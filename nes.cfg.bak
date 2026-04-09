@@ -1,0 +1,23 @@
+MEMORY {
+    # The NES Header (16 bytes)
+    HEADER: start = $0000, size = $0010, type = ro, file = %O, fill = yes;
+
+    # The PRG-ROM (The Code) - 32KB
+    PRG:    start = $8000, size = $8000, type = ro, file = %O, fill = yes, define = yes;
+
+    # The CHR-ROM (The Graphics) - 8KB (This fixes your error!)
+    CHR:    start = $0000, size = $2000, type = ro, file = %O, fill = yes;
+
+    # RAM (2KB)
+    RAM:    start = $0300, size = $0500, type = rw, define = yes;
+}
+
+SEGMENTS {
+    HEADER:   load = HEADER, type = ro;
+    CODE:     load = PRG,    type = ro,  start = $8000;
+    RODATA:   load = PRG,    type = ro;
+    VECTORS:  load = PRG,    type = ro,  start = $FFFA;
+    CHARS:    load = CHR,    type = ro;
+    BSS:      load = RAM,    type = bss, define = yes;
+    ZEROPAGE: load = RAM,    type = zp;
+}

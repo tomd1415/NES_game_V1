@@ -1,0 +1,7 @@
+# Build artifacts
+*.o
+*.s
+!graphics.s
+
+# ROM files (keep source, rebuild ROMs)
+*.nes
