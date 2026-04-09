@@ -45,4 +45,4 @@ loop:
 .endproc
 
 .segment "CHARS"
-mytiles_chr: .incbin "walk1.chr"
+mytiles_chr: .incbin "../assets/sprites/walk1.chr"
