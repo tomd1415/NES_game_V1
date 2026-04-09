@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(file /home/duguid/projects/nesgame/attempt1/*.chr /home/duguid/projects/nesgame/attempt1/*.nam /home/duguid/projects/nesgame/attempt1/*.pal)",
+      "Bash(stat *.nes *.o *.c main.c)",
+      "Bash(wc -c *.chr *.nam *.pal)",
+      "Bash(objdump -h main.o)",
+      "Bash(cc65 --version)",
+      "Bash(ca65 --version)",
+      "Bash(ld65 --version)",
+      "Bash(cc65 -t nes -o main.s main.c)",
+      "Bash(ca65 -t nes -o main.o main.s)",
+      "Bash(ca65 -t nes -o graphics.o graphics.s)",
+      "Bash(ld65 -C nes.cfg -o game_test.nes main.o graphics.o /usr/share/cc65/lib/nes.lib)",
+      "Bash(make clean:*)",
+      "Bash(make)",
+      "Bash(ld65 --dump-config nes)",
+      "Bash(ar65 l:*)",
+      "Bash(xxd game.nes)",
+      "Bash(git commit -m ':*)"
+    ],
+    "additionalDirectories": [
+      "/home/duguid/projects/nesgame/attempt1"
+    ]
+  }
+}
