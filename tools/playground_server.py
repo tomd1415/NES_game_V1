@@ -100,9 +100,28 @@ def build_chr(state):
     return legacy * 2
 
 
+def _active_nametable(state):
+    """Pull the selected background's nametable.
+
+    New-format state keeps a list under `backgrounds` with `selectedBgIdx`.
+    Legacy state had a single top-level `nametable` — fall back to that so
+    older saves (and the example assets used in tests) still build.
+    """
+    bgs = state.get("backgrounds")
+    if isinstance(bgs, list) and bgs:
+        idx = state.get("selectedBgIdx", 0) or 0
+        if not isinstance(idx, int) or idx < 0 or idx >= len(bgs):
+            idx = 0
+        bg = bgs[idx] or {}
+        nt = bg.get("nametable")
+        if isinstance(nt, list):
+            return nt
+    return state.get("nametable") or []
+
+
 def build_nam(state):
     """32x30 tile bytes + 64 attribute bytes = 1024-byte NES nametable."""
-    nt = state.get("nametable") or []
+    nt = _active_nametable(state)
     tiles_out = bytearray(SCREEN_COLS * SCREEN_ROWS)
     for r in range(SCREEN_ROWS):
         row = nt[r] if r < len(nt) else []

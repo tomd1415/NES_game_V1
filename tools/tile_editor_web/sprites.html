@@ -952,6 +952,10 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
           click on preview to place the selected item
         </div>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)" title="Choose which background the playground scene sits on. Manage backgrounds on the Backgrounds page.">
+        Background
+        <select id="pg-bg-select" style="flex:1"></select>
+      </label>
       <div class="pg-mode-toggle" role="tablist">
         <button type="button" id="pg-mode-player" class="active" title="Next click on the preview sets the player's starting position">Place Player</button>
         <button type="button" id="pg-mode-scene" title="Next click places the currently highlighted scene sprite">Place scene sprite</button>
@@ -1205,20 +1209,38 @@ function emptyNametable() {
   return Array.from({length: rows}, () =>
     Array.from({length: cols}, () => ({ tile: 0, palette: 0 })));
 }
+function emptyBackground(name) {
+  return {
+    name: name || 'background',
+    dimensions: { screens_x: 1, screens_y: 1 },
+    nametable: emptyNametable(),
+  };
+}
+
 function createDefaultState() {
   return {
     version: STATE_VERSION,
     name: 'untitled',
-    dimensions: { screens_x: 1, screens_y: 1 },
     universal_bg: 0x21,
     bg_palettes: defaultBgPalettes(),
     sprite_palettes: defaultSpritePalettes(),
     sprite_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
     bg_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
-    nametable: emptyNametable(),
+    backgrounds: [emptyBackground('background')],
+    selectedBgIdx: 0,
     sprites: [],
     metadata: { created: new Date().toISOString(), modified: new Date().toISOString() },
   };
+}
+
+function activeBg(s) {
+  const src = s || state;
+  if (!Array.isArray(src.backgrounds) || src.backgrounds.length === 0) {
+    return { name: 'background', dimensions: { screens_x: 1, screens_y: 1 }, nametable: emptyNametable() };
+  }
+  let idx = src.selectedBgIdx | 0;
+  if (idx < 0 || idx >= src.backgrounds.length) idx = 0;
+  return src.backgrounds[idx];
 }
 
 // An "empty" cell is a placeholder: it has no tile assigned yet. The pupil
@@ -1283,7 +1305,9 @@ function validateState(s) {
   if (!Array.isArray(s.bg_palettes) || s.bg_palettes.length !== 4) return 'bg_palettes';
   if (!Array.isArray(s.sprite_palettes) || s.sprite_palettes.length !== 4) return 'sprite_palettes';
   if (s.universal_bg < 0 || s.universal_bg > 0x3F) return 'universal_bg';
-  if (!Array.isArray(s.nametable)) return 'nametable';
+  // Accept either new `backgrounds` list or legacy top-level `nametable`
+  // — migrateState converts between them.
+  if (!Array.isArray(s.backgrounds) && !Array.isArray(s.nametable)) return 'nametable';
   return null;
 }
 function migrateState(s) {
@@ -1306,6 +1330,35 @@ function migrateState(s) {
   if (!Array.isArray(s.bg_tiles)) {
     s.bg_tiles = Array.from({length: NUM_TILES}, () => ({ pixels: Array.from({length:8}, () => Array(8).fill(0)), name: '' }));
   }
+  // Old saves had a single top-level `nametable` + `dimensions`. Wrap
+  // them into `backgrounds[]` so both pages see the same shape.
+  if (!Array.isArray(s.backgrounds)) {
+    const legacyName = (typeof s.name === 'string' && s.name !== 'untitled') ? s.name : 'background';
+    const bg = {
+      name: legacyName,
+      dimensions: s.dimensions || { screens_x: 1, screens_y: 1 },
+      nametable: Array.isArray(s.nametable) ? s.nametable : emptyNametable(),
+    };
+    s.backgrounds = [bg];
+    s.selectedBgIdx = 0;
+  }
+  if (s.backgrounds.length === 0) s.backgrounds.push(emptyBackground('background'));
+  if (typeof s.selectedBgIdx !== 'number'
+      || s.selectedBgIdx < 0
+      || s.selectedBgIdx >= s.backgrounds.length) {
+    s.selectedBgIdx = 0;
+  }
+  for (const bg of s.backgrounds) {
+    if (!bg.name || typeof bg.name !== 'string') bg.name = 'background';
+    if (!bg.dimensions || typeof bg.dimensions !== 'object') {
+      bg.dimensions = { screens_x: 1, screens_y: 1 };
+    }
+    bg.dimensions.screens_x = Math.max(1, bg.dimensions.screens_x | 0 || 1);
+    bg.dimensions.screens_y = Math.max(1, bg.dimensions.screens_y | 0 || 1);
+    if (!Array.isArray(bg.nametable)) bg.nametable = emptyNametable();
+  }
+  delete s.nametable;
+  delete s.dimensions;
   // Sanity-patch each sprite.
   if (Array.isArray(s.sprites)) {
     for (const sp of s.sprites) {
@@ -3071,9 +3124,33 @@ function openPlaygroundDialog() {
   pgState.highlightedScene = pgState.scene.length ? 0 : -1;
   setPgMode('player');
   pgSetStatus('Ready. Click the preview to move the player, or pick a scene sprite and click to place it. Then hit Play.');
+  refreshPgBgSelect();
   renderPlaygroundSpriteList();
   renderPlaygroundPreview();
   document.getElementById('playground-dialog').showModal();
+}
+
+// Populate the background picker in the Play dialog with every background
+// in the shared project state, highlighting the currently-selected one.
+// Pupils can switch the scene's backdrop without leaving the sprites page.
+function refreshPgBgSelect() {
+  const sel = document.getElementById('pg-bg-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const bgs = Array.isArray(state.backgrounds) ? state.backgrounds : [];
+  for (let i = 0; i < bgs.length; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = bgs[i].name || ('background ' + (i + 1));
+    sel.appendChild(opt);
+  }
+  if (bgs.length === 0) {
+    const opt = document.createElement('option');
+    opt.textContent = '(no backgrounds)';
+    opt.disabled = true;
+    sel.appendChild(opt);
+  }
+  sel.value = String(state.selectedBgIdx || 0);
 }
 
 function renderPlaygroundSpriteList() {
@@ -3227,7 +3304,7 @@ function renderPlaygroundPreview() {
   ctx.fillRect(0, 0, cv.width, cv.height);
 
   // Background nametable (32x30 tiles, 8x8 pixels each).
-  const nt = state.nametable || [];
+  const nt = activeBg().nametable || [];
   for (let r = 0; r < Math.min(30, nt.length); r++) {
     const row = nt[r];
     for (let c = 0; c < Math.min(32, row.length); c++) {
@@ -3405,6 +3482,13 @@ function init() {
   document.getElementById('pg-mode-player').addEventListener('click', () => setPgMode('player'));
   document.getElementById('pg-mode-scene').addEventListener('click', () => setPgMode('scene'));
   document.getElementById('pg-preview').addEventListener('click', onPgPreviewClick);
+  document.getElementById('pg-bg-select').addEventListener('change', e => {
+    const idx = parseInt(e.target.value, 10) || 0;
+    if (!Array.isArray(state.backgrounds) || idx >= state.backgrounds.length) return;
+    state.selectedBgIdx = idx;
+    markDirty();
+    renderPlaygroundPreview();
+  });
   document.querySelectorAll('.help-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       const which = tab.dataset.tab;

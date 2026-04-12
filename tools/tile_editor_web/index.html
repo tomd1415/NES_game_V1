@@ -805,6 +805,13 @@ kbd {
 <section class="nt-panel">
   <h2>Background / Nametable</h2>
   <div class="nt-controls">
+    <label title="Switch between the backgrounds in this project. Tiles and palettes are shared; each background keeps its own layout + name + size.">Background
+      <select id="bg-select" style="min-width:140px"></select>
+    </label>
+    <button type="button" id="btn-bg-new"    title="Add a new empty background that shares the same tileset + palettes">+ New</button>
+    <button type="button" id="btn-bg-dup"    title="Duplicate the current background (same layout, new name)">⎘ Duplicate</button>
+    <button type="button" id="btn-bg-rename" title="Rename the current background">✎ Rename</button>
+    <button type="button" id="btn-bg-del"    class="warn" title="Delete the current background (undoable). Cannot delete the last one.">🗑 Delete</button>
     <label>Screens
       <select id="nt-size">
         <option value="1x1">1×1 (single screen)</option>
@@ -1103,11 +1110,18 @@ function emptyNametable() {
     Array.from({length: cols}, () => ({ tile: 0, palette: 0 }))
   );
 }
+function emptyBackground(name) {
+  return {
+    name: name || 'background',
+    dimensions: { screens_x: 1, screens_y: 1 },
+    nametable: emptyNametable(),
+  };
+}
+
 function createDefaultState() {
   return {
     version: STATE_VERSION,
     name: 'untitled',
-    dimensions: { screens_x: 1, screens_y: 1 },
     universal_bg: 0x21,           // light blue sky
     bg_palettes: defaultBgPalettes(),
     sprite_palettes: defaultSpritePalettes(),
@@ -1116,13 +1130,31 @@ function createDefaultState() {
     // art and background art don't fight over the same 256 CHR slots.
     sprite_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
     bg_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
-    nametable: emptyNametable(),
+    // Multiple named backgrounds share the bg_tiles pool, palettes and
+    // universal_bg. Pupils can design several scenes (one per background)
+    // without needing to redraw the tileset every time.
+    backgrounds: [emptyBackground('background')],
+    selectedBgIdx: 0,
     sprites: [],                   // populated on the Sprites page
     metadata: {
       created: new Date().toISOString(),
       modified: new Date().toISOString(),
     },
   };
+}
+
+// Always returns the currently-active background object. Rendering,
+// editing and export code all go through this so there is only one
+// source of truth -- no dual-copy bookkeeping to forget.
+function activeBg(s) {
+  const src = s || state;
+  if (!Array.isArray(src.backgrounds) || src.backgrounds.length === 0) {
+    // Shouldn't happen after migrateState, but don't crash the editor.
+    return { name: 'background', dimensions: { screens_x: 1, screens_y: 1 }, nametable: emptyNametable() };
+  }
+  let idx = src.selectedBgIdx | 0;
+  if (idx < 0 || idx >= src.backgrounds.length) idx = 0;
+  return src.backgrounds[idx];
 }
 
 // Back-fill any fields added after the original save. Keeps old projects
@@ -1155,6 +1187,40 @@ function migrateState(s) {
   if (!Array.isArray(s.bg_tiles)) {
     s.bg_tiles = Array.from({length: NUM_TILES}, () => emptyTile());
   }
+  // Old saves had a single top-level `nametable` + `dimensions`. Wrap
+  // them into the first entry of the new `backgrounds` array so every
+  // existing project keeps working -- and nothing the pupil made is lost.
+  if (!Array.isArray(s.backgrounds)) {
+    const legacyName = (typeof s.name === 'string' && s.name !== 'untitled') ? s.name : 'background';
+    const bg = {
+      name: legacyName,
+      dimensions: s.dimensions || { screens_x: 1, screens_y: 1 },
+      nametable: Array.isArray(s.nametable) ? s.nametable : emptyNametable(),
+    };
+    s.backgrounds = [bg];
+    s.selectedBgIdx = 0;
+  }
+  if (s.backgrounds.length === 0) {
+    s.backgrounds.push(emptyBackground('background'));
+  }
+  if (typeof s.selectedBgIdx !== 'number'
+      || s.selectedBgIdx < 0
+      || s.selectedBgIdx >= s.backgrounds.length) {
+    s.selectedBgIdx = 0;
+  }
+  // Normalise each background and strip legacy top-level fields so there's
+  // only one source of truth going forward.
+  for (const bg of s.backgrounds) {
+    if (!bg.name || typeof bg.name !== 'string') bg.name = 'background';
+    if (!bg.dimensions || typeof bg.dimensions !== 'object') {
+      bg.dimensions = { screens_x: 1, screens_y: 1 };
+    }
+    bg.dimensions.screens_x = Math.max(1, bg.dimensions.screens_x | 0 || 1);
+    bg.dimensions.screens_y = Math.max(1, bg.dimensions.screens_y | 0 || 1);
+    if (!Array.isArray(bg.nametable)) bg.nametable = emptyNametable();
+  }
+  delete s.nametable;
+  delete s.dimensions;
   return s;
 }
 
@@ -1188,7 +1254,16 @@ function validateState(s) {
     for (const b of p.slots) if (b < 0 || b > 0x3F || !Number.isInteger(b)) return 'palette byte';
   }
   if (s.universal_bg < 0 || s.universal_bg > 0x3F) return 'universal_bg';
-  if (!Array.isArray(s.nametable)) return 'nametable';
+  if (!Array.isArray(s.backgrounds) || s.backgrounds.length === 0) return 'backgrounds';
+  for (let i = 0; i < s.backgrounds.length; i++) {
+    const bg = s.backgrounds[i];
+    if (!bg || typeof bg !== 'object') return 'background ' + i + ' shape';
+    if (!bg.dimensions || typeof bg.dimensions !== 'object') return 'background ' + i + ' dimensions';
+    if (!Array.isArray(bg.nametable)) return 'background ' + i + ' nametable';
+  }
+  if (typeof s.selectedBgIdx !== 'number'
+      || s.selectedBgIdx < 0
+      || s.selectedBgIdx >= s.backgrounds.length) return 'selectedBgIdx';
   return null;
 }
 
@@ -1196,18 +1271,20 @@ function cloneState(s) {
   return JSON.parse(JSON.stringify(s));
 }
 
-// Ensure nametable size matches dimensions (after load / resize).
+// Ensure the active background's nametable size matches its dimensions
+// (after load / resize / switching backgrounds).
 function resizeNametable(state) {
-  const cols = SCREEN_W * state.dimensions.screens_x;
-  const rows = SCREEN_H * state.dimensions.screens_y;
-  const old = state.nametable;
+  const bg = activeBg(state);
+  const cols = SCREEN_W * bg.dimensions.screens_x;
+  const rows = SCREEN_H * bg.dimensions.screens_y;
+  const old = bg.nametable;
   const next = Array.from({length: rows}, (_, r) =>
     Array.from({length: cols}, (_, c) => {
       if (old && old[r] && old[r][c]) return old[r][c];
       return { tile: 0, palette: 0 };
     })
   );
-  state.nametable = next;
+  bg.nametable = next;
 }
 
 // ================================================================
@@ -1456,18 +1533,18 @@ function exportCHR() {
 
 function exportNAM() {
   // Each screen = 960 tile bytes + 64 attribute bytes = 1024.
-  const screens = state.dimensions.screens_x * state.dimensions.screens_y;
+  const screens = activeBg().dimensions.screens_x * activeBg().dimensions.screens_y;
   const out = new Uint8Array(screens * 1024);
 
-  for (let sy = 0; sy < state.dimensions.screens_y; sy++) {
-    for (let sx = 0; sx < state.dimensions.screens_x; sx++) {
-      const screenIdx = sy * state.dimensions.screens_x + sx;
+  for (let sy = 0; sy < activeBg().dimensions.screens_y; sy++) {
+    for (let sx = 0; sx < activeBg().dimensions.screens_x; sx++) {
+      const screenIdx = sy * activeBg().dimensions.screens_x + sx;
       const base = screenIdx * 1024;
 
       // Tile indices (32 × 30 = 960 bytes)
       for (let y = 0; y < SCREEN_H; y++) {
         for (let x = 0; x < SCREEN_W; x++) {
-          const cell = state.nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
+          const cell = activeBg().nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
           out[base + y*32 + x] = cell.tile & 0xFF;
         }
       }
@@ -1481,7 +1558,7 @@ function exportNAM() {
             const tx = sx*SCREEN_W + ax*4 + qx*2;
             const ty = sy*SCREEN_H + ay*4 + qy*2;
             // Use the palette of the first tile in this 2×2 block.
-            const row = state.nametable[ty];
+            const row = activeBg().nametable[ty];
             const cell = row ? row[tx] : null;
             const pal = cell ? (cell.palette & 3) : 0;
             byte |= (pal << (q * 2));
@@ -1561,15 +1638,15 @@ function exportText() {
   }
 
   // Whole nametable exported as one background per screen.
-  for (let sy = 0; sy < state.dimensions.screens_y; sy++) {
-    for (let sx = 0; sx < state.dimensions.screens_x; sx++) {
+  for (let sy = 0; sy < activeBg().dimensions.screens_y; sy++) {
+    for (let sx = 0; sx < activeBg().dimensions.screens_x; sx++) {
       const name = 'screen_' + sx + '_' + sy;
       // Majority-vote palette across the screen for the text format
       // (per-tile palettes are kept in the binary export).
       const counts = [0,0,0,0];
       for (let y = 0; y < SCREEN_H; y++) {
         for (let x = 0; x < SCREEN_W; x++) {
-          const cell = state.nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
+          const cell = activeBg().nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
           counts[cell.palette & 3]++;
         }
       }
@@ -1578,7 +1655,7 @@ function exportText() {
       for (let y = 0; y < SCREEN_H; y++) {
         const names = [];
         for (let x = 0; x < SCREEN_W; x++) {
-          const cell = state.nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
+          const cell = activeBg().nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
           names.push(tileName(cell.tile));
         }
         lines.push('  ' + names.join(' '));
@@ -1847,8 +1924,8 @@ function renderFullPreview() {
   const dlg = document.getElementById('preview-dialog');
   if (!dlg.open) return;
   const canvas = document.getElementById('preview-canvas');
-  const cols = SCREEN_W * state.dimensions.screens_x;
-  const rows = SCREEN_H * state.dimensions.screens_y;
+  const cols = SCREEN_W * activeBg().dimensions.screens_x;
+  const rows = SCREEN_H * activeBg().dimensions.screens_y;
   const srcW = cols * 8;
   const srcH = rows * 8;
 
@@ -1869,7 +1946,7 @@ function renderFullPreview() {
 
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const cell = state.nametable[y][x];
+      const cell = activeBg().nametable[y][x];
       const tile = state.bg_tiles[cell.tile];
       const pal = state.bg_palettes[cell.palette & 3];
       const over = {
@@ -2107,8 +2184,8 @@ function renderNametable() {
   const canvas = document.getElementById('nt-canvas');
   const ctx = canvas.getContext('2d');
   const zoom = ntZoom();
-  const cols = SCREEN_W * state.dimensions.screens_x;
-  const rows = SCREEN_H * state.dimensions.screens_y;
+  const cols = SCREEN_W * activeBg().dimensions.screens_x;
+  const rows = SCREEN_H * activeBg().dimensions.screens_y;
   const cellPx = 8 * zoom;
   canvas.width = cols * cellPx;
   canvas.height = rows * cellPx;
@@ -2119,7 +2196,7 @@ function renderNametable() {
 
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const cell = state.nametable[y][x];
+      const cell = activeBg().nametable[y][x];
       const tile = state.bg_tiles[cell.tile];
       const pal = state.bg_palettes[cell.palette & 3];
       const pOverride = {
@@ -2181,13 +2258,13 @@ function renderNametable() {
   // screen boundaries (thick)
   ctx.strokeStyle = 'rgba(120,220,232,0.75)';
   ctx.lineWidth = 2;
-  for (let sx = 1; sx < state.dimensions.screens_x; sx++) {
+  for (let sx = 1; sx < activeBg().dimensions.screens_x; sx++) {
     ctx.beginPath();
     ctx.moveTo(sx*SCREEN_W*cellPx, 0);
     ctx.lineTo(sx*SCREEN_W*cellPx, canvas.height);
     ctx.stroke();
   }
-  for (let sy = 1; sy < state.dimensions.screens_y; sy++) {
+  for (let sy = 1; sy < activeBg().dimensions.screens_y; sy++) {
     ctx.beginPath();
     ctx.moveTo(0, sy*SCREEN_H*cellPx);
     ctx.lineTo(canvas.width, sy*SCREEN_H*cellPx);
@@ -2227,10 +2304,10 @@ function applyPaletteRect(a, b) {
   const pal = parseInt(document.getElementById('nt-palette').value, 10);
   const { x0, y0, x1, y1 } = normalisedBlockRect(a, b);
   for (let y = y0; y <= y1; y++) {
-    if (!state.nametable[y]) continue;
+    if (!activeBg().nametable[y]) continue;
     for (let x = x0; x <= x1; x++) {
-      if (!state.nametable[y][x]) continue;
-      state.nametable[y][x].palette = pal;
+      if (!activeBg().nametable[y][x]) continue;
+      activeBg().nametable[y][x].palette = pal;
     }
   }
   markDirty();
@@ -2259,29 +2336,29 @@ function drawNtRectOverlay(a, b) {
 
 function applyNtTool(cx, cy) {
   if (cy < 0 || cx < 0) return;
-  if (!state.nametable[cy] || !state.nametable[cy][cx]) return;
+  if (!activeBg().nametable[cy] || !activeBg().nametable[cy][cx]) return;
   const tool = document.getElementById('nt-tool').value;
   const pal = parseInt(document.getElementById('nt-palette').value, 10);
 
   if (tool === 'paint') {
-    const cell = state.nametable[cy][cx];
+    const cell = activeBg().nametable[cy][cx];
     const block_x = cx & ~1, block_y = cy & ~1;
     for (let dy = 0; dy < 2; dy++) {
       for (let dx = 0; dx < 2; dx++) {
-        if (state.nametable[block_y+dy] && state.nametable[block_y+dy][block_x+dx]) {
-          state.nametable[block_y+dy][block_x+dx].palette = pal;
+        if (activeBg().nametable[block_y+dy] && activeBg().nametable[block_y+dy][block_x+dx]) {
+          activeBg().nametable[block_y+dy][block_x+dx].palette = pal;
         }
       }
     }
     cell.tile = selectedTileIdx;
   } else if (tool === 'erase') {
-    state.nametable[cy][cx].tile = 0;
+    activeBg().nametable[cy][cx].tile = 0;
   } else if (tool === 'palette') {
     const block_x = cx & ~1, block_y = cy & ~1;
     for (let dy = 0; dy < 2; dy++) {
       for (let dx = 0; dx < 2; dx++) {
-        if (state.nametable[block_y+dy] && state.nametable[block_y+dy][block_x+dx]) {
-          state.nametable[block_y+dy][block_x+dx].palette = pal;
+        if (activeBg().nametable[block_y+dy] && activeBg().nametable[block_y+dy][block_x+dx]) {
+          activeBg().nametable[block_y+dy][block_x+dx].palette = pal;
         }
       }
     }
@@ -2292,22 +2369,22 @@ function applyNtTool(cx, cy) {
   renderNametable();
 }
 function ntFloodFill(sx, sy, newTile, newPal) {
-  const cols = SCREEN_W * state.dimensions.screens_x;
-  const rows = SCREEN_H * state.dimensions.screens_y;
-  const target = state.nametable[sy][sx].tile;
+  const cols = SCREEN_W * activeBg().dimensions.screens_x;
+  const rows = SCREEN_H * activeBg().dimensions.screens_y;
+  const target = activeBg().nametable[sy][sx].tile;
   if (target === newTile) return;
   const q = [[sx, sy]];
   while (q.length) {
     const [x, y] = q.shift();
     if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
-    const c = state.nametable[y][x];
+    const c = activeBg().nametable[y][x];
     if (c.tile !== target) continue;
     c.tile = newTile;
     const block_x = x & ~1, block_y = y & ~1;
     for (let dy = 0; dy < 2; dy++)
       for (let dx = 0; dx < 2; dx++)
-        if (state.nametable[block_y+dy] && state.nametable[block_y+dy][block_x+dx])
-          state.nametable[block_y+dy][block_x+dx].palette = newPal;
+        if (activeBg().nametable[block_y+dy] && activeBg().nametable[block_y+dy][block_x+dx])
+          activeBg().nametable[block_y+dy][block_x+dx].palette = newPal;
     q.push([x+1,y]); q.push([x-1,y]); q.push([x,y+1]); q.push([x,y-1]);
   }
 }
@@ -2319,8 +2396,7 @@ function afterStateReplaced() {
   // Called after load/undo/redo. Re-syncs UI + persists.
   resizeNametable(state);
   document.getElementById('project-name').value = state.name || 'untitled';
-  document.getElementById('nt-size').value =
-    state.dimensions.screens_x + 'x' + state.dimensions.screens_y;
+  refreshBgUi();
   renderAll();
   markDirty();
   updateUndoButtons();
@@ -2332,6 +2408,38 @@ function renderAll() {
   renderPalettes();
   renderMasterGrid();
   renderNametable();
+}
+
+// Rebuild the background picker + sync the size selector to the active bg.
+// Called after anything that changes state.backgrounds or state.selectedBgIdx.
+function refreshBgUi() {
+  const sel = document.getElementById('bg-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  for (let i = 0; i < state.backgrounds.length; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = state.backgrounds[i].name || ('background ' + (i + 1));
+    sel.appendChild(opt);
+  }
+  sel.value = String(state.selectedBgIdx);
+  const bg = activeBg();
+  const sizeSel = document.getElementById('nt-size');
+  if (sizeSel) sizeSel.value = bg.dimensions.screens_x + 'x' + bg.dimensions.screens_y;
+  const delBtn = document.getElementById('btn-bg-del');
+  if (delBtn) delBtn.disabled = state.backgrounds.length <= 1;
+}
+
+// Produce a unique "name_copy" / "name_copy_2" style name.
+function nextCopyName(base, existing) {
+  const set = new Set(existing);
+  const stem = base ? base + '_copy' : 'background_copy';
+  if (!set.has(stem)) return stem;
+  for (let i = 2; i < 1000; i++) {
+    const cand = stem + '_' + i;
+    if (!set.has(cand)) return cand;
+  }
+  return stem + '_' + Date.now();
 }
 
 // --- Tile editor painting ---------------------------------------
@@ -2454,11 +2562,13 @@ function init() {
         // importing a level file never wipes out their character work.
         // Old saves used a single `tiles` pool for both — fall back to it
         // so pre-split JSON files still load cleanly into the BG pool.
-        state.nametable = parsed.nametable;
         state.bg_palettes = parsed.bg_palettes;
         state.universal_bg = parsed.universal_bg;
         state.bg_tiles = parsed.bg_tiles || parsed.tiles;
-        if (parsed.dimensions) state.dimensions = parsed.dimensions;
+        // migrateState above wrapped any legacy top-level nametable into
+        // parsed.backgrounds[], so we can always just copy the whole list.
+        state.backgrounds = parsed.backgrounds;
+        state.selectedBgIdx = Math.min(parsed.selectedBgIdx || 0, state.backgrounds.length - 1);
         resizeNametable(state);
 
         afterStateReplaced();
@@ -2603,11 +2713,73 @@ function init() {
     renderNametable();
   });
 
+  // --- Background list controls ---
+  document.getElementById('bg-select').addEventListener('change', e => {
+    const idx = Math.max(0, Math.min(state.backgrounds.length - 1, parseInt(e.target.value, 10) || 0));
+    if (idx === state.selectedBgIdx) return;
+    pushUndo();
+    state.selectedBgIdx = idx;
+    markDirty();
+    refreshBgUi();
+    renderNametable();
+  });
+  document.getElementById('btn-bg-new').addEventListener('click', () => {
+    pushUndo();
+    const base = 'background';
+    let n = state.backgrounds.length + 1;
+    while (state.backgrounds.some(b => b.name === base + ' ' + n)) n++;
+    state.backgrounds.push(emptyBackground(base + ' ' + n));
+    state.selectedBgIdx = state.backgrounds.length - 1;
+    markDirty();
+    refreshBgUi();
+    renderNametable();
+  });
+  document.getElementById('btn-bg-dup').addEventListener('click', () => {
+    pushUndo();
+    const src = activeBg();
+    const copy = {
+      name: nextCopyName(src.name, state.backgrounds.map(b => b.name)),
+      dimensions: { ...src.dimensions },
+      nametable: src.nametable.map(row => row.map(c => ({ ...c }))),
+    };
+    state.backgrounds.splice(state.selectedBgIdx + 1, 0, copy);
+    state.selectedBgIdx += 1;
+    markDirty();
+    refreshBgUi();
+    renderNametable();
+  });
+  document.getElementById('btn-bg-rename').addEventListener('click', () => {
+    const cur = activeBg();
+    const v = prompt('Rename background:', cur.name);
+    if (v === null) return;
+    const name = v.trim();
+    if (!name) return;
+    pushUndo();
+    cur.name = name;
+    markDirty();
+    refreshBgUi();
+  });
+  document.getElementById('btn-bg-del').addEventListener('click', () => {
+    if (state.backgrounds.length <= 1) {
+      alert('You can\'t delete the last background — add another first.');
+      return;
+    }
+    if (!confirm('Delete background "' + activeBg().name + '"? (Undoable with Ctrl+Z)')) return;
+    pushUndo();
+    state.backgrounds.splice(state.selectedBgIdx, 1);
+    if (state.selectedBgIdx >= state.backgrounds.length) {
+      state.selectedBgIdx = state.backgrounds.length - 1;
+    }
+    markDirty();
+    refreshBgUi();
+    renderNametable();
+  });
+
   // --- Nametable controls ---
   document.getElementById('nt-size').addEventListener('change', e => {
     const [sx, sy] = e.target.value.split('x').map(Number);
     pushUndo();
-    state.dimensions = { screens_x: sx, screens_y: sy };
+    activeBg().dimensions = { screens_x: sx, screens_y: sy };
     resizeNametable(state);
     markDirty();
     renderNametable();
@@ -2615,7 +2787,7 @@ function init() {
   document.getElementById('nt-zoom').addEventListener('input', renderNametable);
   document.getElementById('btn-nt-clear').addEventListener('click', () => {
     pushUndo();
-    for (const row of state.nametable) {
+    for (const row of activeBg().nametable) {
       for (const c of row) { c.tile = 0; c.palette = 0; }
     }
     markDirty();
@@ -2816,8 +2988,7 @@ function init() {
 
   // --- Initial render ---
   document.getElementById('project-name').value = state.name;
-  document.getElementById('nt-size').value =
-    state.dimensions.screens_x + 'x' + state.dimensions.screens_y;
+  refreshBgUi();
   renderAll();
   refreshColourButtons();
   updateUndoButtons();
