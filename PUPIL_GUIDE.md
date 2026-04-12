@@ -8,9 +8,31 @@ Right now the game has a player character that can walk left and right, with ani
 
 ---
 
+## Steps - Learning the game piece by piece
+
+The game is built up in steps. Each step is a complete, working game that you can build and play. You can jump between steps to see how each feature was added.
+
+```text
+steps/
+  Step_1_Player_Movement/    <-- Just the player character on a blue background
+  Step_2_Background_Level/   <-- Adds a background level with platforms and ground
+  Step_3_Enemies_And_Items/  <-- Adds enemies, gems, and a heart pickup
+```
+
+**To try a step**, open a terminal in that step's folder and run:
+
+```bash
+cd steps/Step_1_Player_Movement
+make run
+```
+
+Each step has its own complete set of files. You can edit any step without breaking the others. If you mess something up, you can always look at the next step to see what the code should look like.
+
+---
+
 ## Project folder layout
 
-```
+```text
 attempt1/
   src/               <-- Source code (the files you edit to change the game)
     main.c           <-- The main game code - player, movement, drawing
@@ -67,15 +89,15 @@ PPU_DATA = 0x12;   // Blue background - try changing this!
 Replace `0x12` with a different color number. Here are some to try:
 
 | Value  | Color        |
-|--------|-------------|
-| `0x0F` | Black       |
-| `0x00` | Grey        |
-| `0x12` | Blue        |
-| `0x14` | Purple      |
-| `0x16` | Red         |
-| `0x1A` | Green       |
-| `0x27` | Orange      |
-| `0x30` | White       |
+|--------|--------------|
+| `0x0F` | Black        |
+| `0x00` | Grey         |
+| `0x12` | Blue         |
+| `0x14` | Purple       |
+| `0x16` | Red          |
+| `0x1A` | Green        |
+| `0x27` | Orange       |
+| `0x30` | White        |
 
 Search online for "NES color palette chart" to see all 64 colors.
 
@@ -149,6 +171,7 @@ if (y < 150) {
 ```
 
 The number `150` is where the "floor" is. Change it to:
+
 - `200` to put the floor near the bottom of the screen
 - `100` to put the floor higher up
 - `50` for a very high floor
@@ -197,7 +220,7 @@ if (pad & 0x80) {  // A = Jump
 
 The player character is made of **8 small tiles** (8x8 pixels each) arranged in a 2-wide by 4-tall grid:
 
-```
+```text
 [head-L ] [head-R ]     <- row 0
 [body-L ] [body-R ]     <- row 1
 [legs-L ] [legs-R ]     <- row 2
@@ -253,21 +276,37 @@ You'll need to make sure tile `0x03` in your CHR file actually has a graphic dra
 
 ## Ideas for next steps
 
-Here are some features you could try adding, roughly in order of difficulty:
+Look at the step folders to see how each feature was added! Each step builds on the one before it.
 
-1. **Change the A or B button to do something** (e.g. print a different sprite, change color)
-2. **Add a static enemy sprite** on screen (see "How to add new sprites" above)
-3. **Make the enemy move** back and forth (add an `enemy_x` variable, change it each frame)
-4. **Add collision detection** between player and enemy (check if their positions overlap)
-5. **Add a background** with platforms (load a nametable - this is more advanced)
-6. **Add scrolling** so the level is wider than one screen
-7. **Add sound effects** using the NES audio registers
+**Step 1 (where you start):** Player character moves and jumps on a blue screen.
+
+**Step 2 adds:**
+- Background tiles (ground, platforms, clouds, castle walls, a door)
+- The level is defined in a nametable file (`level1.nam`)
+- Multiple background color palettes
+- Look at `steps/Step_2_Background_Level/src/main.c` to see how backgrounds are loaded
+
+**Step 3 adds:**
+- A slime enemy that patrols back and forth on the ground
+- A skeleton enemy that patrols on a floating platform
+- Collectible gems (4 of them) and a heart pickup
+- Collision detection between the player and items
+- Multiple sprite palettes (different colors for player, enemies, items)
+- Look at `steps/Step_3_Enemies_And_Items/src/main.c` to see how enemies and items work
+
+**Things you could try adding next:**
+1. **Make enemies hurt the player** - check if player overlaps an enemy, reduce health
+2. **Add a sword attack** - press A to swing a sword sprite, check if it hits enemies
+3. **Make enemies disappear when hit** - track enemy health, remove when defeated
+4. **Add scrolling** so the level is wider than one screen
+5. **Add sound effects** using the NES audio registers
+6. **Design your own level** - edit the nametable to create a new layout
 
 ---
 
 ## Quick reference - NES screen coordinates
 
-```
+```text
 (0,0) -------- X increases ---------> (255,0)
   |                                       |
   |            NES SCREEN                 |

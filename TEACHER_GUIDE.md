@@ -4,6 +4,20 @@
 
 This project builds a NES ROM using the **cc65 toolchain** (a C compiler and assembler targeting the 6502 CPU). The game is written primarily in C with a small amount of 65xx assembly for graphics data loading. The cc65 library (`nes.lib`) provides the startup code (crt0), C runtime, and hardware abstraction.
 
+## Step-based lesson structure
+
+The project includes a `steps/` folder with self-contained, buildable snapshots of the game at each stage of development. Each step can be built independently with `make` from within its folder.
+
+| Step | Folder | What it teaches |
+|------|--------|----------------|
+| 1 | `Step_1_Player_Movement/` | Sprites, OAM, controller input, animation, basic physics (jump/gravity). The minimal working game. |
+| 2 | `Step_2_Background_Level/` | Background tiles (CHR pattern tables), nametables, palette management, PPU_CTRL pattern table selection. A visible level with ground, platforms, clouds, and castle walls. |
+| 3 | `Step_3_Enemies_And_Items/` | Multiple sprite palettes, enemy AI (patrol behaviour), collision detection (bounding box), game state (collectibles, score tracking). |
+
+The `tools/generate_chr.py` script was used to create the CHR tile data and nametables for Steps 2 and 3. It can be used as a reference for how NES tile graphics are encoded (2-bit planar format), or modified to generate new tiles programmatically.
+
+Pupils can work in any step folder without affecting the others, and can look ahead to later steps to see how features were implemented. This avoids needing git for version management during lessons.
+
 ---
 
 ## NES Architecture Summary
