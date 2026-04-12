@@ -339,11 +339,698 @@ def sprite_sword():
     ])
 
 
-def build_combined_chr(player_chr_path, output_path):
+# =========================================================================
+# NPC SPRITE TILES (used from Step 4 onwards)
+# An "old man" style NPC - 2x2 tiles (16x16 pixels)
+# =========================================================================
+
+def sprite_npc_head_left():
+    """Old man NPC head/beard - left half.
+    Color 1 = skin/body, Color 2 = white beard/hair, Color 3 = robe/shadow."""
+    return pixels_to_tile([
+        [0,0,0,0,2,2,2,2],
+        [0,0,0,2,2,2,2,2],
+        [0,0,2,2,2,1,1,1],
+        [0,0,2,2,1,1,3,1],
+        [0,0,2,2,1,1,1,1],
+        [0,0,0,2,2,1,1,1],
+        [0,0,0,2,2,2,2,2],
+        [0,0,2,2,2,2,2,2],
+    ])
+
+def sprite_npc_head_right():
+    """Old man NPC head - right half."""
+    return pixels_to_tile([
+        [2,2,2,2,0,0,0,0],
+        [2,2,2,2,2,0,0,0],
+        [1,1,1,2,2,0,0,0],
+        [1,3,1,1,2,2,0,0],
+        [1,1,1,1,2,2,0,0],
+        [1,1,1,2,2,0,0,0],
+        [2,2,2,2,2,0,0,0],
+        [2,2,2,2,2,2,0,0],
+    ])
+
+def sprite_npc_body_left():
+    """Old man NPC body/robe - left half. Color 3 = dark robe."""
+    return pixels_to_tile([
+        [0,2,2,2,3,3,3,3],
+        [0,0,3,3,3,3,3,3],
+        [0,0,3,3,3,3,3,3],
+        [0,0,3,3,3,3,3,3],
+        [0,0,3,3,3,3,3,3],
+        [0,0,3,3,3,3,3,3],
+        [0,0,3,3,3,3,3,3],
+        [0,0,3,3,3,3,3,3],
+    ])
+
+def sprite_npc_body_right():
+    """Old man NPC body/robe - right half."""
+    return pixels_to_tile([
+        [3,3,3,3,2,2,2,0],
+        [3,3,3,3,3,3,0,0],
+        [3,3,3,3,3,3,0,0],
+        [3,3,3,3,3,3,0,0],
+        [3,3,3,3,3,3,0,0],
+        [3,3,3,3,3,3,0,0],
+        [3,3,3,3,3,3,0,0],
+        [3,3,3,3,3,3,0,0],
+    ])
+
+# A shorter "merchant" NPC (2x2) - for Step 5
+def sprite_npc2_head_left():
+    """Merchant NPC head - left half. Hat/cap.
+    Color 1 = face/body, Color 2 = hat highlight, Color 3 = hat/shadow."""
+    return pixels_to_tile([
+        [0,0,3,3,3,3,3,3],
+        [0,3,3,2,3,3,3,3],
+        [3,3,2,3,3,3,3,3],
+        [0,0,1,1,1,1,1,1],
+        [0,0,1,1,1,3,1,1],
+        [0,0,1,1,1,1,1,1],
+        [0,0,0,1,1,1,1,1],
+        [0,0,0,0,1,1,1,1],
+    ])
+
+def sprite_npc2_head_right():
+    """Merchant NPC head - right half."""
+    return pixels_to_tile([
+        [3,3,3,3,3,3,0,0],
+        [3,3,3,3,3,0,0,0],
+        [3,3,3,3,0,0,0,0],
+        [1,1,1,1,1,1,0,0],
+        [1,1,3,1,1,1,0,0],
+        [1,1,1,1,1,1,0,0],
+        [1,1,1,1,1,0,0,0],
+        [1,1,1,1,0,0,0,0],
+    ])
+
+def sprite_npc2_body_left():
+    """Merchant body - left half. Color 1 = shirt, Color 3 = belt."""
+    return pixels_to_tile([
+        [0,0,0,1,1,1,1,1],
+        [0,0,1,1,1,1,1,1],
+        [0,1,1,1,1,1,1,1],
+        [0,1,1,1,1,1,1,1],
+        [0,1,3,3,3,3,3,3],
+        [0,0,1,1,1,1,1,1],
+        [0,0,1,1,1,1,1,1],
+        [0,0,1,1,0,0,0,1],
+    ])
+
+def sprite_npc2_body_right():
+    """Merchant body - right half."""
+    return pixels_to_tile([
+        [1,1,1,1,1,0,0,0],
+        [1,1,1,1,1,1,0,0],
+        [1,1,1,1,1,1,1,0],
+        [1,1,1,1,1,1,1,0],
+        [3,3,3,3,3,3,1,0],
+        [1,1,1,1,1,1,0,0],
+        [1,1,1,1,1,1,0,0],
+        [1,0,0,0,1,1,0,0],
+    ])
+
+
+# =========================================================================
+# FONT TILES (used from Step 4 onwards)
+# Simple 5x7 pixel font, centered in 8x8 tiles.
+# Written as pattern strings for readability: '#' = color 1, ' ' = color 0.
+# =========================================================================
+
+FONT_PATTERNS = {
+    'A': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        " #   #  ",
+        " #####  ",
+        " #   #  ",
+        " #   #  ",
+        "        ",
+    ],
+    'B': [
+        "        ",
+        " ####   ",
+        " #   #  ",
+        " ####   ",
+        " #   #  ",
+        " #   #  ",
+        " ####   ",
+        "        ",
+    ],
+    'C': [
+        "        ",
+        "  ####  ",
+        " #      ",
+        " #      ",
+        " #      ",
+        " #      ",
+        "  ####  ",
+        "        ",
+    ],
+    'D': [
+        "        ",
+        " ####   ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        " ####   ",
+        "        ",
+    ],
+    'E': [
+        "        ",
+        " #####  ",
+        " #      ",
+        " ####   ",
+        " #      ",
+        " #      ",
+        " #####  ",
+        "        ",
+    ],
+    'F': [
+        "        ",
+        " #####  ",
+        " #      ",
+        " ####   ",
+        " #      ",
+        " #      ",
+        " #      ",
+        "        ",
+    ],
+    'G': [
+        "        ",
+        "  ####  ",
+        " #      ",
+        " #  ##  ",
+        " #   #  ",
+        " #   #  ",
+        "  ####  ",
+        "        ",
+    ],
+    'H': [
+        "        ",
+        " #   #  ",
+        " #   #  ",
+        " #####  ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        "        ",
+    ],
+    'I': [
+        "        ",
+        "  ###   ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "  ###   ",
+        "        ",
+    ],
+    'J': [
+        "        ",
+        "   ###  ",
+        "    #   ",
+        "    #   ",
+        "    #   ",
+        " #  #   ",
+        "  ##    ",
+        "        ",
+    ],
+    'K': [
+        "        ",
+        " #   #  ",
+        " #  #   ",
+        " ###    ",
+        " #  #   ",
+        " #   #  ",
+        " #   #  ",
+        "        ",
+    ],
+    'L': [
+        "        ",
+        " #      ",
+        " #      ",
+        " #      ",
+        " #      ",
+        " #      ",
+        " #####  ",
+        "        ",
+    ],
+    'M': [
+        "        ",
+        " #   #  ",
+        " ## ##  ",
+        " # # #  ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        "        ",
+    ],
+    'N': [
+        "        ",
+        " #   #  ",
+        " ##  #  ",
+        " # # #  ",
+        " #  ##  ",
+        " #   #  ",
+        " #   #  ",
+        "        ",
+    ],
+    'O': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        "  ###   ",
+        "        ",
+    ],
+    'P': [
+        "        ",
+        " ####   ",
+        " #   #  ",
+        " ####   ",
+        " #      ",
+        " #      ",
+        " #      ",
+        "        ",
+    ],
+    'Q': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        " #   #  ",
+        " # # #  ",
+        " #  #   ",
+        "  ## #  ",
+        "        ",
+    ],
+    'R': [
+        "        ",
+        " ####   ",
+        " #   #  ",
+        " ####   ",
+        " # #    ",
+        " #  #   ",
+        " #   #  ",
+        "        ",
+    ],
+    'S': [
+        "        ",
+        "  ####  ",
+        " #      ",
+        "  ###   ",
+        "     #  ",
+        "     #  ",
+        " ####   ",
+        "        ",
+    ],
+    'T': [
+        "        ",
+        " #####  ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "        ",
+    ],
+    'U': [
+        "        ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        "  ###   ",
+        "        ",
+    ],
+    'V': [
+        "        ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        "  # #   ",
+        "   #    ",
+        "        ",
+    ],
+    'W': [
+        "        ",
+        " #   #  ",
+        " #   #  ",
+        " #   #  ",
+        " # # #  ",
+        " ## ##  ",
+        " #   #  ",
+        "        ",
+    ],
+    'X': [
+        "        ",
+        " #   #  ",
+        "  # #   ",
+        "   #    ",
+        "   #    ",
+        "  # #   ",
+        " #   #  ",
+        "        ",
+    ],
+    'Y': [
+        "        ",
+        " #   #  ",
+        " #   #  ",
+        "  # #   ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "        ",
+    ],
+    'Z': [
+        "        ",
+        " #####  ",
+        "     #  ",
+        "    #   ",
+        "   #    ",
+        "  #     ",
+        " #####  ",
+        "        ",
+    ],
+    '0': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        " #  ##  ",
+        " # # #  ",
+        " ##  #  ",
+        "  ###   ",
+        "        ",
+    ],
+    '1': [
+        "        ",
+        "   #    ",
+        "  ##    ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "  ###   ",
+        "        ",
+    ],
+    '2': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        "    #   ",
+        "   #    ",
+        "  #     ",
+        " #####  ",
+        "        ",
+    ],
+    '3': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        "   ##   ",
+        "     #  ",
+        " #   #  ",
+        "  ###   ",
+        "        ",
+    ],
+    '4': [
+        "        ",
+        "    #   ",
+        "   ##   ",
+        "  # #   ",
+        " #  #   ",
+        " #####  ",
+        "    #   ",
+        "        ",
+    ],
+    '5': [
+        "        ",
+        " #####  ",
+        " #      ",
+        " ####   ",
+        "     #  ",
+        " #   #  ",
+        "  ###   ",
+        "        ",
+    ],
+    '6': [
+        "        ",
+        "  ###   ",
+        " #      ",
+        " ####   ",
+        " #   #  ",
+        " #   #  ",
+        "  ###   ",
+        "        ",
+    ],
+    '7': [
+        "        ",
+        " #####  ",
+        "     #  ",
+        "    #   ",
+        "   #    ",
+        "  #     ",
+        "  #     ",
+        "        ",
+    ],
+    '8': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        "  ###   ",
+        " #   #  ",
+        " #   #  ",
+        "  ###   ",
+        "        ",
+    ],
+    '9': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        " #   #  ",
+        "  ####  ",
+        "     #  ",
+        "  ###   ",
+        "        ",
+    ],
+    ' ': [
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+    ],
+    '!': [
+        "        ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "   #    ",
+        "        ",
+        "   #    ",
+        "        ",
+    ],
+    '?': [
+        "        ",
+        "  ###   ",
+        " #   #  ",
+        "    #   ",
+        "   #    ",
+        "        ",
+        "   #    ",
+        "        ",
+    ],
+    '.': [
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "  ##    ",
+        "  ##    ",
+    ],
+    ',': [
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "  ##    ",
+        "   #    ",
+        "  #     ",
+    ],
+    "'": [
+        "   #    ",
+        "   #    ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+    ],
+    '-': [
+        "        ",
+        "        ",
+        "        ",
+        " #####  ",
+        "        ",
+        "        ",
+        "        ",
+        "        ",
+    ],
+}
+
+# Maps a character to the NES tile number where its glyph lives in pattern table 1.
+# Font occupies tiles $10-$3F (48 tiles: 26 letters + 10 digits + 12 punctuation/etc).
+FONT_TILE_MAP = {}
+_font_order = (
+    list("ABCDEFGHIJKLMNOPQRSTUVWXYZ") +   # $10 - $29
+    list("0123456789") +                    # $2A - $33
+    [' ', '!', '?', '.', ',', "'", '-']    # $34 - $3A
+)
+for i, ch in enumerate(_font_order):
+    FONT_TILE_MAP[ch] = 0x10 + i
+
+def font_tile(ch):
+    """Return 16-byte tile data for one font character."""
+    pattern = FONT_PATTERNS.get(ch, FONT_PATTERNS[' '])
+    rows = []
+    for row_str in pattern:
+        row = [1 if c == '#' else 0 for c in row_str]
+        rows.append(row[:8])
+    return pixels_to_tile(rows)
+
+
+# =========================================================================
+# DIALOGUE BOX BORDER TILES (used from Step 5)
+# =========================================================================
+
+def tile_box_corner_tl():
+    """Top-left corner of a dialogue box. Color 1 = border."""
+    return pixels_to_tile([
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,1,1,1,1,1,1],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+    ])
+
+def tile_box_corner_tr():
+    return pixels_to_tile([
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [1,1,1,1,1,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+    ])
+
+def tile_box_corner_bl():
+    return pixels_to_tile([
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,1,1,1,1,1],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+    ])
+
+def tile_box_corner_br():
+    return pixels_to_tile([
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [1,1,1,1,1,1,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+    ])
+
+def tile_box_edge_top():
+    """Horizontal border - used along the top of a dialogue box."""
+    return pixels_to_tile([
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [1,1,1,1,1,1,1,1],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+    ])
+
+def tile_box_edge_bottom():
+    """Horizontal border - used along the bottom of a dialogue box."""
+    return pixels_to_tile([
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+        [1,1,1,1,1,1,1,1],
+        [0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0],
+    ])
+
+def tile_box_edge_left():
+    """Vertical border on the left side of the box."""
+    return pixels_to_tile([
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+        [0,0,1,0,0,0,0,0],
+    ])
+
+def tile_box_edge_right():
+    """Vertical border on the right side of the box."""
+    return pixels_to_tile([
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+        [0,0,0,0,0,1,0,0],
+    ])
+
+
+def build_combined_chr(player_chr_path, output_path,
+                       with_npc=False, with_merchant=False,
+                       with_font=False, with_box_borders=False):
     """
     Build an 8KB CHR file:
-      - First 4KB (pattern table 0): Player sprites + enemy/item sprites
-      - Second 4KB (pattern table 1): Background tiles
+      - First 4KB (pattern table 0): Player sprites + enemy/item sprites (+ optional NPC)
+      - Second 4KB (pattern table 1): Background tiles (+ optional font, box borders)
+
+    Flags:
+      with_npc       - Add old-man NPC sprite at tiles $60, $61, $70, $71
+      with_merchant  - Add merchant NPC sprite at tiles $62, $63, $72, $73
+      with_font      - Add font glyphs at tiles $10 - $3A in bg pattern table
+      with_box_borders - Add dialogue box border tiles at $3B - $42
     """
     # Load existing player sprite data (first 4KB)
     with open(player_chr_path, 'rb') as f:
@@ -379,6 +1066,25 @@ def build_combined_chr(player_chr_path, output_path):
     player_data[offset:offset+16] = sprite_gem()
     player_data[offset+16:offset+32] = sprite_heart()
     player_data[offset+32:offset+48] = sprite_sword()
+
+    # --- NPC SPRITES ---
+    if with_npc:
+        # Old man NPC at $60, $61 (head) and $70, $71 (body)
+        offset = 0x60 * 16
+        player_data[offset:offset+16] = sprite_npc_head_left()
+        player_data[offset+16:offset+32] = sprite_npc_head_right()
+        offset = 0x70 * 16
+        player_data[offset:offset+16] = sprite_npc_body_left()
+        player_data[offset+16:offset+32] = sprite_npc_body_right()
+
+    if with_merchant:
+        # Merchant NPC at $62, $63 (head) and $72, $73 (body)
+        offset = 0x62 * 16
+        player_data[offset:offset+16] = sprite_npc2_head_left()
+        player_data[offset+16:offset+32] = sprite_npc2_head_right()
+        offset = 0x72 * 16
+        player_data[offset:offset+16] = sprite_npc2_body_left()
+        player_data[offset+16:offset+32] = sprite_npc2_body_right()
 
     # --- BUILD BACKGROUND TILES (pattern table 1, second 4KB) ---
     bg_data = bytearray(4096)
@@ -418,6 +1124,22 @@ def build_combined_chr(player_chr_path, output_path):
 
     # Tile $0B: Solid block (useful filler)
     bg_data[0x0B*16:0x0B*16+16] = solid_tile(1)
+
+    # --- FONT TILES (tiles $10 - $3A in bg pattern table) ---
+    if with_font:
+        for ch, tile_num in FONT_TILE_MAP.items():
+            bg_data[tile_num*16:tile_num*16+16] = font_tile(ch)
+
+    # --- DIALOGUE BOX BORDER TILES (tiles $3B - $42) ---
+    if with_box_borders:
+        bg_data[0x3B*16:0x3B*16+16] = tile_box_corner_tl()
+        bg_data[0x3C*16:0x3C*16+16] = tile_box_corner_tr()
+        bg_data[0x3D*16:0x3D*16+16] = tile_box_corner_bl()
+        bg_data[0x3E*16:0x3E*16+16] = tile_box_corner_br()
+        bg_data[0x3F*16:0x3F*16+16] = tile_box_edge_top()
+        bg_data[0x40*16:0x40*16+16] = tile_box_edge_bottom()
+        bg_data[0x41*16:0x41*16+16] = tile_box_edge_left()
+        bg_data[0x42*16:0x42*16+16] = tile_box_edge_right()
 
     # Combine into 8KB
     output = bytes(player_data) + bytes(bg_data)
@@ -590,11 +1312,13 @@ if __name__ == '__main__':
 
     player_chr = os.path.join(project_dir, 'assets', 'sprites', 'walk1.chr')
 
-    # Output for Step 2 and Step 3
+    # Output for Step 2, 3, 4, 5
     step2_dir = os.path.join(project_dir, 'steps', 'Step_2_Background_Level', 'assets')
     step3_dir = os.path.join(project_dir, 'steps', 'Step_3_Enemies_And_Items', 'assets')
+    step4_dir = os.path.join(project_dir, 'steps', 'Step_4_Dialogue', 'assets')
+    step5_dir = os.path.join(project_dir, 'steps', 'Step_5_Multi_NPC_Dialogue', 'assets')
 
-    for d in [step2_dir, step3_dir]:
+    for d in [step2_dir, step3_dir, step4_dir, step5_dir]:
         os.makedirs(os.path.join(d, 'sprites'), exist_ok=True)
         os.makedirs(os.path.join(d, 'backgrounds'), exist_ok=True)
         os.makedirs(os.path.join(d, 'palettes'), exist_ok=True)
@@ -609,10 +1333,34 @@ if __name__ == '__main__':
     # Generate palettes
     build_palettes(os.path.join(step2_dir, 'palettes', 'game.pal'))
 
-    # Copy same assets for Step 3
+    # Step 3: enemies and items (same CHR/nametable/palette as Step 2)
     build_combined_chr(player_chr,
                        os.path.join(step3_dir, 'sprites', 'game.chr'))
     build_nametable(os.path.join(step3_dir, 'backgrounds', 'level1.nam'))
     build_palettes(os.path.join(step3_dir, 'palettes', 'game.pal'))
+
+    # Step 4: dialogue with one NPC + font
+    build_combined_chr(player_chr,
+                       os.path.join(step4_dir, 'sprites', 'game.chr'),
+                       with_npc=True,
+                       with_font=True)
+    build_nametable(os.path.join(step4_dir, 'backgrounds', 'level1.nam'))
+    build_palettes(os.path.join(step4_dir, 'palettes', 'game.pal'))
+
+    # Step 5: two NPCs + font + bordered dialogue box
+    build_combined_chr(player_chr,
+                       os.path.join(step5_dir, 'sprites', 'game.chr'),
+                       with_npc=True,
+                       with_merchant=True,
+                       with_font=True,
+                       with_box_borders=True)
+    build_nametable(os.path.join(step5_dir, 'backgrounds', 'level1.nam'))
+    build_palettes(os.path.join(step5_dir, 'palettes', 'game.pal'))
+
+    # Print the font tile map so teacher knows what values to use in code
+    print("\nFont tile numbers (for use in main.c):")
+    for ch, tile_num in sorted(FONT_TILE_MAP.items(), key=lambda x: x[1]):
+        display = repr(ch) if ch in (' ', "'", ',') else ch
+        print(f"  '{display}' = 0x{tile_num:02X}")
 
     print("\nDone! CHR files, nametables, and palettes generated.")
