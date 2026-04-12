@@ -2543,6 +2543,10 @@ function init() {
   document.getElementById('help-dialog').addEventListener('close', () => {
     localStorage.setItem('help-seen', '1');
   });
+  document.getElementById('btn-help-replay').addEventListener('click', () => {
+    localStorage.removeItem('help-seen');
+    setStatus('saved', '● Help will reopen the next time this page loads');
+  });
   document.getElementById('btn-import').addEventListener('click', () => {
     document.getElementById('file-input').click();
   });
@@ -2698,19 +2702,25 @@ function init() {
   });
   document.getElementById('btn-copy-tile').addEventListener('click', () => {
     tileClipboard = clonePixels(state.bg_tiles[selectedTileIdx].pixels);
+    const hex = selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
     const pasteBtn = document.getElementById('btn-paste-tile');
     pasteBtn.disabled = false;
-    pasteBtn.title = 'Paste clipboard pixels into this tile (overwrites) — '
-      + 'copied from 0x' + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
+    pasteBtn.title = 'Paste clipboard pixels into this tile (overwrites) — copied from 0x' + hex;
+    setStatus('saved', '● Copied tile 0x' + hex + ' — select another tile and press V to paste');
   });
   document.getElementById('btn-paste-tile').addEventListener('click', () => {
-    if (!tileClipboard) return;
+    if (!tileClipboard) {
+      setStatus('warn', '● Nothing to paste — press C on a tile first');
+      return;
+    }
     pushUndo();
     state.bg_tiles[selectedTileIdx].pixels = clonePixels(tileClipboard);
     markDirty();
     renderTileEditor();
     renderTileset();
     renderNametable();
+    setStatus('saved', '● Pasted into tile 0x'
+      + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase());
   });
 
   // --- Background list controls ---

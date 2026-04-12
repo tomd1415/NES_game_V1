@@ -44,6 +44,66 @@ Use these whenever you add something to `main.c` that you want the pupil to noti
 
 If the pupil creates new sprites in Aseprite, you (teacher) can convert and place them by opening the teacher workspace, running the `Regenerate All Graphics (Teacher)` task, or using `tools/png2chr.py` as documented in `ASEPRITE_WORKFLOW.md`. The pupil workspace has `tools/` hidden.
 
+---
+
+## Pupil-facing tile/sprite editor
+
+The project ships a self-contained web-based tile editor in `tools/tile_editor_web/`:
+
+- **`index.html`** — the Backgrounds page (tileset, palettes, nametable, multi-background management).
+- **`sprites.html`** — the Sprites page (composite sprite builder, Play-in-NES dialog).
+
+Both pages are plain HTML with inline CSS and JS, no build step. They share one project blob in `localStorage` under the key `nes_tile_editor.current.v1`, so edits on either page save into the same state.
+
+### State shape
+
+The editor state object (what JSON export writes and import reads) is:
+
+```text
+{
+  version: 1,
+  name: "untitled",
+  universal_bg: 0x21,
+  bg_palettes: [{slots:[b,b,b]}, ...4 of these],
+  sprite_palettes: [{slots:[b,b,b]}, ...4 of these],
+  sprite_tiles: [{pixels:[8×8], name:""}, ...256 of these],
+  bg_tiles:     [{pixels:[8×8], name:""}, ...256 of these],
+  backgrounds: [{name, dimensions:{screens_x,screens_y}, nametable:[[...]]}],
+  selectedBgIdx: 0,
+  sprites: [{name, width, height, cells:[[{tile,palette,flipH,flipV,priority,empty}]]}],
+  metadata: {created, modified}
+}
+```
+
+Two independent 256-tile pools (`sprite_tiles` / `bg_tiles`) mirror the NES pattern tables and stop the two pages clobbering each other's art. Legacy saves with a single `tiles` pool are migrated by `migrateState()` on load — they duplicate across both pools.
+
+### Playground Server (`tools/playground_server.py`)
+
+Python stdlib HTTP server on `127.0.0.1:8765`. Two roles:
+
+1. **Serves the editor** over HTTP (the `file://` protocol breaks `fetch()` CORS when the editor tries to POST).
+2. **POST `/play`** — accepts the full editor state, encodes sprite_tiles + bg_tiles into a single 8 KB CHR (sprite pool at $0000, BG pool at $1000 — `PPU_CTRL=0x10` selects $1000 for the background), encodes the active nametable into 1024 bytes (960 tile + 64 attribute), writes `src/scene.inc` + `src/palettes.inc` into `steps/Step_Playground/`, runs `make -C steps/Step_Playground`, and spawns `fceux` detached on the resulting ROM.
+
+The server is stdlib-only — no pip installs needed. Keep it that way.
+
+**VSCode tasks**: `Start Playground Server` is auto-run on folder open. `Open Editor via Playground Server` is the canonical entry — opens the browser on the served URL (the Play button fails on `file://` with a CORS hint in the status bar).
+
+**Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, and `ss_*` arrays for the extra static sprites — if you rename these symbols, update `build_scene_inc()` in the server to match.
+
+### Converting pupil's legacy `my_tiles.txt`
+
+`tools/convert_my_tiles.py` reads the old text-block format (via `tools/tile_editor.py`'s parser) and writes `assets/pupil/my_project.json` in the current editor schema:
+
+```bash
+python3 tools/convert_my_tiles.py
+```
+
+It categorises tiles by whether they're referenced by sprites or backgrounds, fills the matching pool(s) starting at slot 1 (slot 0 left blank to match the editor convention), and claims up to 4 BG + 4 sprite palette slots. Unused palette slots are filled with the editor defaults so the pupil doesn't open an all-black palette grid.
+
+Once run, the pupil imports the JSON on each editor page (**Import background…** / **Import sprites…**).
+
+---
+
 ## Step-based lesson structure
 
 The project includes a `steps/` folder with self-contained, buildable snapshots of the game at each stage of development. Each step can be built independently with `make` from within its folder.

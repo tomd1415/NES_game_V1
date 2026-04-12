@@ -780,8 +780,9 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
     <input id="project-name" type="text" value="untitled" title="Project name (shared with Backgrounds)" aria-label="Project name">
   </div>
   <div class="toolbar">
-    <button type="button" id="btn-undo" title="Undo (Ctrl+Z or Z)">↶ Undo</button>
-    <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z or Y)">↷ Redo</button>
+    <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+    <button type="button" id="btn-new" title="Start a new project (your current work is saved to a snapshot first)">New</button>
     <button type="button" id="btn-recover" title="Recover from a snapshot or backup">Recover…</button>
     <details class="export-menu">
       <summary title="Export your sprites for the NES game">Export ▾</summary>
@@ -958,7 +959,7 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
       </label>
       <div class="pg-mode-toggle" role="tablist">
         <button type="button" id="pg-mode-player" class="active" title="Next click on the preview sets the player's starting position">Place Player</button>
-        <button type="button" id="pg-mode-scene" title="Next click places the currently highlighted scene sprite">Place scene sprite</button>
+        <button type="button" id="pg-mode-scene" title="Next click places the currently highlighted extra sprite on the background">Place extra sprite</button>
       </div>
       <div id="pg-status" class="pg-status">Ready. Hit Play when you're happy.</div>
     </div>
@@ -979,6 +980,7 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
     <button type="button" class="help-tab active" data-tab="tutorial">Quick start</button>
     <button type="button" class="help-tab" data-tab="shortcuts">Keyboard</button>
     <button type="button" class="help-tab" data-tab="nes">Sprite rules</button>
+    <button type="button" class="help-tab" data-tab="saves">Saving &amp; recovery</button>
     <button type="button" class="help-tab" data-tab="faq">Tips / FAQ</button>
   </div>
 
@@ -1058,6 +1060,22 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
     </ul>
   </div>
 
+  <div class="help-tab-panel" data-panel="saves" hidden>
+    <h2>Saving &amp; recovery</h2>
+    <p class="help-hint">
+      Your work is saved to this browser's storage <b>every time you change
+      anything</b>. Refreshing the page reloads the last-saved version — so you
+      can close the tab and come back later without losing anything.
+    </p>
+    <ul class="help-list">
+      <li>Every <b>30 seconds</b> a numbered snapshot is kept (last 5 stay around).</li>
+      <li>Every <b>5 minutes</b> an emergency backup is written to browser storage.</li>
+      <li><b>Recover…</b> in the toolbar lets you roll back to any snapshot or emergency backup. The current project is snapshotted first, so nothing is ever lost in the process.</li>
+      <li><b>Export → JSON save</b> gives you a portable file you can email, commit to git, or keep as a permanent backup. Import it back with <b>Import sprites…</b>.</li>
+      <li>The <b>Backgrounds</b> and <b>Sprites</b> pages share one project in storage — changes on either page save into the same file.</li>
+    </ul>
+  </div>
+
   <div class="help-tab-panel" data-panel="faq" hidden>
     <h2>Tips &amp; gotchas</h2>
     <ul class="help-list">
@@ -1073,6 +1091,7 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   </div>
 
   <div class="dialog-actions">
+    <button type="button" id="btn-help-replay" title="Show the Quick-start tour automatically the next time this page loads">↺ Replay on next load</button>
     <button type="button" id="btn-help-close" class="primary">Got it</button>
   </div>
 </dialog>
@@ -1123,6 +1142,19 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   <div class="dialog-actions">
     <button type="button" id="btn-confirm-no">Cancel</button>
     <button type="button" id="btn-confirm-yes" class="primary">Yes</button>
+  </div>
+</dialog>
+
+<!-- ============ New project ============ -->
+<dialog id="new-dialog">
+  <h2>Start a new project</h2>
+  <p style="color:var(--muted);line-height:1.5">
+    Your current project will be saved to a snapshot first, so you can always
+    recover it from the <b>Recover…</b> menu. Continue?
+  </p>
+  <div class="dialog-actions">
+    <button type="button" id="btn-new-cancel">Cancel</button>
+    <button type="button" id="btn-new-yes" class="primary">Save &amp; start fresh</button>
   </div>
 </dialog>
 
@@ -3464,6 +3496,18 @@ function init() {
   });
   document.getElementById('btn-undo').addEventListener('click', undo);
   document.getElementById('btn-redo').addEventListener('click', redo);
+  document.getElementById('btn-new').addEventListener('click', () => {
+    document.getElementById('new-dialog').showModal();
+  });
+  document.getElementById('btn-new-cancel').addEventListener('click', () => {
+    document.getElementById('new-dialog').close();
+  });
+  document.getElementById('btn-new-yes').addEventListener('click', () => {
+    Storage.saveSnapshot(state, 'before_new');
+    state = createDefaultState();
+    afterStateReplaced();
+    document.getElementById('new-dialog').close();
+  });
   document.getElementById('btn-recover').addEventListener('click', openRecoveryDialog);
   document.getElementById('btn-recovery-cancel').addEventListener('click', () => {
     document.getElementById('recovery-dialog').close();
@@ -3471,8 +3515,13 @@ function init() {
   document.getElementById('btn-help').addEventListener('click', () => {
     document.getElementById('help-dialog').showModal();
   });
+  document.getElementById('btn-help-replay').addEventListener('click', () => {
+    localStorage.removeItem('sprites-help-seen');
+    setStatus('saved', '● Help will reopen the next time this page loads');
+  });
   document.getElementById('btn-help-close').addEventListener('click', () => {
     document.getElementById('help-dialog').close();
+    localStorage.setItem('sprites-help-seen', '1');
   });
   document.getElementById('btn-play').addEventListener('click', openPlaygroundDialog);
   document.getElementById('btn-pg-cancel').addEventListener('click', () => {

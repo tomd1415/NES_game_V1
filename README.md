@@ -93,37 +93,69 @@ Some ideas:
 
 ## Designing your own sprites and backgrounds
 
-There are **two ways** to draw your own tiles — pick whichever you prefer.
+The fastest way is the **visual tile editor**: a web page that runs in
+your browser with tools for drawing tiles, arranging sprites, and
+laying out backgrounds.
 
-### 🎨 Visual editor (click and paint)
+### 🎨 Opening the visual editor
 
-Press **Ctrl+Shift+P → Tasks: Run Task → Open Visual Tile Editor**.
-A web page opens with:
+1. Press **Ctrl+Shift+P → Tasks: Run Task → Open Editor via Playground Server**.
+2. A browser tab opens at `http://127.0.0.1:8765/` with the **Backgrounds** page.
+3. Click the **Sprites** link at the top of the page to switch to the sprites editor. Both pages share one project.
 
-- A **tileset** grid — click any of 256 tiles to edit it
-- A big **tile editor** — click pixels to paint (numbers 0-3 = your colours)
-- **Palette** picker — pick any of the 64 NES colours
-- A **background builder** — click or drag to place tiles into a scene,
-  up to 4 screens big for scrolling
+The first time you open the editor a Quick-start tour pops up. If you
+dismiss it and want it back, click **?** → **↺ Replay on next load**.
 
-Your work **auto-saves** to the browser every time you change anything,
-plus a snapshot every 30s and a backup every 5 min. Hit **Recover…** in
-the toolbar if anything ever goes wrong.
+### 🎨 What's in the editor
 
-Export your work as `my_tiles.txt` (for the text-based preview),
-`.chr` / `.nam` / `.pal` (for the game), or a `.json` save file.
+- **Tileset** — 256 tiles. Click one to edit it. Press **C** to copy a tile's pixels, select another slot and press **V** to paste.
+- **Tile editor** — click pixels to paint. Numbers 0–3 map to the four palette colours.
+- **Palettes** — 4 background palettes + 4 sprite palettes, 3 colours each. Click any of the 64 NES colours to assign.
+- **Backgrounds page** — a 32×30 tile grid (plus multi-screen scrolling). You can create **multiple named backgrounds** with **+ New** above the grid and flip between them.
+- **Sprites page** — build multi-tile sprites (up to 8×8 tiles) out of the shared tileset.
 
-### 📝 Text editor (type digits)
+Your work **auto-saves** to the browser on every change, with a snapshot
+every 30 s and a backup every 5 min. Hit **Recover…** in the toolbar if
+anything ever goes wrong. **New** starts fresh (snapshotting your
+current work first, so it's never lost).
 
-Open the **Tile Editor** folder in the sidebar and edit `my_tiles.txt`.
-Save and `preview.png` refreshes automatically.
+### ▶ Play your scene in the NES
 
-1. Open `my_tiles.txt` and `preview.png` side-by-side.
-2. Press **Ctrl+Shift+P → Tasks: Run Task → Start Live Tile Preview**.
-3. Now every **Ctrl+S** refreshes `preview.png` automatically.
+On the **Sprites** page, click **▶ Play in NES**. Pick a Player sprite,
+optionally drop a few extras onto the background, and the editor will
+compile your tiles into a real NES ROM and open it in FCEUX so you can
+walk the player around.
 
-Full instructions are in `assets/pupil/TILE_EDITOR_GUIDE.md`.
-All 64 NES colours are in `assets/pupil/palette_reference.png`.
+This needs the **Playground Server** running — the
+"Open Editor via Playground Server" task starts it for you. If you see
+"is the server running?" in the status bar, run the task again.
+
+### 💾 Exporting your work
+
+The editor writes a few different formats. Most of the time you want
+**JSON save** (portable, re-importable) or leave everything in browser
+storage. The other formats are there for the cc65 build.
+
+| Format | Where | Use for |
+| ------ | ----- | ------- |
+| `.json` | both pages | Round-trip save you can email / commit to git |
+| `my_tiles.txt` | backgrounds | Feed the text-based preview + converter |
+| `.chr` | backgrounds | Raw tile bitmap for cc65 |
+| `.nam` / `.pal` | backgrounds | Nametable + palette bytes for cc65 |
+| `sprites.inc` / `sprites.h` | sprites | C arrays compiled into the game |
+
+### 📝 Or: text editor (type digits)
+
+If you prefer typing, edit `assets/pupil/my_tiles.txt` directly. Open it
+alongside `preview.png` and run **Tasks: Run Task → Start Live Tile
+Preview** — every save refreshes the preview image.
+
+To move a text-format file into the visual editor, run
+`python3 tools/convert_my_tiles.py` and then on each page click
+**Import…** and pick the resulting `assets/pupil/my_project.json`.
+
+Full editor instructions: **`assets/pupil/TILE_EDITOR_GUIDE.md`**.
+All 64 NES colours: **`assets/pupil/palette_reference.png`**.
 
 ---
 

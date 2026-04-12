@@ -60,6 +60,11 @@ attempt1/
 
 **The file you'll edit most is `src/main.c`** - this is where all the game logic lives.
 
+If you want to draw your own tiles, sprites, and levels, jump to
+**[Designing your own graphics](#designing-your-own-graphics)** at the
+bottom of this guide. The full tile-editor walkthrough lives in
+[`assets/pupil/TILE_EDITOR_GUIDE.md`](assets/pupil/TILE_EDITOR_GUIDE.md).
+
 ---
 
 ## How to build and run
@@ -263,14 +268,45 @@ You'll need to make sure tile `0x03` in your CHR file actually has a graphic dra
 
 ---
 
-## How to create new sprite graphics
+## Designing your own graphics
 
-1. Download a tile editor like **YY-CHR** or **NES Screen Tool (NESST)**
-2. Open `assets/sprites/walk1.chr` in the editor
-3. You'll see a grid of 8x8 pixel tiles - each tile can use 4 colors (transparent + 3 from the palette)
-4. Draw your new tiles and note their tile numbers (shown in the editor)
-5. Use those numbers in the `anim_tiles` table or in `draw_one_sprite()` calls
-6. Save the file and run `make run` to see your changes
+This project ships with its own **visual tile editor** — a web page
+with tools for drawing tiles, building sprites and laying out
+backgrounds. You don't need to download anything extra.
+
+### Opening the editor
+
+1. Press **Ctrl+Shift+P → Tasks: Run Task → Open Editor via Playground Server**.
+2. A browser tab opens with the **Backgrounds** page.
+3. Click the **Sprites** link at the top to switch pages. Both pages share one project; your work auto-saves between them.
+
+### What it can do
+
+- **Paint 8×8 tiles** on a 256-slot tileset, share tiles between backgrounds and sprites.
+- **Copy a tile's pixels** with **C** and paste into another slot with **V** — the fastest way to make variants of an existing shape.
+- **Multi-tile sprites** (up to 8×8 tiles each) with flip-H / flip-V and per-sprite palettes.
+- **Multiple named backgrounds** per project — click **+ New** above the background grid to start a second scene.
+- **▶ Play in NES** — the sprites page has a Play button that compiles your tileset + background + sprites into a real `.nes` ROM and opens it in FCEUX so you can walk around in your scene.
+
+### Moving graphics into the step code
+
+When you're happy with your art, **Export ▾** on the backgrounds page
+gives you `.chr`, `.nam` and `.pal` files that drop into
+`assets/sprites/`, `assets/backgrounds/` and `assets/palettes/`. Once
+in place, the step folders pick them up on the next `make run`.
+
+If you started in the text editor (`my_tiles.txt`) and want to move to
+the visual editor, run this first:
+
+```bash
+python3 tools/convert_my_tiles.py
+```
+
+It writes `assets/pupil/my_project.json`. Open the editor, click
+**Import…** on each page, pick the JSON, and your tiles, palettes,
+sprites and background arrive in the new format.
+
+Full editor walkthrough: [`assets/pupil/TILE_EDITOR_GUIDE.md`](assets/pupil/TILE_EDITOR_GUIDE.md).
 
 ---
 
