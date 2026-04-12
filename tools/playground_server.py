@@ -73,17 +73,31 @@ def tile_to_chr(pixels):
     return bytes(out)
 
 
-def build_chr(state):
-    """Pupil has one shared 256-tile pool; write it as both pattern tables."""
-    tiles = state["tiles"]
+def _encode_pool(tiles, label):
     if len(tiles) != NUM_TILES:
-        raise ValueError(f"expected {NUM_TILES} tiles, got {len(tiles)}")
+        raise ValueError(f"expected {NUM_TILES} {label} tiles, got {len(tiles)}")
     chunk = bytearray()
     for t in tiles:
         chunk += tile_to_chr(t["pixels"])
     if len(chunk) != 4096:
-        raise ValueError(f"CHR pool came out {len(chunk)} bytes, expected 4096")
-    return bytes(chunk) * 2   # 8KB: sprites in $0000, BG in $1000
+        raise ValueError(f"{label} pool came out {len(chunk)} bytes, expected 4096")
+    return bytes(chunk)
+
+
+def build_chr(state):
+    """Two independent 256-tile pools -> 8KB CHR.
+
+    Sprite pattern table lives at $0000 (first 4KB), background pattern
+    table at $1000 (second 4KB) -- matches PPU_CTRL bit 4 = 1 set by the
+    step's init code. Old saves with a single `tiles` pool fall back to
+    duplicating it across both tables so nothing breaks during migration.
+    """
+    if "sprite_tiles" in state and "bg_tiles" in state:
+        return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
+             + _encode_pool(state["bg_tiles"], "bg_tiles")
+    # Legacy single pool: shared across both tables.
+    legacy = _encode_pool(state["tiles"], "tiles")
+    return legacy * 2
 
 
 def build_nam(state):

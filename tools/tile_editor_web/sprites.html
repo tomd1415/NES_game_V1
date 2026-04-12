@@ -1025,6 +1025,7 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
       <span>Sprite right-click</span><span>Stamp the highlighted tile into the clicked cell</span>
       <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd><span>Move the selected cell inside the sprite</span>
       <kbd>D</kbd><span>Duplicate the cell's tile into the next empty slot (doesn't disturb other sprites)</span>
+      <kbd>C</kbd> / <kbd>V</kbd><span>Copy the highlighted tile's pixels, then paste them into any other tile slot</span>
       <kbd>H</kbd> / <kbd>Shift</kbd>+<kbd>H</kbd><span>Toggle flip-H / flip-V on the current cell</span>
     </div>
     <h3>Undo / redo / save</h3>
@@ -1212,7 +1213,8 @@ function createDefaultState() {
     universal_bg: 0x21,
     bg_palettes: defaultBgPalettes(),
     sprite_palettes: defaultSpritePalettes(),
-    tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    sprite_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    bg_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
     nametable: emptyNametable(),
     sprites: [],
     metadata: { created: new Date().toISOString(), modified: new Date().toISOString() },
@@ -1236,7 +1238,7 @@ function makeEmptyTileAllocator() {
   return () => {
     for (let i = 1; i < NUM_TILES; i++) {
       if (reserved.has(i)) continue;
-      const t = state.tiles[i];
+      const t = state.sprite_tiles[i];
       if (!t.pixels.some(r => r.some(v => v !== 0))) {
         reserved.add(i);
         return i;
@@ -1273,7 +1275,11 @@ function resizeSprite(sprite, w, h) {
 function validateState(s) {
   if (!s || typeof s !== 'object') return 'not an object';
   if (s.version !== STATE_VERSION) return 'version mismatch';
-  if (!Array.isArray(s.tiles) || s.tiles.length !== NUM_TILES) return 'tiles wrong';
+  // Accept either the new split pools or the old single `tiles` pool —
+  // the full check happens in migrateState once the pools are normalised.
+  const hasSplit = Array.isArray(s.sprite_tiles) && Array.isArray(s.bg_tiles);
+  const hasLegacy = Array.isArray(s.tiles);
+  if (!hasSplit && !hasLegacy) return 'tiles wrong';
   if (!Array.isArray(s.bg_palettes) || s.bg_palettes.length !== 4) return 'bg_palettes';
   if (!Array.isArray(s.sprite_palettes) || s.sprite_palettes.length !== 4) return 'sprite_palettes';
   if (s.universal_bg < 0 || s.universal_bg > 0x3F) return 'universal_bg';
@@ -1281,7 +1287,25 @@ function validateState(s) {
   return null;
 }
 function migrateState(s) {
-  if (s && typeof s === 'object' && !Array.isArray(s.sprites)) s.sprites = [];
+  if (!s || typeof s !== 'object') return s;
+  if (!Array.isArray(s.sprites)) s.sprites = [];
+  // Old saves had one shared `tiles` pool. Duplicate it into both
+  // split pools so the pupil's existing art survives the upgrade.
+  if (Array.isArray(s.tiles) && (!Array.isArray(s.sprite_tiles) || !Array.isArray(s.bg_tiles))) {
+    const dup = () => s.tiles.map(t => ({
+      pixels: t.pixels.map(r => r.slice()),
+      name: t.name,
+    }));
+    if (!Array.isArray(s.sprite_tiles)) s.sprite_tiles = dup();
+    if (!Array.isArray(s.bg_tiles)) s.bg_tiles = dup();
+    delete s.tiles;
+  }
+  if (!Array.isArray(s.sprite_tiles)) {
+    s.sprite_tiles = Array.from({length: NUM_TILES}, () => ({ pixels: Array.from({length:8}, () => Array(8).fill(0)), name: '' }));
+  }
+  if (!Array.isArray(s.bg_tiles)) {
+    s.bg_tiles = Array.from({length: NUM_TILES}, () => ({ pixels: Array.from({length:8}, () => Array(8).fill(0)), name: '' }));
+  }
   // Sanity-patch each sprite.
   if (Array.isArray(s.sprites)) {
     for (const sp of s.sprites) {
@@ -1486,6 +1510,10 @@ let selectedPaletteSlot = 1;  // 1..3
 // tile — lets you browse the tileset without changing what's in the cell).
 let selectedTileIdx = 0;
 
+// Clipboard for tileset copy/paste (C / V). Holds a pixel grid only — palette
+// and flip flags belong to the sprite cell, not the raw CHR tile.
+let tileClipboard = null;
+
 // 'browse' (default, safe) or 'paint' (pixels are editable).
 let editMode = localStorage.getItem('sprite-edit-mode') === 'paint' ? 'paint' : 'browse';
 
@@ -1603,17 +1631,8 @@ function pixelRgb(v, pal) {
 // ================================================================
 function findTileUsage(tileIdx, excludeSprite, excludeCellR, excludeCellC) {
   const uses = [];
-  // Background nametable
-  if (Array.isArray(state.nametable)) {
-    for (let r = 0; r < state.nametable.length; r++) {
-      const row = state.nametable[r];
-      for (let c = 0; c < row.length; c++) {
-        if (row[c].tile === tileIdx) {
-          uses.push({ kind: 'bg', text: 'Background cell (' + c + ', ' + r + ')' });
-        }
-      }
-    }
-  }
+  // The background pool (bg_tiles) is now independent from sprite_tiles,
+  // so a sprite tile index never aliases a BG cell. Only scan sprites.
   // Sprite cells (skip empty placeholders — they aren't using a tile yet)
   for (let si = 0; si < state.sprites.length; si++) {
     const sp = state.sprites[si];
@@ -1648,7 +1667,7 @@ function findFirstSpriteUsingTile(tileIdx) {
 
 function findNextEmptyTileSlot() {
   for (let i = 0; i < NUM_TILES; i++) {
-    const t = state.tiles[i];
+    const t = state.sprite_tiles[i];
     if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
   }
   return -1;
@@ -1752,7 +1771,7 @@ function drawSpriteIntoCtx(sp, ctx, destW, destH) {
     for (let cc = 0; cc < sp.width; cc++) {
       const cell = sp.cells[cr][cc];
       if (cell.empty) continue;  // empty placeholders don't render
-      const tile = state.tiles[cell.tile];
+      const tile = state.sprite_tiles[cell.tile];
       const pal = spritePaletteFor(cell.palette);
       for (let py = 0; py < 8; py++) {
         for (let px = 0; px < 8; px++) {
@@ -1843,7 +1862,7 @@ function renderSpriteCanvas() {
         drawEmptyCellPlaceholder(ctx, cc * 8 * px, cr * 8 * px, 8 * px);
         continue;
       }
-      const tile = state.tiles[cell.tile];
+      const tile = state.sprite_tiles[cell.tile];
       const pal = spritePaletteFor(cell.palette);
       for (let py = 0; py < 8; py++) {
         for (let pxl = 0; pxl < 8; pxl++) {
@@ -2015,7 +2034,7 @@ function renderTileset() {
   for (let i = 0; i < NUM_TILES; i++) {
     const cx = (i % cols) * cell;
     const cy = Math.floor(i / cols) * cell;
-    const tile = state.tiles[i];
+    const tile = state.sprite_tiles[i];
     const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
     if (!anyPixel) {
       ctx.fillStyle = '#1a1630';
@@ -2067,7 +2086,7 @@ function renderTileEditor() {
   const ctx = canvas.getContext('2d');
   const cell = currentCell();
   const tileIdx = cell ? cell.tile : 0;
-  const tile = state.tiles[tileIdx];
+  const tile = state.sprite_tiles[tileIdx];
   const pal = activeCellPalette();
   const size = canvas.width;
   const cellPx = size / 8;
@@ -2288,7 +2307,7 @@ function spApply(evt, initial) {
 
   const pick = evt.shiftKey || evt.button === 2;
   if (pick) {
-    currentColour = state.tiles[cell.tile].pixels[srcY][srcX];
+    currentColour = state.sprite_tiles[cell.tile].pixels[srcY][srcX];
     refreshColourButtons();
     return;
   }
@@ -2305,8 +2324,8 @@ function spApply(evt, initial) {
         const c2 = currentSprite().cells[pos.cellR][pos.cellC];
         const sx2 = c2.flipH ? 7 - pos.localX : pos.localX;
         const sy2 = c2.flipV ? 7 - pos.localY : pos.localY;
-        if (state.tiles[c2.tile].pixels[sy2][sx2] !== currentColour) {
-          state.tiles[c2.tile].pixels[sy2][sx2] = currentColour;
+        if (state.sprite_tiles[c2.tile].pixels[sy2][sx2] !== currentColour) {
+          state.sprite_tiles[c2.tile].pixels[sy2][sx2] = currentColour;
           markDirty();
           renderSpriteCanvas(); renderTileset(); renderTileEditor(); renderSpriteList();
         }
@@ -2316,8 +2335,8 @@ function spApply(evt, initial) {
     pushUndo();
   }
 
-  if (state.tiles[cell.tile].pixels[srcY][srcX] === currentColour) return;
-  state.tiles[cell.tile].pixels[srcY][srcX] = currentColour;
+  if (state.sprite_tiles[cell.tile].pixels[srcY][srcX] === currentColour) return;
+  state.sprite_tiles[cell.tile].pixels[srcY][srcX] = currentColour;
   markDirty();
   renderSpriteCanvas();
   renderTileset();
@@ -2348,7 +2367,7 @@ function teApply(evt, initial) {
 
   const pick = evt.shiftKey || evt.button === 2;
   if (pick) {
-    currentColour = state.tiles[cell.tile].pixels[y][x];
+    currentColour = state.sprite_tiles[cell.tile].pixels[y][x];
     refreshColourButtons();
     return;
   }
@@ -2364,8 +2383,8 @@ function teApply(evt, initial) {
         teDragging = true;
         // Apply the pending first pixel now.
         pushUndo();
-        if (state.tiles[currentCell().tile].pixels[y][x] !== currentColour) {
-          state.tiles[currentCell().tile].pixels[y][x] = currentColour;
+        if (state.sprite_tiles[currentCell().tile].pixels[y][x] !== currentColour) {
+          state.sprite_tiles[currentCell().tile].pixels[y][x] = currentColour;
           markDirty();
           renderTileEditor();
           renderTileset();
@@ -2378,8 +2397,8 @@ function teApply(evt, initial) {
     pushUndo();
   }
   const tIdx = currentCell().tile;
-  if (state.tiles[tIdx].pixels[y][x] === currentColour) return;
-  state.tiles[tIdx].pixels[y][x] = currentColour;
+  if (state.sprite_tiles[tIdx].pixels[y][x] === currentColour) return;
+  state.sprite_tiles[tIdx].pixels[y][x] = currentColour;
   markDirty();
   renderTileEditor();
   renderTileset();
@@ -2417,8 +2436,8 @@ function openSharedTileDialog(tileIdx, uses, cb) {
       return;
     }
     pushUndo();
-    const src = state.tiles[tileIdx];
-    state.tiles[dst] = {
+    const src = state.sprite_tiles[tileIdx];
+    state.sprite_tiles[dst] = {
       pixels: clonePixels(src.pixels),
       name: src.name ? src.name + '_copy' : '',
     };
@@ -2488,7 +2507,7 @@ function renderFullPreview() {
       for (let cc = 0; cc < sp.width; cc++) {
         const cell = sp.cells[cr][cc];
         if (cell.empty) continue;
-        const tile = state.tiles[cell.tile];
+        const tile = state.sprite_tiles[cell.tile];
         const pal = spritePaletteFor(cell.palette);
         for (let py = 0; py < 8; py++) {
           for (let pxl = 0; pxl < 8; pxl++) {
@@ -2654,7 +2673,7 @@ function renderFloatingTileset() {
   for (let i = 0; i < NUM_TILES; i++) {
     const cx = (i % cols) * cell;
     const cy = Math.floor(i / cols) * cell;
-    const tile = state.tiles[i];
+    const tile = state.sprite_tiles[i];
     const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
     if (!anyPixel) {
       ctx.fillStyle = '#1a1630';
@@ -2904,14 +2923,14 @@ function importSpritesFromFile(file) {
     Storage.saveSnapshot(state, 'before_import_sprites');
 
     // Only pull in sprites-related data. The background (nametable,
-    // bg palettes, universal BG) stays exactly as the pupil left it,
-    // so importing a sprite pack can't clobber their level. Tiles are
-    // shared hardware CHR, so they come in with the sprites -- otherwise
-    // the imported sprites would render with whatever art happens to
-    // be in the tile pool right now.
+    // bg_tiles, bg_palettes, universal BG) stays exactly as the pupil
+    // left it, so importing a sprite pack can't clobber their level.
+    // `migrateState` above already normalised old saves (single `tiles`
+    // pool) into `sprite_tiles` + `bg_tiles`, so this always has the
+    // right field to read from.
     state.sprites = parsed.sprites || [];
     state.sprite_palettes = parsed.sprite_palettes;
-    state.tiles = parsed.tiles;
+    state.sprite_tiles = parsed.sprite_tiles;
     selectedSpriteIdx = state.sprites.length ? 0 : -1;
     selectedCell = { r: 0, c: 0 };
 
@@ -3213,7 +3232,7 @@ function renderPlaygroundPreview() {
     const row = nt[r];
     for (let c = 0; c < Math.min(32, row.length); c++) {
       const cell = row[c] || { tile: 0, palette: 0 };
-      const tile = state.tiles[cell.tile] || state.tiles[0];
+      const tile = state.bg_tiles[cell.tile] || state.bg_tiles[0];
       const pal = bgPaletteFor(cell.palette);
       const bx = c * 8, by = r * 8;
       for (let py = 0; py < 8; py++) {
@@ -3235,7 +3254,7 @@ function renderPlaygroundPreview() {
       for (let cc = 0; cc < sp.width; cc++) {
         const cell = sp.cells[cr][cc];
         if (cell.empty) continue;
-        const tile = state.tiles[cell.tile];
+        const tile = state.sprite_tiles[cell.tile];
         const pal = spritePaletteFor(cell.palette);
         for (let py = 0; py < 8; py++) {
           for (let px = 0; px < 8; px++) {
@@ -3708,6 +3727,28 @@ function init() {
       refreshColourButtons();
       return;
     }
+    // Copy / paste the highlighted tile's pixels (tileset-level, not cell).
+    // Lets the pupil base a new tile on an existing one: highlight source,
+    // press C, highlight an empty destination, press V.
+    if (e.key === 'c') {
+      tileClipboard = clonePixels(state.sprite_tiles[selectedTileIdx].pixels);
+      setStatus('saved', '● Copied tile 0x'
+        + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase());
+      return;
+    }
+    if (e.key === 'v') {
+      if (!tileClipboard) {
+        setStatus('warn', '● Nothing to paste — press C on a tile first');
+        return;
+      }
+      pushUndo();
+      state.sprite_tiles[selectedTileIdx].pixels = clonePixels(tileClipboard);
+      markDirty();
+      renderAll();
+      setStatus('saved', '● Pasted into tile 0x'
+        + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase());
+      return;
+    }
     // Flip / duplicate
     if (e.key === 'h' && cell) {
       pushUndo(); cell.flipH = !cell.flipH; markDirty();
@@ -3727,8 +3768,8 @@ function init() {
       const dst = findNextEmptyTileSlot();
       if (dst < 0) { alert('No empty tile slots left.'); return; }
       pushUndo();
-      const src = state.tiles[cell.tile];
-      state.tiles[dst] = { pixels: clonePixels(src.pixels), name: src.name ? src.name + '_copy' : '' };
+      const src = state.sprite_tiles[cell.tile];
+      state.sprite_tiles[dst] = { pixels: clonePixels(src.pixels), name: src.name ? src.name + '_copy' : '' };
       cell.tile = dst;
       selectedTileIdx = dst;
       markDirty();

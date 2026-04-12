@@ -1111,7 +1111,11 @@ function createDefaultState() {
     universal_bg: 0x21,           // light blue sky
     bg_palettes: defaultBgPalettes(),
     sprite_palettes: defaultSpritePalettes(),
-    tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    // Two independent 256-tile pools — one per NES pattern table.
+    // Sprites live in $0000, backgrounds in $1000, so the pupil's sprite
+    // art and background art don't fight over the same 256 CHR slots.
+    sprite_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    bg_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
     nametable: emptyNametable(),
     sprites: [],                   // populated on the Sprites page
     metadata: {
@@ -1124,27 +1128,59 @@ function createDefaultState() {
 // Back-fill any fields added after the original save. Keeps old projects
 // loadable without bumping STATE_VERSION (which would hide them from the user).
 function migrateState(s) {
-  if (s && typeof s === 'object' && !Array.isArray(s.sprites)) {
-    s.sprites = [];
+  if (!s || typeof s !== 'object') return s;
+  if (!Array.isArray(s.sprites)) s.sprites = [];
+  // Old saves had a single `tiles` pool shared by sprites+BG. Split it
+  // into two independent pools (one per NES pattern table) by duplicating
+  // the pupil's existing work into both, so nothing they made disappears.
+  if (Array.isArray(s.tiles) && (!Array.isArray(s.sprite_tiles) || !Array.isArray(s.bg_tiles))) {
+    if (!Array.isArray(s.sprite_tiles)) {
+      s.sprite_tiles = s.tiles.map(t => ({
+        pixels: t.pixels.map(r => r.slice()),
+        name: t.name,
+      }));
+    }
+    if (!Array.isArray(s.bg_tiles)) {
+      s.bg_tiles = s.tiles.map(t => ({
+        pixels: t.pixels.map(r => r.slice()),
+        name: t.name,
+      }));
+    }
+    delete s.tiles;
+  }
+  // Fresh-install fallback: if somehow a pool is missing, create an empty one.
+  if (!Array.isArray(s.sprite_tiles)) {
+    s.sprite_tiles = Array.from({length: NUM_TILES}, () => emptyTile());
+  }
+  if (!Array.isArray(s.bg_tiles)) {
+    s.bg_tiles = Array.from({length: NUM_TILES}, () => emptyTile());
   }
   return s;
+}
+
+function validateTilePool(tiles, label) {
+  if (!Array.isArray(tiles) || tiles.length !== NUM_TILES) return label + ' wrong';
+  for (let i = 0; i < NUM_TILES; i++) {
+    const t = tiles[i];
+    if (!t || !Array.isArray(t.pixels) || t.pixels.length !== 8) return label + ' ' + i + ' rows';
+    for (let r = 0; r < 8; r++) {
+      if (!Array.isArray(t.pixels[r]) || t.pixels[r].length !== 8) return label + ' ' + i + ' row ' + r;
+      for (let c = 0; c < 8; c++) {
+        const v = t.pixels[r][c];
+        if (v < 0 || v > 3 || !Number.isInteger(v)) return label + ' ' + i + ' pixel';
+      }
+    }
+  }
+  return null;
 }
 
 function validateState(s) {
   if (!s || typeof s !== 'object') return 'not an object';
   if (s.version !== STATE_VERSION) return 'version mismatch';
-  if (!Array.isArray(s.tiles) || s.tiles.length !== NUM_TILES) return 'tiles wrong';
-  for (let i = 0; i < NUM_TILES; i++) {
-    const t = s.tiles[i];
-    if (!t || !Array.isArray(t.pixels) || t.pixels.length !== 8) return 'tile ' + i + ' rows';
-    for (let r = 0; r < 8; r++) {
-      if (!Array.isArray(t.pixels[r]) || t.pixels[r].length !== 8) return 'tile ' + i + ' row ' + r;
-      for (let c = 0; c < 8; c++) {
-        const v = t.pixels[r][c];
-        if (v < 0 || v > 3 || !Number.isInteger(v)) return 'tile ' + i + ' pixel';
-      }
-    }
-  }
+  const se = validateTilePool(s.sprite_tiles, 'sprite_tiles');
+  if (se) return se;
+  const be = validateTilePool(s.bg_tiles, 'bg_tiles');
+  if (be) return be;
   if (!Array.isArray(s.bg_palettes) || s.bg_palettes.length !== 4) return 'bg_palettes';
   if (!Array.isArray(s.sprite_palettes) || s.sprite_palettes.length !== 4) return 'sprite_palettes';
   for (const p of s.bg_palettes.concat(s.sprite_palettes)) {
@@ -1413,7 +1449,7 @@ function exportCHR() {
   // 256 tiles × 16 bytes = 4096 bytes, pad to 8KB (2 pattern tables).
   const out = new Uint8Array(8192);
   for (let i = 0; i < NUM_TILES; i++) {
-    out.set(tileToChrBytes(state.tiles[i]), i * 16);
+    out.set(tileToChrBytes(state.bg_tiles[i]), i * 16);
   }
   triggerDownload(safeFilename(state.name) + '.chr', out);
 }
@@ -1505,20 +1541,20 @@ function exportText() {
 
   const usedTiles = new Set();
   for (let i = 0; i < NUM_TILES; i++) {
-    const t = state.tiles[i];
+    const t = state.bg_tiles[i];
     const anyPixel = t.pixels.some(row => row.some(v => v !== 0));
     if (anyPixel || t.name) usedTiles.add(i);
   }
 
   const tileName = (i) => {
-    const t = state.tiles[i];
+    const t = state.bg_tiles[i];
     if (t.name) return t.name.replace(/\W/g, '_');
     return 'tile_' + i.toString(16).padStart(2,'0');
   };
 
   for (const i of usedTiles) {
     lines.push('tile ' + tileName(i) + ':');
-    for (const row of state.tiles[i].pixels) {
+    for (const row of state.bg_tiles[i].pixels) {
       lines.push('  ' + row.map(v => v === 0 ? '.' : String(v)).join(''));
     }
     lines.push('');
@@ -1615,7 +1651,7 @@ function pixelRgb(v, pal) {
 function renderTileEditor() {
   const canvas = document.getElementById('tile-canvas');
   const ctx = canvas.getContext('2d');
-  const tile = state.tiles[selectedTileIdx];
+  const tile = state.bg_tiles[selectedTileIdx];
   const pal = activePreviewPalette();
   const size = canvas.width;  // 384
   const cell = size / 8;       // 48
@@ -1680,7 +1716,7 @@ function renderTileset() {
   for (let i = 0; i < NUM_TILES; i++) {
     const cx = (i % cols) * cell;
     const cy = Math.floor(i / cols) * cell;
-    const tile = state.tiles[i];
+    const tile = state.bg_tiles[i];
     const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
     if (!anyPixel) {
       ctx.fillStyle = '#1a1630';
@@ -1720,7 +1756,7 @@ function renderTileset() {
   }
 
   let used = 0;
-  for (const t of state.tiles) {
+  for (const t of state.bg_tiles) {
     if (t.pixels.some(r => r.some(v => v !== 0))) used++;
   }
   document.getElementById('tileset-stats').textContent =
@@ -1745,7 +1781,7 @@ function renderFloatingTileset() {
   for (let i = 0; i < NUM_TILES; i++) {
     const cx = (i % cols) * cell;
     const cy = Math.floor(i / cols) * cell;
-    const tile = state.tiles[i];
+    const tile = state.bg_tiles[i];
     const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
     if (!anyPixel) {
       ctx.fillStyle = '#1a1630';
@@ -1800,7 +1836,7 @@ function clonePixels(p) {
 }
 function findNextEmptyTileSlot() {
   for (let i = 0; i < NUM_TILES; i++) {
-    const t = state.tiles[i];
+    const t = state.bg_tiles[i];
     if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
   }
   return -1;
@@ -1834,7 +1870,7 @@ function renderFullPreview() {
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const cell = state.nametable[y][x];
-      const tile = state.tiles[cell.tile];
+      const tile = state.bg_tiles[cell.tile];
       const pal = state.bg_palettes[cell.palette & 3];
       const over = {
         slot0: state.universal_bg,
@@ -2084,7 +2120,7 @@ function renderNametable() {
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const cell = state.nametable[y][x];
-      const tile = state.tiles[cell.tile];
+      const tile = state.bg_tiles[cell.tile];
       const pal = state.bg_palettes[cell.palette & 3];
       const pOverride = {
         slot0: state.universal_bg,
@@ -2316,13 +2352,13 @@ function teApply(evt, initial) {
   if (x < 0 || x > 7 || y < 0 || y > 7) return;
   const pick = evt.shiftKey || evt.button === 2;
   if (pick) {
-    currentColour = state.tiles[selectedTileIdx].pixels[y][x];
+    currentColour = state.bg_tiles[selectedTileIdx].pixels[y][x];
     refreshColourButtons();
     return;
   }
   if (initial) pushUndo();
-  if (state.tiles[selectedTileIdx].pixels[y][x] === currentColour) return;
-  state.tiles[selectedTileIdx].pixels[y][x] = currentColour;
+  if (state.bg_tiles[selectedTileIdx].pixels[y][x] === currentColour) return;
+  state.bg_tiles[selectedTileIdx].pixels[y][x] = currentColour;
   markDirty();
   renderTileEditor();
   renderTileset();
@@ -2414,14 +2450,14 @@ function init() {
         Storage.saveSnapshot(state, 'before_import');
 
         // Only pull in background-related data. The pupil's sprites
-        // (and sprite palettes) stay untouched, so importing a level
-        // file never wipes out their character work. Tiles are shared
-        // CHR so they come in with the background -- otherwise the
-        // imported nametable would render with the wrong art.
+        // (sprite_tiles, sprites, sprite_palettes) stay untouched, so
+        // importing a level file never wipes out their character work.
+        // Old saves used a single `tiles` pool for both — fall back to it
+        // so pre-split JSON files still load cleanly into the BG pool.
         state.nametable = parsed.nametable;
         state.bg_palettes = parsed.bg_palettes;
         state.universal_bg = parsed.universal_bg;
-        state.tiles = parsed.tiles;
+        state.bg_tiles = parsed.bg_tiles || parsed.tiles;
         if (parsed.dimensions) state.dimensions = parsed.dimensions;
         resizeNametable(state);
 
@@ -2479,7 +2515,7 @@ function init() {
   // --- Tile controls ---
   document.getElementById('tile-name').addEventListener('input', e => {
     pushUndo();
-    state.tiles[selectedTileIdx].name = e.target.value;
+    state.bg_tiles[selectedTileIdx].name = e.target.value;
     markDirty();
   });
   document.getElementById('show-numbers').addEventListener('change', renderTileEditor);
@@ -2497,7 +2533,7 @@ function init() {
   });
   document.getElementById('btn-clear-tile').addEventListener('click', () => {
     pushUndo();
-    state.tiles[selectedTileIdx].pixels =
+    state.bg_tiles[selectedTileIdx].pixels =
       Array.from({length:8}, () => [0,0,0,0,0,0,0,0]);
     markDirty();
     renderTileEditor();
@@ -2506,7 +2542,7 @@ function init() {
   });
   document.getElementById('btn-flip-h').addEventListener('click', () => {
     pushUndo();
-    state.tiles[selectedTileIdx].pixels.forEach(r => r.reverse());
+    state.bg_tiles[selectedTileIdx].pixels.forEach(r => r.reverse());
     markDirty();
     renderTileEditor();
     renderTileset();
@@ -2514,7 +2550,7 @@ function init() {
   });
   document.getElementById('btn-flip-v').addEventListener('click', () => {
     pushUndo();
-    state.tiles[selectedTileIdx].pixels.reverse();
+    state.bg_tiles[selectedTileIdx].pixels.reverse();
     markDirty();
     renderTileEditor();
     renderTileset();
@@ -2522,10 +2558,10 @@ function init() {
   });
   document.getElementById('btn-rotate').addEventListener('click', () => {
     pushUndo();
-    const src = state.tiles[selectedTileIdx].pixels;
+    const src = state.bg_tiles[selectedTileIdx].pixels;
     const rotated = Array.from({ length: 8 }, (_, y) =>
       Array.from({ length: 8 }, (_, x) => src[7 - x][y]));
-    state.tiles[selectedTileIdx].pixels = rotated;
+    state.bg_tiles[selectedTileIdx].pixels = rotated;
     markDirty();
     renderTileEditor();
     renderTileset();
@@ -2539,19 +2575,19 @@ function init() {
       return;
     }
     pushUndo();
-    const src = state.tiles[selectedTileIdx];
-    state.tiles[dstIdx] = {
+    const src = state.bg_tiles[selectedTileIdx];
+    state.bg_tiles[dstIdx] = {
       pixels: clonePixels(src.pixels),
       name: src.name ? src.name + '_copy' : '',
     };
     selectedTileIdx = dstIdx;
     markDirty();
-    document.getElementById('tile-name').value = state.tiles[dstIdx].name;
+    document.getElementById('tile-name').value = state.bg_tiles[dstIdx].name;
     renderTileEditor();
     renderTileset();
   });
   document.getElementById('btn-copy-tile').addEventListener('click', () => {
-    tileClipboard = clonePixels(state.tiles[selectedTileIdx].pixels);
+    tileClipboard = clonePixels(state.bg_tiles[selectedTileIdx].pixels);
     const pasteBtn = document.getElementById('btn-paste-tile');
     pasteBtn.disabled = false;
     pasteBtn.title = 'Paste clipboard pixels into this tile (overwrites) — '
@@ -2560,7 +2596,7 @@ function init() {
   document.getElementById('btn-paste-tile').addEventListener('click', () => {
     if (!tileClipboard) return;
     pushUndo();
-    state.tiles[selectedTileIdx].pixels = clonePixels(tileClipboard);
+    state.bg_tiles[selectedTileIdx].pixels = clonePixels(tileClipboard);
     markDirty();
     renderTileEditor();
     renderTileset();
