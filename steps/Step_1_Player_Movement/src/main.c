@@ -46,8 +46,11 @@
 // These control the player's position, movement, and animation.
 // Try changing the starting values to see what happens!
 
-unsigned char x = 120;        // Player X position (0 = left edge, 255 = right edge)
-unsigned char y = 120;        // Player Y position (0 = top, bigger = lower on screen)
+// EDIT: Change these two numbers to move where the player starts.
+// X goes from 0 (left edge) to 255 (right edge).
+// Y goes from 0 (top) to about 150 (the floor).
+unsigned char x = 120;        // Player starting X position
+unsigned char y = 120;        // Player starting Y position
 unsigned char pad;            // Stores which buttons are pressed this frame
 unsigned char jump = 1;       // Can the player jump? (1 = yes, on ground)
 unsigned char jmptime = 0;    // How many frames of upward jump are left
@@ -207,15 +210,19 @@ void main(void) {
     // Background color
     PPU_ADDR = 0x3F;
     PPU_ADDR = 0x00;
-    PPU_DATA = 0x12;   // Blue background - try changing this!
+    // TRY: change 0x12 (blue) to a different NES colour number.
+    //      0x0F = black, 0x16 = red, 0x1A = green, 0x2A = light green,
+    //      0x21 = sky blue, 0x30 = white, 0x2C = turquoise.
+    PPU_DATA = 0x12;
 
     // Sprite colors (palette 0, colors 1-3)
     // Color 0 is always transparent for sprites
     PPU_ADDR = 0x3F;
     PPU_ADDR = 0x11;
-    PPU_DATA = 0x30;   // Color 1: White (used for eyes)
+    // TRY: change any of these three numbers to recolour the player.
+    PPU_DATA = 0x30;   // Color 1: White  (used for eyes)
     PPU_DATA = 0x27;   // Color 2: Orange (used for outline)
-    PPU_DATA = 0x17;   // Color 3: Brown (used for main body)
+    PPU_DATA = 0x17;   // Color 3: Brown  (used for main body)
 
     // Turn the screen on! Show sprites and background.
     PPU_MASK = 0x1E;
@@ -235,7 +242,9 @@ void main(void) {
         if (pad & 0x08) {  // UP = Jump
             if (jump == 1 && jmptime <= 0) {
                 y = y - 3;
-                jmptime = 15;  // Jump lasts 15 frames - increase for higher jump
+                // TRY: increase 15 to make the player jump higher.
+                //      Try 25 for a much higher jump, or 8 for a tiny hop.
+                jmptime = 15;
             }
         }
 
@@ -246,17 +255,20 @@ void main(void) {
         }
 
         if (pad & 0x02) {  // LEFT
+            // TRY: change x-- to x -= 2 to move twice as fast to the left.
             x--;
             plrdir = 0x40;   // Face left (0x40 = horizontal flip)
             plrxmod = 1;
             moveWait++;
-            if (moveWait >= 7) {       // Every 7 frames, advance animation
+            // TRY: change 7 to a smaller number for a faster walk animation.
+            if (moveWait >= 7) {
                 moved = moved + 1;
                 moveWait = 0;
             }
         }
 
         if (pad & 0x01) {  // RIGHT
+            // TRY: change x++ to x += 2 to move twice as fast to the right.
             x++;
             plrdir = 0x00;   // Face right (no flip)
             plrxmod = 0;
@@ -270,6 +282,7 @@ void main(void) {
         // --- GRAVITY ---
         // If the player is above the floor (y < 150), apply gravity.
         // During a jump, move up for jmptime frames, then fall down.
+        // EDIT: change 150 to move the floor. A smaller number = higher floor.
         if (y < 150) {
             jump = 0;  // Player is in the air, can't jump again
             if (jmptime > 0) {

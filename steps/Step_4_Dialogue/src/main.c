@@ -114,6 +114,7 @@ unsigned char enemy_speed = 3;
 // =============================================================================
 
 // Old man NPC - stands on the ground on the right side of the starting area
+// EDIT: move the NPC by changing these two numbers.
 unsigned char npc_x = 40;
 unsigned char npc_y = 192;    // Same Y level as the slime (on the ground)
 
@@ -151,11 +152,14 @@ static const unsigned char anim_tiles[4][8] = {
 // "HELLO HERO!" converted to tile numbers:
 //   H=0x17 E=0x14 L=0x1B L=0x1B O=0x1E ' '=0x34 H=0x17 E=0x14 R=0x21 O=0x1E !=0x35
 
+// EDIT: change what the NPC says by swapping these tile numbers.
+//       Use the font table in the comments at the top of this file.
+//       Example: "HI!" would be  0x17, 0x18, 0x35, 0x00
 static const unsigned char msg_hello[] = {
     0x17, 0x14, 0x1B, 0x1B, 0x1E,   // HELLO
     0x34,                            // space
     0x17, 0x14, 0x21, 0x1E, 0x35,   // HERO!
-    0x00                             // end marker
+    0x00                             // end marker (always keep this!)
 };
 
 // Where on the screen to draw the dialogue text

@@ -1,0 +1,93 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build & Run Current Step",
+            "detail": "Compile the step folder of the file you currently have open, then launch it in FCEUX.",
+            "type": "shell",
+            "command": "make",
+            "args": ["-C", "${fileWorkspaceFolder}", "run"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true,
+                "focus": false
+            },
+            "problemMatcher": {
+                "owner": "cc65",
+                "fileLocation": ["relative", "${fileWorkspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.*?):(\\d+):\\s+(Error|Warning):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            }
+        },
+        {
+            "label": "Build Only (no Run)",
+            "detail": "Compile the current step without launching FCEUX.",
+            "type": "shell",
+            "command": "make",
+            "args": ["-C", "${fileWorkspaceFolder}"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "cc65",
+                "fileLocation": ["relative", "${fileWorkspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.*?):(\\d+):\\s+(Error|Warning):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            }
+        },
+        {
+            "label": "Clean Current Step",
+            "detail": "Delete build files for the current step.",
+            "type": "shell",
+            "command": "make",
+            "args": ["-C", "${fileWorkspaceFolder}", "clean"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "Rebuild Current Step",
+            "detail": "Clean and then build the current step from scratch.",
+            "dependsOn": ["Clean Current Step", "Build & Run Current Step"],
+            "dependsOrder": "sequence",
+            "group": "build"
+        },
+        {
+            "label": "Regenerate All Graphics (Teacher)",
+            "detail": "Regenerate CHR, nametable and palette files for all steps. Teacher use only.",
+            "type": "shell",
+            "command": "python3",
+            "args": ["tools/generate_chr.py"],
+            "options": {
+                "cwd": "${workspaceFolder:Project Root}"
+            },
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        }
+    ]
+}

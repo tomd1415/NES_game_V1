@@ -60,8 +60,10 @@ unsigned char moveWait = 0;
 // =============================================================================
 
 // Slime enemy (patrols on the ground)
-unsigned char enemy1_x = 150;       // Starting X position
-unsigned char enemy1_y = 192;       // Y position (on the ground, 2 tiles tall)
+// EDIT: move the slime by changing enemy1_x / enemy1_y, or change its
+//       patrol range with enemy1_left and enemy1_right.
+unsigned char enemy1_x = 150;
+unsigned char enemy1_y = 192;
 unsigned char enemy1_dir = 1;       // 1 = moving right, 0 = moving left
 unsigned char enemy1_left = 120;    // Left patrol boundary
 unsigned char enemy1_right = 200;   // Right patrol boundary
@@ -75,14 +77,16 @@ unsigned char enemy2_right = 112;   // Platform ends at column 16 = pixel 128, m
 
 // How fast enemies move (frames between steps - lower = faster)
 unsigned char enemy_timer = 0;
-unsigned char enemy_speed = 3;      // Move every 3 frames
+// TRY: smaller enemy_speed = faster enemies (1 is zoomy, 10 is slow).
+unsigned char enemy_speed = 3;
 
 // =============================================================================
 // ITEM VARIABLES
 // =============================================================================
 
 // Gems - positions and collected state
-// You can add more gems by increasing the array size and adding positions
+// TRY: to add a 5th gem, change NUM_GEMS to 5, then add one extra number
+//      to each of the three arrays below (e.g. another X, another Y, another 0).
 #define NUM_GEMS 4
 unsigned char gem_x[NUM_GEMS]         = { 100, 140, 180, 88 };
 unsigned char gem_y[NUM_GEMS]         = { 168, 168, 168, 104 };

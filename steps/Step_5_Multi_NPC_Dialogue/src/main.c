@@ -122,6 +122,7 @@ unsigned char enemy_speed = 3;
 // Old man stands to the left near the player start.
 // Merchant stands further right on the ground.
 
+// EDIT: move the two NPCs by changing these numbers.
 unsigned char npc1_x = 40;     // Old man
 unsigned char npc1_y = 192;
 

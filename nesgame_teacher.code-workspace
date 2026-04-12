@@ -1,0 +1,88 @@
+{
+    "folders": [
+        {
+            "path": ".",
+            "name": "Project Root"
+        },
+        {
+            "path": "steps/Step_1_Player_Movement",
+            "name": "Step 1 - Player Movement"
+        },
+        {
+            "path": "steps/Step_2_Background_Level",
+            "name": "Step 2 - Background Level"
+        },
+        {
+            "path": "steps/Step_3_Enemies_And_Items",
+            "name": "Step 3 - Enemies and Items"
+        },
+        {
+            "path": "steps/Step_4_Dialogue",
+            "name": "Step 4 - Dialogue"
+        },
+        {
+            "path": "steps/Step_5_Multi_NPC_Dialogue",
+            "name": "Step 5 - Multi NPC Dialogue"
+        }
+    ],
+    "settings": {
+        "workbench.startupEditor": "none",
+        "editor.renderWhitespace": "none",
+        "editor.minimap.enabled": true,
+        "files.associations": {
+            "*.s": "asm-collection",
+            "*.chr": "binary",
+            "*.nam": "binary",
+            "*.pal": "binary"
+        },
+        "files.exclude": {
+            "**/build": true,
+            "**/*.o": true
+        },
+        "better-comments.tags": [
+            {
+                "tag": "TRY:",
+                "color": "#47D16C",
+                "strikethrough": false,
+                "backgroundColor": "transparent",
+                "bold": true,
+                "italic": false
+            },
+            {
+                "tag": "EDIT:",
+                "color": "#FFD866",
+                "strikethrough": false,
+                "backgroundColor": "transparent",
+                "bold": true,
+                "italic": false
+            },
+            {
+                "tag": "NOTE:",
+                "color": "#78DCE8",
+                "strikethrough": false,
+                "backgroundColor": "transparent",
+                "bold": false,
+                "italic": false
+            },
+            {
+                "tag": "WARNING:",
+                "color": "#FF6188",
+                "strikethrough": false,
+                "backgroundColor": "transparent",
+                "bold": true,
+                "italic": false
+            }
+        ],
+        "todo-tree.general.tags": [
+            "TRY:",
+            "EDIT:",
+            "NOTE:",
+            "TODO",
+            "WARNING:"
+        ],
+        "todo-tree.highlights.customHighlight": {
+            "TRY:": { "icon": "lightbulb", "foreground": "#47D16C" },
+            "EDIT:": { "icon": "pencil", "foreground": "#FFD866" }
+        }
+    }
+}

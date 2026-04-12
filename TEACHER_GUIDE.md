@@ -4,6 +4,46 @@
 
 This project builds a NES ROM using the **cc65 toolchain** (a C compiler and assembler targeting the 6502 CPU). The game is written primarily in C with a small amount of 65xx assembly for graphics data loading. The cc65 library (`nes.lib`) provides the startup code (crt0), C runtime, and hardware abstraction.
 
+## Two VS Code workspaces
+
+There are two workspace files in the project root. Pick the one that matches what you are doing:
+
+- **`nesgame_teacher.code-workspace`** - Full read/write access to every file. Use this when you are preparing lessons, editing `Makefile`, regenerating graphics, or modifying anything outside `main.c`.
+- **`nesgame_pupil.code-workspace`** - Everything is read-only except `**/src/main.c` and markdown guides. Makefile, graphics.s, linker config, assets, and `tools/` are hidden or locked. The pupil cannot accidentally break the build by editing infrastructure files.
+
+Both workspaces share the same `.vscode/tasks.json`, so **`Ctrl+Shift+B`** builds and runs the step containing the currently-open file. The task auto-detects which step folder the file lives in using `${fileWorkspaceFolder}`.
+
+### How the read-only restriction works
+
+The pupil workspace uses VS Code's `files.readonlyInclude` and `files.readonlyExclude` settings:
+
+```json
+"files.readonlyInclude": { "**/*": true },
+"files.readonlyExclude": {
+    "**/src/main.c": true,
+    "**/*.md": true
+}
+```
+
+Everything is locked by default, then `main.c` and markdown files are explicitly unlocked. If you add new pupil-editable files later (e.g. a `level_data.h`), add them to `readonlyExclude`.
+
+Additionally `files.exclude` hides the files we don't want the pupil to see at all (Makefiles, cfg/, tools/, reset.s, etc.). They still exist on disk - they just don't appear in the file tree.
+
+### Comment conventions for pupil guidance
+
+Four comment prefixes are colour-highlighted by the `better-comments` extension and listed in the **TODO Tree** sidebar:
+
+- `// TRY:` - suggestion to experiment with a value (green)
+- `// EDIT:` - a value the pupil is intended to change (yellow)
+- `// NOTE:` - explanation of what's happening (cyan)
+- `// WARNING:` - caution / do not change (red)
+
+Use these whenever you add something to `main.c` that you want the pupil to notice.
+
+### Swapping in real assets
+
+If the pupil creates new sprites in Aseprite, you (teacher) can convert and place them by opening the teacher workspace, running the `Regenerate All Graphics (Teacher)` task, or using `tools/png2chr.py` as documented in `ASEPRITE_WORKFLOW.md`. The pupil workspace has `tools/` hidden.
+
 ## Step-based lesson structure
 
 The project includes a `steps/` folder with self-contained, buildable snapshots of the game at each stage of development. Each step can be built independently with `make` from within its folder.
