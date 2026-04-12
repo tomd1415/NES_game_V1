@@ -17,7 +17,12 @@
       "Bash(ld65 --dump-config nes)",
       "Bash(ar65 l:*)",
       "Bash(xxd game.nes)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(~/projects/nesgame/mesen/Mesen --help)",
+      "Bash(emerge --search nes)",
+      "Bash(eix -S \"nes emulator\")",
+      "Bash(xxd -s 0x800A -l 6 game.nes)",
+      "Bash(cc65 -t nes -o /tmp/main_check.s src/main.c)"
     ],
     "additionalDirectories": [
       "/home/duguid/projects/nesgame/attempt1"

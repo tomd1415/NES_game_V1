@@ -19,6 +19,8 @@
 
 ; cc65 runtime needs these symbols
 .importzp sp              ; C stack pointer (in zero page)
+.import copydata          ; Copies initialized variables from ROM to RAM
+.import zerobss           ; Zeros out uninitialized variables in RAM
 .export __STARTUP__: absolute = 1  ; Tell linker we have a startup segment
 
 ; =============================================================================
@@ -59,6 +61,8 @@ _oam_buf: .res 256        ; 64 sprites x 4 bytes each
 .segment "BSS"
 .export _nmi_ready
 _nmi_ready: .res 1        ; Flag: 1 = C code finished a frame, safe to update PPU
+
+nmi_done: .res 1          ; Flag: set by NMI handler, waited on by waitvsync
 
 ; =============================================================================
 ; NMI HANDLER - Runs automatically every frame
@@ -103,6 +107,10 @@ _nmi_ready: .res 1        ; Flag: 1 = C code finished a frame, safe to update PP
     sta _nmi_ready
 
 @skip:
+    ; Signal that an NMI happened (waitvsync waits for this)
+    lda #$01
+    sta nmi_done
+
     ; Restore the registers we saved
     pla
     tay                    ; Restore Y
@@ -123,6 +131,8 @@ _nmi_ready: .res 1        ; Flag: 1 = C code finished a frame, safe to update PP
 .proc reset
     sei                    ; Disable interrupts during setup
     cld                    ; Clear decimal mode (NES doesn't use it)
+    ldx #$FF
+    txs                    ; Initialize CPU hardware stack to $01FF
 
     ; Disable PPU rendering and NMI during setup
     lda #$00
@@ -171,6 +181,11 @@ _nmi_ready: .res 1        ; Flag: 1 = C code finished a frame, safe to update PP
     lda #>(__SRAM_START__ + __SRAM_SIZE__)
     sta sp+1
 
+    ; Copy initialized variables (like x=120, y=120) from ROM to RAM.
+    ; Without this, all variables would start as 0!
+    jsr zerobss
+    jsr copydata
+
     ; Everything is set up - jump to the C main function!
     jmp _main
 .endproc
@@ -179,16 +194,19 @@ _nmi_ready: .res 1        ; Flag: 1 = C code finished a frame, safe to update PP
 ; WAITVSYNC - Wait for the next frame
 ; =============================================================================
 ; This is called from C code as waitvsync().
-; It waits until the PPU signals the start of vertical blank (vblank)
-; by checking bit 7 of PPU status register $2002.
-; The game loop calls this to sync to 60fps (the NES refresh rate).
+; It waits until the NMI handler has fired (which happens once per frame).
+; We can't poll PPU_STATUS directly because reading it clears the vblank
+; flag, which conflicts with NMI. Instead we wait for a flag that the
+; NMI handler sets every frame.
 
 .export _waitvsync
 .proc _waitvsync
+    lda #$00
+    sta nmi_done           ; Clear the flag
 @wait:
-    bit PPUSTATUS          ; Check PPU status - bit 7 = vblank started
-    bpl @wait              ; If bit 7 is 0, keep waiting
-    rts                    ; Vblank started, return to game code
+    lda nmi_done           ; Check if NMI has fired
+    beq @wait              ; If not, keep waiting
+    rts                    ; NMI fired, frame is done
 .endproc
 
 ; =============================================================================

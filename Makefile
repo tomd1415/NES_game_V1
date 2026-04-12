@@ -11,7 +11,7 @@
 #
 # Usage:
 #   make          - Build the ROM
-#   make run      - Build and run in Mesen emulator
+#   make run      - Build and run in emulator
 #   make clean    - Delete build files and ROM
 
 CC      = cc65
@@ -19,10 +19,10 @@ AS      = ca65
 LD      = ld65
 TARGET  = nes
 CONFIG  = cfg/nes.cfg
+NESLIB  = /usr/share/cc65/lib/nes.lib
 
-# We use none.lib (cc65 runtime without platform startup) because
-# we provide our own startup and NMI handler in src/reset.s
-RTLIB   = /usr/share/cc65/lib/none.lib
+# Change EMULATOR if you prefer a different one (e.g. mednafen, fceux)
+EMULATOR = fceux
 
 # Output ROM
 ROM     = game.nes
@@ -32,7 +32,7 @@ BUILD   = build
 
 # Source files
 C_SRC   = src/main.c
-ASM_SRC = src/reset.s src/graphics.s
+ASM_SRC = src/graphics.s
 
 # Object files go in build/
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
@@ -48,7 +48,7 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(ROM): $(OBJECTS)
-	$(LD) -C $(CONFIG) -o $@ $(OBJECTS) $(RTLIB)
+	$(LD) -C $(CONFIG) -o $@ $(OBJECTS) $(NESLIB)
 
 # Compile C to assembly, then assemble
 $(BUILD)/%.o: src/%.c | $(BUILD)
@@ -60,9 +60,9 @@ $(BUILD)/%.o: src/%.c | $(BUILD)
 $(BUILD)/%.o: src/%.s | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $<
 
-# Build and run in Mesen emulator
+# Build and run in emulator
 run: $(ROM)
-	~/projects/nesgame/mesen/Mesen $(ROM)
+	$(EMULATOR) $(ROM)
 
 clean:
 	rm -rf $(BUILD) $(ROM)

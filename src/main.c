@@ -20,8 +20,7 @@
 // - Floor position: change "y < 150" (lower number = higher floor)
 // =============================================================================
 
-// waitvsync() is defined in reset.s - it waits for the next video frame
-void __fastcall__ waitvsync(void);
+#include <nes.h>
 
 // =============================================================================
 // HARDWARE ADDRESSES
@@ -34,30 +33,12 @@ void __fastcall__ waitvsync(void);
 #define PPU_MASK      *((unsigned char*)0x2001)  // PPU mask: show/hide sprites & background
 #define PPU_STATUS    *((unsigned char*)0x2002)  // PPU status: check if PPU is ready
 #define OAM_ADDR      *((unsigned char*)0x2003)  // Sprite memory: which sprite to write to
-#define OAM_DMA       *((unsigned char*)0x4014)  // Sprite DMA: fast copy all sprites at once
+#define OAM_DATA      *((unsigned char*)0x2004)  // Sprite memory: the data to write
 #define PPU_SCROLL    *((unsigned char*)0x2005)  // Scroll position of the screen
 #define PPU_ADDR      *((unsigned char*)0x2006)  // PPU address: where in video memory to write
 #define PPU_DATA      *((unsigned char*)0x2007)  // PPU data: the value to write there
 
 #define JOYPAD1       *((unsigned char*)0x4016)  // Controller port 1
-
-// =============================================================================
-// OAM BUFFER (Sprite Memory)
-// =============================================================================
-// The NES can show 64 sprites on screen. Each sprite needs 4 bytes:
-//   Byte 0: Y position (how far down the screen)
-//   Byte 1: Tile number (which small image to show)
-//   Byte 2: Attributes (color palette, flip horizontally/vertically)
-//   Byte 3: X position (how far across the screen)
-//
-// We store all sprite data in a buffer (a block of memory at address $0200).
-// Every frame, the NMI handler copies this entire buffer to the PPU at once
-// using DMA (Direct Memory Access) - this is much faster and more reliable
-// than writing sprites one by one.
-//
-// These are defined in reset.s (the assembly startup file):
-extern unsigned char oam_buf[256];  // 64 sprites x 4 bytes = 256 bytes
-extern unsigned char nmi_ready;     // Flag: 1 = game logic done, NMI can update screen
 
 // =============================================================================
 // GAME VARIABLES
@@ -139,9 +120,27 @@ unsigned char read_controller(void) {
 }
 
 // =============================================================================
+// DRAW PLAYER SPRITE
+// =============================================================================
+// This writes one sprite (one 8x8 tile) directly to the PPU's sprite memory.
+// Each sprite needs 4 values written in order:
+//   1. Y position
+//   2. Tile number (which graphic to show)
+//   3. Attributes (palette + flip flags)
+//   4. X position
+
+void draw_one_sprite(unsigned char sy, unsigned char tile,
+                     unsigned char attr, unsigned char sx) {
+    OAM_DATA = sy;
+    OAM_DATA = tile;
+    OAM_DATA = attr;
+    OAM_DATA = sx;
+}
+
+// =============================================================================
 // DRAW PLAYER
 // =============================================================================
-// This function writes the player's 8 sprites into the OAM buffer.
+// This function draws all 8 sprites that make up the player character.
 // It uses the animation table above to pick the right tiles for the
 // current animation frame.
 //
@@ -151,50 +150,31 @@ unsigned char read_controller(void) {
 
 void draw_player(void) {
     unsigned char frame;
-    unsigned char row, col;
-    unsigned char idx;
-    unsigned char tile_x;
+    unsigned char row;
+    unsigned char left_x, right_x;
     const unsigned char *tiles;
 
     // Pick the current animation frame (cycles through 0, 1, 2, 3)
     frame = moved % 4;
     tiles = anim_tiles[frame];
 
-    idx = 0;  // Start at sprite 0 in the OAM buffer
-
-    // Loop through 4 rows and 2 columns = 8 sprites total
-    for (row = 0; row < 4; row++) {
-        for (col = 0; col < 2; col++) {
-            // Y position: each row is 8 pixels further down
-            oam_buf[idx] = y + (row * 8);
-
-            // Tile number: when facing left, swap left/right columns
-            if (plrdir == 0x40) {
-                oam_buf[idx + 1] = tiles[row * 2 + (1 - col)];
-            } else {
-                oam_buf[idx + 1] = tiles[row * 2 + col];
-            }
-
-            // Attributes: palette 0, plus horizontal flip if facing left
-            oam_buf[idx + 2] = 0x00 | plrdir;
-
-            // X position: when facing left, mirror the column positions
-            if (plrdir == 0x40) {
-                tile_x = (1 - col) * 8;
-            } else {
-                tile_x = col * 8;
-            }
-            oam_buf[idx + 3] = x + tile_x;
-
-            idx += 4;  // Move to next sprite (4 bytes per sprite)
-        }
+    // Work out X positions for left and right columns
+    // When facing left (flipped), we swap the columns
+    if (plrdir == 0x40) {
+        left_x = x + 8;
+        right_x = x;
+    } else {
+        left_x = x;
+        right_x = x + 8;
     }
 
-    // Hide all unused sprites by moving them off-screen (Y = 0xFF)
-    // This prevents leftover sprites from previous frames showing up
-    while (idx < 255) {
-        oam_buf[idx] = 0xFF;
-        idx += 4;
+    // Tell the PPU we're writing sprites starting at sprite 0
+    OAM_ADDR = 0x00;
+
+    // Draw 4 rows of 2 sprites each (left tile, then right tile)
+    for (row = 0; row < 4; row++) {
+        draw_one_sprite(y + (row * 8), tiles[row * 2],     plrdir, left_x);
+        draw_one_sprite(y + (row * 8), tiles[row * 2 + 1], plrdir, right_x);
     }
 }
 
@@ -205,8 +185,6 @@ void draw_player(void) {
 // and then runs the game loop forever.
 
 void main(void) {
-    unsigned char i;
-
     // --- STARTUP ---
     // Wait for the PPU to warm up (takes a couple of frames)
     waitvsync();
@@ -238,21 +216,6 @@ void main(void) {
     PPU_DATA = 0x30;   // Color 1: White (used for eyes)
     PPU_DATA = 0x27;   // Color 2: Orange (used for outline)
     PPU_DATA = 0x17;   // Color 3: Brown (used for main body)
-
-    // --- CLEAR ALL SPRITES ---
-    // Move every sprite off-screen so nothing random appears
-    for (i = 0; i < 255; i += 4) {
-        oam_buf[i] = 0xFF;  // Y = 0xFF = off-screen
-    }
-
-    // Reset scroll position (no scrolling yet)
-    PPU_SCROLL = 0;
-    PPU_SCROLL = 0;
-
-    // Enable NMI interrupts (bit 7 of PPU_CTRL)
-    // NMI fires every frame when the PPU finishes drawing.
-    // Our NMI handler (in reset.s) uses this to copy sprites to the PPU.
-    PPU_CTRL = 0x80;
 
     // Turn the screen on! Show sprites and background.
     PPU_MASK = 0x1E;
@@ -319,11 +282,21 @@ void main(void) {
             jump = 1;  // On the ground, can jump again
         }
 
-        // --- DRAW ---
-        // Update all sprites in the buffer, then tell the NMI handler
-        // it's safe to copy them to the screen
-        draw_player();
-        nmi_ready = 1;
+        // --- WAIT FOR NEXT FRAME ---
         waitvsync();
+
+        // --- DRAW ---
+        draw_player();
     }
 }
+
+// =============================================================================
+// INTERRUPT VECTORS
+// =============================================================================
+// The NES processor looks at address $FFFA to know what to do.
+// We must point these to our main function.
+const void *vectors[] = {
+    (void *) 0,    // NMI Vector (unused for now)
+    (void *) main, // Reset Vector (Start the game here!)
+    (void *) 0     // IRQ Vector (unused)
+};
