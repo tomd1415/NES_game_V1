@@ -1,0 +1,189 @@
+# ============================================================
+#  MY TILES — your sprite & background workshop
+# ============================================================
+#
+#  HOW THIS WORKS
+#  --------------
+#  Every picture on a Nintendo Entertainment System is built from
+#  little 8×8 squares called TILES. Link. Mario. The ground. Clouds.
+#  All of them are just tiles stacked together.
+#
+#  In this file you DRAW TILES using numbers, pick COLOURS for them
+#  (a "palette"), then STITCH them into sprites and backgrounds.
+#
+#  Save the file (Ctrl+S). The preview image refreshes automatically.
+#  If you make a mistake, the preview will show a red error banner
+#  telling you which line to fix.
+#
+#
+#  THE FOUR NUMBERS YOU USE FOR PIXELS
+#  -----------------------------------
+#    0  or  .   =  transparent (shows through to the sky)
+#    1          =  palette colour 1
+#    2          =  palette colour 2
+#    3          =  palette colour 3
+#
+#  That's it. Only four possible values per pixel. The NES PPU cannot
+#  do any more than that per tile — which is why Miyamoto's Mario is
+#  just three colours plus transparent (red, brown, peach).
+#
+#
+#  THE RULES (checked automatically)
+#  ---------------------------------
+#    * every TILE must be exactly 8 rows of 8 digits. No more, no less.
+#    * every PALETTE must set slots 1, 2 and 3.
+#    * palette bytes must be NES colours (0x00 .. 0x3F).
+#      Look at palette_reference.png for every possible colour.
+#    * SPRITE / BACKGROUND rows must all be the same length.
+#
+#
+#  FOUR BUILDING BLOCKS IN THIS FILE
+#  ---------------------------------
+#    PALETTE    — pick 3 colours from the NES master palette
+#    TILE       — draw one 8×8 picture
+#    SPRITE     — stitch tiles into a character that moves
+#    BACKGROUND — stitch tiles into a static scene
+#
+# ============================================================
+
+
+# ------------------------------------------------------------
+#  PALETTES
+# ------------------------------------------------------------
+#  Each palette slot (1, 2, 3) gets a byte from the NES master
+#  palette. A few popular ones to start with:
+#
+#     sky / water          0x21    light blue
+#     dark blue            0x01    navy
+#     grass                0x29    bright green
+#     dark grass           0x19    dark green
+#     dirt                 0x07    brown
+#     orange               0x27    Mario's overalls / a cap
+#     red                  0x16    blood red / 1UP heart
+#     pink                 0x36    soft pink
+#     white                0x30    eyes, bones
+#     black                0x0F    always black
+#     grey                 0x00    mid grey (rock, armour)
+#
+
+palette player:
+  1 = 0x27   # orange (cap / tunic)
+  2 = 0x17   # brown (body)
+  3 = 0x30   # white (eyes)
+
+palette grass_ground:
+  1 = 0x29   # grass green
+  2 = 0x19   # dark green shadow
+  3 = 0x07   # dirt brown
+
+
+# ------------------------------------------------------------
+#  TILES
+# ------------------------------------------------------------
+#  Draw pictures. Use . for transparent to make the shape easy
+#  to see, or use 0 — they mean the same thing.
+#
+#  Copy a tile and rename it to make a variant.
+#
+
+tile head_left:
+  ..1111..
+  .111111.
+  11.11.11
+  11.11.11
+  .122221.
+  ..3113..
+  ..1111..
+  ...11...
+
+tile head_right:
+  ..1111..
+  .111111.
+  11.11.11
+  11.11.11
+  .122221.
+  ..3113..
+  ..1111..
+  ...11...
+
+tile body_left:
+  ...22...
+  ..2222..
+  .222222.
+  2222222.
+  2222222.
+  .222222.
+  ..2222..
+  ..2..2..
+
+tile body_right:
+  ...22...
+  ..2222..
+  .222222.
+  .2222222
+  .2222222
+  .222222.
+  ..2222..
+  ..2..2..
+
+# --- ground tiles ---
+
+tile grass:
+  ....1...
+  ...111..
+  .1..1...
+  11.....1
+  22211111
+  22222222
+  23322332
+  33333333
+
+tile dirt:
+  33333333
+  33223322
+  22222222
+  33333333
+  22233322
+  33333333
+  22322322
+  33333333
+
+  tile sky:
+  ........
+  ........
+  ........
+  ........
+  ........
+  ........
+  ........
+  ........
+
+# ------------------------------------------------------------
+#  SPRITES
+# ------------------------------------------------------------
+#  A sprite is a grid of tile names. They are stitched
+#  left-to-right, top-to-bottom. A 2×4 sprite = 16×32 pixels
+#  (the same size as Link in Zelda II).
+#
+
+sprite hero_head_only using player:
+  head_left head_right
+
+sprite hero using player:
+  head_left head_right
+  body_left body_right
+
+
+# ------------------------------------------------------------
+#  BACKGROUNDS
+# ------------------------------------------------------------
+#  Same idea as sprites, but for the scenery. Tile the ground
+#  by repeating tiles across a row. Think Super Mario Bros. —
+#  those endless green hills are six or seven tiles, repeated.
+#
+
+background ground_strip using grass_ground:
+  sky sky sky sky sky sky sky sky
+  grass grass grass grass grass grass grass grass
+  dirt  dirt  dirt  dirt  dirt  dirt  dirt  dirt
+  dirt  dirt  dirt  dirt  dirt  dirt  dirt  dirt

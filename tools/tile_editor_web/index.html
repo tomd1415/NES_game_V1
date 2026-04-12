@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Tile Editor</title>
+<style>
+/* ===========================================================
+   NES TILE EDITOR — single-file web app.
+   Opens with file:// — no server, no build, no deps.
+   =========================================================== */
+:root {
+  --bg:        #14121f;
+  --panel:     #1f1b30;
+  --panel2:    #2a2440;
+  --border:    #3a3352;
+  --fg:        #f4f4f4;
+  --muted:     #9a97ad;
+  --accent:    #ffd866;
+  --good:      #47d16c;
+  --warn:      #ff6188;
+  --info:      #78dce8;
+  --shadow:    0 4px 16px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  overflow-x: auto;
+}
+h1, h2, h3 { margin: 0; }
+h1 { font-size: 1.15em; color: var(--accent); }
+h2 { font-size: 1.0em;  color: var(--accent); margin-bottom: 6px; }
+h3 { font-size: 0.9em;  color: var(--info);   margin: 10px 0 4px; }
+button, select, input[type=text] {
+  background: var(--panel2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 0.9em;
+  cursor: pointer;
+  font-family: inherit;
+}
+button:hover { background: #3a3560; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: #3a2f50; border-color: var(--accent); color: var(--accent); }
+input[type=text] { cursor: text; }
+label { -webkit-user-select: none; user-select: none; }
+dialog {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 640px;
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(0,0,0,0.6); }
+
+/* --- Layout ------------------------------------------------- */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.app-header .status-group {
+  display: flex; align-items: center; gap: 10px;
+  margin-left: 16px;
+}
+.app-header .toolbar {
+  margin-left: auto;
+  display: flex; gap: 6px;
+  align-items: center;
+}
+.app-header .export-menu {
+  position: relative;
+}
+.app-header .export-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.app-header .export-menu[open] > summary { background: #3a3560; }
+.app-header .export-menu > .menu-body {
+  position: absolute;
+  right: 0; top: calc(100% + 4px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 200px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+.app-header .export-menu > .menu-body button { text-align: left; }
+
+.pref-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.85em; color: var(--muted);
+}
+#save-status {
+  font-size: 0.85em;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  min-width: 130px;
+  text-align: center;
+}
+#save-status.saved  { color: var(--good); border-color: var(--good); }
+#save-status.saving { color: var(--accent); }
+#save-status.error  { color: var(--warn); border-color: var(--warn); }
+
+#project-name {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg);
+  font-weight: bold;
+  font-size: 1.05em;
+  min-width: 120px;
+}
+#project-name:hover, #project-name:focus {
+  border-color: var(--border);
+  background: var(--panel2);
+}
+
+/* --- Main 3-column grid ------------------------------------ */
+.app-main {
+  display: grid;
+  grid-template-columns: 440px 1fr 330px;
+  gap: 12px;
+  padding: 12px;
+  align-items: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+/* --- Tileset ----------------------------------------------- */
+.tileset-panel .tileset-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+#tileset-canvas {
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: #000;
+}
+.tileset-hints {
+  color: var(--muted);
+  font-size: 0.78em;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* --- Tile editor ------------------------------------------- */
+.tile-editor h2 { display: flex; align-items: baseline; gap: 8px; }
+.tile-editor .tile-name-input {
+  font-size: 0.9em;
+  margin-left: auto;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 3px 8px;
+  border-radius: 4px;
+  width: 180px;
+}
+#tile-canvas {
+  display: block;
+  margin: 10px auto;
+  image-rendering: pixelated;
+  cursor: crosshair;
+  background: #000;
+  border: 1px solid var(--border);
+}
+.color-picker {
+  display: flex; gap: 6px;
+  justify-content: center;
+  margin: 10px 0;
+}
+.color-btn {
+  width: 56px; height: 56px;
+  font-size: 1.3em;
+  font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: #000;
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+}
+.color-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(255, 216, 102, 0.4);
+}
+.color-btn[data-color="0"] {
+  background: #2a2440;
+  background-image: linear-gradient(45deg, transparent 45%, #888 45%, #888 55%, transparent 55%);
+}
+.tile-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.tile-controls select { font-size: 0.85em; }
+.tile-hints {
+  color: var(--muted);
+  font-size: 0.8em;
+  margin-top: 10px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* --- Palettes ---------------------------------------------- */
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.palette-row .pal-label {
+  width: 28px;
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.palette-slot {
+  width: 38px; height: 38px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  font-size: 0.7em;
+  color: #000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 2px 4px;
+  text-shadow: 0 0 2px #fff;
+}
+.palette-slot.transparent {
+  background-image: linear-gradient(45deg, transparent 45%, #888 45%, #888 55%, transparent 55%);
+  cursor: default;
+}
+.palette-slot.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(255, 216, 102, 0.4);
+}
+.palette-slot .hex {
+  position: absolute;
+  bottom: 2px; right: 4px;
+  font-size: 0.65em;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  padding: 0 3px;
+  border-radius: 2px;
+  text-shadow: none;
+}
+.master-palette {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.master-grid {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 1px;
+  background: #000;
+  padding: 1px;
+  border-radius: 3px;
+}
+.master-cell {
+  aspect-ratio: 1;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55em;
+  color: #000;
+  text-shadow: 0 0 2px #fff;
+}
+.master-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
+.master-cell.chosen { outline: 2px solid var(--good); z-index: 2; }
+.master-hint {
+  color: var(--muted);
+  font-size: 0.75em;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* --- Nametable --------------------------------------------- */
+.nt-panel {
+  margin: 12px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.nt-controls {
+  display: flex; gap: 12px; align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.nt-controls label {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.nt-canvas-wrap {
+  overflow: auto;
+  max-height: 600px;
+  border: 1px solid var(--border);
+  background: #000;
+}
+#nt-canvas {
+  display: block;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+.nt-info {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8em;
+}
+
+/* --- Footer ------------------------------------------------ */
+.app-footer {
+  padding: 6px 16px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8em;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* --- Dialogs ----------------------------------------------- */
+.dialog-actions {
+  display: flex; gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.snapshot-list {
+  list-style: none;
+  padding: 0; margin: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.snapshot-list li {
+  padding: 10px;
+  background: var(--panel2);
+  margin-bottom: 6px;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.snapshot-meta {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+kbd {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: monospace;
+  font-size: 0.85em;
+}
+.help-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  align-items: center;
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🎮 NES Tile Editor</h1>
+  <div class="status-group">
+    <span id="save-status" class="saved">● Loading…</span>
+    <input id="project-name" type="text" value="untitled" title="Project name" aria-label="Project name">
+  </div>
+  <div class="toolbar">
+    <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+    <button type="button" id="btn-new" title="Start a new project">New</button>
+    <button id="btn-recover" type="button" title="Recover from a snapshot or backup">Recover…</button>
+    <label class="pref-toggle" title="When on, a JSON backup file is also downloaded every 5 minutes. Backups in browser storage are always kept regardless of this setting.">
+      <input id="auto-download" type="checkbox"> auto-download backups
+    </label>
+    <details class="export-menu">
+      <summary>Export ▾</summary>
+      <div class="menu-body">
+        <button type="button" data-export="json">💾 JSON save (round-trip)</button>
+        <button type="button" data-export="text">📝 my_tiles.txt</button>
+        <button type="button" data-export="chr">🗂 .chr  (tile graphics)</button>
+        <button type="button" data-export="nam">🗺 .nam  (nametable)</button>
+        <button type="button" data-export="pal">🎨 .pal  (palette)</button>
+        <button type="button" data-export="all">📦 Everything as .zip-ish folder</button>
+      </div>
+    </details>
+    <button type="button" id="btn-import" title="Load a JSON save file">Import…</button>
+    <input id="file-input" type="file" accept=".json" style="display:none">
+    <button type="button" id="btn-help">?</button>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- ============ Tileset panel ============ -->
+  <section class="panel tileset-panel">
+    <div class="tileset-meta">
+      <h2>Tileset</h2>
+      <span id="tileset-stats"></span>
+    </div>
+    <canvas id="tileset-canvas" width="384" height="384"></canvas>
+    <div class="tileset-hints">
+      Click a tile to edit it. Empty tiles show the hex index. Use
+      <kbd>[</kbd> and <kbd>]</kbd> to step through.
+    </div>
+  </section>
+
+  <!-- ============ Tile editor ============ -->
+  <section class="panel tile-editor">
+    <h2>
+      Editing Tile <span id="selected-tile-idx">0x00</span>
+      <input id="tile-name" class="tile-name-input" placeholder="name (optional)">
+    </h2>
+    <canvas id="tile-canvas" width="384" height="384"></canvas>
+    <div class="color-picker">
+      <button type="button" class="color-btn active" data-color="0" title="0 - transparent">0</button>
+      <button type="button" class="color-btn" data-color="1" title="1 - palette slot 1">1</button>
+      <button type="button" class="color-btn" data-color="2" title="2 - palette slot 2">2</button>
+      <button type="button" class="color-btn" data-color="3" title="3 - palette slot 3">3</button>
+    </div>
+    <div class="tile-controls">
+      <label>
+        Preview palette:
+        <select id="preview-palette"></select>
+      </label>
+      <label>
+        <input type="checkbox" id="show-numbers" checked> show numbers
+      </label>
+      <button type="button" id="btn-clear-tile" title="Clear this tile (all 0)">Clear</button>
+      <button type="button" id="btn-flip-h" title="Mirror left↔right">↔ flip</button>
+      <button type="button" id="btn-flip-v" title="Mirror top↔bottom">↕ flip</button>
+    </div>
+    <div class="tile-hints">
+      Click to paint. <kbd>0</kbd>/<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a colour.
+      <kbd>Shift</kbd>-click or right-click to pick the colour under the cursor.
+    </div>
+  </section>
+
+  <!-- ============ Palettes ============ -->
+  <section class="panel palettes-panel">
+    <h2>Palettes</h2>
+    <div style="color:var(--muted);font-size:0.8em;margin-bottom:8px">
+      Slot 0 is always shared (universal BG for backgrounds, transparent for
+      sprites). Click a coloured slot to change it.
+    </div>
+
+    <h3>Universal BG</h3>
+    <div id="universal-bg" class="palette-row"></div>
+
+    <h3>Background palettes</h3>
+    <div id="bg-palettes"></div>
+
+    <h3>Sprite palettes</h3>
+    <div id="sp-palettes"></div>
+
+    <div class="master-palette">
+      <h3>NES master (click to assign to selected slot)</h3>
+      <div class="master-grid" id="master-grid"></div>
+      <div class="master-hint">
+        Hover shows hex code and RGB. The NES chip only knows these 64 colours —
+        some cells are duplicate black.
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ Nametable editor ============ -->
+<section class="nt-panel">
+  <h2>Background / Nametable</h2>
+  <div class="nt-controls">
+    <label>Screens
+      <select id="nt-size">
+        <option value="1x1">1×1 (single screen)</option>
+        <option value="2x1">2×1 (horizontal scroll)</option>
+        <option value="1x2">1×2 (vertical scroll)</option>
+        <option value="2x2">2×2 (4-screen)</option>
+      </select>
+    </label>
+    <label>Zoom
+      <input type="range" id="nt-zoom" min="1" max="4" step="1" value="2">
+      <span id="nt-zoom-label">2×</span>
+    </label>
+    <label>Tool
+      <select id="nt-tool">
+        <option value="paint">Paint tile</option>
+        <option value="erase">Erase to tile 0</option>
+        <option value="palette">Set palette (whole 2×2 block)</option>
+        <option value="fill">Flood-fill tile</option>
+      </select>
+    </label>
+    <label>Use palette
+      <select id="nt-palette"></select>
+    </label>
+    <button type="button" id="btn-nt-clear">Clear whole background</button>
+  </div>
+  <div class="nt-canvas-wrap">
+    <canvas id="nt-canvas"></canvas>
+  </div>
+  <div class="nt-info" id="nt-info">
+    Hover a cell to see its coordinates. Click (or drag) to paint with the
+    selected tile. Palette is set per 2×2 tile block (NES attribute-table rule).
+  </div>
+</section>
+
+<footer class="app-footer">
+  <span id="footer-left">Auto-save every change · snapshot every 30s · emergency backup every 5 minutes</span>
+  <span id="footer-right"></span>
+</footer>
+
+<!-- ============ Dialogs ============ -->
+<dialog id="help-dialog">
+  <h2>Keyboard shortcuts &amp; tips</h2>
+  <div class="help-grid">
+    <kbd>0</kbd><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>Pick the colour you paint with</span>
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo</span>
+    <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd><span>Redo</span>
+    <kbd>Ctrl</kbd>+<kbd>S</kbd><span>Force save + take a snapshot</span>
+    <kbd>[</kbd> / <kbd>]</kbd><span>Previous / next tile</span>
+    <kbd>Shift</kbd>+click<span>Pick colour under the cursor (eyedropper)</span>
+    <kbd>?</kbd><span>Show this help</span>
+    <kbd>Esc</kbd><span>Close dialogs</span>
+  </div>
+  <h3 style="margin-top:16px">About auto-save</h3>
+  <p style="color:var(--muted);font-size:0.9em;line-height:1.5">
+    Your work is saved to this browser's storage <b>every time you change anything</b>.
+    Every 30 seconds a numbered snapshot is kept (last 5). Every 5 minutes an
+    emergency JSON backup is offered for download. If anything goes wrong, hit
+    <b>Recover…</b> in the toolbar to load any snapshot.
+  </p>
+  <div class="dialog-actions">
+    <button type="button" id="btn-help-close" class="primary">Got it</button>
+  </div>
+</dialog>
+
+<dialog id="recovery-dialog">
+  <h2>Recover from a snapshot</h2>
+  <p style="color:var(--muted);font-size:0.9em">
+    Pick any snapshot below and click Restore. The current project is first
+    saved to its own snapshot slot so nothing is lost.
+  </p>
+  <ul class="snapshot-list" id="snapshot-list"></ul>
+  <div class="dialog-actions">
+    <button type="button" id="btn-recovery-cancel">Cancel</button>
+  </div>
+</dialog>
+
+<dialog id="confirm-dialog">
+  <h2 id="confirm-title">Are you sure?</h2>
+  <p id="confirm-body" style="color:var(--muted);line-height:1.5"></p>
+  <div class="dialog-actions">
+    <button type="button" id="btn-confirm-no">Cancel</button>
+    <button type="button" id="btn-confirm-yes" class="primary">Yes, continue</button>
+  </div>
+</dialog>
+
+<dialog id="new-dialog">
+  <h2>Start a new project</h2>
+  <p style="color:var(--muted);line-height:1.5">
+    Your current project will be saved to a snapshot first, so you can always
+    recover it. Continue?
+  </p>
+  <div class="dialog-actions">
+    <button type="button" id="btn-new-cancel">Cancel</button>
+    <button type="button" id="btn-new-yes" class="primary">Save & start fresh</button>
+  </div>
+</dialog>
+
+<script>
+'use strict';
+
+// ================================================================
+// NES master palette — 64 colours, RGB triples
+// ================================================================
+const NES_PALETTE_RGB = [
+  [0x62,0x62,0x62],[0x00,0x1F,0xB2],[0x24,0x04,0xC8],[0x52,0x00,0xB2],
+  [0x73,0x00,0x76],[0x80,0x00,0x24],[0x73,0x0B,0x00],[0x52,0x28,0x00],
+  [0x24,0x44,0x00],[0x00,0x57,0x00],[0x00,0x5C,0x00],[0x00,0x53,0x24],
+  [0x00,0x3C,0x76],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xAB,0xAB,0xAB],[0x0D,0x57,0xFF],[0x4B,0x30,0xFF],[0x8A,0x13,0xFF],
+  [0xBC,0x08,0xD6],[0xD2,0x12,0x69],[0xC7,0x2E,0x00],[0x9D,0x54,0x00],
+  [0x60,0x7B,0x00],[0x20,0x98,0x00],[0x00,0xA3,0x00],[0x00,0x99,0x42],
+  [0x00,0x7D,0xB4],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xFF,0xFF,0xFF],[0x53,0xAE,0xFF],[0x90,0x85,0xFF],[0xD3,0x65,0xFF],
+  [0xFF,0x57,0xFF],[0xFF,0x5D,0xCF],[0xFF,0x77,0x57],[0xFA,0x9E,0x00],
+  [0xBD,0xC7,0x00],[0x7A,0xE7,0x00],[0x43,0xF6,0x11],[0x26,0xEF,0x7E],
+  [0x2C,0xD5,0xF6],[0x4E,0x4E,0x4E],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xFF,0xFF,0xFF],[0xB6,0xE1,0xFF],[0xCE,0xD1,0xFF],[0xE9,0xC3,0xFF],
+  [0xFF,0xBC,0xFF],[0xFF,0xBD,0xF4],[0xFF,0xC6,0xC3],[0xFF,0xD5,0x9A],
+  [0xE9,0xE6,0x81],[0xCE,0xF4,0x81],[0xB6,0xFB,0x9A],[0xA9,0xFA,0xC3],
+  [0xA9,0xF0,0xF4],[0xB8,0xB8,0xB8],[0x00,0x00,0x00],[0x00,0x00,0x00],
+];
+function nesRgb(idx) {
+  const c = NES_PALETTE_RGB[idx & 0x3F];
+  return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+}
+function nesRgbContrast(idx) {
+  const c = NES_PALETTE_RGB[idx & 0x3F];
+  const luma = 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+  return luma > 130 ? '#000' : '#fff';
+}
+
+// ================================================================
+// State model
+// ================================================================
+const STATE_VERSION = 1;
+const NUM_TILES = 256;
+const SCREEN_W = 32;  // tiles per screen
+const SCREEN_H = 30;
+
+function emptyTile() {
+  return { name: '', pixels: Array.from({length:8}, () => [0,0,0,0,0,0,0,0]) };
+}
+function defaultBgPalettes() {
+  // Slot 0 is shared (universal_bg). Slots 1..3 per palette.
+  return [
+    { slots: [0x29, 0x19, 0x07] },  // grass/ground
+    { slots: [0x30, 0x00, 0x2D] },  // stone
+    { slots: [0x27, 0x17, 0x07] },  // wood/dirt
+    { slots: [0x31, 0x21, 0x01] },  // sky
+  ];
+}
+function defaultSpritePalettes() {
+  // Slot 0 is always transparent.
+  return [
+    { slots: [0x27, 0x17, 0x30] },  // hero
+    { slots: [0x1A, 0x30, 0x0A] },  // slime
+    { slots: [0x30, 0x16, 0x00] },  // skeleton
+    { slots: [0x16, 0x36, 0x06] },  // items
+  ];
+}
+function emptyNametable() {
+  // Start at 2x1 screens (most common for scrolling Zelda II style)
+  // Store a flat grid sized for the current dimensions.
+  const cols = SCREEN_W;
+  const rows = SCREEN_H;
+  return Array.from({length: rows}, () =>
+    Array.from({length: cols}, () => ({ tile: 0, palette: 0 }))
+  );
+}
+function createDefaultState() {
+  return {
+    version: STATE_VERSION,
+    name: 'untitled',
+    dimensions: { screens_x: 1, screens_y: 1 },
+    universal_bg: 0x21,           // light blue sky
+    bg_palettes: defaultBgPalettes(),
+    sprite_palettes: defaultSpritePalettes(),
+    tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    nametable: emptyNametable(),
+    metadata: {
+      created: new Date().toISOString(),
+      modified: new Date().toISOString(),
+    },
+  };
+}
+
+function validateState(s) {
+  if (!s || typeof s !== 'object') return 'not an object';
+  if (s.version !== STATE_VERSION) return 'version mismatch';
+  if (!Array.isArray(s.tiles) || s.tiles.length !== NUM_TILES) return 'tiles wrong';
+  for (let i = 0; i < NUM_TILES; i++) {
+    const t = s.tiles[i];
+    if (!t || !Array.isArray(t.pixels) || t.pixels.length !== 8) return 'tile ' + i + ' rows';
+    for (let r = 0; r < 8; r++) {
+      if (!Array.isArray(t.pixels[r]) || t.pixels[r].length !== 8) return 'tile ' + i + ' row ' + r;
+      for (let c = 0; c < 8; c++) {
+        const v = t.pixels[r][c];
+        if (v < 0 || v > 3 || !Number.isInteger(v)) return 'tile ' + i + ' pixel';
+      }
+    }
+  }
+  if (!Array.isArray(s.bg_palettes) || s.bg_palettes.length !== 4) return 'bg_palettes';
+  if (!Array.isArray(s.sprite_palettes) || s.sprite_palettes.length !== 4) return 'sprite_palettes';
+  for (const p of s.bg_palettes.concat(s.sprite_palettes)) {
+    if (!Array.isArray(p.slots) || p.slots.length !== 3) return 'palette slots';
+    for (const b of p.slots) if (b < 0 || b > 0x3F || !Number.isInteger(b)) return 'palette byte';
+  }
+  if (s.universal_bg < 0 || s.universal_bg > 0x3F) return 'universal_bg';
+  if (!Array.isArray(s.nametable)) return 'nametable';
+  return null;
+}
+
+function cloneState(s) {
+  return JSON.parse(JSON.stringify(s));
+}
+
+// Ensure nametable size matches dimensions (after load / resize).
+function resizeNametable(state) {
+  const cols = SCREEN_W * state.dimensions.screens_x;
+  const rows = SCREEN_H * state.dimensions.screens_y;
+  const old = state.nametable;
+  const next = Array.from({length: rows}, (_, r) =>
+    Array.from({length: cols}, (_, c) => {
+      if (old && old[r] && old[r][c]) return old[r][c];
+      return { tile: 0, palette: 0 };
+    })
+  );
+  state.nametable = next;
+}
+
+// ================================================================
+// Storage layer — localStorage, snapshots, recovery
+// ================================================================
+const STORAGE_KEY           = 'nes_tile_editor.current.v1';
+const STORAGE_SNAP_PREFIX   = 'nes_tile_editor.snap.';
+const STORAGE_BACKUP_PREFIX = 'nes_tile_editor.backup.';
+const STORAGE_META_KEY      = 'nes_tile_editor.meta.v1';
+const STORAGE_PREF_KEY      = 'nes_tile_editor.prefs.v1';
+const MAX_SNAPSHOTS         = 8;
+const MAX_BACKUPS           = 5;   // long-lived; rotated every 5 min
+const BACKUP_INTERVAL_MS    = 5 * 60 * 1000;
+const SNAPSHOT_INTERVAL_MS  = 30 * 1000;
+
+const Storage = {
+  saveCurrent(state) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+  loadCurrent() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const err = validateState(parsed);
+      if (err) return null;
+      return parsed;
+    } catch (e) { return null; }
+  },
+  saveSnapshot(state, reason) {
+    try {
+      const meta = this._readMeta();
+      const ts = Date.now();
+      const key = STORAGE_SNAP_PREFIX + ts;
+      localStorage.setItem(key, JSON.stringify(state));
+      meta.snapshots = meta.snapshots || [];
+      meta.snapshots.push({ key, ts, reason, name: state.name });
+      // trim old snapshots
+      while (meta.snapshots.length > MAX_SNAPSHOTS) {
+        const dropped = meta.snapshots.shift();
+        try { localStorage.removeItem(dropped.key); } catch {}
+      }
+      this._writeMeta(meta);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+  listSnapshots() {
+    const meta = this._readMeta();
+    return (meta.snapshots || []).slice().reverse();  // newest first
+  },
+  saveBackup(state) {
+    // Long-lived rotating backup ring. Separate from snapshots so brief
+    // edit bursts cannot evict the pupil's only safety net.
+    try {
+      const meta = this._readMeta();
+      const ts = Date.now();
+      const key = STORAGE_BACKUP_PREFIX + ts;
+      localStorage.setItem(key, JSON.stringify(state));
+      meta.backups = meta.backups || [];
+      meta.backups.push({ key, ts, name: state.name });
+      while (meta.backups.length > MAX_BACKUPS) {
+        const dropped = meta.backups.shift();
+        try { localStorage.removeItem(dropped.key); } catch {}
+      }
+      this._writeMeta(meta);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+  listBackups() {
+    const meta = this._readMeta();
+    return (meta.backups || []).slice().reverse();
+  },
+  loadSnapshot(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      const err = validateState(s);
+      if (err) return null;
+      return s;
+    } catch (e) { return null; }
+  },
+  readPrefs() {
+    try {
+      const raw = localStorage.getItem(STORAGE_PREF_KEY);
+      if (!raw) return {};
+      return JSON.parse(raw) || {};
+    } catch { return {}; }
+  },
+  writePrefs(p) {
+    try { localStorage.setItem(STORAGE_PREF_KEY, JSON.stringify(p)); } catch {}
+  },
+  _readMeta() {
+    try {
+      const raw = localStorage.getItem(STORAGE_META_KEY);
+      if (!raw) return { snapshots: [] };
+      return JSON.parse(raw);
+    } catch { return { snapshots: [] }; }
+  },
+  _writeMeta(m) {
+    localStorage.setItem(STORAGE_META_KEY, JSON.stringify(m));
+  },
+};
+
+// ================================================================
+// Undo / redo
+// ================================================================
+const UNDO_LIMIT = 50;
+let undoStack = [];
+let redoStack = [];
+let undoSuspended = false;
+
+function pushUndo() {
+  if (undoSuspended) return;
+  undoStack.push(JSON.stringify(state));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack = [];
+  updateUndoButtons();
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(JSON.stringify(state));
+  state = JSON.parse(undoStack.pop());
+  afterStateReplaced();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(JSON.stringify(state));
+  state = JSON.parse(redoStack.pop());
+  afterStateReplaced();
+}
+function updateUndoButtons() {
+  document.getElementById('btn-undo').disabled = !undoStack.length;
+  document.getElementById('btn-redo').disabled = !redoStack.length;
+}
+
+// ================================================================
+// Auto-save
+// ================================================================
+let dirty = false;
+let saveTimer = null;
+let snapshotTimer = null;
+let backupTimer = null;
+let lastSaveTs = 0;
+
+function markDirty() {
+  dirty = true;
+  state.metadata.modified = new Date().toISOString();
+  scheduleSave();
+}
+function scheduleSave() {
+  setStatus('saving', 'Saving…');
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const res = Storage.saveCurrent(state);
+    if (res.ok) {
+      dirty = false;
+      lastSaveTs = Date.now();
+      setStatus('saved', '● Saved just now');
+    } else {
+      setStatus('error', '⚠ Save failed — click');
+      console.error('save failed:', res.error);
+      // If localStorage is full, force a JSON download.
+      if (/quota|exceeded/i.test(res.error || '')) {
+        forceEmergencyDownload(state, 'quota_exceeded');
+      }
+    }
+  }, 150);
+}
+function setStatus(cls, text) {
+  const el = document.getElementById('save-status');
+  el.className = cls;
+  el.textContent = text;
+}
+function updateSavedTimeLabel() {
+  if (dirty) return;
+  if (!lastSaveTs) return;
+  const secs = Math.floor((Date.now() - lastSaveTs) / 1000);
+  if (secs < 2) setStatus('saved', '● Saved just now');
+  else if (secs < 60) setStatus('saved', '● Saved ' + secs + 's ago');
+  else setStatus('saved', '● Saved ' + Math.floor(secs/60) + 'm ago');
+}
+
+// ================================================================
+// Exporters
+// ================================================================
+function triggerDownload(filename, data, mime) {
+  let blob;
+  if (data instanceof Uint8Array) {
+    blob = new Blob([data], { type: mime || 'application/octet-stream' });
+  } else {
+    blob = new Blob([data], { type: mime || 'text/plain' });
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+}
+
+function exportJSON() {
+  const text = JSON.stringify(state, null, 2);
+  triggerDownload(safeFilename(state.name) + '.json', text, 'application/json');
+}
+
+function safeFilename(name) {
+  return (name || 'untitled').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+// Convert 8x8 pixel grid to 16 bytes of NES CHR data
+function tileToChrBytes(tile) {
+  const plane0 = new Uint8Array(8);
+  const plane1 = new Uint8Array(8);
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const v = tile.pixels[y][x];
+      if (v & 1) plane0[y] |= (0x80 >> x);
+      if (v & 2) plane1[y] |= (0x80 >> x);
+    }
+  }
+  const out = new Uint8Array(16);
+  out.set(plane0, 0);
+  out.set(plane1, 8);
+  return out;
+}
+
+function exportCHR() {
+  // 256 tiles × 16 bytes = 4096 bytes, pad to 8KB (2 pattern tables).
+  const out = new Uint8Array(8192);
+  for (let i = 0; i < NUM_TILES; i++) {
+    out.set(tileToChrBytes(state.tiles[i]), i * 16);
+  }
+  triggerDownload(safeFilename(state.name) + '.chr', out);
+}
+
+function exportNAM() {
+  // Each screen = 960 tile bytes + 64 attribute bytes = 1024.
+  const screens = state.dimensions.screens_x * state.dimensions.screens_y;
+  const out = new Uint8Array(screens * 1024);
+
+  for (let sy = 0; sy < state.dimensions.screens_y; sy++) {
+    for (let sx = 0; sx < state.dimensions.screens_x; sx++) {
+      const screenIdx = sy * state.dimensions.screens_x + sx;
+      const base = screenIdx * 1024;
+
+      // Tile indices (32 × 30 = 960 bytes)
+      for (let y = 0; y < SCREEN_H; y++) {
+        for (let x = 0; x < SCREEN_W; x++) {
+          const cell = state.nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
+          out[base + y*32 + x] = cell.tile & 0xFF;
+        }
+      }
+      // Attribute table: 8 × 8 bytes, each covers a 4×4 tile region with
+      // 4 quadrants of 2×2 tiles (bits 0-1=TL,2-3=TR,4-5=BL,6-7=BR).
+      for (let ay = 0; ay < 8; ay++) {
+        for (let ax = 0; ax < 8; ax++) {
+          let byte = 0;
+          for (let q = 0; q < 4; q++) {
+            const qx = q & 1, qy = (q >> 1) & 1;
+            const tx = sx*SCREEN_W + ax*4 + qx*2;
+            const ty = sy*SCREEN_H + ay*4 + qy*2;
+            // Use the palette of the first tile in this 2×2 block.
+            const row = state.nametable[ty];
+            const cell = row ? row[tx] : null;
+            const pal = cell ? (cell.palette & 3) : 0;
+            byte |= (pal << (q * 2));
+          }
+          out[base + 960 + ay*8 + ax] = byte;
+        }
+      }
+    }
+  }
+  triggerDownload(safeFilename(state.name) + '.nam', out);
+}
+
+function exportPAL() {
+  // 32 bytes: BG pal 0..3 (4 bytes each, first is universal_bg), then sprite.
+  const out = new Uint8Array(32);
+  for (let p = 0; p < 4; p++) {
+    out[p*4 + 0] = state.universal_bg;
+    out[p*4 + 1] = state.bg_palettes[p].slots[0];
+    out[p*4 + 2] = state.bg_palettes[p].slots[1];
+    out[p*4 + 3] = state.bg_palettes[p].slots[2];
+  }
+  for (let p = 0; p < 4; p++) {
+    out[16 + p*4 + 0] = state.universal_bg;  // sprite slot 0 is transparent,
+                                              // but conventionally holds same byte
+    out[16 + p*4 + 1] = state.sprite_palettes[p].slots[0];
+    out[16 + p*4 + 2] = state.sprite_palettes[p].slots[1];
+    out[16 + p*4 + 3] = state.sprite_palettes[p].slots[2];
+  }
+  triggerDownload(safeFilename(state.name) + '.pal', out);
+}
+
+function exportText() {
+  // Produces a my_tiles.txt compatible with tools/tile_editor.py.
+  // Only emits tiles that have any non-zero pixel OR a name.
+  // Names fall back to tile_XX hex index.
+  const lines = [];
+  lines.push('# Exported from NES Tile Editor — ' + new Date().toISOString());
+  lines.push('# Project: ' + state.name);
+  lines.push('');
+
+  for (let p = 0; p < 4; p++) {
+    const slots = state.bg_palettes[p].slots;
+    lines.push('palette bg' + p + ':');
+    lines.push('  1 = 0x' + slots[0].toString(16).padStart(2,'0'));
+    lines.push('  2 = 0x' + slots[1].toString(16).padStart(2,'0'));
+    lines.push('  3 = 0x' + slots[2].toString(16).padStart(2,'0'));
+    lines.push('');
+  }
+  for (let p = 0; p < 4; p++) {
+    const slots = state.sprite_palettes[p].slots;
+    lines.push('palette sp' + p + ':');
+    lines.push('  1 = 0x' + slots[0].toString(16).padStart(2,'0'));
+    lines.push('  2 = 0x' + slots[1].toString(16).padStart(2,'0'));
+    lines.push('  3 = 0x' + slots[2].toString(16).padStart(2,'0'));
+    lines.push('');
+  }
+
+  const usedTiles = new Set();
+  for (let i = 0; i < NUM_TILES; i++) {
+    const t = state.tiles[i];
+    const anyPixel = t.pixels.some(row => row.some(v => v !== 0));
+    if (anyPixel || t.name) usedTiles.add(i);
+  }
+
+  const tileName = (i) => {
+    const t = state.tiles[i];
+    if (t.name) return t.name.replace(/\W/g, '_');
+    return 'tile_' + i.toString(16).padStart(2,'0');
+  };
+
+  for (const i of usedTiles) {
+    lines.push('tile ' + tileName(i) + ':');
+    for (const row of state.tiles[i].pixels) {
+      lines.push('  ' + row.map(v => v === 0 ? '.' : String(v)).join(''));
+    }
+    lines.push('');
+  }
+
+  // Whole nametable exported as one background per screen.
+  for (let sy = 0; sy < state.dimensions.screens_y; sy++) {
+    for (let sx = 0; sx < state.dimensions.screens_x; sx++) {
+      const name = 'screen_' + sx + '_' + sy;
+      // Majority-vote palette across the screen for the text format
+      // (per-tile palettes are kept in the binary export).
+      const counts = [0,0,0,0];
+      for (let y = 0; y < SCREEN_H; y++) {
+        for (let x = 0; x < SCREEN_W; x++) {
+          const cell = state.nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
+          counts[cell.palette & 3]++;
+        }
+      }
+      const dominant = counts.indexOf(Math.max.apply(null, counts));
+      lines.push('background ' + name + ' using bg' + dominant + ':');
+      for (let y = 0; y < SCREEN_H; y++) {
+        const names = [];
+        for (let x = 0; x < SCREEN_W; x++) {
+          const cell = state.nametable[sy*SCREEN_H + y][sx*SCREEN_W + x];
+          names.push(tileName(cell.tile));
+        }
+        lines.push('  ' + names.join(' '));
+      }
+      lines.push('');
+    }
+  }
+
+  triggerDownload('my_tiles.txt', lines.join('\n'), 'text/plain');
+}
+
+function exportAll() {
+  // "zip-ish" — just triggers each download in sequence.
+  exportJSON();
+  setTimeout(exportText, 200);
+  setTimeout(exportCHR,  400);
+  setTimeout(exportNAM,  600);
+  setTimeout(exportPAL,  800);
+}
+
+function forceEmergencyDownload(state, reason) {
+  console.warn('emergency download: ' + reason);
+  triggerDownload(
+    'emergency_backup_' + Date.now() + '.json',
+    JSON.stringify(state, null, 2),
+    'application/json',
+  );
+}
+
+// ================================================================
+// Renderers — each takes state and paints a DOM target.
+// ================================================================
+let state = createDefaultState();
+let prefs = { autoDownloadBackups: false };
+let selectedTileIdx = 0;
+let currentColour = 1;
+let selectedPaletteKind = 'bg';  // 'bg' | 'sprite' | 'universal'
+let selectedPaletteIdx = 0;
+let selectedPaletteSlot = 1;     // 1..3 (0 means universal_bg)
+
+// Which palette is used to preview the tile editor / tileset.
+// We show every tile through the selectedPaletteKind[selectedPaletteIdx].
+function activePreviewPalette() {
+  if (selectedPaletteKind === 'sprite') {
+    return {
+      slot0: -1,  // transparent
+      slot1: state.sprite_palettes[selectedPaletteIdx].slots[0],
+      slot2: state.sprite_palettes[selectedPaletteIdx].slots[1],
+      slot3: state.sprite_palettes[selectedPaletteIdx].slots[2],
+    };
+  }
+  const p = state.bg_palettes[selectedPaletteIdx];
+  return {
+    slot0: state.universal_bg,
+    slot1: p.slots[0],
+    slot2: p.slots[1],
+    slot3: p.slots[2],
+  };
+}
+
+function pixelRgb(v, pal) {
+  if (v === 0) return pal.slot0 < 0 ? null : nesRgb(pal.slot0);
+  if (v === 1) return nesRgb(pal.slot1);
+  if (v === 2) return nesRgb(pal.slot2);
+  if (v === 3) return nesRgb(pal.slot3);
+  return null;
+}
+
+// --- Tile editor canvas -----------------------------------------
+function renderTileEditor() {
+  const canvas = document.getElementById('tile-canvas');
+  const ctx = canvas.getContext('2d');
+  const tile = state.tiles[selectedTileIdx];
+  const pal = activePreviewPalette();
+  const size = canvas.width;  // 384
+  const cell = size / 8;       // 48
+  const showNumbers = document.getElementById('show-numbers').checked;
+
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.font = 'bold 20px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const v = tile.pixels[y][x];
+      const rgb = pixelRgb(v, pal);
+      if (rgb) {
+        ctx.fillStyle = rgb;
+        ctx.fillRect(x*cell, y*cell, cell, cell);
+      } else {
+        // transparent-checker
+        ctx.fillStyle = '#2a2440';
+        ctx.fillRect(x*cell, y*cell, cell, cell);
+        ctx.fillStyle = '#3a3352';
+        for (let k = 0; k < cell; k += 8) {
+          for (let l = (k%16 === 0 ? 0 : 8); l < cell; l += 16) {
+            ctx.fillRect(x*cell + l, y*cell + k, 8, 8);
+          }
+        }
+      }
+      // grid
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.strokeRect(x*cell + 0.5, y*cell + 0.5, cell - 1, cell - 1);
+      // number overlay
+      if (showNumbers) {
+        const ink = v === 0 ? '#aaa'
+                   : nesRgbContrast(pixelRgb(v, pal) === null ? 0 :
+                                    (v===1?pal.slot1:v===2?pal.slot2:pal.slot3));
+        ctx.fillStyle = ink;
+        ctx.fillText(String(v), x*cell + cell/2, y*cell + cell/2);
+      }
+    }
+  }
+
+  document.getElementById('selected-tile-idx').textContent =
+    '0x' + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
+  document.getElementById('tile-name').value = tile.name || '';
+}
+
+// --- Tileset panel (256 tile grid) ------------------------------
+function renderTileset() {
+  const canvas = document.getElementById('tileset-canvas');
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;       // 384
+  const cols = 16, rows = 16;
+  const cell = size / cols;        // 24
+  const pal = activePreviewPalette();
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < NUM_TILES; i++) {
+    const cx = (i % cols) * cell;
+    const cy = Math.floor(i / cols) * cell;
+    const tile = state.tiles[i];
+    const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
+    if (!anyPixel) {
+      ctx.fillStyle = '#1a1630';
+      ctx.fillRect(cx, cy, cell, cell);
+      ctx.fillStyle = '#4a4270';
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(i.toString(16).padStart(2,'0'),
+                   cx + cell/2, cy + cell/2);
+    } else {
+      const p = cell / 8;
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const v = tile.pixels[y][x];
+          const rgb = pixelRgb(v, pal);
+          if (rgb) {
+            ctx.fillStyle = rgb;
+            ctx.fillRect(cx + x*p, cy + y*p, p, p);
+          } else {
+            ctx.fillStyle = '#2a2440';
+            ctx.fillRect(cx + x*p, cy + y*p, p, p);
+          }
+        }
+      }
+    }
+    // selection
+    if (i === selectedTileIdx) {
+      ctx.strokeStyle = '#ffd866';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx + 1, cy + 1, cell - 2, cell - 2);
+    } else {
+      ctx.strokeStyle = 'rgba(60,60,80,0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    }
+  }
+
+  let used = 0;
+  for (const t of state.tiles) {
+    if (t.pixels.some(r => r.some(v => v !== 0))) used++;
+  }
+  document.getElementById('tileset-stats').textContent =
+    used + ' / ' + NUM_TILES + ' tiles used';
+}
+
+// --- Palettes panel ---------------------------------------------
+function renderPalettes() {
+  const ubg = document.getElementById('universal-bg');
+  ubg.innerHTML = '';
+  ubg.appendChild(makePaletteSlot('universal', 0, 0, state.universal_bg, false));
+
+  const bg = document.getElementById('bg-palettes');
+  bg.innerHTML = '';
+  state.bg_palettes.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'palette-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'pal-label';
+    lbl.textContent = 'BG' + i;
+    row.appendChild(lbl);
+    row.appendChild(makePaletteSlot('bg', i, 0, state.universal_bg, true));
+    for (let s = 0; s < 3; s++) {
+      row.appendChild(makePaletteSlot('bg', i, s + 1, p.slots[s], false));
+    }
+    bg.appendChild(row);
+  });
+
+  const sp = document.getElementById('sp-palettes');
+  sp.innerHTML = '';
+  state.sprite_palettes.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'palette-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'pal-label';
+    lbl.textContent = 'SP' + i;
+    row.appendChild(lbl);
+    const slot0 = makePaletteSlot('sprite', i, 0, -1, true);
+    slot0.classList.add('transparent');
+    row.appendChild(slot0);
+    for (let s = 0; s < 3; s++) {
+      row.appendChild(makePaletteSlot('sprite', i, s + 1, p.slots[s], false));
+    }
+    sp.appendChild(row);
+  });
+
+  updatePreviewPaletteSelect();
+  updateNtPaletteSelect();
+}
+
+function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
+  const el = document.createElement('div');
+  el.className = 'palette-slot';
+  if (colourIdx >= 0) el.style.background = nesRgb(colourIdx);
+  el.dataset.kind = kind;
+  el.dataset.palIdx = palIdx;
+  el.dataset.slot = slot;
+  if (colourIdx >= 0) {
+    const hex = document.createElement('span');
+    hex.className = 'hex';
+    hex.textContent = '0x' + colourIdx.toString(16).padStart(2, '0').toUpperCase();
+    el.appendChild(hex);
+  }
+  if (readonly) el.title = 'Shared slot — edit Universal BG or nothing to change';
+  if (kind === selectedPaletteKind
+      && palIdx === selectedPaletteIdx
+      && slot === selectedPaletteSlot) {
+    el.classList.add('selected');
+  }
+  el.addEventListener('click', () => {
+    if (readonly && kind !== 'universal') return;
+    selectedPaletteKind = kind;
+    selectedPaletteIdx = palIdx;
+    selectedPaletteSlot = slot;
+    renderPalettes();
+    renderMasterGrid();
+    // If picking a BG palette or universal, re-render tileset + tile preview.
+    renderTileset();
+    renderTileEditor();
+    renderNametable();
+  });
+  return el;
+}
+
+function renderMasterGrid() {
+  const grid = document.getElementById('master-grid');
+  grid.innerHTML = '';
+  const chosen = currentChosenColourIdx();
+  for (let i = 0; i < 64; i++) {
+    const c = document.createElement('div');
+    c.className = 'master-cell';
+    c.style.background = nesRgb(i);
+    c.style.color = nesRgbContrast(i);
+    c.textContent = '0x' + i.toString(16).padStart(2,'0').toUpperCase();
+    c.title = 'Click to assign 0x' + i.toString(16).padStart(2,'0').toUpperCase()
+      + ' to ' + describeSelectedSlot();
+    if (i === chosen) c.classList.add('chosen');
+    c.addEventListener('click', () => assignColour(i));
+    grid.appendChild(c);
+  }
+}
+function currentChosenColourIdx() {
+  if (selectedPaletteKind === 'universal') return state.universal_bg;
+  if (selectedPaletteKind === 'bg') {
+    if (selectedPaletteSlot === 0) return state.universal_bg;
+    return state.bg_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1];
+  }
+  if (selectedPaletteKind === 'sprite') {
+    if (selectedPaletteSlot === 0) return -1;
+    return state.sprite_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1];
+  }
+  return -1;
+}
+function describeSelectedSlot() {
+  if (selectedPaletteKind === 'universal') return 'Universal BG';
+  if (selectedPaletteSlot === 0) return selectedPaletteKind.toUpperCase() + ' slot 0 (shared)';
+  return selectedPaletteKind.toUpperCase() + selectedPaletteIdx
+    + ' slot ' + selectedPaletteSlot;
+}
+function assignColour(nesIdx) {
+  if (selectedPaletteKind === 'sprite' && selectedPaletteSlot === 0) return;
+  pushUndo();
+  if (selectedPaletteKind === 'universal'
+      || (selectedPaletteKind === 'bg' && selectedPaletteSlot === 0)) {
+    state.universal_bg = nesIdx;
+  } else if (selectedPaletteKind === 'bg') {
+    state.bg_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1] = nesIdx;
+  } else if (selectedPaletteKind === 'sprite') {
+    state.sprite_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1] = nesIdx;
+  }
+  markDirty();
+  renderPalettes();
+  renderMasterGrid();
+  renderTileset();
+  renderTileEditor();
+  renderNametable();
+}
+
+function updatePreviewPaletteSelect() {
+  const sel = document.getElementById('preview-palette');
+  const keep = sel.value;
+  sel.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const o = document.createElement('option');
+    o.value = 'bg:' + i; o.textContent = 'BG' + i;
+    sel.appendChild(o);
+  }
+  for (let i = 0; i < 4; i++) {
+    const o = document.createElement('option');
+    o.value = 'sprite:' + i; o.textContent = 'Sprite' + i;
+    sel.appendChild(o);
+  }
+  const want = selectedPaletteKind === 'universal'
+    ? 'bg:0'
+    : selectedPaletteKind + ':' + selectedPaletteIdx;
+  sel.value = keep || want;
+}
+function updateNtPaletteSelect() {
+  const sel = document.getElementById('nt-palette');
+  const keep = sel.value;
+  sel.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const o = document.createElement('option');
+    o.value = String(i); o.textContent = 'BG' + i;
+    sel.appendChild(o);
+  }
+  sel.value = keep || '0';
+}
+
+// --- Nametable editor -------------------------------------------
+function ntZoom() {
+  return parseInt(document.getElementById('nt-zoom').value, 10) || 2;
+}
+function renderNametable() {
+  const canvas = document.getElementById('nt-canvas');
+  const ctx = canvas.getContext('2d');
+  const zoom = ntZoom();
+  const cols = SCREEN_W * state.dimensions.screens_x;
+  const rows = SCREEN_H * state.dimensions.screens_y;
+  const cellPx = 8 * zoom;
+  canvas.width = cols * cellPx;
+  canvas.height = rows * cellPx;
+  document.getElementById('nt-zoom-label').textContent = zoom + '×';
+
+  ctx.fillStyle = nesRgb(state.universal_bg);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const cell = state.nametable[y][x];
+      const tile = state.tiles[cell.tile];
+      const pal = state.bg_palettes[cell.palette & 3];
+      const pOverride = {
+        slot0: state.universal_bg,
+        slot1: pal.slots[0],
+        slot2: pal.slots[1],
+        slot3: pal.slots[2],
+      };
+      for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+          const v = tile.pixels[py][px];
+          const rgb = pixelRgb(v, pOverride);
+          if (!rgb) continue;
+          ctx.fillStyle = rgb;
+          ctx.fillRect(x*cellPx + px*zoom, y*cellPx + py*zoom, zoom, zoom);
+        }
+      }
+    }
+  }
+
+  // attribute-block grid (2×2 tiles)
+  ctx.strokeStyle = 'rgba(255, 216, 102, 0.25)';
+  ctx.lineWidth = 1;
+  for (let ax = 0; ax <= cols; ax += 2) {
+    ctx.beginPath();
+    ctx.moveTo(ax*cellPx + 0.5, 0);
+    ctx.lineTo(ax*cellPx + 0.5, canvas.height);
+    ctx.stroke();
+  }
+  for (let ay = 0; ay <= rows; ay += 2) {
+    ctx.beginPath();
+    ctx.moveTo(0, ay*cellPx + 0.5);
+    ctx.lineTo(canvas.width, ay*cellPx + 0.5);
+    ctx.stroke();
+  }
+  // screen boundaries (thick)
+  ctx.strokeStyle = 'rgba(120,220,232,0.75)';
+  ctx.lineWidth = 2;
+  for (let sx = 1; sx < state.dimensions.screens_x; sx++) {
+    ctx.beginPath();
+    ctx.moveTo(sx*SCREEN_W*cellPx, 0);
+    ctx.lineTo(sx*SCREEN_W*cellPx, canvas.height);
+    ctx.stroke();
+  }
+  for (let sy = 1; sy < state.dimensions.screens_y; sy++) {
+    ctx.beginPath();
+    ctx.moveTo(0, sy*SCREEN_H*cellPx);
+    ctx.lineTo(canvas.width, sy*SCREEN_H*cellPx);
+    ctx.stroke();
+  }
+}
+
+function ntPointToCell(evt) {
+  const canvas = document.getElementById('nt-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const zoom = ntZoom();
+  const cellPx = 8 * zoom;
+  const x = Math.floor((evt.clientX - rect.left) / cellPx);
+  const y = Math.floor((evt.clientY - rect.top) / cellPx);
+  return { x, y };
+}
+
+let ntPainting = false;
+let ntLastCellKey = null;
+
+function applyNtTool(cx, cy) {
+  if (cy < 0 || cx < 0) return;
+  if (!state.nametable[cy] || !state.nametable[cy][cx]) return;
+  const tool = document.getElementById('nt-tool').value;
+  const pal = parseInt(document.getElementById('nt-palette').value, 10);
+
+  if (tool === 'paint') {
+    const cell = state.nametable[cy][cx];
+    const block_x = cx & ~1, block_y = cy & ~1;
+    for (let dy = 0; dy < 2; dy++) {
+      for (let dx = 0; dx < 2; dx++) {
+        if (state.nametable[block_y+dy] && state.nametable[block_y+dy][block_x+dx]) {
+          state.nametable[block_y+dy][block_x+dx].palette = pal;
+        }
+      }
+    }
+    cell.tile = selectedTileIdx;
+  } else if (tool === 'erase') {
+    state.nametable[cy][cx].tile = 0;
+  } else if (tool === 'palette') {
+    const block_x = cx & ~1, block_y = cy & ~1;
+    for (let dy = 0; dy < 2; dy++) {
+      for (let dx = 0; dx < 2; dx++) {
+        if (state.nametable[block_y+dy] && state.nametable[block_y+dy][block_x+dx]) {
+          state.nametable[block_y+dy][block_x+dx].palette = pal;
+        }
+      }
+    }
+  } else if (tool === 'fill') {
+    ntFloodFill(cx, cy, selectedTileIdx, pal);
+  }
+  markDirty();
+  renderNametable();
+}
+function ntFloodFill(sx, sy, newTile, newPal) {
+  const cols = SCREEN_W * state.dimensions.screens_x;
+  const rows = SCREEN_H * state.dimensions.screens_y;
+  const target = state.nametable[sy][sx].tile;
+  if (target === newTile) return;
+  const q = [[sx, sy]];
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+    const c = state.nametable[y][x];
+    if (c.tile !== target) continue;
+    c.tile = newTile;
+    const block_x = x & ~1, block_y = y & ~1;
+    for (let dy = 0; dy < 2; dy++)
+      for (let dx = 0; dx < 2; dx++)
+        if (state.nametable[block_y+dy] && state.nametable[block_y+dy][block_x+dx])
+          state.nametable[block_y+dy][block_x+dx].palette = newPal;
+    q.push([x+1,y]); q.push([x-1,y]); q.push([x,y+1]); q.push([x,y-1]);
+  }
+}
+
+// ================================================================
+// Event wiring
+// ================================================================
+function afterStateReplaced() {
+  // Called after load/undo/redo. Re-syncs UI + persists.
+  resizeNametable(state);
+  document.getElementById('project-name').value = state.name || 'untitled';
+  document.getElementById('nt-size').value =
+    state.dimensions.screens_x + 'x' + state.dimensions.screens_y;
+  renderAll();
+  markDirty();
+  updateUndoButtons();
+}
+
+function renderAll() {
+  renderTileEditor();
+  renderTileset();
+  renderPalettes();
+  renderMasterGrid();
+  renderNametable();
+}
+
+// --- Tile editor painting ---------------------------------------
+function tileCanvasCell(evt) {
+  const canvas = document.getElementById('tile-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const size = canvas.width;
+  const cell = size / 8;
+  const x = Math.floor((evt.clientX - rect.left) / cell);
+  const y = Math.floor((evt.clientY - rect.top) / cell);
+  return { x, y };
+}
+let teDragging = false;
+let teDragStart = null;
+
+function teApply(evt, initial) {
+  const { x, y } = tileCanvasCell(evt);
+  if (x < 0 || x > 7 || y < 0 || y > 7) return;
+  const pick = evt.shiftKey || evt.button === 2;
+  if (pick) {
+    currentColour = state.tiles[selectedTileIdx].pixels[y][x];
+    refreshColourButtons();
+    return;
+  }
+  if (initial) pushUndo();
+  if (state.tiles[selectedTileIdx].pixels[y][x] === currentColour) return;
+  state.tiles[selectedTileIdx].pixels[y][x] = currentColour;
+  markDirty();
+  renderTileEditor();
+  renderTileset();
+  renderNametable();
+}
+
+// --- Master grid shift-click too --------------------------------
+// (handled per-cell above)
+
+// --- Colour buttons ---------------------------------------------
+function refreshColourButtons() {
+  document.querySelectorAll('.color-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.color,10) === currentColour);
+    const c = parseInt(b.dataset.color, 10);
+    if (c === 0) return;
+    const pal = activePreviewPalette();
+    const idx = c===1?pal.slot1:c===2?pal.slot2:pal.slot3;
+    b.style.background = nesRgb(idx);
+    b.style.color = nesRgbContrast(idx);
+  });
+}
+
+// ================================================================
+// Init — runs at the bottom
+// ================================================================
+function init() {
+  // --- Load state + prefs ---
+  const loaded = Storage.loadCurrent();
+  if (loaded) {
+    state = loaded;
+  } else {
+    state = createDefaultState();
+    Storage.saveCurrent(state);
+  }
+  resizeNametable(state);
+  prefs = Object.assign({ autoDownloadBackups: false }, Storage.readPrefs());
+  document.getElementById('auto-download').checked = prefs.autoDownloadBackups;
+  document.getElementById('auto-download').addEventListener('change', e => {
+    prefs.autoDownloadBackups = !!e.target.checked;
+    Storage.writePrefs(prefs);
+  });
+
+  // --- Wire header buttons ---
+  document.getElementById('project-name').addEventListener('input', e => {
+    pushUndo();
+    state.name = e.target.value || 'untitled';
+    markDirty();
+  });
+  document.getElementById('btn-undo').addEventListener('click', undo);
+  document.getElementById('btn-redo').addEventListener('click', redo);
+  document.getElementById('btn-new').addEventListener('click', () => {
+    document.getElementById('new-dialog').showModal();
+  });
+  document.getElementById('btn-new-cancel').addEventListener('click', () => {
+    document.getElementById('new-dialog').close();
+  });
+  document.getElementById('btn-new-yes').addEventListener('click', () => {
+    Storage.saveSnapshot(state, 'before_new');
+    state = createDefaultState();
+    afterStateReplaced();
+    document.getElementById('new-dialog').close();
+  });
+  document.getElementById('btn-recover').addEventListener('click', openRecoveryDialog);
+  document.getElementById('btn-recovery-cancel').addEventListener('click', () => {
+    document.getElementById('recovery-dialog').close();
+  });
+  document.getElementById('btn-help').addEventListener('click', () => {
+    document.getElementById('help-dialog').showModal();
+  });
+  document.getElementById('btn-help-close').addEventListener('click', () => {
+    document.getElementById('help-dialog').close();
+  });
+  document.getElementById('btn-import').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+  });
+  document.getElementById('file-input').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const err = validateState(parsed);
+        if (err) { alert('This JSON is not a valid save: ' + err); return; }
+        Storage.saveSnapshot(state, 'before_import');
+        state = parsed;
+        afterStateReplaced();
+      } catch (e) {
+        alert('Could not load: ' + e.message);
+      }
+    };
+    reader.readAsText(f);
+    e.target.value = '';  // allow re-selecting same file
+  });
+  document.querySelectorAll('[data-export]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.export;
+      ({json:exportJSON, text:exportText, chr:exportCHR, nam:exportNAM,
+        pal:exportPAL, all:exportAll})[kind]();
+      document.querySelector('.export-menu').open = false;
+    });
+  });
+
+  // --- Tile canvas ---
+  const tc = document.getElementById('tile-canvas');
+  tc.addEventListener('contextmenu', e => e.preventDefault());
+  tc.addEventListener('mousedown', e => {
+    teDragging = true;
+    teApply(e, true);
+  });
+  tc.addEventListener('mousemove', e => {
+    if (teDragging) teApply(e, false);
+  });
+  window.addEventListener('mouseup', () => { teDragging = false; });
+
+  // --- Tileset canvas ---
+  const ts = document.getElementById('tileset-canvas');
+  ts.addEventListener('click', e => {
+    const rect = ts.getBoundingClientRect();
+    const cell = ts.width / 16;
+    const x = Math.floor((e.clientX - rect.left) / cell);
+    const y = Math.floor((e.clientY - rect.top) / cell);
+    if (x < 0 || y < 0 || x > 15 || y > 15) return;
+    selectedTileIdx = y * 16 + x;
+    renderTileset();
+    renderTileEditor();
+    refreshColourButtons();
+  });
+
+  // --- Colour picker buttons ---
+  document.querySelectorAll('.color-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      currentColour = parseInt(b.dataset.color, 10);
+      refreshColourButtons();
+    });
+  });
+
+  // --- Tile controls ---
+  document.getElementById('tile-name').addEventListener('input', e => {
+    pushUndo();
+    state.tiles[selectedTileIdx].name = e.target.value;
+    markDirty();
+  });
+  document.getElementById('show-numbers').addEventListener('change', renderTileEditor);
+  document.getElementById('preview-palette').addEventListener('change', e => {
+    const [kind, idx] = e.target.value.split(':');
+    selectedPaletteKind = kind;
+    selectedPaletteIdx = parseInt(idx, 10);
+    selectedPaletteSlot = 1;
+    renderPalettes();
+    renderMasterGrid();
+    renderTileset();
+    renderTileEditor();
+    renderNametable();
+    refreshColourButtons();
+  });
+  document.getElementById('btn-clear-tile').addEventListener('click', () => {
+    pushUndo();
+    state.tiles[selectedTileIdx].pixels =
+      Array.from({length:8}, () => [0,0,0,0,0,0,0,0]);
+    markDirty();
+    renderTileEditor();
+    renderTileset();
+    renderNametable();
+  });
+  document.getElementById('btn-flip-h').addEventListener('click', () => {
+    pushUndo();
+    state.tiles[selectedTileIdx].pixels.forEach(r => r.reverse());
+    markDirty();
+    renderTileEditor();
+    renderTileset();
+    renderNametable();
+  });
+  document.getElementById('btn-flip-v').addEventListener('click', () => {
+    pushUndo();
+    state.tiles[selectedTileIdx].pixels.reverse();
+    markDirty();
+    renderTileEditor();
+    renderTileset();
+    renderNametable();
+  });
+
+  // --- Nametable controls ---
+  document.getElementById('nt-size').addEventListener('change', e => {
+    const [sx, sy] = e.target.value.split('x').map(Number);
+    pushUndo();
+    state.dimensions = { screens_x: sx, screens_y: sy };
+    resizeNametable(state);
+    markDirty();
+    renderNametable();
+  });
+  document.getElementById('nt-zoom').addEventListener('input', renderNametable);
+  document.getElementById('btn-nt-clear').addEventListener('click', () => {
+    pushUndo();
+    for (const row of state.nametable) {
+      for (const c of row) { c.tile = 0; c.palette = 0; }
+    }
+    markDirty();
+    renderNametable();
+  });
+  const ntc = document.getElementById('nt-canvas');
+  ntc.addEventListener('contextmenu', e => e.preventDefault());
+  ntc.addEventListener('mousedown', e => {
+    ntPainting = true;
+    pushUndo();
+    const { x, y } = ntPointToCell(e);
+    ntLastCellKey = x + ',' + y;
+    applyNtTool(x, y);
+  });
+  ntc.addEventListener('mousemove', e => {
+    const { x, y } = ntPointToCell(e);
+    document.getElementById('nt-info').textContent =
+      'Cell (' + x + ', ' + y + ') — screen '
+      + Math.floor(x / SCREEN_W) + ',' + Math.floor(y / SCREEN_H)
+      + ' · local ' + (x % SCREEN_W) + ',' + (y % SCREEN_H);
+    if (!ntPainting) return;
+    const key = x + ',' + y;
+    if (key === ntLastCellKey) return;
+    ntLastCellKey = key;
+    applyNtTool(x, y);
+  });
+  window.addEventListener('mouseup', () => {
+    ntPainting = false;
+    ntLastCellKey = null;
+  });
+
+  // --- Keyboard ---
+  window.addEventListener('keydown', e => {
+    if (e.target.matches('input, textarea, select')) return;
+    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); return; }
+    if (e.ctrlKey && (e.key === 'Z' || e.key === 'y')) { e.preventDefault(); redo(); return; }
+    if (e.ctrlKey && e.key === 's') {
+      e.preventDefault();
+      if (saveTimer) clearTimeout(saveTimer);
+      Storage.saveCurrent(state);
+      Storage.saveSnapshot(state, 'manual_ctrl_s');
+      lastSaveTs = Date.now();
+      dirty = false;
+      setStatus('saved', '● Saved + snapshot');
+      return;
+    }
+    if (e.key >= '0' && e.key <= '3') {
+      currentColour = parseInt(e.key, 10);
+      refreshColourButtons();
+      return;
+    }
+    if (e.key === '[') {
+      selectedTileIdx = (selectedTileIdx + NUM_TILES - 1) % NUM_TILES;
+      renderTileset(); renderTileEditor();
+      return;
+    }
+    if (e.key === ']') {
+      selectedTileIdx = (selectedTileIdx + 1) % NUM_TILES;
+      renderTileset(); renderTileEditor();
+      return;
+    }
+    if (e.key === '?') {
+      document.getElementById('help-dialog').showModal();
+    }
+  });
+
+  // --- Auto-save intervals ---
+  // Snapshot: every 30s if anything changed since last snapshot.
+  let lastSnapshotStamp = '';
+  snapshotTimer = setInterval(() => {
+    const stamp = state.metadata.modified;
+    if (stamp !== lastSnapshotStamp) {
+      Storage.saveSnapshot(state, 'auto_30s');
+      lastSnapshotStamp = stamp;
+    }
+  }, SNAPSHOT_INTERVAL_MS);
+
+  // Backup: every 5 min, always write to localStorage; optionally also
+  // trigger a silent JSON download to the Downloads folder.
+  let lastBackupStamp = '';
+  backupTimer = setInterval(() => {
+    const stamp = state.metadata.modified;
+    if (stamp === lastBackupStamp) return;
+    lastBackupStamp = stamp;
+    Storage.saveBackup(state);
+    if (prefs.autoDownloadBackups) {
+      try {
+        triggerDownload(
+          'tile_editor_backup_' + safeFilename(state.name)
+            + '_' + new Date().toISOString().replace(/[:.]/g, '-') + '.json',
+          JSON.stringify(state),
+          'application/json'
+        );
+      } catch (e) {
+        console.warn('backup download failed:', e);
+      }
+    }
+  }, BACKUP_INTERVAL_MS);
+
+  setInterval(updateSavedTimeLabel, 1000);
+
+  // --- beforeunload: final save ---
+  window.addEventListener('beforeunload', () => {
+    Storage.saveCurrent(state);
+    Storage.saveSnapshot(state, 'beforeunload');
+  });
+
+  // --- Initial render ---
+  document.getElementById('project-name').value = state.name;
+  document.getElementById('nt-size').value =
+    state.dimensions.screens_x + 'x' + state.dimensions.screens_y;
+  renderAll();
+  refreshColourButtons();
+  updateUndoButtons();
+  setStatus('saved', '● Ready');
+  lastSaveTs = Date.now();
+}
+
+function openRecoveryDialog() {
+  const ul = document.getElementById('snapshot-list');
+  ul.innerHTML = '';
+  // Union of snapshots and backups, tagged with kind and newest-first.
+  const all = []
+    .concat(Storage.listSnapshots().map(s => ({ ...s, kind: 'snapshot' })))
+    .concat(Storage.listBackups().map(s => ({ ...s, kind: 'backup' })));
+  all.sort((a, b) => b.ts - a.ts);
+
+  if (!all.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No snapshots or backups yet. Make a change and wait 30s.';
+    ul.appendChild(li);
+  } else {
+    for (const s of all) {
+      const li = document.createElement('li');
+      const when = new Date(s.ts).toLocaleString();
+      const tag = s.kind === 'backup' ? '🛟 backup' : '📸 snapshot';
+      const desc = document.createElement('span');
+      const b = document.createElement('b');
+      b.textContent = s.name || 'untitled';
+      const meta = document.createElement('span');
+      meta.className = 'snapshot-meta';
+      meta.textContent = when + ' · ' + tag
+        + (s.reason ? ' · ' + s.reason : '');
+      desc.appendChild(b);
+      desc.appendChild(document.createElement('br'));
+      desc.appendChild(meta);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = 'Restore';
+      btn.className = 'primary';
+      btn.addEventListener('click', () => {
+        Storage.saveSnapshot(state, 'before_recovery');
+        const loaded = Storage.loadSnapshot(s.key);
+        if (!loaded) { alert('That save could not be loaded — the data may be damaged.'); return; }
+        state = loaded;
+        afterStateReplaced();
+        document.getElementById('recovery-dialog').close();
+      });
+      li.appendChild(desc);
+      li.appendChild(btn);
+      ul.appendChild(li);
+    }
+  }
+  document.getElementById('recovery-dialog').showModal();
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

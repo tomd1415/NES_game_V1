@@ -80,13 +80,84 @@
             "command": "python3",
             "args": ["tools/generate_chr.py"],
             "options": {
-                "cwd": "${workspaceFolder:Project Root}"
+                "cwd": "${workspaceFolder}"
             },
             "group": "none",
             "presentation": {
                 "reveal": "always",
                 "panel": "dedicated",
                 "clear": true
+            }
+        },
+        {
+            "label": "Start Live Tile Preview",
+            "detail": "Watches assets/pupil/my_tiles.txt and refreshes preview.png every time you save.",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "tools/tile_editor.py",
+                "assets/pupil/my_tiles.txt",
+                "--watch"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "isBackground": true,
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated",
+                "clear": false
+            },
+            "problemMatcher": {
+                "owner": "tile-editor",
+                "pattern": {
+                    "regexp": "^\\s*(line \\d+): (.*)$",
+                    "file": 1,
+                    "message": 2
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^Watching",
+                    "endsPattern": "^  wrote"
+                }
+            }
+        },
+        {
+            "label": "Refresh Tile Preview Once",
+            "detail": "Regenerate preview.png from my_tiles.txt without starting the watcher.",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "tools/tile_editor.py",
+                "assets/pupil/my_tiles.txt"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "none",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "Open Visual Tile Editor",
+            "detail": "Open the click-and-paint web editor for tiles and backgrounds in your browser. Work auto-saves to browser storage.",
+            "type": "shell",
+            "command": "xdg-open",
+            "args": ["tools/tile_editor_web/index.html"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "none",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared",
+                "close": true
             }
         }
     ]

@@ -23,6 +23,10 @@
         {
             "path": "steps/Step_5_Multi_NPC_Dialogue",
             "name": "Step 5 - Multi NPC Dialogue"
+        },
+        {
+            "path": "assets/pupil",
+            "name": "Tile Editor"
         }
     ],
     "settings": {
@@ -49,7 +53,8 @@
         },
         "files.readonlyExclude": {
             "**/src/main.c": true,
-            "**/*.md": true
+            "**/*.md": true,
+            "**/my_tiles.txt": true
         },
         "files.readonlyFromPermissions": false,
 

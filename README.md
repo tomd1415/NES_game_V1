@@ -1,4 +1,4 @@
-# Welcome to Your NES Game!
+# Welcome to Your NES Game
 
 You are going to make a game for the **Nintendo Entertainment System (NES)** using the C programming language.
 
@@ -24,7 +24,7 @@ If you would rather click than press keys, open the **Terminal** menu at the top
 ## The 5 Steps
 
 | Step | Folder | What it does |
-|------|--------|--------------|
+| ---- | ------ | ------------ |
 | 1 | Step 1 - Player Movement | Move a character around with the arrow keys |
 | 2 | Step 2 - Background Level | Add a scenery background with ground, platforms, and clouds |
 | 3 | Step 3 - Enemies and Items | Add enemies, gems, and a heart pickup |
@@ -40,7 +40,7 @@ Each step builds on the one before. **Start with Step 1** if this is your first 
 The emulator maps your keyboard to NES controller buttons. The defaults are usually:
 
 | NES Button | Keyboard Key |
-|------------|--------------|
+| ---------- | ------------ |
 | D-pad Up | Up arrow |
 | D-pad Down | Down arrow |
 | D-pad Left | Left arrow |
@@ -83,10 +83,47 @@ These comments are colour-coded and listed in the **TODO Tree** sidebar (click t
 Open `Step 1 - Player Movement` > `src` > `main.c` and scroll down to the comments marked `// TRY:`. Pick one, change the number it points to, press `Ctrl + Shift + B` and see what happens!
 
 Some ideas:
+
 - Make the player jump higher
 - Make the player move faster
 - Change the player's colours
 - Change where the player starts
+
+---
+
+## Designing your own sprites and backgrounds
+
+There are **two ways** to draw your own tiles — pick whichever you prefer.
+
+### 🎨 Visual editor (click and paint)
+
+Press **Ctrl+Shift+P → Tasks: Run Task → Open Visual Tile Editor**.
+A web page opens with:
+
+- A **tileset** grid — click any of 256 tiles to edit it
+- A big **tile editor** — click pixels to paint (numbers 0-3 = your colours)
+- **Palette** picker — pick any of the 64 NES colours
+- A **background builder** — click or drag to place tiles into a scene,
+  up to 4 screens big for scrolling
+
+Your work **auto-saves** to the browser every time you change anything,
+plus a snapshot every 30s and a backup every 5 min. Hit **Recover…** in
+the toolbar if anything ever goes wrong.
+
+Export your work as `my_tiles.txt` (for the text-based preview),
+`.chr` / `.nam` / `.pal` (for the game), or a `.json` save file.
+
+### 📝 Text editor (type digits)
+
+Open the **Tile Editor** folder in the sidebar and edit `my_tiles.txt`.
+Save and `preview.png` refreshes automatically.
+
+1. Open `my_tiles.txt` and `preview.png` side-by-side.
+2. Press **Ctrl+Shift+P → Tasks: Run Task → Start Live Tile Preview**.
+3. Now every **Ctrl+S** refreshes `preview.png` automatically.
+
+Full instructions are in `assets/pupil/TILE_EDITOR_GUIDE.md`.
+All 64 NES colours are in `assets/pupil/palette_reference.png`.
 
 ---
 
