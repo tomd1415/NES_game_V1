@@ -338,6 +338,171 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   border: 1px solid var(--border);
   background: #000;
 }
+.nt-resize-handle {
+  height: 10px;
+  margin: 14px 12px 0;
+  cursor: ns-resize;
+  background: var(--border);
+  border-radius: 5px;
+  position: relative;
+  transition: background 0.15s;
+}
+.nt-resize-handle::after {
+  content: "⋯";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -58%);
+  color: var(--muted);
+  font-size: 14px;
+  letter-spacing: 2px;
+  pointer-events: none;
+}
+.nt-resize-handle:hover,
+.nt-resize-handle.dragging { background: var(--accent); }
+body.nt-resizing { cursor: ns-resize; -webkit-user-select: none; user-select: none; }
+
+/* --- Floating tileset panel ------------------------------ */
+.floating-panel {
+  position: fixed;
+  top: 120px;
+  left: calc(100vw - 380px);
+  width: 340px;
+  height: 400px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  display: none;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+  min-width: 200px;
+  min-height: 180px;
+}
+.floating-panel.open { display: flex; }
+.floating-panel-header {
+  padding: 6px 10px;
+  background: var(--panel2);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: bold;
+  font-size: 0.9em;
+  -webkit-user-select: none;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+.floating-panel-header.dragging { cursor: grabbing; }
+.floating-panel-header .title { flex: 0 0 auto; }
+.floating-panel-header .stats {
+  flex: 1;
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.floating-panel-header .close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.1em;
+  padding: 0 4px;
+}
+.floating-panel-header .close:hover { color: var(--accent); }
+.floating-panel-body {
+  flex: 1;
+  overflow: auto;
+  background: #000;
+  padding: 4px;
+}
+.floating-panel-body canvas {
+  display: block;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+.floating-panel-footer {
+  padding: 4px 10px;
+  background: var(--panel2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+.floating-panel-footer input[type=range] { flex: 1; }
+.floating-panel-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg,
+      transparent 0 55%,
+      var(--muted) 55% 62%,
+      transparent 62% 72%,
+      var(--muted) 72% 79%,
+      transparent 79%);
+}
+
+/* --- Floating palette window ---------------------------------- */
+#floating-palettes {
+  top: 540px;
+  left: calc(100vw - 380px);
+  width: 340px;
+  height: 360px;
+}
+#floating-palettes-grid { padding: 8px 10px; }
+#floating-palettes-grid h3 {
+  margin: 0 0 6px 0;
+  font-size: 0.75em;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: bold;
+}
+.fp-palette-row {
+  display: grid;
+  grid-template-columns: 44px repeat(4, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.fp-palette-row.selectable { cursor: pointer; }
+.fp-palette-row.selectable:hover { background: var(--panel2); }
+.fp-palette-row.selected {
+  border-color: var(--accent);
+  background: rgba(255,97,136,0.12);
+}
+.fp-palette-row .name {
+  font-size: 0.85em;
+  font-weight: bold;
+  color: var(--fg);
+}
+.fp-palette-swatch {
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 0.7em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.65);
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.55);
+  -webkit-user-select: none;
+  user-select: none;
+}
 #nt-canvas {
   display: block;
   image-rendering: pixelated;
@@ -401,6 +566,102 @@ kbd {
   gap: 8px 16px;
   align-items: center;
 }
+.help-dialog-wide { max-width: 720px; width: 90vw; }
+.help-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.help-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  padding: 6px 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.help-tab:hover { background: var(--panel2); color: var(--fg); }
+.help-tab.active {
+  background: var(--panel2);
+  color: var(--accent);
+  border-color: var(--border);
+}
+.help-tab-panel { max-height: 55vh; overflow-y: auto; padding: 4px 4px 8px; }
+.help-tab-panel h3 {
+  margin: 14px 0 6px;
+  font-size: 0.85em;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.help-steps, .help-list {
+  margin: 8px 0;
+  padding-left: 22px;
+  color: var(--fg);
+  line-height: 1.55;
+}
+.help-steps li, .help-list li { margin-bottom: 6px; }
+.help-hint {
+  color: var(--muted);
+  font-size: 0.9em;
+  line-height: 1.5;
+  background: rgba(120,220,232,0.06);
+  border-left: 2px solid rgba(120,220,232,0.6);
+  padding: 8px 12px;
+  margin: 10px 0;
+  border-radius: 3px;
+}
+
+/* Full-screen NES preview */
+.preview-dialog {
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: #000;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  overflow: hidden;
+}
+.preview-dialog::backdrop { background: #000; }
+.preview-dialog canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  image-rendering: pixelated;
+  box-shadow: 0 0 60px rgba(255,97,136,0.25);
+}
+.preview-hud {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: rgba(255,255,255,0.75);
+  font-family: monospace;
+  font-size: 0.85em;
+  pointer-events: none;
+}
+.preview-hud .close-fab {
+  pointer-events: auto;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  font-size: 1.2em;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.preview-hud .close-fab:hover { background: rgba(255,97,136,0.4); }
 </style>
 </head>
 <body>
@@ -475,6 +736,10 @@ kbd {
       <button type="button" id="btn-clear-tile" title="Clear this tile (all 0)">Clear</button>
       <button type="button" id="btn-flip-h" title="Mirror left↔right">↔ flip</button>
       <button type="button" id="btn-flip-v" title="Mirror top↔bottom">↕ flip</button>
+      <button type="button" id="btn-rotate" title="Rotate 90° clockwise (click again for 180°, 270°)">↻ rotate</button>
+      <button type="button" id="btn-duplicate" title="Copy this tile into the next empty slot and jump to it. Good for making a flipped/rotated variant without losing the original.">⎘ duplicate</button>
+      <button type="button" id="btn-copy-tile" title="Copy this tile's pixels to the clipboard">📋 copy</button>
+      <button type="button" id="btn-paste-tile" title="Paste clipboard pixels into this tile (overwrites)" disabled>📌 paste</button>
     </div>
     <div class="tile-hints">
       Click to paint. <kbd>0</kbd>/<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a colour.
@@ -511,6 +776,7 @@ kbd {
 </main>
 
 <!-- ============ Nametable editor ============ -->
+<div class="nt-resize-handle" id="nt-resize-handle" title="Drag up/down to resize the background area"></div>
 <section class="nt-panel">
   <h2>Background / Nametable</h2>
   <div class="nt-controls">
@@ -530,14 +796,21 @@ kbd {
       <select id="nt-tool">
         <option value="paint">Paint tile</option>
         <option value="erase">Erase to tile 0</option>
-        <option value="palette">Set palette (whole 2×2 block)</option>
+        <option value="palette">Set palette (single 2×2 block)</option>
+        <option value="palette-rect">Set palette (drag a rectangle — tiles unchanged)</option>
         <option value="fill">Flood-fill tile</option>
       </select>
     </label>
     <label>Use palette
       <select id="nt-palette"></select>
     </label>
-    <button type="button" id="btn-nt-clear">Clear whole background</button>
+    <button type="button" id="btn-nt-clear" title="Erase every cell back to tile 0 / palette BG0 (undoable)">Clear whole background</button>
+    <label title="Show a faint dotted grid marking each individual 8×8 tile within the 2×2 attribute blocks. Toggle with the G key.">
+      <input type="checkbox" id="nt-fine-grid"> fine grid
+    </label>
+    <button type="button" id="btn-popout-tileset" title="Show a floating tileset window so you can pick tiles while painting the background">📌 Pop-out tileset</button>
+    <button type="button" id="btn-popout-palettes" title="Show a floating palette picker. Click a BG palette then click in the background to assign it to that block.">🎨 Pop-out palettes</button>
+    <button type="button" id="btn-fullscreen-preview" title="Preview the background in full screen at the correct NES aspect ratio — press F to toggle, Esc to close.">🖥 Full preview</button>
   </div>
   <div class="nt-canvas-wrap">
     <canvas id="nt-canvas"></canvas>
@@ -554,27 +827,118 @@ kbd {
 </footer>
 
 <!-- ============ Dialogs ============ -->
-<dialog id="help-dialog">
-  <h2>Keyboard shortcuts &amp; tips</h2>
-  <div class="help-grid">
-    <kbd>0</kbd><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>Pick the colour you paint with</span>
-    <kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo</span>
-    <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd><span>Redo</span>
-    <kbd>Ctrl</kbd>+<kbd>S</kbd><span>Force save + take a snapshot</span>
-    <kbd>[</kbd> / <kbd>]</kbd><span>Previous / next tile</span>
-    <kbd>Shift</kbd>+click<span>Pick colour under the cursor (eyedropper)</span>
-    <kbd>?</kbd><span>Show this help</span>
-    <kbd>Esc</kbd><span>Close dialogs</span>
+<dialog id="help-dialog" class="help-dialog-wide">
+  <div class="help-tabs" role="tablist">
+    <button type="button" class="help-tab active" data-tab="tutorial">Quick start</button>
+    <button type="button" class="help-tab" data-tab="shortcuts">Keyboard</button>
+    <button type="button" class="help-tab" data-tab="nes">NES rules</button>
+    <button type="button" class="help-tab" data-tab="saves">Saving &amp; recovery</button>
+    <button type="button" class="help-tab" data-tab="faq">Tips / FAQ</button>
   </div>
-  <h3 style="margin-top:16px">About auto-save</h3>
-  <p style="color:var(--muted);font-size:0.9em;line-height:1.5">
-    Your work is saved to this browser's storage <b>every time you change anything</b>.
-    Every 30 seconds a numbered snapshot is kept (last 5). Every 5 minutes an
-    emergency JSON backup is offered for download. If anything goes wrong, hit
-    <b>Recover…</b> in the toolbar to load any snapshot.
-  </p>
+
+  <div class="help-tab-panel" data-panel="tutorial">
+    <h2>Welcome — a 5-step tour</h2>
+    <ol class="help-steps">
+      <li><b>Pick a colour</b> — press <kbd>0</kbd>, <kbd>1</kbd>, <kbd>2</kbd>, or <kbd>3</kbd>. Colour 0 is always "transparent / show the universal background".</li>
+      <li><b>Draw a tile</b> — click squares in the big Editing Tile canvas. Use <kbd>[</kbd> / <kbd>]</kbd> to move to the previous / next tile (there are 256).</li>
+      <li><b>Choose colours for the palette</b> — in the Palettes panel, click a slot (e.g. BG0 slot 1) then click a colour in the 64-colour master grid to assign it.</li>
+      <li><b>Paint the background</b> — scroll to <i>Background / Nametable</i>. Click cells to stamp the selected tile. Try the <b>📌 Pop-out tileset</b> and <b>🎨 Pop-out palettes</b> windows for easy picking while you paint.</li>
+      <li><b>Preview it</b> — click <b>🖥 Full preview</b> (or press <kbd>F</kbd>) to see it at real NES size. Press <kbd>Esc</kbd> to close.</li>
+    </ol>
+    <p class="help-hint">
+      Hover almost anything in the editor for a tooltip. Everything you do is
+      auto-saved, so experiment freely — and <kbd>Ctrl</kbd>+<kbd>Z</kbd>
+      (or just <kbd>Z</kbd>) undoes.
+    </p>
+  </div>
+
+  <div class="help-tab-panel" data-panel="shortcuts" hidden>
+    <h2>Keyboard shortcuts</h2>
+    <h3>Colour</h3>
+    <div class="help-grid">
+      <kbd>0</kbd> or <kbd>`</kbd><span>Pick colour 0 (transparent)</span>
+      <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd><span>Pick colour 1 / 2 / 3</span>
+      <kbd>Shift</kbd>+click<span>Eyedropper — pick colour under the cursor</span>
+    </div>
+    <h3>Tiles</h3>
+    <div class="help-grid">
+      <kbd>[</kbd> / <kbd>]</kbd><span>Previous / next tile in the tileset</span>
+      <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd><span>Move selection around the 16×16 tileset grid</span>
+      <kbd>D</kbd><span>Duplicate current tile into the next empty slot</span>
+      <kbd>C</kbd><span>Copy current tile to clipboard</span>
+      <kbd>V</kbd><span>Paste clipboard onto current tile</span>
+      <kbd>R</kbd><span>Rotate 90° clockwise</span>
+      <kbd>H</kbd> / <kbd>Shift</kbd>+<kbd>H</kbd><span>Flip horizontal / vertical</span>
+    </div>
+    <h3>Undo / redo / save</h3>
+    <div class="help-grid">
+      <kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo</span>
+      <kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd><span>Redo</span>
+      <kbd>Ctrl</kbd>+<kbd>S</kbd><span>Force save + snapshot</span>
+    </div>
+    <h3>View</h3>
+    <div class="help-grid">
+      <kbd>F</kbd><span>Open / close the full-screen NES preview</span>
+      <kbd>G</kbd><span>Toggle the fine 8×8 tile grid on the background</span>
+      <kbd>?</kbd><span>Show this help</span>
+      <kbd>Esc</kbd><span>Close any open dialog / preview</span>
+    </div>
+    <p class="help-hint">
+      Typing in a text box? Shortcuts are ignored there so you can type
+      freely — click somewhere else to re-enable them.
+    </p>
+  </div>
+
+  <div class="help-tab-panel" data-panel="nes" hidden>
+    <h2>NES hardware rules (why the editor limits some things)</h2>
+    <ul class="help-list">
+      <li><b>256 background tiles max.</b> Every background tile in your game must be one of the 256 slots. Duplicate + flip a tile to make a variant — it uses a second slot.</li>
+      <li><b>4 colours per tile.</b> Each tile can show 4 colour indices (0, 1, 2, 3). Colour 0 is always the universal background.</li>
+      <li><b>4 background palettes</b> (BG0–BG3). Each holds 3 colours (slot 0 is shared). One palette per 2×2 attribute block, not per tile — see the thicker yellow grid in the background view.</li>
+      <li><b>No flip/rotate for BG tiles on hardware.</b> The nametable byte is just a tile index. To show a flipped tree, store a flipped version in a second tile slot. (Sprites can flip via their OAM bit, but not BG.)</li>
+      <li><b>Screen is 32×30 tiles</b> (256×240 pixels). Scrolling games stitch multiple "screens" together — pick the layout in the <i>Screens</i> dropdown.</li>
+    </ul>
+  </div>
+
+  <div class="help-tab-panel" data-panel="saves" hidden>
+    <h2>Saving &amp; recovery</h2>
+    <p class="help-hint">
+      Your work is saved to this browser's storage <b>every time you change
+      anything</b>. Refreshing the page reloads the last-saved version — so you
+      can close the tab and come back later without losing anything.
+    </p>
+    <ul class="help-list">
+      <li>Every <b>30 seconds</b> a numbered snapshot is kept (last 5 stay around).</li>
+      <li>Every <b>5 minutes</b> an emergency backup is written. If you turned on <i>auto-download backups</i> a <code>.json</code> file is also saved to your Downloads folder.</li>
+      <li><b>Recover…</b> in the toolbar lets you roll back to any snapshot or emergency backup. The current project is snapshotted first, so nothing is ever lost in the process.</li>
+      <li><b>Export → JSON save</b> gives you a portable file you can email, commit to git, or keep as a permanent backup.</li>
+      <li><b>Export → my_tiles.txt</b> is the file the Python tile editor reads — use it to move your art into the cc65 NES build.</li>
+    </ul>
+  </div>
+
+  <div class="help-tab-panel" data-panel="faq" hidden>
+    <h2>Tips &amp; common gotchas</h2>
+    <ul class="help-list">
+      <li><b>My background has wrong colours in one patch.</b> NES palette is per 2×2 tile block (the thicker yellow grid). Use the <i>Set palette (drag a rectangle)</i> tool to paint palette indices over an area without changing the tiles.</li>
+      <li><b>I want a flipped copy of a tile.</b> Click the tile, press <kbd>D</kbd> to duplicate, then flip. The original stays untouched.</li>
+      <li><b>My tiles look wrong in the floating window.</b> The floating tileset previews using the <i>currently selected BG palette</i>, so picking a different palette in the 🎨 window recolours every tile preview.</li>
+      <li><b>Undo history is gone after I reloaded.</b> Undo is in-memory only. Once you refresh, snapshots (every 30s) are how you go back further.</li>
+      <li><b>I accidentally wrote over everything.</b> Open <b>Recover…</b> — a snapshot from seconds ago almost certainly has what you want.</li>
+    </ul>
+  </div>
+
   <div class="dialog-actions">
+    <button type="button" id="btn-help-replay" title="Show the Quick-start tour automatically the next time this page loads">↺ Replay on next load</button>
     <button type="button" id="btn-help-close" class="primary">Got it</button>
+  </div>
+</dialog>
+
+<!-- ============ Full-screen preview ============ -->
+<dialog id="preview-dialog" class="preview-dialog">
+  <canvas id="preview-canvas"></canvas>
+  <div class="preview-hud">
+    <span id="preview-hud-info">NES 256×240 · Esc or F to close</span>
+    <button type="button" id="btn-preview-close" class="close-fab" title="Close preview (Esc or F)">×</button>
   </div>
 </dialog>
 
@@ -610,6 +974,37 @@ kbd {
     <button type="button" id="btn-new-yes" class="primary">Save & start fresh</button>
   </div>
 </dialog>
+
+<!-- ============ Floating tileset palette ============ -->
+<div id="floating-tileset" class="floating-panel" role="dialog" aria-label="Floating tileset">
+  <div class="floating-panel-header" id="floating-tileset-header">
+    <span class="title">🎨 Tileset</span>
+    <span class="stats" id="floating-tileset-stats"></span>
+    <button type="button" class="close" id="floating-tileset-close" title="Close (you can reopen from the Background controls)">×</button>
+  </div>
+  <div class="floating-panel-body" id="floating-tileset-body">
+    <canvas id="floating-tileset-canvas" width="320" height="320"></canvas>
+  </div>
+  <div class="floating-panel-footer">
+    <label for="floating-tileset-zoom">Zoom</label>
+    <input type="range" id="floating-tileset-zoom" min="8" max="48" step="1" value="20">
+    <span id="floating-tileset-zoom-label">20 px</span>
+  </div>
+  <div class="floating-panel-resize" id="floating-tileset-resize" title="Drag to resize"></div>
+</div>
+
+<!-- ============ Floating palette picker ============ -->
+<div id="floating-palettes" class="floating-panel" role="dialog" aria-label="Floating palettes">
+  <div class="floating-panel-header" id="floating-palettes-header">
+    <span class="title">🎨 Palettes</span>
+    <span class="stats" id="floating-palettes-stats"></span>
+    <button type="button" class="close" id="floating-palettes-close" title="Close">×</button>
+  </div>
+  <div class="floating-panel-body" id="floating-palettes-body">
+    <div id="floating-palettes-grid"></div>
+  </div>
+  <div class="floating-panel-resize" id="floating-palettes-resize" title="Drag to resize"></div>
+</div>
 
 <script>
 'use strict';
@@ -1295,6 +1690,178 @@ function renderTileset() {
   }
   document.getElementById('tileset-stats').textContent =
     used + ' / ' + NUM_TILES + ' tiles used';
+  renderFloatingTileset();
+}
+
+function renderFloatingTileset() {
+  const panel = document.getElementById('floating-tileset');
+  if (!panel || !panel.classList.contains('open')) return;
+  const canvas = document.getElementById('floating-tileset-canvas');
+  const ctx = canvas.getContext('2d');
+  const cell = floatingTilesetZoom;
+  const cols = 16, rows = 16;
+  const size = cell * cols;
+  if (canvas.width !== size) { canvas.width = size; canvas.height = size; }
+  const pal = floatingTilesetPalette();
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < NUM_TILES; i++) {
+    const cx = (i % cols) * cell;
+    const cy = Math.floor(i / cols) * cell;
+    const tile = state.tiles[i];
+    const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
+    if (!anyPixel) {
+      ctx.fillStyle = '#1a1630';
+      ctx.fillRect(cx, cy, cell, cell);
+      if (cell >= 14) {
+        ctx.fillStyle = '#4a4270';
+        ctx.font = Math.max(8, Math.floor(cell * 0.4)) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(i.toString(16).padStart(2, '0'),
+                     cx + cell / 2, cy + cell / 2);
+      }
+    } else {
+      const p = cell / 8;
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const v = tile.pixels[y][x];
+          const rgb = pixelRgb(v, pal);
+          if (rgb) {
+            ctx.fillStyle = rgb;
+            ctx.fillRect(cx + x * p, cy + y * p, p, p);
+          } else {
+            ctx.fillStyle = '#2a2440';
+            ctx.fillRect(cx + x * p, cy + y * p, p, p);
+          }
+        }
+      }
+    }
+    if (i === selectedTileIdx) {
+      ctx.strokeStyle = '#ffd866';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx + 1, cy + 1, cell - 2, cell - 2);
+    } else if (cell >= 10) {
+      ctx.strokeStyle = 'rgba(60,60,80,0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    }
+  }
+  const stats = document.getElementById('floating-tileset-stats');
+  if (stats) {
+    stats.textContent =
+      '0x' + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
+  }
+}
+
+let floatingTilesetZoom = 20;
+let tileClipboard = null;
+let showFineTileGrid = localStorage.getItem('nt-fine-grid') === '1';
+
+function clonePixels(p) {
+  return p.map(row => row.slice());
+}
+function findNextEmptyTileSlot() {
+  for (let i = 0; i < NUM_TILES; i++) {
+    const t = state.tiles[i];
+    if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
+  }
+  return -1;
+}
+
+// --- Full-screen NES preview ------------------------------------
+function renderFullPreview() {
+  const dlg = document.getElementById('preview-dialog');
+  if (!dlg.open) return;
+  const canvas = document.getElementById('preview-canvas');
+  const cols = SCREEN_W * state.dimensions.screens_x;
+  const rows = SCREEN_H * state.dimensions.screens_y;
+  const srcW = cols * 8;
+  const srcH = rows * 8;
+
+  // Pick integer scale that fits window with room for HUD.
+  const margin = 48;
+  const availW = window.innerWidth  - margin;
+  const availH = window.innerHeight - margin;
+  let scale = Math.max(1, Math.floor(Math.min(availW / srcW, availH / srcH)));
+  canvas.width  = srcW;
+  canvas.height = srcH;
+  canvas.style.width  = (srcW * scale) + 'px';
+  canvas.style.height = (srcH * scale) + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = nesRgb(state.universal_bg);
+  ctx.fillRect(0, 0, srcW, srcH);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const cell = state.nametable[y][x];
+      const tile = state.tiles[cell.tile];
+      const pal = state.bg_palettes[cell.palette & 3];
+      const over = {
+        slot0: state.universal_bg,
+        slot1: pal.slots[0],
+        slot2: pal.slots[1],
+        slot3: pal.slots[2],
+      };
+      for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+          const v = tile.pixels[py][px];
+          const rgb = pixelRgb(v, over);
+          if (!rgb) continue;
+          ctx.fillStyle = rgb;
+          ctx.fillRect(x * 8 + px, y * 8 + py, 1, 1);
+        }
+      }
+    }
+  }
+
+  const hud = document.getElementById('preview-hud-info');
+  if (hud) {
+    hud.textContent = 'NES ' + srcW + '×' + srcH + '  ·  ' + scale + '× scale  ·  Esc or F to close';
+  }
+}
+
+function togglePreview() {
+  const dlg = document.getElementById('preview-dialog');
+  if (dlg.open) {
+    dlg.close();
+  } else {
+    dlg.showModal();
+    renderFullPreview();
+  }
+}
+
+function openHelp(tabName) {
+  const dlg = document.getElementById('help-dialog');
+  if (tabName) {
+    const tab = document.querySelector('.help-tab[data-tab="' + tabName + '"]');
+    if (tab) tab.click();
+  }
+  if (!dlg.open) dlg.showModal();
+}
+
+function maybeShowOnboarding() {
+  if (localStorage.getItem('help-seen') === '1') return;
+  // Defer so first render finishes — less jarring.
+  setTimeout(() => openHelp('tutorial'), 250);
+}
+
+function floatingTilesetPalette() {
+  // Preview tiles using the BG palette that's currently armed for painting.
+  const ntSel = document.getElementById('nt-palette');
+  const idx = ntSel ? (parseInt(ntSel.value, 10) || 0) : 0;
+  const pal = state.bg_palettes[idx];
+  if (!pal) return activePreviewPalette();
+  return {
+    slot0: state.universal_bg,
+    slot1: pal.slots[0],
+    slot2: pal.slots[1],
+    slot3: pal.slots[2],
+  };
 }
 
 // --- Palettes panel ---------------------------------------------
@@ -1339,6 +1906,7 @@ function renderPalettes() {
 
   updatePreviewPaletteSelect();
   updateNtPaletteSelect();
+  renderFloatingPalettes();
 }
 
 function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
@@ -1501,6 +2069,29 @@ function renderNametable() {
     }
   }
 
+  // fine per-tile grid (8×8) — dotted, lighter
+  if (showFineTileGrid) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(220, 220, 240, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    for (let ax = 1; ax < cols; ax++) {
+      if (ax % 2 === 0) continue;         // attribute lines drawn separately
+      ctx.beginPath();
+      ctx.moveTo(ax*cellPx + 0.5, 0);
+      ctx.lineTo(ax*cellPx + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let ay = 1; ay < rows; ay++) {
+      if (ay % 2 === 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(0, ay*cellPx + 0.5);
+      ctx.lineTo(canvas.width, ay*cellPx + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // attribute-block grid (2×2 tiles)
   ctx.strokeStyle = 'rgba(255, 216, 102, 0.25)';
   ctx.lineWidth = 1;
@@ -1531,6 +2122,10 @@ function renderNametable() {
     ctx.lineTo(canvas.width, sy*SCREEN_H*cellPx);
     ctx.stroke();
   }
+
+  // Keep the full-screen preview in sync if it's open.
+  const previewDlg = document.getElementById('preview-dialog');
+  if (previewDlg && previewDlg.open) renderFullPreview();
 }
 
 function ntPointToCell(evt) {
@@ -1545,6 +2140,51 @@ function ntPointToCell(evt) {
 
 let ntPainting = false;
 let ntLastCellKey = null;
+let ntRectStart = null;
+let ntRectEnd = null;
+
+function normalisedBlockRect(a, b) {
+  // Snap both corners outward to the 2×2 attribute-block grid.
+  const x0 = Math.min(a.x, b.x) & ~1;
+  const y0 = Math.min(a.y, b.y) & ~1;
+  const x1 = (Math.max(a.x, b.x) | 1);
+  const y1 = (Math.max(a.y, b.y) | 1);
+  return { x0, y0, x1, y1 };
+}
+
+function applyPaletteRect(a, b) {
+  const pal = parseInt(document.getElementById('nt-palette').value, 10);
+  const { x0, y0, x1, y1 } = normalisedBlockRect(a, b);
+  for (let y = y0; y <= y1; y++) {
+    if (!state.nametable[y]) continue;
+    for (let x = x0; x <= x1; x++) {
+      if (!state.nametable[y][x]) continue;
+      state.nametable[y][x].palette = pal;
+    }
+  }
+  markDirty();
+  renderNametable();
+}
+
+function drawNtRectOverlay(a, b) {
+  if (!a || !b) return;
+  const canvas = document.getElementById('nt-canvas');
+  const ctx = canvas.getContext('2d');
+  const zoom = ntZoom();
+  const cellPx = 8 * zoom;
+  const { x0, y0, x1, y1 } = normalisedBlockRect(a, b);
+  const px = x0 * cellPx;
+  const py = y0 * cellPx;
+  const pw = (x1 - x0 + 1) * cellPx;
+  const ph = (y1 - y0 + 1) * cellPx;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 216, 102, 0.18)';
+  ctx.fillRect(px, py, pw, ph);
+  ctx.strokeStyle = '#ffd866';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+  ctx.restore();
+}
 
 function applyNtTool(cx, cy) {
   if (cy < 0 || cx < 0) return;
@@ -1715,10 +2355,14 @@ function init() {
     document.getElementById('recovery-dialog').close();
   });
   document.getElementById('btn-help').addEventListener('click', () => {
-    document.getElementById('help-dialog').showModal();
+    openHelp('tutorial');
   });
   document.getElementById('btn-help-close').addEventListener('click', () => {
     document.getElementById('help-dialog').close();
+    localStorage.setItem('help-seen', '1');
+  });
+  document.getElementById('help-dialog').addEventListener('close', () => {
+    localStorage.setItem('help-seen', '1');
   });
   document.getElementById('btn-import').addEventListener('click', () => {
     document.getElementById('file-input').click();
@@ -1829,6 +2473,52 @@ function init() {
     renderTileset();
     renderNametable();
   });
+  document.getElementById('btn-rotate').addEventListener('click', () => {
+    pushUndo();
+    const src = state.tiles[selectedTileIdx].pixels;
+    const rotated = Array.from({ length: 8 }, (_, y) =>
+      Array.from({ length: 8 }, (_, x) => src[7 - x][y]));
+    state.tiles[selectedTileIdx].pixels = rotated;
+    markDirty();
+    renderTileEditor();
+    renderTileset();
+    renderNametable();
+  });
+  document.getElementById('btn-duplicate').addEventListener('click', () => {
+    const dstIdx = findNextEmptyTileSlot();
+    if (dstIdx < 0) {
+      alert('No empty tile slots left — all 256 CHR tiles are in use.\n\n' +
+            'Clear a tile you no longer need, then try again.');
+      return;
+    }
+    pushUndo();
+    const src = state.tiles[selectedTileIdx];
+    state.tiles[dstIdx] = {
+      pixels: clonePixels(src.pixels),
+      name: src.name ? src.name + '_copy' : '',
+    };
+    selectedTileIdx = dstIdx;
+    markDirty();
+    document.getElementById('tile-name').value = state.tiles[dstIdx].name;
+    renderTileEditor();
+    renderTileset();
+  });
+  document.getElementById('btn-copy-tile').addEventListener('click', () => {
+    tileClipboard = clonePixels(state.tiles[selectedTileIdx].pixels);
+    const pasteBtn = document.getElementById('btn-paste-tile');
+    pasteBtn.disabled = false;
+    pasteBtn.title = 'Paste clipboard pixels into this tile (overwrites) — '
+      + 'copied from 0x' + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
+  });
+  document.getElementById('btn-paste-tile').addEventListener('click', () => {
+    if (!tileClipboard) return;
+    pushUndo();
+    state.tiles[selectedTileIdx].pixels = clonePixels(tileClipboard);
+    markDirty();
+    renderTileEditor();
+    renderTileset();
+    renderNametable();
+  });
 
   // --- Nametable controls ---
   document.getElementById('nt-size').addEventListener('change', e => {
@@ -1851,9 +2541,17 @@ function init() {
   const ntc = document.getElementById('nt-canvas');
   ntc.addEventListener('contextmenu', e => e.preventDefault());
   ntc.addEventListener('mousedown', e => {
-    ntPainting = true;
-    pushUndo();
+    const tool = document.getElementById('nt-tool').value;
     const { x, y } = ntPointToCell(e);
+    ntPainting = true;
+    if (tool === 'palette-rect') {
+      ntRectStart = { x, y };
+      ntRectEnd = { x, y };
+      renderNametable();
+      drawNtRectOverlay(ntRectStart, ntRectEnd);
+      return;
+    }
+    pushUndo();
     ntLastCellKey = x + ',' + y;
     applyNtTool(x, y);
   });
@@ -1864,22 +2562,67 @@ function init() {
       + Math.floor(x / SCREEN_W) + ',' + Math.floor(y / SCREEN_H)
       + ' · local ' + (x % SCREEN_W) + ',' + (y % SCREEN_H);
     if (!ntPainting) return;
+    if (ntRectStart) {
+      ntRectEnd = { x, y };
+      renderNametable();
+      drawNtRectOverlay(ntRectStart, ntRectEnd);
+      return;
+    }
     const key = x + ',' + y;
     if (key === ntLastCellKey) return;
     ntLastCellKey = key;
     applyNtTool(x, y);
   });
   window.addEventListener('mouseup', () => {
+    if (ntRectStart && ntRectEnd) {
+      pushUndo();
+      applyPaletteRect(ntRectStart, ntRectEnd);
+    }
+    ntRectStart = null;
+    ntRectEnd = null;
     ntPainting = false;
     ntLastCellKey = null;
+  });
+
+  // --- Fine tile grid ---
+  const fineGridChk = document.getElementById('nt-fine-grid');
+  fineGridChk.checked = showFineTileGrid;
+  fineGridChk.addEventListener('change', () => {
+    showFineTileGrid = fineGridChk.checked;
+    localStorage.setItem('nt-fine-grid', showFineTileGrid ? '1' : '0');
+    renderNametable();
+  });
+
+  // --- Full-screen preview ---
+  const previewDlg = document.getElementById('preview-dialog');
+  document.getElementById('btn-fullscreen-preview').addEventListener('click', togglePreview);
+  document.getElementById('btn-preview-close').addEventListener('click', () => previewDlg.close());
+  previewDlg.addEventListener('click', e => {
+    // Click outside the canvas closes.
+    if (e.target === previewDlg) previewDlg.close();
+  });
+  window.addEventListener('resize', () => {
+    if (previewDlg.open) renderFullPreview();
+  });
+
+  // --- Help dialog tabs ---
+  document.querySelectorAll('.help-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const which = tab.dataset.tab;
+      document.querySelectorAll('.help-tab').forEach(t =>
+        t.classList.toggle('active', t === tab));
+      document.querySelectorAll('.help-tab-panel').forEach(p =>
+        p.hidden = p.dataset.panel !== which);
+    });
   });
 
   // --- Keyboard ---
   window.addEventListener('keydown', e => {
     if (e.target.matches('input, textarea, select')) return;
-    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); return; }
-    if (e.ctrlKey && (e.key === 'Z' || e.key === 'y')) { e.preventDefault(); redo(); return; }
-    if (e.ctrlKey && e.key === 's') {
+    // Undo / redo / save.
+    if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey && (e.key === 'Z' || e.key.toLowerCase() === 'y'))) { e.preventDefault(); redo(); return; }
+    if (e.ctrlKey && e.key.toLowerCase() === 's') {
       e.preventDefault();
       if (saveTimer) clearTimeout(saveTimer);
       Storage.saveCurrent(state);
@@ -1889,11 +2632,22 @@ function init() {
       setStatus('saved', '● Saved + snapshot');
       return;
     }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'z') { e.preventDefault(); undo(); return; }
+      if (e.key === 'y') { e.preventDefault(); redo(); return; }
+    }
+    // Colour: 0-3 and backtick (for colour 0).
     if (e.key >= '0' && e.key <= '3') {
       currentColour = parseInt(e.key, 10);
       refreshColourButtons();
       return;
     }
+    if (e.key === '`') {
+      currentColour = 0;
+      refreshColourButtons();
+      return;
+    }
+    // Tile navigation.
     if (e.key === '[') {
       selectedTileIdx = (selectedTileIdx + NUM_TILES - 1) % NUM_TILES;
       renderTileset(); renderTileEditor();
@@ -1902,6 +2656,33 @@ function init() {
     if (e.key === ']') {
       selectedTileIdx = (selectedTileIdx + 1) % NUM_TILES;
       renderTileset(); renderTileEditor();
+      return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'
+        || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const col = selectedTileIdx % 16, row = Math.floor(selectedTileIdx / 16);
+      let nc = col, nr = row;
+      if (e.key === 'ArrowLeft')  nc = (col + 15) % 16;
+      if (e.key === 'ArrowRight') nc = (col + 1)  % 16;
+      if (e.key === 'ArrowUp')    nr = (row + 15) % 16;
+      if (e.key === 'ArrowDown')  nr = (row + 1)  % 16;
+      selectedTileIdx = nr * 16 + nc;
+      renderTileset(); renderTileEditor();
+      return;
+    }
+    // Tile operations.
+    if (e.key === 'd') { document.getElementById('btn-duplicate').click(); return; }
+    if (e.key === 'c') { document.getElementById('btn-copy-tile').click(); return; }
+    if (e.key === 'v') { document.getElementById('btn-paste-tile').click(); return; }
+    if (e.key === 'r') { document.getElementById('btn-rotate').click(); return; }
+    if (e.key === 'h') { document.getElementById('btn-flip-h').click(); return; }
+    if (e.key === 'H') { document.getElementById('btn-flip-v').click(); return; }
+    // View.
+    if (e.key === 'f') { togglePreview(); return; }
+    if (e.key === 'g') {
+      fineGridChk.checked = !fineGridChk.checked;
+      fineGridChk.dispatchEvent(new Event('change'));
       return;
     }
     if (e.key === '?') {
@@ -1959,6 +2740,7 @@ function init() {
   updateUndoButtons();
   setStatus('saved', '● Ready');
   lastSaveTs = Date.now();
+  maybeShowOnboarding();
 }
 
 function openRecoveryDialog() {
@@ -2010,7 +2792,320 @@ function openRecoveryDialog() {
   document.getElementById('recovery-dialog').showModal();
 }
 
-window.addEventListener('DOMContentLoaded', init);
+// --- Background area resize handle -------------------------------
+function initNtResize() {
+  const handle = document.getElementById('nt-resize-handle');
+  const wrap = document.querySelector('.nt-canvas-wrap');
+  if (!handle || !wrap) return;
+  const MIN_H = 120;
+  const MAX_H = 2000;
+  const STORAGE_KEY = 'nt-canvas-height';
+  const saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+  if (!isNaN(saved) && saved >= MIN_H) wrap.style.maxHeight = saved + 'px';
+
+  let startY = 0;
+  let startH = 0;
+  function onMove(e) {
+    const dy = e.clientY - startY;
+    // Dragging UP shrinks startY (negative dy) => grow the panel.
+    const next = Math.max(MIN_H, Math.min(MAX_H, startH - dy));
+    wrap.style.maxHeight = next + 'px';
+  }
+  function onUp() {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    handle.classList.remove('dragging');
+    document.body.classList.remove('nt-resizing');
+    const h = parseInt(wrap.style.maxHeight, 10);
+    if (!isNaN(h)) localStorage.setItem(STORAGE_KEY, String(h));
+  }
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startH = wrap.getBoundingClientRect().height;
+    handle.classList.add('dragging');
+    document.body.classList.add('nt-resizing');
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  });
+  handle.addEventListener('dblclick', () => {
+    wrap.style.maxHeight = '600px';
+    localStorage.removeItem(STORAGE_KEY);
+  });
+}
+
+// --- Floating panel helper --------------------------------------
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function makeFloatingPanel({
+  panel, header, resize, toggleBtn, closeBtn,
+  storageKey,
+  minWidth = 200, minHeight = 160,
+  onOpen = null,
+  extraPersist = null,
+  initFromSaved = null,
+}) {
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); }
+    catch (e) { return {}; }
+  })();
+
+  if (Number.isFinite(saved.x)) panel.style.left = saved.x + 'px';
+  if (Number.isFinite(saved.y)) panel.style.top  = saved.y + 'px';
+  if (Number.isFinite(saved.w)) panel.style.width  = Math.max(minWidth, saved.w) + 'px';
+  if (Number.isFinite(saved.h)) panel.style.height = Math.max(minHeight, saved.h) + 'px';
+  initFromSaved && initFromSaved(saved);
+
+  function clampIntoViewport() {
+    const r = panel.getBoundingClientRect();
+    const nx = clamp(r.left, 0, Math.max(0, window.innerWidth - 40));
+    const ny = clamp(r.top,  0, Math.max(0, window.innerHeight - 40));
+    panel.style.left = nx + 'px';
+    panel.style.top  = ny + 'px';
+  }
+  function persist() {
+    const r = panel.getBoundingClientRect();
+    const data = {
+      open: panel.classList.contains('open'),
+      x: r.left, y: r.top, w: r.width, h: r.height,
+    };
+    if (extraPersist) Object.assign(data, extraPersist());
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  }
+  function openPanel() {
+    panel.classList.add('open');
+    clampIntoViewport();
+    onOpen && onOpen();
+    persist();
+  }
+  function closePanel() {
+    panel.classList.remove('open');
+    persist();
+  }
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      panel.classList.contains('open') ? closePanel() : openPanel();
+    });
+  }
+  if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
+  // Drag header.
+  let dragStart = null;
+  header.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    const r = panel.getBoundingClientRect();
+    dragStart = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    header.classList.add('dragging');
+    header.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  header.addEventListener('pointermove', (e) => {
+    if (!dragStart) return;
+    panel.style.left = clamp(e.clientX - dragStart.dx, 0, window.innerWidth - 40) + 'px';
+    panel.style.top  = clamp(e.clientY - dragStart.dy, 0, window.innerHeight - 40) + 'px';
+  });
+  header.addEventListener('pointerup', (e) => {
+    if (!dragStart) return;
+    dragStart = null;
+    header.classList.remove('dragging');
+    try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+    persist();
+  });
+
+  // Bottom-right resize.
+  if (resize) {
+    let rs = null;
+    resize.addEventListener('pointerdown', (e) => {
+      const r = panel.getBoundingClientRect();
+      rs = { x: e.clientX, y: e.clientY, w: r.width, h: r.height };
+      resize.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    resize.addEventListener('pointermove', (e) => {
+      if (!rs) return;
+      panel.style.width  = Math.max(minWidth,  rs.w + (e.clientX - rs.x)) + 'px';
+      panel.style.height = Math.max(minHeight, rs.h + (e.clientY - rs.y)) + 'px';
+    });
+    resize.addEventListener('pointerup', (e) => {
+      if (!rs) return;
+      rs = null;
+      try { resize.releasePointerCapture(e.pointerId); } catch (_) {}
+      persist();
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    if (panel.classList.contains('open')) clampIntoViewport();
+  });
+
+  if (saved.open) openPanel();
+  return { open: openPanel, close: closePanel, persist };
+}
+
+// --- Floating tileset window ------------------------------------
+function initFloatingTileset() {
+  const panel   = document.getElementById('floating-tileset');
+  const header  = document.getElementById('floating-tileset-header');
+  const body    = document.getElementById('floating-tileset-body');
+  const canvas  = document.getElementById('floating-tileset-canvas');
+  const close   = document.getElementById('floating-tileset-close');
+  const resize  = document.getElementById('floating-tileset-resize');
+  const zoom    = document.getElementById('floating-tileset-zoom');
+  const zoomLbl = document.getElementById('floating-tileset-zoom-label');
+  const toggle  = document.getElementById('btn-popout-tileset');
+  if (!panel || !toggle) return;
+
+  const handle = makeFloatingPanel({
+    panel, header, resize, toggleBtn: toggle, closeBtn: close,
+    storageKey: 'floating-tileset',
+    minWidth: 200, minHeight: 180,
+    onOpen: () => renderFloatingTileset(),
+    extraPersist: () => ({ zoom: floatingTilesetZoom }),
+    initFromSaved: (s) => {
+      if (Number.isFinite(s.zoom)) floatingTilesetZoom = clamp(s.zoom, 8, 48);
+      zoom.value = String(floatingTilesetZoom);
+      zoomLbl.textContent = floatingTilesetZoom + ' px';
+    },
+  });
+
+  zoom.addEventListener('input', () => {
+    floatingTilesetZoom = clamp(parseInt(zoom.value, 10) || 20, 8, 48);
+    zoomLbl.textContent = floatingTilesetZoom + ' px';
+    renderFloatingTileset();
+    handle.persist();
+  });
+  body.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const dir = e.deltaY < 0 ? 1 : -1;
+    floatingTilesetZoom = clamp(floatingTilesetZoom + dir * 2, 8, 48);
+    zoom.value = String(floatingTilesetZoom);
+    zoomLbl.textContent = floatingTilesetZoom + ' px';
+    renderFloatingTileset();
+    handle.persist();
+  }, { passive: false });
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const cell = canvas.width / 16;
+    const x = Math.floor((e.clientX - rect.left) * (canvas.width  / rect.width)  / cell);
+    const y = Math.floor((e.clientY - rect.top)  * (canvas.height / rect.height) / cell);
+    if (x < 0 || y < 0 || x > 15 || y > 15) return;
+    selectedTileIdx = y * 16 + x;
+    renderTileset();
+    renderTileEditor();
+    refreshColourButtons();
+  });
+}
+
+// --- Floating palette window ------------------------------------
+function initFloatingPalettes() {
+  const panel  = document.getElementById('floating-palettes');
+  const header = document.getElementById('floating-palettes-header');
+  const close  = document.getElementById('floating-palettes-close');
+  const resize = document.getElementById('floating-palettes-resize');
+  const toggle = document.getElementById('btn-popout-palettes');
+  if (!panel || !toggle) return;
+
+  makeFloatingPanel({
+    panel, header, resize, toggleBtn: toggle, closeBtn: close,
+    storageKey: 'floating-palettes',
+    minWidth: 240, minHeight: 220,
+    onOpen: () => renderFloatingPalettes(),
+  });
+
+  document.getElementById('nt-palette')
+    .addEventListener('change', () => {
+      renderFloatingPalettes();
+      renderFloatingTileset();
+    });
+}
+
+function renderFloatingPalettes() {
+  const panel = document.getElementById('floating-palettes');
+  if (!panel || !panel.classList.contains('open')) return;
+  const grid = document.getElementById('floating-palettes-grid');
+  const stats = document.getElementById('floating-palettes-stats');
+  if (!grid) return;
+  const ntSel = document.getElementById('nt-palette');
+  const activeBg = parseInt(ntSel.value, 10) || 0;
+  grid.innerHTML = '';
+
+  const bgHeader = document.createElement('h3');
+  bgHeader.textContent = 'Background palettes (click to select)';
+  grid.appendChild(bgHeader);
+
+  state.bg_palettes.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'fp-palette-row selectable';
+    if (i === activeBg) row.classList.add('selected');
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = 'BG' + i;
+    row.appendChild(name);
+    const slot0 = buildFpSwatch(state.universal_bg, '0', true);
+    row.appendChild(slot0);
+    for (let s = 0; s < 3; s++) {
+      row.appendChild(buildFpSwatch(p.slots[s], String(s + 1), false));
+    }
+    row.addEventListener('click', () => {
+      ntSel.value = String(i);
+      ntSel.dispatchEvent(new Event('change'));
+      const toolSel = document.getElementById('nt-tool');
+      const paletteTools = new Set(['paint', 'palette', 'palette-rect']);
+      if (!paletteTools.has(toolSel.value)) {
+        toolSel.value = 'palette';
+        toolSel.dispatchEvent(new Event('change'));
+      }
+      renderFloatingPalettes();
+    });
+    grid.appendChild(row);
+  });
+
+  const spHeader = document.createElement('h3');
+  spHeader.textContent = 'Sprite palettes (reference only)';
+  spHeader.style.marginTop = '10px';
+  grid.appendChild(spHeader);
+  state.sprite_palettes.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'fp-palette-row read-only';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = 'SP' + i;
+    row.appendChild(name);
+    const slot0 = buildFpSwatch(-1, 'T', true);
+    slot0.classList.add('transparent');
+    row.appendChild(slot0);
+    for (let s = 0; s < 3; s++) {
+      row.appendChild(buildFpSwatch(p.slots[s], String(s + 1), false));
+    }
+    grid.appendChild(row);
+  });
+
+  if (stats) stats.textContent = 'Active: BG' + activeBg;
+}
+
+function buildFpSwatch(colourIdx, label, shared) {
+  const el = document.createElement('div');
+  el.className = 'fp-palette-swatch';
+  if (colourIdx >= 0) {
+    el.style.background = nesRgb(colourIdx);
+    el.title = 'Slot ' + label + '  —  0x' + colourIdx.toString(16).padStart(2, '0').toUpperCase();
+  } else {
+    el.style.background = 'repeating-linear-gradient(45deg,#2a2440 0 5px,#1a1630 5px 10px)';
+    el.title = 'Transparent';
+  }
+  el.textContent = label;
+  if (shared) el.style.opacity = '0.75';
+  return el;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  init();
+  initNtResize();
+  initFloatingTileset();
+  initFloatingPalettes();
+});
 </script>
 </body>
 </html>

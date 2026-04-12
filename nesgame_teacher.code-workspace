@@ -83,6 +83,23 @@
         "todo-tree.highlights.customHighlight": {
             "TRY:": { "icon": "lightbulb", "foreground": "#47D16C" },
             "EDIT:": { "icon": "pencil", "foreground": "#FFD866" }
+        },
+
+        "C_Cpp.default.browse.path": [
+            "${workspaceFolder:Project Root}/src",
+            "/usr/share/cc65/include"
+        ],
+        "C_Cpp.default.includePath": [
+            "${workspaceFolder:Project Root}/src",
+            "/usr/share/cc65/include"
+        ],
+        "C_Cpp.default.browse.limitSymbolsToIncludedHeaders": true,
+        "C_Cpp.files.exclude": {
+            "**/build": true,
+            "**/.git": true,
+            "**/__pycache__": true,
+            "**/assets": true,
+            "**/slides": true
         }
     }
 }
