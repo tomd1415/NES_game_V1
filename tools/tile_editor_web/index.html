@@ -75,6 +75,27 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   display: flex; align-items: center; gap: 10px;
   margin-left: 16px;
 }
+.page-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+.page-link {
+  padding: 5px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.9em;
+}
+.page-link:hover { background: #3a3560; }
+.page-link.active {
+  background: #3a2f50;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: bold;
+}
 .app-header .toolbar {
   margin-left: auto;
   display: flex; gap: 6px;
@@ -668,6 +689,10 @@ kbd {
 
 <header class="app-header">
   <h1>🎮 NES Tile Editor</h1>
+  <nav class="page-nav" aria-label="Editor pages">
+    <a class="page-link active" href="index.html" title="You are here — edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
+    <a class="page-link" href="sprites.html" title="Design sprites from the same shared tileset — hero, enemies, items">🦸 Sprites</a>
+  </nav>
   <div class="status-group">
     <span id="save-status" class="saved">● Loading…</span>
     <input id="project-name" type="text" value="untitled" title="Project name" aria-label="Project name">
@@ -691,7 +716,7 @@ kbd {
         <button type="button" data-export="all">📦 Everything as .zip-ish folder</button>
       </div>
     </details>
-    <button type="button" id="btn-import" title="Load a JSON save file">Import…</button>
+    <button type="button" id="btn-import" title="Load background + tileset from a JSON file. Your sprites stay untouched.">Import background…</button>
     <input id="file-input" type="file" accept=".json" style="display:none">
     <button type="button" id="btn-help">?</button>
   </div>
@@ -1088,11 +1113,21 @@ function createDefaultState() {
     sprite_palettes: defaultSpritePalettes(),
     tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
     nametable: emptyNametable(),
+    sprites: [],                   // populated on the Sprites page
     metadata: {
       created: new Date().toISOString(),
       modified: new Date().toISOString(),
     },
   };
+}
+
+// Back-fill any fields added after the original save. Keeps old projects
+// loadable without bumping STATE_VERSION (which would hide them from the user).
+function migrateState(s) {
+  if (s && typeof s === 'object' && !Array.isArray(s.sprites)) {
+    s.sprites = [];
+  }
+  return s;
 }
 
 function validateState(s) {
@@ -1165,7 +1200,7 @@ const Storage = {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw);
+      const parsed = migrateState(JSON.parse(raw));
       const err = validateState(parsed);
       if (err) return null;
       return parsed;
@@ -1222,7 +1257,7 @@ const Storage = {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
-      const s = JSON.parse(raw);
+      const s = migrateState(JSON.parse(raw));
       const err = validateState(s);
       if (err) return null;
       return s;
@@ -2373,11 +2408,23 @@ function init() {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(reader.result);
+        const parsed = migrateState(JSON.parse(reader.result));
         const err = validateState(parsed);
         if (err) { alert('This JSON is not a valid save: ' + err); return; }
         Storage.saveSnapshot(state, 'before_import');
-        state = parsed;
+
+        // Only pull in background-related data. The pupil's sprites
+        // (and sprite palettes) stay untouched, so importing a level
+        // file never wipes out their character work. Tiles are shared
+        // CHR so they come in with the background -- otherwise the
+        // imported nametable would render with the wrong art.
+        state.nametable = parsed.nametable;
+        state.bg_palettes = parsed.bg_palettes;
+        state.universal_bg = parsed.universal_bg;
+        state.tiles = parsed.tiles;
+        if (parsed.dimensions) state.dimensions = parsed.dimensions;
+        resizeNametable(state);
+
         afterStateReplaced();
       } catch (e) {
         alert('Could not load: ' + e.message);

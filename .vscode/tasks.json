@@ -159,6 +159,54 @@
                 "panel": "shared",
                 "close": true
             }
+        },
+        {
+            "label": "Start Playground Server",
+            "detail": "Runs the one-click 'Play in NES' companion server. Keeps running in the background so the editor's ▶ Play button can compile and launch your scene in FCEUX.",
+            "type": "shell",
+            "command": "python3",
+            "args": ["tools/playground_server.py"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "isBackground": true,
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated",
+                "clear": false
+            },
+            "problemMatcher": {
+                "owner": "playground",
+                "pattern": {
+                    "regexp": "^\\s*\\[playground\\]\\s+(.*)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^Playground server listening",
+                    "endsPattern": "^(Press Ctrl-C|  Sprites:)"
+                }
+            }
+        },
+        {
+            "label": "Open Editor via Playground Server",
+            "detail": "Open the editor through the Playground Server so the '▶ Play in NES' button works. Starts the server (via dependsOn) and opens the sprites page in your browser.",
+            "dependsOn": ["Start Playground Server"],
+            "type": "shell",
+            "command": "xdg-open",
+            "args": ["http://127.0.0.1:8765/sprites.html"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "none",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared",
+                "close": true
+            }
         }
     ]
 }

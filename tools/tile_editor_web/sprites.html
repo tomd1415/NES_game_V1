@@ -1,0 +1,3823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Sprite Editor</title>
+<style>
+/* ===========================================================
+   NES SPRITE EDITOR — shares localStorage with index.html.
+   Single file, no server, no build.
+   =========================================================== */
+:root {
+  --bg:        #14121f;
+  --panel:     #1f1b30;
+  --panel2:    #2a2440;
+  --border:    #3a3352;
+  --fg:        #f4f4f4;
+  --muted:     #9a97ad;
+  --accent:    #ffd866;
+  --good:      #47d16c;
+  --warn:      #ff6188;
+  --info:      #78dce8;
+  --shadow:    0 4px 16px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+}
+h1, h2, h3 { margin: 0; }
+h1 { font-size: 1.15em; color: var(--accent); }
+h2 { font-size: 1.0em;  color: var(--accent); margin-bottom: 6px; }
+h3 { font-size: 0.9em;  color: var(--info);   margin: 10px 0 4px; }
+button, select, input[type=text], input[type=number] {
+  background: var(--panel2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 0.9em;
+  cursor: pointer;
+  font-family: inherit;
+}
+input[type=text], input[type=number] { cursor: text; }
+button:hover { background: #3a3560; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: #3a2f50; border-color: var(--accent); color: var(--accent); }
+button.warn    { border-color: var(--warn); color: var(--warn); }
+kbd {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85em;
+}
+label { -webkit-user-select: none; user-select: none; }
+dialog {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 640px;
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(0,0,0,0.6); }
+
+/* --- Header ------------------------------------------------ */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.page-nav { display: flex; gap: 4px; margin-left: 8px; }
+.page-link {
+  padding: 5px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.9em;
+}
+.page-link:hover { background: #3a3560; }
+.page-link.active {
+  background: #3a2f50;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: bold;
+}
+.app-header .status-group {
+  display: flex; align-items: center; gap: 10px;
+  margin-left: 16px;
+}
+.app-header .toolbar {
+  margin-left: auto;
+  display: flex; gap: 6px;
+  align-items: center;
+}
+#save-status {
+  font-size: 0.85em;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  min-width: 130px;
+  text-align: center;
+}
+#save-status.saved  { color: var(--good); border-color: var(--good); }
+#save-status.saving { color: var(--accent); }
+#save-status.error  { color: var(--warn); border-color: var(--warn); }
+#project-name {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg);
+  font-weight: bold;
+  font-size: 1.05em;
+  min-width: 120px;
+}
+#project-name:hover, #project-name:focus {
+  border-color: var(--border);
+  background: var(--panel2);
+}
+
+/* --- Main layout ------------------------------------------- */
+.app-main {
+  display: grid;
+  grid-template-columns: 240px minmax(520px, 1fr) 320px;
+  gap: 12px;
+  padding: 12px;
+  align-items: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+/* Center column splits into [pixel-editor | palettes] below composite. */
+.edit-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  margin-top: 12px;
+  align-items: start;
+}
+.pixel-editor-sub {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+}
+.pixel-editor-sub h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 0;
+}
+.pixel-editor-sub .shared-warn {
+  font-size: 0.75em;
+  font-weight: normal;
+  margin-left: auto;
+}
+.palettes-sub {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  min-width: 0;
+}
+.palettes-sub h3 { margin-top: 8px; }
+@media (max-width: 1100px) {
+  .edit-row { grid-template-columns: 1fr; }
+}
+
+/* --- Sprite list ------------------------------------------- */
+.sprite-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+}
+.sprite-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.sprite-list li:last-child { border-bottom: none; }
+.sprite-list li:hover { background: var(--panel2); }
+.sprite-list li.selected { background: #3a2f50; color: var(--accent); }
+.sprite-list li .sprite-thumb {
+  width: 24px; height: 24px;
+  background: #000;
+  border: 1px solid var(--border);
+  image-rendering: pixelated;
+  flex: 0 0 auto;
+}
+.sprite-list li .sprite-meta {
+  font-size: 0.75em;
+  color: var(--muted);
+  margin-left: auto;
+}
+.sprite-list-buttons {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.sprite-list-buttons button { flex: 1 1 auto; }
+.empty-hint {
+  color: var(--muted);
+  font-size: 0.85em;
+  text-align: center;
+  padding: 12px;
+  font-style: italic;
+}
+
+.dim-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.dim-row input[type=number] { width: 54px; }
+#sprite-name-input { width: 100%; }
+
+/* --- Composite sprite canvas ------------------------------ */
+.sprite-canvas-wrap {
+  border: 1px solid var(--border);
+  background: #222;
+  padding: 12px;
+  border-radius: 4px;
+  text-align: center;
+  margin-bottom: 10px;
+  position: relative;
+}
+#sprite-canvas {
+  image-rendering: pixelated;
+  cursor: pointer;
+  background:
+    linear-gradient(45deg, #0a0a0f 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, #0a0a0f 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(45deg, transparent 75%, #0a0a0f 75%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, transparent 75%, #0a0a0f 75%) 0 0 / 16px 16px,
+    #1a1630;
+}
+.sprite-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+/* --- Mode toggle (Browse / Paint) ------------------------- */
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--panel2);
+}
+.mode-toggle button {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 0.9em;
+  cursor: pointer;
+}
+.mode-toggle button + button { border-left: 1px solid var(--border); }
+.mode-toggle button.active {
+  background: var(--accent);
+  color: #1a1630;
+  font-weight: bold;
+}
+.mode-toggle button.active.paint { background: #ff9f6a; color: #1a1630; }
+.mode-hint {
+  font-size: 0.78em;
+  color: var(--muted);
+  font-style: italic;
+}
+body.paint-mode #sprite-canvas { cursor: crosshair; }
+body.browse-mode #sprite-canvas { cursor: pointer; }
+body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
+
+/* --- Background-theme picker ------------------------------ */
+.bg-theme-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel2);
+}
+.bg-theme-btn {
+  padding: 2px 6px;
+  font-size: 1em;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.bg-theme-btn.active {
+  border-color: var(--accent);
+  background: rgba(255, 216, 102, 0.15);
+}
+
+/* --- Empty cell placeholder in cell inspector ------------- */
+.cell-inspector.is-empty {
+  border-color: var(--warn);
+  background: #3a2a20;
+  opacity: 1;
+}
+.cell-inspector .assign-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.cell-inspector .assign-row button {
+  background: var(--accent);
+  color: #1a1630;
+  font-weight: bold;
+}
+.cell-inspector .assign-row button:disabled {
+  background: var(--panel2);
+  color: var(--muted);
+  font-weight: normal;
+}
+
+/* --- Cell inspector --------------------------------------- */
+.cell-inspector {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  margin-top: 8px;
+}
+.cell-inspector.empty { opacity: 0.55; }
+.cell-inspector h3 { margin-top: 0; }
+.cell-inspector .row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.cell-inspector input[type=number] { width: 70px; }
+.cell-inspector .checkbox-row label {
+  display: flex; align-items: center; gap: 4px;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+/* --- Tileset picker --------------------------------------- */
+#tileset-canvas {
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: #000;
+  width: 100%;
+  height: auto;
+  max-width: 320px;
+  margin: 0 auto;
+}
+.tileset-hints {
+  color: var(--muted);
+  font-size: 0.78em;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* --- Pixel editor ----------------------------------------- */
+#tile-canvas {
+  display: block;
+  margin: 8px auto;
+  image-rendering: pixelated;
+  cursor: crosshair;
+  background: #000;
+  border: 1px solid var(--border);
+}
+.color-picker {
+  display: flex; gap: 6px;
+  justify-content: center;
+  margin: 8px 0;
+}
+.color-btn {
+  width: 44px; height: 44px;
+  font-size: 1.1em;
+  font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: #000;
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+}
+.color-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(255, 216, 102, 0.4);
+}
+.color-btn[data-color="0"] {
+  background: #2a2440;
+  background-image: linear-gradient(45deg, transparent 45%, #888 45%, #888 55%, transparent 55%);
+}
+.pixel-editor-sub .hints {
+  color: var(--muted);
+  font-size: 0.75em;
+  text-align: center;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+.palette-slot-sm { width: 28px; height: 28px; }
+.muted-inline { color: var(--muted); font-size: 0.85em; }
+.cell-inspector label.cbx {
+  display: flex; align-items: center; gap: 4px;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.faint { opacity: 0.8; }
+
+/* --- Palettes --------------------------------------------- */
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.palette-row .pal-label {
+  width: 28px;
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.palette-row.active .pal-label { color: var(--accent); font-weight: bold; }
+.palette-slot {
+  width: 34px; height: 34px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+  font-size: 0.7em;
+  color: #000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 2px 4px;
+  text-shadow: 0 0 2px #fff;
+}
+.palette-slot.transparent {
+  background-image: linear-gradient(45deg, transparent 45%, #888 45%, #888 55%, transparent 55%);
+  cursor: default;
+}
+.palette-slot.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(255, 216, 102, 0.4);
+}
+.palette-slot .hex {
+  position: absolute;
+  bottom: 2px; right: 4px;
+  font-size: 0.65em;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  padding: 0 3px;
+  border-radius: 2px;
+  text-shadow: none;
+}
+.palette-slot.readonly {
+  cursor: default;
+  opacity: 0.8;
+}
+.master-palette { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.master-grid {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 1px;
+  background: #000;
+  padding: 1px;
+  border-radius: 3px;
+}
+.master-cell {
+  aspect-ratio: 1;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55em;
+  color: #000;
+  text-shadow: 0 0 2px #fff;
+}
+.master-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
+.master-cell.chosen { outline: 2px solid var(--good); z-index: 2; }
+.master-hint { color: var(--muted); font-size: 0.75em; margin-top: 6px; line-height: 1.5; }
+
+/* --- Full-screen preview ---------------------------------- */
+.preview-dialog {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: #000;
+  max-width: 100vw;
+  max-height: 100vh;
+  width: 100vw;
+  height: 100vh;
+  display: none;
+}
+.preview-dialog[open] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#preview-canvas {
+  image-rendering: pixelated;
+  display: block;
+  background: #000;
+}
+.preview-hud {
+  position: absolute;
+  top: 12px; right: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.85em;
+  z-index: 5;
+}
+.preview-hud .close-fab {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+  width: 30px; height: 30px;
+  cursor: pointer;
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+/* --- Floating tileset panel ------------------------------ */
+.floating-panel {
+  position: fixed;
+  top: 120px;
+  left: calc(100vw - 380px);
+  width: 340px;
+  height: 400px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  display: none;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+  min-width: 200px;
+  min-height: 180px;
+}
+.floating-panel.open { display: flex; }
+.floating-panel-header {
+  padding: 6px 10px;
+  background: var(--panel2);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: bold;
+  font-size: 0.9em;
+  -webkit-user-select: none;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+.floating-panel-header.dragging { cursor: grabbing; }
+.floating-panel-header .title { flex: 0 0 auto; }
+.floating-panel-header .stats {
+  flex: 1;
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.floating-panel-header .close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.1em;
+  padding: 0 4px;
+}
+.floating-panel-header .close:hover { color: var(--accent); }
+.floating-panel-body {
+  flex: 1;
+  overflow: auto;
+  background: #000;
+  padding: 4px;
+}
+.floating-panel-body canvas {
+  display: block;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+.floating-panel-footer {
+  padding: 4px 10px;
+  background: var(--panel2);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+.floating-panel-footer input[type=range] { flex: 1; }
+.floating-panel-resize {
+  position: absolute;
+  right: 0; bottom: 0;
+  width: 18px; height: 18px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg,
+      transparent 0 55%,
+      var(--muted) 55% 62%,
+      transparent 62% 72%,
+      var(--muted) 72% 79%,
+      transparent 79%);
+}
+
+/* --- Export menu ----------------------------------------- */
+.export-menu { position: relative; }
+.export-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.export-menu[open] > summary { background: #3a3560; }
+.export-menu > .menu-body {
+  position: absolute;
+  right: 0; top: calc(100% + 4px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 220px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+.export-menu > .menu-body button { text-align: left; }
+
+/* --- Play-in-NES button + dialog -------------------------- */
+.play-btn { font-weight: 600; background: #1f4a2c; border-color: #47d16c; color: #c9f7cd; }
+.play-btn:hover:not(:disabled) { background: #285c36; }
+.play-btn:disabled { opacity: 0.6; cursor: progress; }
+
+.playground-dialog { max-width: 760px; width: min(100%, 760px); }
+.playground-dialog h2 { margin: 0 0 8px; }
+.playground-dialog .sub { color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
+.playground-dialog .pg-body { display: grid; grid-template-columns: 288px 1fr; gap: 16px; }
+.playground-dialog .pg-preview-wrap { background: #0f0c1a; border: 1px solid var(--border); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.playground-dialog canvas.pg-preview { image-rendering: pixelated; display: block; cursor: crosshair; width: 272px; height: 240px; background: #000; border: 1px solid #000; }
+.playground-dialog .pg-legend { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.4; }
+.playground-dialog .pg-legend b { color: #c9f7cd; }
+.playground-dialog .pg-sprites { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; }
+.playground-dialog .pg-sprite-row { display: grid; grid-template-columns: 32px 1fr auto auto auto; gap: 6px; align-items: center; background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 6px; }
+.playground-dialog .pg-sprite-row.is-player { border-color: #47d16c; background: #1f4a2c; }
+.playground-dialog .pg-sprite-row.is-scene { border-color: #78dce8; }
+.playground-dialog .pg-sprite-row canvas { width: 28px; height: 28px; image-rendering: pixelated; background: #15111f; border: 1px solid var(--border); }
+.playground-dialog .pg-sprite-row label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 3px; cursor: pointer; }
+.playground-dialog .pg-sprite-row label input { margin: 0; }
+.playground-dialog .pg-sprite-row .pg-name { font-weight: 600; color: var(--fg); font-size: 13px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; }
+.playground-dialog .pg-sprite-row .pg-size { font-size: 10px; color: var(--muted); }
+.playground-dialog .pg-sprite-row .pg-xy { display: none; gap: 4px; font-size: 11px; }
+.playground-dialog .pg-sprite-row.is-scene .pg-xy,
+.playground-dialog .pg-sprite-row.is-player .pg-xy { display: inline-flex; }
+.playground-dialog .pg-sprite-row .pg-xy input { width: 48px; font-size: 12px; padding: 2px 4px; background: #0f0c1a; color: var(--fg); border: 1px solid var(--border); border-radius: 3px; }
+.playground-dialog .pg-mode-toggle { display: inline-flex; gap: 4px; margin: 2px 0 6px; }
+.playground-dialog .pg-mode-toggle button { padding: 4px 10px; font-size: 12px; }
+.playground-dialog .pg-mode-toggle button.active { background: #2a3a5a; border-color: var(--accent); color: var(--accent); }
+.playground-dialog .pg-status { min-height: 20px; font-size: 12px; line-height: 1.4; white-space: pre-wrap; padding: 6px 8px; border-radius: 4px; background: #15111f; border: 1px solid var(--border); max-height: 140px; overflow-y: auto; font-family: ui-monospace, monospace; }
+.playground-dialog .pg-status.ok { border-color: #47d16c; color: #c9f7cd; background: #19301f; }
+.playground-dialog .pg-status.err { border-color: #ff6188; color: #ffbdc9; background: #2a1620; }
+
+/* --- Help dialog ------------------------------------------ */
+.help-dialog-wide { max-width: 720px; }
+.help-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.help-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  color: var(--muted);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.help-tab:hover { color: var(--fg); }
+.help-tab.active {
+  background: var(--panel2);
+  border-color: var(--border);
+  color: var(--accent);
+}
+.help-steps, .help-list { padding-left: 18px; line-height: 1.7; }
+.help-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 14px;
+  align-items: center;
+  margin: 6px 0 10px;
+}
+.help-hint { color: var(--muted); font-style: italic; line-height: 1.6; }
+.dialog-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+
+.snapshot-list {
+  list-style: none; padding: 0; margin: 10px 0; max-height: 320px; overflow-y: auto;
+}
+.snapshot-list li {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 4px;
+}
+.app-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8em;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* --- Confirm / shared-tile dialog ------------------------- */
+#shared-tile-dialog .shared-list {
+  margin: 8px 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow-y: auto;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🦸 NES Sprite Editor</h1>
+  <nav class="page-nav" aria-label="Editor pages">
+    <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
+    <a class="page-link active" href="sprites.html" title="You are here — design sprites from the shared tileset">🦸 Sprites</a>
+  </nav>
+  <div class="status-group">
+    <span id="save-status" class="saved">● Loading…</span>
+    <input id="project-name" type="text" value="untitled" title="Project name (shared with Backgrounds)" aria-label="Project name">
+  </div>
+  <div class="toolbar">
+    <button type="button" id="btn-undo" title="Undo (Ctrl+Z or Z)">↶ Undo</button>
+    <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z or Y)">↷ Redo</button>
+    <button type="button" id="btn-recover" title="Recover from a snapshot or backup">Recover…</button>
+    <details class="export-menu">
+      <summary title="Export your sprites for the NES game">Export ▾</summary>
+      <div class="menu-body">
+        <button type="button" data-export="json">💾 JSON save (round-trip)</button>
+        <button type="button" data-export="inc">📜 sprites.inc  (OAM C arrays)</button>
+        <button type="button" data-export="h">📄 sprites.h   (C header)</button>
+      </div>
+    </details>
+    <button type="button" id="btn-import" title="Load sprites + tileset from a JSON file. Your background stays untouched.">Import sprites…</button>
+    <input id="file-input" type="file" accept=".json" style="display:none">
+    <button type="button" id="btn-play" class="primary play-btn" title="Compile and run your background + sprites as a mini NES game you can move around in (needs the Playground Server running)">▶ Play in NES</button>
+    <button type="button" id="btn-help" title="Show help and keyboard shortcuts (?)">?</button>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- ============ Sprite list (left) ============ -->
+  <section class="panel sprites-list-panel">
+    <h2>Sprites</h2>
+    <div class="sprite-list-buttons">
+      <button type="button" id="btn-sprite-new"   title="Create a new 2×2 sprite">+ New</button>
+      <button type="button" id="btn-sprite-dup"   title="Duplicate the selected sprite (cells + attributes)">⎘ Duplicate</button>
+      <button type="button" id="btn-sprite-del"   class="warn" title="Delete the selected sprite (undoable)">🗑 Delete</button>
+    </div>
+    <ul id="sprite-list" class="sprite-list" role="listbox" aria-label="Sprites"></ul>
+    <label style="color:var(--muted);font-size:0.85em">
+      Name
+      <input type="text" id="sprite-name-input" placeholder="e.g. hero_idle" title="Rename the selected sprite">
+    </label>
+    <h3>Dimensions (tiles)</h3>
+    <div class="dim-row">
+      <label>W <input type="number" id="sprite-w" min="1" max="8" value="2" title="Width in 8×8 tiles (1–8)"></label>
+      <label>H <input type="number" id="sprite-h" min="1" max="8" value="2" title="Height in 8×8 tiles (1–8)"></label>
+    </div>
+    <div class="empty-hint" id="sprite-dim-hint">
+      Existing cells are preserved when you resize.
+    </div>
+  </section>
+
+  <!-- ============ Center: composition + palettes + pixel editor ============ -->
+  <section class="panel">
+    <h2>Sprite composition</h2>
+    <div class="sprite-controls">
+      <div class="mode-toggle" role="tablist" aria-label="Edit mode">
+        <button type="button" id="btn-mode-browse" class="active" role="tab" title="Browse mode — click to select cells and tiles. No accidental painting (press M to switch).">🖱 Browse</button>
+        <button type="button" id="btn-mode-paint" class="paint" role="tab" title="Paint mode — click to paint pixels on sprite cells and in the tile editor (press M to switch).">✏️ Paint</button>
+      </div>
+      <span class="mode-hint" id="mode-hint" title="Current mode">Click safely selects cells &amp; tiles</span>
+      <label>Zoom
+        <input type="range" id="sprite-zoom" min="4" max="32" step="1" value="16" title="Display zoom for the composition canvas">
+        <span id="sprite-zoom-label">16×</span>
+      </label>
+      <label title="Draw a checkerboard behind the sprite so you can see transparent pixels">
+        <input type="checkbox" id="show-checker" checked> checker
+      </label>
+      <span class="bg-theme-picker" title="Background shade for transparent pixels — try Light if dark colours are hard to see">
+        BG:
+        <button type="button" class="bg-theme-btn" data-theme="dark"  title="Dark background">🌑</button>
+        <button type="button" class="bg-theme-btn" data-theme="mid"   title="Mid-grey background">🌗</button>
+        <button type="button" class="bg-theme-btn" data-theme="light" title="Light background">🌕</button>
+      </span>
+      <label title="Show a faint grid at each 8×8 tile boundary">
+        <input type="checkbox" id="show-cell-grid" checked> cell grid
+      </label>
+      <button type="button" id="btn-popout-tileset" title="Show a floating tileset window so you can pick tiles while painting">📌 Pop-out tileset</button>
+      <button type="button" id="btn-fullscreen-preview" title="Preview all sprites at NES pixel size (F)">🖥 Full preview</button>
+    </div>
+    <div class="sprite-canvas-wrap">
+      <canvas id="sprite-canvas" width="128" height="128" title="Click / drag on a pixel to paint it. Shift-click or right-click to pick the colour under the cursor."></canvas>
+    </div>
+
+    <div class="cell-inspector" id="cell-inspector">
+      <h3>Selected cell: <span id="cell-coords">—</span> <span id="cell-status" class="muted-inline"></span></h3>
+      <div class="assign-row">
+        <span class="muted-inline" id="assign-hint">Highlighted tile:</span>
+        <button type="button" id="btn-assign-tile" title="Put the currently highlighted tile (from the tileset) into this cell">
+          📥 Assign 0x<span id="assign-tile-hex">00</span> to this cell
+        </button>
+      </div>
+      <div class="row">
+        <label>Tile
+          <input type="number" id="cell-tile" min="0" max="255" value="0" title="Tile index (0–255) from the shared tileset">
+        </label>
+        <span class="muted-inline">
+          = 0x<span id="cell-tile-hex">00</span>
+          <span id="cell-tile-usage" title="How many other places this tile appears in"></span>
+        </span>
+        <label title="Which sprite palette (SP0–SP3) to draw this tile with">Palette
+          <select id="cell-palette"></select>
+        </label>
+        <label class="cbx" title="Hardware flips the tile horizontally when drawn (no extra tile slot needed)">
+          <input type="checkbox" id="cell-flipH"> Flip H
+        </label>
+        <label class="cbx" title="Hardware flips the tile vertically when drawn">
+          <input type="checkbox" id="cell-flipV"> Flip V
+        </label>
+        <label class="cbx" title="Priority bit — draw this tile BEHIND background pixels">
+          <input type="checkbox" id="cell-priority"> Behind BG
+        </label>
+        <button type="button" id="btn-cell-clear" title="Empty this cell so you can assign a different tile">Clear cell</button>
+      </div>
+    </div>
+
+    <div class="edit-row">
+      <div class="pixel-editor-sub">
+        <h3>
+          Editing tile <span id="editing-tile-idx">0x00</span>
+          <span class="shared-warn" id="shared-warn-inline"></span>
+        </h3>
+        <canvas id="tile-canvas" width="256" height="256"></canvas>
+        <div class="color-picker">
+          <button type="button" class="color-btn active" data-color="0" title="0 — always transparent for sprites">0</button>
+          <button type="button" class="color-btn" data-color="1" title="1 — sprite palette slot 1">1</button>
+          <button type="button" class="color-btn" data-color="2" title="2 — sprite palette slot 2">2</button>
+          <button type="button" class="color-btn" data-color="3" title="3 — sprite palette slot 3">3</button>
+        </div>
+        <div class="hints">
+          Click to paint. <kbd>0</kbd>/<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a colour.
+          <kbd>Shift</kbd>-click eyedrops.
+          <kbd>D</kbd> duplicates into a free slot.
+        </div>
+      </div>
+      <div class="palettes-sub">
+        <h3>Sprite palettes (click a label to use for the selected cell)</h3>
+        <div id="sp-palettes"></div>
+        <h3>Background palettes (reference only)</h3>
+        <div id="bg-palettes-ro" class="faint"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Right: shared tileset + master ============ -->
+  <section class="panel">
+    <h2>Shared tileset</h2>
+    <canvas id="tileset-canvas" width="384" height="384" title="Left-click: assign tile to the selected cell. Right-click: jump to the first sprite that uses this tile."></canvas>
+    <div class="tileset-hints">
+      <b>Left-click</b> a tile to assign it to the selected cell.
+      <b>Right-click</b> to jump to the first sprite that already uses it.
+      Use <kbd>[</kbd> / <kbd>]</kbd> to step the highlight, <kbd>Enter</kbd> to assign.
+    </div>
+    <div class="master-palette">
+      <h3>NES master (click to assign to selected slot)</h3>
+      <div class="master-grid" id="master-grid"></div>
+      <div class="master-hint">
+        The NES can only show these 64 colours.
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="app-footer">
+  Shared project with Backgrounds · Auto-save every change · snapshot every 30s · backup every 5 min
+</footer>
+
+<!-- ============ Play-in-NES dialog ============ -->
+<dialog id="playground-dialog" class="playground-dialog">
+  <h2>▶ Play in NES</h2>
+  <p class="sub">Pick which sprite is the <b>Player</b> (the one the D-pad moves) and tick any extra sprites to drop into the scene. Click on the preview to set positions. Press <b>Play</b> to compile your scene and launch it in FCEUX.</p>
+  <div class="pg-body">
+    <div>
+      <div class="pg-preview-wrap">
+        <canvas id="pg-preview" class="pg-preview" width="256" height="240"></canvas>
+        <div class="pg-legend">
+          <b style="color:#47d16c">●</b> player start ·
+          <b style="color:#78dce8">●</b> scene sprite<br>
+          click on preview to place the selected item
+        </div>
+      </div>
+      <div class="pg-mode-toggle" role="tablist">
+        <button type="button" id="pg-mode-player" class="active" title="Next click on the preview sets the player's starting position">Place Player</button>
+        <button type="button" id="pg-mode-scene" title="Next click places the currently highlighted scene sprite">Place scene sprite</button>
+      </div>
+      <div id="pg-status" class="pg-status">Ready. Hit Play when you're happy.</div>
+    </div>
+    <div>
+      <h3 style="margin: 0 0 6px; font-size: 14px; color: var(--accent);">Your sprites</h3>
+      <div id="pg-sprite-list" class="pg-sprites"></div>
+    </div>
+  </div>
+  <div class="dialog-actions">
+    <button type="button" id="btn-pg-cancel">Cancel</button>
+    <button type="button" id="btn-pg-play" class="primary play-btn">▶ Play</button>
+  </div>
+</dialog>
+
+<!-- ============ Help dialog ============ -->
+<dialog id="help-dialog" class="help-dialog-wide">
+  <div class="help-tabs" role="tablist">
+    <button type="button" class="help-tab active" data-tab="tutorial">Quick start</button>
+    <button type="button" class="help-tab" data-tab="shortcuts">Keyboard</button>
+    <button type="button" class="help-tab" data-tab="nes">Sprite rules</button>
+    <button type="button" class="help-tab" data-tab="faq">Tips / FAQ</button>
+  </div>
+
+  <div class="help-tab-panel" data-panel="tutorial">
+    <h2>Welcome — sprite editor in 5 steps</h2>
+    <ol class="help-steps">
+      <li><b>Make a sprite</b> — click <b>+ New</b>. A blank 2×2-tile sprite appears with <b>empty cells</b> (dashed orange boxes).</li>
+      <li><b>Pick cell size</b> — set Width × Height (1–8 tiles). Common Zelda-II sizes: 2×2 for enemies, 2×3 for the hero.</li>
+      <li><b>Assign tiles</b> — click an empty cell, then <b>left-click</b> a tile in the <b>Shared tileset</b> to drop it into the cell. <b>Right-click</b> a tileset tile to jump to the first sprite that already uses it. You can also hit <b>📥 Assign</b> or press <kbd>Enter</kbd>.</li>
+      <li><b>Switch to Paint mode</b> — press <kbd>M</kbd> (or click <b>✏️ Paint</b>) to edit pixels. In <b>🖱 Browse</b> mode nothing gets painted by accident — clicks only select.</li>
+      <li><b>Preview</b> — click <b>🖥 Full preview</b> (or press <kbd>F</kbd>) to see all sprites at real NES size.</li>
+    </ol>
+    <h3>How clicks work</h3>
+    <ul class="help-list">
+      <li><b>Tileset, left-click</b> → assign that tile to the selected cell in the big sprite.</li>
+      <li><b>Tileset, right-click</b> → jump to the first sprite using that tile (great for "where did I put that tile?").</li>
+      <li><b>Sprite, left-click</b> → select the cell (in Paint mode also paints the pixel).</li>
+      <li><b>Sprite, right-click</b> → stamp the highlighted tile into the clicked cell — fast tile assignment in any mode.</li>
+    </ul>
+    <h3>Browse vs Paint</h3>
+    <ul class="help-list">
+      <li><b>🖱 Browse</b> — the safe default. Clicking a cell in the big sprite just <i>selects</i> it; nothing gets painted by accident. Palette, flip, priority controls still work.</li>
+      <li><b>✏️ Paint</b> — clicks on the big sprite paint pixels. Tileset clicks behave the same in both modes. Switch with <kbd>M</kbd>.</li>
+    </ul>
+    <p class="help-hint">
+      Everything auto-saves. <kbd>Ctrl</kbd>+<kbd>Z</kbd> (or just <kbd>Z</kbd>) undoes. The tileset and palettes are shared with the Backgrounds page.
+    </p>
+  </div>
+
+  <div class="help-tab-panel" data-panel="shortcuts" hidden>
+    <h2>Keyboard shortcuts</h2>
+    <h3>Colour (when painting pixels)</h3>
+    <div class="help-grid">
+      <kbd>0</kbd> or <kbd>`</kbd><span>Pick colour 0 (transparent)</span>
+      <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd><span>Pick colour 1 / 2 / 3</span>
+      <kbd>Shift</kbd>+click<span>Eyedropper — pick colour under the cursor</span>
+    </div>
+    <h3>Modes</h3>
+    <div class="help-grid">
+      <kbd>M</kbd><span>Toggle 🖱 Browse ↔ ✏️ Paint</span>
+    </div>
+    <h3>Tiles &amp; cells</h3>
+    <div class="help-grid">
+      <kbd>[</kbd> / <kbd>]</kbd><span>Step the highlighted tile in the shared tileset (preview only — doesn't assign)</span>
+      <kbd>Enter</kbd> or <kbd>Space</kbd><span>Assign the highlighted tile to the current cell</span>
+      <span>Tileset left-click</span><span>Assign the clicked tile to the current cell</span>
+      <span>Tileset right-click</span><span>Jump to the first sprite that uses the clicked tile</span>
+      <span>Sprite right-click</span><span>Stamp the highlighted tile into the clicked cell</span>
+      <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd><span>Move the selected cell inside the sprite</span>
+      <kbd>D</kbd><span>Duplicate the cell's tile into the next empty slot (doesn't disturb other sprites)</span>
+      <kbd>H</kbd> / <kbd>Shift</kbd>+<kbd>H</kbd><span>Toggle flip-H / flip-V on the current cell</span>
+    </div>
+    <h3>Undo / redo / save</h3>
+    <div class="help-grid">
+      <kbd>Z</kbd> or <kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo</span>
+      <kbd>Y</kbd> or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd><span>Redo</span>
+      <kbd>Ctrl</kbd>+<kbd>S</kbd><span>Force save + snapshot</span>
+    </div>
+    <h3>View</h3>
+    <div class="help-grid">
+      <kbd>F</kbd><span>Open / close the full-screen preview</span>
+      <kbd>?</kbd><span>Show this help</span>
+      <kbd>Esc</kbd><span>Close any dialog / preview</span>
+    </div>
+  </div>
+
+  <div class="help-tab-panel" data-panel="nes" hidden>
+    <h2>NES sprite rules (and why some choices exist)</h2>
+    <ul class="help-list">
+      <li><b>Sprites CAN flip.</b> Unlike background tiles, every sprite in OAM has flip-H and flip-V bits — no need to store a mirrored copy in a separate tile slot.</li>
+      <li><b>No rotation.</b> The hardware has no rotate bit. A 90°-rotated tile must be a different tile in the CHR.</li>
+      <li><b>64 sprites on-screen, 8 per scanline.</b> Each <i>cell</i> in a sprite becomes one 8×8 hardware sprite — a 2×3 hero is 6 of your 64 sprite slots.</li>
+      <li><b>4 sprite palettes (SP0–SP3).</b> Each holds 3 colours — slot 0 is always transparent. Palette is assigned per cell.</li>
+      <li><b>Priority bit.</b> "Behind BG" draws the cell underneath non-transparent background pixels — useful for hiding a character in bushes or doorways.</li>
+      <li><b>Shared CHR.</b> Backgrounds and sprites share the same 256 tiles. Editing a sprite's tile can change any background that uses the same index.</li>
+    </ul>
+  </div>
+
+  <div class="help-tab-panel" data-panel="faq" hidden>
+    <h2>Tips &amp; gotchas</h2>
+    <ul class="help-list">
+      <li><b>"This tile is also used…" warning.</b> The editor is telling you that painting here will change every sprite or background tile using that index. Click <i>Duplicate first</i> to get a fresh tile slot for just this cell.</li>
+      <li><b>Outlines around sprites look wrong.</b> Check that colour 0 (the transparent colour) is set. Sprite colour 0 is ALWAYS transparent — you cannot use it to draw black.</li>
+      <li><b>Empty cell?</b> Assign any tile (even the blank tile 0) with an outline palette. To remove a cell entirely, use <i>Clear cell</i> — it sets tile 0 and won't render.</li>
+      <li><b>Flipped tiles don't cost a tile slot.</b> Unlike the Backgrounds page. Use <i>Flip H</i> freely for mirrored enemies.</li>
+      <li><b>Right-click a cell to stamp a tile.</b> Highlight a tile in the tileset, then right-click any cell in the composite sprite to drop that tile in — fast way to fill a sprite without switching modes.</li>
+      <li><b>The tileset highlight is independent of the selected cell.</b> Selecting a cell no longer changes the tileset highlight, so you can freely browse tiles without losing your place. Use left-click in the tileset to actually assign.</li>
+      <li><b>"Where is this tile used?"</b> Right-click the tile in the shared tileset — the editor will jump to the first sprite that uses it. Handy when you're hunting for where a specific shape lives.</li>
+      <li><b>Dark colours hard to see?</b> Use the <b>BG:</b> picker (🌑 / 🌗 / 🌕) to change the transparent-pixel background. Picking "Light" makes blacks and dark purples pop.</li>
+    </ul>
+  </div>
+
+  <div class="dialog-actions">
+    <button type="button" id="btn-help-close" class="primary">Got it</button>
+  </div>
+</dialog>
+
+<!-- ============ Full-screen preview ============ -->
+<dialog id="preview-dialog" class="preview-dialog">
+  <canvas id="preview-canvas"></canvas>
+  <div class="preview-hud">
+    <span id="preview-hud-info">Esc or F to close</span>
+    <button type="button" id="btn-preview-close" class="close-fab" title="Close preview (Esc or F)">×</button>
+  </div>
+</dialog>
+
+<!-- ============ Shared-tile warning ============ -->
+<dialog id="shared-tile-dialog">
+  <h2>This tile is used elsewhere</h2>
+  <p style="color:var(--muted);line-height:1.5">
+    Tile <b id="shared-tile-idx">0x00</b> appears in <b id="shared-count">…</b> other places:
+  </p>
+  <ul class="shared-list" id="shared-list"></ul>
+  <p style="color:var(--muted);line-height:1.5">
+    Painting here will change <i>every</i> place that uses this tile.
+    You can duplicate the tile into a free slot first, so the change only affects this cell.
+  </p>
+  <div class="dialog-actions">
+    <button type="button" id="btn-shared-cancel">Cancel</button>
+    <button type="button" id="btn-shared-dup" class="primary">Duplicate first &amp; edit copy</button>
+    <button type="button" id="btn-shared-everywhere">Change everywhere</button>
+  </div>
+</dialog>
+
+<!-- ============ Recovery ============ -->
+<dialog id="recovery-dialog">
+  <h2>Recover from a snapshot</h2>
+  <p style="color:var(--muted);font-size:0.9em">
+    Pick any snapshot below and click Restore. The current project is first saved to a snapshot so nothing is lost.
+  </p>
+  <ul class="snapshot-list" id="snapshot-list"></ul>
+  <div class="dialog-actions">
+    <button type="button" id="btn-recovery-cancel">Cancel</button>
+  </div>
+</dialog>
+
+<!-- ============ Confirm delete ============ -->
+<dialog id="confirm-dialog">
+  <h2 id="confirm-title">Are you sure?</h2>
+  <p id="confirm-body" style="color:var(--muted);line-height:1.5"></p>
+  <div class="dialog-actions">
+    <button type="button" id="btn-confirm-no">Cancel</button>
+    <button type="button" id="btn-confirm-yes" class="primary">Yes</button>
+  </div>
+</dialog>
+
+<!-- ============ Floating tileset palette ============ -->
+<div id="floating-tileset" class="floating-panel" role="dialog" aria-label="Floating tileset">
+  <div class="floating-panel-header" id="floating-tileset-header">
+    <span class="title">🎨 Tileset</span>
+    <span class="stats" id="floating-tileset-stats"></span>
+    <button type="button" class="close" id="floating-tileset-close" title="Close (reopen from Pop-out tileset)">×</button>
+  </div>
+  <div class="floating-panel-body" id="floating-tileset-body">
+    <canvas id="floating-tileset-canvas" width="320" height="320" title="Click a tile to assign it to the selected sprite cell"></canvas>
+  </div>
+  <div class="floating-panel-footer">
+    <label for="floating-tileset-zoom">Zoom</label>
+    <input type="range" id="floating-tileset-zoom" min="8" max="48" step="1" value="20">
+    <span id="floating-tileset-zoom-label">20 px</span>
+  </div>
+  <div class="floating-panel-resize" id="floating-tileset-resize" title="Drag to resize"></div>
+</div>
+
+<script>
+'use strict';
+
+// ================================================================
+// Shared constants (kept in sync with index.html)
+// ================================================================
+const NES_PALETTE_RGB = [
+  [0x62,0x62,0x62],[0x00,0x1F,0xB2],[0x24,0x04,0xC8],[0x52,0x00,0xB2],
+  [0x73,0x00,0x76],[0x80,0x00,0x24],[0x73,0x0B,0x00],[0x52,0x28,0x00],
+  [0x24,0x44,0x00],[0x00,0x57,0x00],[0x00,0x5C,0x00],[0x00,0x53,0x24],
+  [0x00,0x3C,0x76],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xAB,0xAB,0xAB],[0x0D,0x57,0xFF],[0x4B,0x30,0xFF],[0x8A,0x13,0xFF],
+  [0xBC,0x08,0xD6],[0xD2,0x12,0x69],[0xC7,0x2E,0x00],[0x9D,0x54,0x00],
+  [0x60,0x7B,0x00],[0x20,0x98,0x00],[0x00,0xA3,0x00],[0x00,0x99,0x42],
+  [0x00,0x7D,0xB4],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xFF,0xFF,0xFF],[0x53,0xAE,0xFF],[0x90,0x85,0xFF],[0xD3,0x65,0xFF],
+  [0xFF,0x57,0xFF],[0xFF,0x5D,0xCF],[0xFF,0x77,0x57],[0xFA,0x9E,0x00],
+  [0xBD,0xC7,0x00],[0x7A,0xE7,0x00],[0x43,0xF6,0x11],[0x26,0xEF,0x7E],
+  [0x2C,0xD5,0xF6],[0x4E,0x4E,0x4E],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xFF,0xFF,0xFF],[0xB6,0xE1,0xFF],[0xCE,0xD1,0xFF],[0xE9,0xC3,0xFF],
+  [0xFF,0xBC,0xFF],[0xFF,0xBD,0xF4],[0xFF,0xC6,0xC3],[0xFF,0xD5,0x9A],
+  [0xE9,0xE6,0x81],[0xCE,0xF4,0x81],[0xB6,0xFB,0x9A],[0xA9,0xFA,0xC3],
+  [0xA9,0xF0,0xF4],[0xB8,0xB8,0xB8],[0x00,0x00,0x00],[0x00,0x00,0x00],
+];
+function nesRgb(idx) {
+  const c = NES_PALETTE_RGB[idx & 0x3F];
+  return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+}
+function nesRgbContrast(idx) {
+  const c = NES_PALETTE_RGB[idx & 0x3F];
+  const luma = 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+  return luma > 130 ? '#000' : '#fff';
+}
+
+const STATE_VERSION = 1;
+const NUM_TILES = 256;
+const SCREEN_W = 32;
+const SCREEN_H = 30;
+const MAX_SPRITE_W = 8;
+const MAX_SPRITE_H = 8;
+
+function emptyTile() {
+  return { name: '', pixels: Array.from({length:8}, () => [0,0,0,0,0,0,0,0]) };
+}
+function defaultBgPalettes() {
+  return [
+    { slots: [0x29, 0x19, 0x07] },
+    { slots: [0x30, 0x00, 0x2D] },
+    { slots: [0x27, 0x17, 0x07] },
+    { slots: [0x31, 0x21, 0x01] },
+  ];
+}
+function defaultSpritePalettes() {
+  return [
+    { slots: [0x27, 0x17, 0x30] },
+    { slots: [0x1A, 0x30, 0x0A] },
+    { slots: [0x30, 0x16, 0x00] },
+    { slots: [0x16, 0x36, 0x06] },
+  ];
+}
+function emptyNametable() {
+  const cols = SCREEN_W, rows = SCREEN_H;
+  return Array.from({length: rows}, () =>
+    Array.from({length: cols}, () => ({ tile: 0, palette: 0 })));
+}
+function createDefaultState() {
+  return {
+    version: STATE_VERSION,
+    name: 'untitled',
+    dimensions: { screens_x: 1, screens_y: 1 },
+    universal_bg: 0x21,
+    bg_palettes: defaultBgPalettes(),
+    sprite_palettes: defaultSpritePalettes(),
+    tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    nametable: emptyNametable(),
+    sprites: [],
+    metadata: { created: new Date().toISOString(), modified: new Date().toISOString() },
+  };
+}
+
+// An "empty" cell is a placeholder: it has no tile assigned yet. The pupil
+// has to pick a tile from the shared tileset before they can paint on it.
+// This makes new sprites start as blank slots rather than landing on whatever
+// tile 0 happens to contain (which is almost always the background's blank tile).
+function emptySpriteCell() {
+  return { tile: 0, palette: 0, flipH: false, flipV: false, priority: false, empty: true };
+}
+
+// Allocator that hands out fresh empty tile indices starting from 1
+// (tile 0 is kept as the universal blank shared with the background).
+// Same tile is never returned twice within one allocation run.
+// Still used by the `D` duplicate-to-empty-slot shortcut.
+function makeEmptyTileAllocator() {
+  const reserved = new Set();
+  return () => {
+    for (let i = 1; i < NUM_TILES; i++) {
+      if (reserved.has(i)) continue;
+      const t = state.tiles[i];
+      if (!t.pixels.some(r => r.some(v => v !== 0))) {
+        reserved.add(i);
+        return i;
+      }
+    }
+    return 0;  // CHR full — fall back to tile 0 and accept the warning
+  };
+}
+
+function createSprite(name, w, h) {
+  w = Math.max(1, Math.min(MAX_SPRITE_W, w|0 || 2));
+  h = Math.max(1, Math.min(MAX_SPRITE_H, h|0 || 2));
+  return {
+    name: name || 'sprite',
+    width: w,
+    height: h,
+    cells: Array.from({length: h}, () =>
+      Array.from({length: w}, () => emptySpriteCell())),
+  };
+}
+function resizeSprite(sprite, w, h) {
+  w = Math.max(1, Math.min(MAX_SPRITE_W, w));
+  h = Math.max(1, Math.min(MAX_SPRITE_H, h));
+  const next = Array.from({length: h}, (_, r) =>
+    Array.from({length: w}, (_, c) => {
+      if (sprite.cells[r] && sprite.cells[r][c]) return sprite.cells[r][c];
+      return emptySpriteCell();
+    }));
+  sprite.width = w;
+  sprite.height = h;
+  sprite.cells = next;
+}
+
+function validateState(s) {
+  if (!s || typeof s !== 'object') return 'not an object';
+  if (s.version !== STATE_VERSION) return 'version mismatch';
+  if (!Array.isArray(s.tiles) || s.tiles.length !== NUM_TILES) return 'tiles wrong';
+  if (!Array.isArray(s.bg_palettes) || s.bg_palettes.length !== 4) return 'bg_palettes';
+  if (!Array.isArray(s.sprite_palettes) || s.sprite_palettes.length !== 4) return 'sprite_palettes';
+  if (s.universal_bg < 0 || s.universal_bg > 0x3F) return 'universal_bg';
+  if (!Array.isArray(s.nametable)) return 'nametable';
+  return null;
+}
+function migrateState(s) {
+  if (s && typeof s === 'object' && !Array.isArray(s.sprites)) s.sprites = [];
+  // Sanity-patch each sprite.
+  if (Array.isArray(s.sprites)) {
+    for (const sp of s.sprites) {
+      if (!sp || typeof sp !== 'object') continue;
+      sp.name ??= 'sprite';
+      sp.width = Math.max(1, Math.min(MAX_SPRITE_W, sp.width|0 || 2));
+      sp.height = Math.max(1, Math.min(MAX_SPRITE_H, sp.height|0 || 2));
+      if (!Array.isArray(sp.cells)) sp.cells = [];
+      while (sp.cells.length < sp.height) sp.cells.push([]);
+      for (let r = 0; r < sp.height; r++) {
+        if (!Array.isArray(sp.cells[r])) sp.cells[r] = [];
+        while (sp.cells[r].length < sp.width) sp.cells[r].push(emptySpriteCell());
+        for (let c = 0; c < sp.width; c++) {
+          const cell = sp.cells[r][c];
+          if (!cell || typeof cell !== 'object') {
+            sp.cells[r][c] = emptySpriteCell();
+          } else {
+            cell.tile = Math.max(0, Math.min(NUM_TILES - 1, cell.tile|0));
+            cell.palette = Math.max(0, Math.min(3, cell.palette|0));
+            cell.flipH = !!cell.flipH;
+            cell.flipV = !!cell.flipV;
+            cell.priority = !!cell.priority;
+            cell.empty = !!cell.empty;
+          }
+        }
+      }
+    }
+  }
+  return s;
+}
+function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
+
+// ================================================================
+// Storage — identical keys to index.html so state is shared.
+// ================================================================
+const STORAGE_KEY           = 'nes_tile_editor.current.v1';
+const STORAGE_SNAP_PREFIX   = 'nes_tile_editor.snap.';
+const STORAGE_BACKUP_PREFIX = 'nes_tile_editor.backup.';
+const STORAGE_META_KEY      = 'nes_tile_editor.meta.v1';
+const STORAGE_PREF_KEY      = 'nes_tile_editor.prefs.v1';
+const MAX_SNAPSHOTS = 8;
+const MAX_BACKUPS   = 5;
+const BACKUP_INTERVAL_MS   = 5 * 60 * 1000;
+const SNAPSHOT_INTERVAL_MS = 30 * 1000;
+
+const Storage = {
+  saveCurrent(state) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return { ok: true }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  },
+  loadCurrent() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = migrateState(JSON.parse(raw));
+      const err = validateState(parsed);
+      if (err) return null;
+      return parsed;
+    } catch { return null; }
+  },
+  saveSnapshot(state, reason) {
+    try {
+      const meta = this._readMeta();
+      const ts = Date.now();
+      const key = STORAGE_SNAP_PREFIX + ts;
+      localStorage.setItem(key, JSON.stringify(state));
+      meta.snapshots = meta.snapshots || [];
+      meta.snapshots.push({ key, ts, reason, name: state.name });
+      while (meta.snapshots.length > MAX_SNAPSHOTS) {
+        const d = meta.snapshots.shift();
+        try { localStorage.removeItem(d.key); } catch {}
+      }
+      this._writeMeta(meta);
+      return { ok: true };
+    } catch (e) { return { ok: false, error: e.message }; }
+  },
+  saveBackup(state) {
+    try {
+      const meta = this._readMeta();
+      const ts = Date.now();
+      const key = STORAGE_BACKUP_PREFIX + ts;
+      localStorage.setItem(key, JSON.stringify(state));
+      meta.backups = meta.backups || [];
+      meta.backups.push({ key, ts, name: state.name });
+      while (meta.backups.length > MAX_BACKUPS) {
+        const d = meta.backups.shift();
+        try { localStorage.removeItem(d.key); } catch {}
+      }
+      this._writeMeta(meta);
+      return { ok: true };
+    } catch (e) { return { ok: false, error: e.message }; }
+  },
+  listSnapshots() { return (this._readMeta().snapshots || []).slice().reverse(); },
+  listBackups()   { return (this._readMeta().backups   || []).slice().reverse(); },
+  loadSnapshot(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const s = migrateState(JSON.parse(raw));
+      const err = validateState(s);
+      if (err) return null;
+      return s;
+    } catch { return null; }
+  },
+  readPrefs() {
+    try { const raw = localStorage.getItem(STORAGE_PREF_KEY); return raw ? (JSON.parse(raw) || {}) : {}; }
+    catch { return {}; }
+  },
+  writePrefs(p) { try { localStorage.setItem(STORAGE_PREF_KEY, JSON.stringify(p)); } catch {} },
+  _readMeta() {
+    try { const raw = localStorage.getItem(STORAGE_META_KEY); return raw ? JSON.parse(raw) : { snapshots: [] }; }
+    catch { return { snapshots: [] }; }
+  },
+  _writeMeta(m) { localStorage.setItem(STORAGE_META_KEY, JSON.stringify(m)); },
+};
+
+// ================================================================
+// Undo / redo
+// ================================================================
+const UNDO_LIMIT = 50;
+let undoStack = [];
+let redoStack = [];
+let undoSuspended = false;
+function pushUndo() {
+  if (undoSuspended) return;
+  undoStack.push(cloneState(state));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack = [];
+  updateUndoButtons();
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(cloneState(state));
+  state = undoStack.pop();
+  afterStateReplaced();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(cloneState(state));
+  state = redoStack.pop();
+  afterStateReplaced();
+}
+function updateUndoButtons() {
+  document.getElementById('btn-undo').disabled = undoStack.length === 0;
+  document.getElementById('btn-redo').disabled = redoStack.length === 0;
+}
+
+// ================================================================
+// Save status
+// ================================================================
+let dirty = false;
+let lastSaveTs = 0;
+let saveTimer = null;
+let snapshotTimer = null;
+let backupTimer = null;
+function markDirty() {
+  dirty = true;
+  state.metadata.modified = new Date().toISOString();
+  scheduleSave();
+}
+function scheduleSave() {
+  setStatus('saving', '● Saving…');
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const r = Storage.saveCurrent(state);
+    if (r.ok) {
+      dirty = false;
+      lastSaveTs = Date.now();
+      setStatus('saved', '● Saved');
+    } else {
+      setStatus('error', '● Save error');
+    }
+  }, 120);
+}
+function setStatus(cls, text) {
+  const el = document.getElementById('save-status');
+  el.className = cls;
+  el.textContent = text;
+}
+function updateSavedTimeLabel() {
+  if (!lastSaveTs) return;
+  const diff = Math.floor((Date.now() - lastSaveTs) / 1000);
+  const el = document.getElementById('save-status');
+  if (el.classList.contains('saved')) {
+    el.textContent = diff < 2 ? '● Saved' : '● Saved ' + diff + 's ago';
+  }
+}
+
+// ================================================================
+// State + selection
+// ================================================================
+let state = createDefaultState();
+let prefs = {};
+let selectedSpriteIdx = -1;
+let selectedCell = { r: 0, c: 0 };
+let currentColour = 1;
+let selectedPaletteKind = 'sprite';  // 'sprite' | 'bg-ro'
+let selectedPaletteIdx = 0;
+let selectedPaletteSlot = 1;  // 1..3
+
+// Which tile is highlighted in the tileset (separate from the selected cell's
+// tile — lets you browse the tileset without changing what's in the cell).
+let selectedTileIdx = 0;
+
+// 'browse' (default, safe) or 'paint' (pixels are editable).
+let editMode = localStorage.getItem('sprite-edit-mode') === 'paint' ? 'paint' : 'browse';
+
+// Background-theme for the "transparent" areas of the composite sprite
+// canvas and the tile-pixel editor. Handy when dark colours vanish against
+// the default near-black backdrop.
+const BG_THEMES = {
+  dark:  { checkA: '#1a1630', checkB: '#0d0b1a', flat: '#000000',
+           editorA: '#2a2440', editorB: '#3a3352' },
+  mid:   { checkA: '#5a5470', checkB: '#433e55', flat: '#4a4560',
+           editorA: '#5a5470', editorB: '#6a6482' },
+  light: { checkA: '#d4ccdc', checkB: '#bcb4c8', flat: '#c8c0d6',
+           editorA: '#d4ccdc', editorB: '#e6dff0' },
+};
+let bgTheme = (localStorage.getItem('sprite-bg-theme') in BG_THEMES)
+  ? localStorage.getItem('sprite-bg-theme')
+  : 'dark';
+function currentBgTheme() { return BG_THEMES[bgTheme] || BG_THEMES.dark; }
+
+function setBgTheme(name) {
+  if (!BG_THEMES[name]) name = 'dark';
+  bgTheme = name;
+  localStorage.setItem('sprite-bg-theme', name);
+  document.querySelectorAll('.bg-theme-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.theme === name));
+  renderSpriteCanvas();
+  renderTileEditor();
+}
+
+function setEditMode(m) {
+  editMode = (m === 'paint') ? 'paint' : 'browse';
+  localStorage.setItem('sprite-edit-mode', editMode);
+  document.body.classList.toggle('paint-mode', editMode === 'paint');
+  document.body.classList.toggle('browse-mode', editMode !== 'paint');
+  const browseBtn = document.getElementById('btn-mode-browse');
+  const paintBtn  = document.getElementById('btn-mode-paint');
+  const hint      = document.getElementById('mode-hint');
+  if (browseBtn) browseBtn.classList.toggle('active', editMode === 'browse');
+  if (paintBtn)  paintBtn .classList.toggle('active', editMode === 'paint');
+  if (hint) {
+    hint.textContent = editMode === 'paint'
+      ? 'Clicks paint pixels (M to browse)'
+      : 'Click safely selects cells & tiles (M to paint)';
+  }
+}
+
+// Click a tile in any tileset view: highlights it, jumps to first sprite
+// using it (if any). Optionally assigns it to the current cell as well.
+function selectTilesetTile(idx, opts) {
+  opts = opts || {};
+  if (idx < 0 || idx >= NUM_TILES) return;
+  selectedTileIdx = idx;
+
+  if (opts.assign) {
+    const cell = currentCell();
+    if (cell && (cell.tile !== idx || cell.empty)) {
+      pushUndo();
+      cell.tile = idx;
+      cell.empty = false;
+      markDirty();
+    }
+  } else if (opts.jumpToUser) {
+    // In browse mode, clicking a tile with existing usage jumps to it so the
+    // pupil can see where the tile is already in play before deciding.
+    const hit = findFirstSpriteUsingTile(idx);
+    if (hit && (hit.spriteIdx !== selectedSpriteIdx
+                || hit.r !== selectedCell.r
+                || hit.c !== selectedCell.c)) {
+      selectedSpriteIdx = hit.spriteIdx;
+      selectedCell = { r: hit.r, c: hit.c };
+    }
+  }
+  renderSpriteCanvas();
+  renderCellInspector();
+  renderTileset();
+  renderTileEditor();
+  renderPalettes();
+  renderSpriteList();
+  refreshColourButtons();
+}
+
+function currentSprite() {
+  if (selectedSpriteIdx < 0 || selectedSpriteIdx >= state.sprites.length) return null;
+  return state.sprites[selectedSpriteIdx];
+}
+function currentCell() {
+  const sp = currentSprite();
+  if (!sp) return null;
+  if (selectedCell.r >= sp.height || selectedCell.c >= sp.width) return null;
+  return sp.cells[selectedCell.r][selectedCell.c];
+}
+
+// Palette used to preview / paint the selected cell's tile.
+function activeCellPalette() {
+  const cell = currentCell();
+  const palIdx = cell ? cell.palette : selectedPaletteIdx;
+  const p = state.sprite_palettes[palIdx & 3];
+  return { slot0: -1, slot1: p.slots[0], slot2: p.slots[1], slot3: p.slots[2] };
+}
+function spritePaletteFor(palIdx) {
+  const p = state.sprite_palettes[palIdx & 3];
+  return { slot0: -1, slot1: p.slots[0], slot2: p.slots[1], slot3: p.slots[2] };
+}
+
+function pixelRgb(v, pal) {
+  if (v === 0) return pal.slot0 < 0 ? null : nesRgb(pal.slot0);
+  if (v === 1) return nesRgb(pal.slot1);
+  if (v === 2) return nesRgb(pal.slot2);
+  if (v === 3) return nesRgb(pal.slot3);
+  return null;
+}
+
+// ================================================================
+// Tile usage — does this tile appear anywhere else?
+// ================================================================
+function findTileUsage(tileIdx, excludeSprite, excludeCellR, excludeCellC) {
+  const uses = [];
+  // Background nametable
+  if (Array.isArray(state.nametable)) {
+    for (let r = 0; r < state.nametable.length; r++) {
+      const row = state.nametable[r];
+      for (let c = 0; c < row.length; c++) {
+        if (row[c].tile === tileIdx) {
+          uses.push({ kind: 'bg', text: 'Background cell (' + c + ', ' + r + ')' });
+        }
+      }
+    }
+  }
+  // Sprite cells (skip empty placeholders — they aren't using a tile yet)
+  for (let si = 0; si < state.sprites.length; si++) {
+    const sp = state.sprites[si];
+    for (let r = 0; r < sp.height; r++) {
+      for (let c = 0; c < sp.width; c++) {
+        if (si === excludeSprite && r === excludeCellR && c === excludeCellC) continue;
+        const cl = sp.cells[r][c];
+        if (cl.empty) continue;
+        if (cl.tile === tileIdx) {
+          uses.push({ kind: 'sprite', text: 'Sprite "' + (sp.name || '?') + '" cell (' + c + ', ' + r + ')', spriteIdx: si, r, c });
+        }
+      }
+    }
+  }
+  return uses;
+}
+
+// Locate the first sprite+cell using a given tile (excluding empties).
+function findFirstSpriteUsingTile(tileIdx) {
+  for (let si = 0; si < state.sprites.length; si++) {
+    const sp = state.sprites[si];
+    for (let r = 0; r < sp.height; r++) {
+      for (let c = 0; c < sp.width; c++) {
+        const cl = sp.cells[r][c];
+        if (cl.empty) continue;
+        if (cl.tile === tileIdx) return { spriteIdx: si, r, c };
+      }
+    }
+  }
+  return null;
+}
+
+function findNextEmptyTileSlot() {
+  for (let i = 0; i < NUM_TILES; i++) {
+    const t = state.tiles[i];
+    if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
+  }
+  return -1;
+}
+function clonePixels(p) { return p.map(row => row.slice()); }
+
+// ================================================================
+// Renderers
+// ================================================================
+function renderAll() {
+  renderSpriteList();
+  renderSpriteCanvas();
+  renderCellInspector();
+  renderTileset();
+  renderTileEditor();
+  renderPalettes();
+  renderMasterGrid();
+  updateHeaderFields();
+}
+
+function updateHeaderFields() {
+  document.getElementById('project-name').value = state.name || 'untitled';
+}
+
+// --- Sprite list --------------------------------------------
+function renderSpriteList() {
+  const ul = document.getElementById('sprite-list');
+  ul.innerHTML = '';
+  if (!state.sprites.length) {
+    const li = document.createElement('li');
+    li.className = 'empty-hint';
+    li.textContent = 'No sprites yet — click + New to start.';
+    li.style.cursor = 'default';
+    ul.appendChild(li);
+    document.getElementById('btn-sprite-dup').disabled = true;
+    document.getElementById('btn-sprite-del').disabled = true;
+    document.getElementById('sprite-name-input').disabled = true;
+    document.getElementById('sprite-w').disabled = true;
+    document.getElementById('sprite-h').disabled = true;
+    return;
+  }
+  document.getElementById('btn-sprite-dup').disabled = false;
+  document.getElementById('btn-sprite-del').disabled = false;
+  document.getElementById('sprite-name-input').disabled = false;
+  document.getElementById('sprite-w').disabled = false;
+  document.getElementById('sprite-h').disabled = false;
+
+  for (let i = 0; i < state.sprites.length; i++) {
+    const sp = state.sprites[i];
+    const li = document.createElement('li');
+    if (i === selectedSpriteIdx) li.classList.add('selected');
+    li.dataset.idx = i;
+    // Thumb
+    const thumb = document.createElement('canvas');
+    thumb.className = 'sprite-thumb';
+    const aspect = sp.width / sp.height;
+    const thumbPx = 24;
+    let tw = thumbPx, th = thumbPx;
+    if (aspect > 1) th = Math.max(1, Math.floor(thumbPx / aspect));
+    else if (aspect < 1) tw = Math.max(1, Math.floor(thumbPx * aspect));
+    thumb.width = tw; thumb.height = th;
+    drawSpriteIntoCtx(sp, thumb.getContext('2d'), tw, th);
+    li.appendChild(thumb);
+    const label = document.createElement('span');
+    label.textContent = sp.name || '(unnamed)';
+    li.appendChild(label);
+    const meta = document.createElement('span');
+    meta.className = 'sprite-meta';
+    meta.textContent = sp.width + '×' + sp.height;
+    li.appendChild(meta);
+    li.addEventListener('click', () => selectSprite(i));
+    ul.appendChild(li);
+  }
+
+  const sp = currentSprite();
+  document.getElementById('sprite-name-input').value = sp ? (sp.name || '') : '';
+  document.getElementById('sprite-w').value = sp ? sp.width : 2;
+  document.getElementById('sprite-h').value = sp ? sp.height : 2;
+}
+
+function selectSprite(idx) {
+  selectedSpriteIdx = idx;
+  const sp = currentSprite();
+  if (sp) {
+    // Clamp selected cell.
+    selectedCell.r = Math.min(selectedCell.r, sp.height - 1);
+    selectedCell.c = Math.min(selectedCell.c, sp.width - 1);
+  } else {
+    selectedCell = { r: 0, c: 0 };
+  }
+  renderAll();
+}
+
+// --- Composite sprite canvas -------------------------------
+function drawSpriteIntoCtx(sp, ctx, destW, destH) {
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, destW, destH);
+  const srcW = sp.width * 8;
+  const srcH = sp.height * 8;
+  for (let cr = 0; cr < sp.height; cr++) {
+    for (let cc = 0; cc < sp.width; cc++) {
+      const cell = sp.cells[cr][cc];
+      if (cell.empty) continue;  // empty placeholders don't render
+      const tile = state.tiles[cell.tile];
+      const pal = spritePaletteFor(cell.palette);
+      for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+          const sx = cell.flipH ? 7 - px : px;
+          const sy = cell.flipV ? 7 - py : py;
+          const v = tile.pixels[sy][sx];
+          const rgb = pixelRgb(v, pal);
+          if (!rgb) continue;
+          const dx = (cc * 8 + px) / srcW * destW;
+          const dy = (cr * 8 + py) / srcH * destH;
+          ctx.fillStyle = rgb;
+          ctx.fillRect(Math.floor(dx), Math.floor(dy),
+                       Math.max(1, Math.ceil(destW / srcW)),
+                       Math.max(1, Math.ceil(destH / srcH)));
+        }
+      }
+    }
+  }
+}
+
+// Draw a dashed "empty / click to assign" placeholder at (x, y) with side length `size`.
+function drawEmptyCellPlaceholder(ctx, x, y, size) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,159,106,0.12)';
+  ctx.fillRect(x, y, size, size);
+  ctx.setLineDash([Math.max(2, size/16), Math.max(2, size/16)]);
+  ctx.strokeStyle = '#ff9f6a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 2, y + 2, size - 4, size - 4);
+  ctx.setLineDash([]);
+  if (size >= 40) {
+    ctx.fillStyle = 'rgba(255,159,106,0.75)';
+    ctx.font = 'bold ' + Math.floor(size * 0.5) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('?', x + size / 2, y + size / 2);
+  }
+  ctx.restore();
+}
+
+let spriteZoom = 16;
+function renderSpriteCanvas() {
+  const canvas = document.getElementById('sprite-canvas');
+  const ctx = canvas.getContext('2d');
+  const sp = currentSprite();
+  const showChecker = document.getElementById('show-checker').checked;
+  const showCellGrid = document.getElementById('show-cell-grid').checked;
+  const px = spriteZoom;
+
+  if (!sp) {
+    canvas.width = px * 16;
+    canvas.height = px * 16;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('No sprite selected', canvas.width/2, canvas.height/2);
+    return;
+  }
+
+  const srcW = sp.width * 8;
+  const srcH = sp.height * 8;
+  canvas.width = srcW * px;
+  canvas.height = srcH * px;
+
+  // Background (checker or flat) — honours the pupil's BG-theme choice.
+  const theme = currentBgTheme();
+  if (showChecker) {
+    const sz = Math.max(4, Math.floor(px));
+    for (let y = 0; y < canvas.height; y += sz) {
+      for (let x = 0; x < canvas.width; x += sz) {
+        const alt = ((x/sz + y/sz) & 1) === 0;
+        ctx.fillStyle = alt ? theme.checkA : theme.checkB;
+        ctx.fillRect(x, y, sz, sz);
+      }
+    }
+  } else {
+    ctx.fillStyle = theme.flat;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Draw each cell
+  for (let cr = 0; cr < sp.height; cr++) {
+    for (let cc = 0; cc < sp.width; cc++) {
+      const cell = sp.cells[cr][cc];
+      if (cell.empty) {
+        drawEmptyCellPlaceholder(ctx, cc * 8 * px, cr * 8 * px, 8 * px);
+        continue;
+      }
+      const tile = state.tiles[cell.tile];
+      const pal = spritePaletteFor(cell.palette);
+      for (let py = 0; py < 8; py++) {
+        for (let pxl = 0; pxl < 8; pxl++) {
+          const sx = cell.flipH ? 7 - pxl : pxl;
+          const sy = cell.flipV ? 7 - py : py;
+          const v = tile.pixels[sy][sx];
+          const rgb = pixelRgb(v, pal);
+          if (!rgb) continue;
+          ctx.fillStyle = rgb;
+          ctx.fillRect((cc * 8 + pxl) * px, (cr * 8 + py) * px, px, px);
+        }
+      }
+    }
+  }
+
+  // Cell grid
+  if (showCellGrid) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1;
+    for (let c = 0; c <= sp.width; c++) {
+      ctx.beginPath();
+      ctx.moveTo(c * 8 * px + 0.5, 0);
+      ctx.lineTo(c * 8 * px + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let r = 0; r <= sp.height; r++) {
+      ctx.beginPath();
+      ctx.moveTo(0,               r * 8 * px + 0.5);
+      ctx.lineTo(canvas.width,    r * 8 * px + 0.5);
+      ctx.stroke();
+    }
+  }
+
+  // Selected-cell outline
+  ctx.strokeStyle = '#ffd866';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(
+    selectedCell.c * 8 * px + 1,
+    selectedCell.r * 8 * px + 1,
+    8 * px - 2, 8 * px - 2
+  );
+}
+
+// Click / drag paints pixels in whatever cell you're over. Crossing a cell
+// boundary switches the selected cell and continues painting. Shift-click or
+// right-click eyedrops the colour under the cursor.
+function spriteCanvasPixel(evt) {
+  const canvas = document.getElementById('sprite-canvas');
+  const sp = currentSprite();
+  if (!sp) return null;
+  const rect = canvas.getBoundingClientRect();
+  const cssX = (evt.clientX - rect.left) / rect.width  * canvas.width;
+  const cssY = (evt.clientY - rect.top)  / rect.height * canvas.height;
+  const pxSize = canvas.width / (sp.width * 8);   // device px per NES pixel
+  const gx = Math.floor(cssX / pxSize);
+  const gy = Math.floor(cssY / pxSize);
+  if (gx < 0 || gy < 0 || gx >= sp.width * 8 || gy >= sp.height * 8) return null;
+  return {
+    cellC: Math.floor(gx / 8),
+    cellR: Math.floor(gy / 8),
+    localX: gx % 8,
+    localY: gy % 8,
+  };
+}
+
+// --- Cell inspector ----------------------------------------
+function renderCellInspector() {
+  const sp = currentSprite();
+  const cell = currentCell();
+  const box = document.getElementById('cell-inspector');
+  const status = document.getElementById('cell-status');
+  const assignBtn = document.getElementById('btn-assign-tile');
+  const assignHex = document.getElementById('assign-tile-hex');
+  if (assignHex) assignHex.textContent =
+    selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
+
+  if (!sp || !cell) {
+    box.classList.add('empty');
+    box.classList.remove('is-empty');
+    if (status) status.textContent = '';
+    if (assignBtn) assignBtn.disabled = true;
+    document.getElementById('cell-coords').textContent = '—';
+    document.getElementById('cell-tile').value = 0;
+    document.getElementById('cell-tile-hex').textContent = '00';
+    document.getElementById('cell-tile-usage').textContent = '';
+    document.getElementById('cell-flipH').checked = false;
+    document.getElementById('cell-flipV').checked = false;
+    document.getElementById('cell-priority').checked = false;
+    return;
+  }
+  box.classList.remove('empty');
+  box.classList.toggle('is-empty', !!cell.empty);
+  if (assignBtn) assignBtn.disabled = false;
+  if (status) {
+    if (cell.empty) {
+      status.textContent = '⚠ empty — pick a tile below';
+      status.style.color = 'var(--warn)';
+    } else {
+      status.textContent = '';
+    }
+  }
+  document.getElementById('cell-coords').textContent =
+    '(col ' + selectedCell.c + ', row ' + selectedCell.r + ')';
+  document.getElementById('cell-tile').value = cell.empty ? '' : cell.tile;
+  document.getElementById('cell-tile-hex').textContent = cell.empty
+    ? '--'
+    : cell.tile.toString(16).padStart(2, '0').toUpperCase();
+  const usageEl = document.getElementById('cell-tile-usage');
+  if (cell.empty) {
+    usageEl.textContent = '  (no tile assigned yet)';
+    usageEl.style.color = 'var(--warn)';
+  } else {
+    const uses = findTileUsage(cell.tile, selectedSpriteIdx, selectedCell.r, selectedCell.c);
+    if (uses.length) {
+      usageEl.textContent = '  (also used in ' + uses.length + ' other place' + (uses.length === 1 ? '' : 's') + ')';
+      usageEl.style.color = 'var(--warn)';
+    } else {
+      usageEl.textContent = '  (unique to this cell)';
+      usageEl.style.color = 'var(--good)';
+    }
+  }
+  // Palette select
+  const sel = document.getElementById('cell-palette');
+  if (!sel.options.length) {
+    for (let i = 0; i < 4; i++) {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = 'SP' + i;
+      sel.appendChild(opt);
+    }
+  }
+  sel.value = String(cell.palette);
+  document.getElementById('cell-flipH').checked = !!cell.flipH;
+  document.getElementById('cell-flipV').checked = !!cell.flipV;
+  document.getElementById('cell-priority').checked = !!cell.priority;
+}
+
+// Put the currently-highlighted tile into the selected cell.
+// Clears the `empty` placeholder flag so painting becomes allowed.
+function assignSelectedTileToCell() {
+  const cell = currentCell();
+  if (!cell) return;
+  if (cell.tile === selectedTileIdx && !cell.empty) return;
+  pushUndo();
+  cell.tile = selectedTileIdx;
+  cell.empty = false;
+  markDirty();
+  renderSpriteCanvas();
+  renderCellInspector();
+  renderTileset();
+  renderTileEditor();
+  renderSpriteList();
+}
+
+// --- Tileset picker ----------------------------------------
+function renderTileset() {
+  const canvas = document.getElementById('tileset-canvas');
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  const cols = 16;
+  const cell = size / cols;
+  const cellData = currentCell();
+  const pal = cellData ? spritePaletteFor(cellData.palette)
+                       : spritePaletteFor(selectedPaletteIdx);
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < NUM_TILES; i++) {
+    const cx = (i % cols) * cell;
+    const cy = Math.floor(i / cols) * cell;
+    const tile = state.tiles[i];
+    const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
+    if (!anyPixel) {
+      ctx.fillStyle = '#1a1630';
+      ctx.fillRect(cx, cy, cell, cell);
+      ctx.fillStyle = '#4a4270';
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(i.toString(16).padStart(2,'0'), cx + cell/2, cy + cell/2);
+    } else {
+      const p = cell / 8;
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const v = tile.pixels[y][x];
+          const rgb = pixelRgb(v, pal);
+          if (rgb) {
+            ctx.fillStyle = rgb;
+            ctx.fillRect(cx + x*p, cy + y*p, p, p);
+          } else {
+            ctx.fillStyle = '#2a2440';
+            ctx.fillRect(cx + x*p, cy + y*p, p, p);
+          }
+        }
+      }
+    }
+    const isHighlighted = i === selectedTileIdx;
+    const isCellTile = cellData && !cellData.empty && cellData.tile === i;
+    if (isHighlighted) {
+      ctx.strokeStyle = '#ff9f6a';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(cx + 1.5, cy + 1.5, cell - 3, cell - 3);
+    }
+    if (isCellTile) {
+      ctx.strokeStyle = '#ffd866';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    } else if (!isHighlighted) {
+      ctx.strokeStyle = 'rgba(60,60,80,0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    }
+  }
+  renderFloatingTileset();
+}
+
+// --- Tile pixel editor -------------------------------------
+function renderTileEditor() {
+  const canvas = document.getElementById('tile-canvas');
+  const ctx = canvas.getContext('2d');
+  const cell = currentCell();
+  const tileIdx = cell ? cell.tile : 0;
+  const tile = state.tiles[tileIdx];
+  const pal = activeCellPalette();
+  const size = canvas.width;
+  const cellPx = size / 8;
+
+  const theme = currentBgTheme();
+  ctx.fillStyle = theme.editorA;
+  ctx.fillRect(0, 0, size, size);
+  ctx.font = 'bold 20px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const v = tile.pixels[y][x];
+      const rgb = pixelRgb(v, pal);
+      if (rgb) {
+        ctx.fillStyle = rgb;
+        ctx.fillRect(x*cellPx, y*cellPx, cellPx, cellPx);
+      } else {
+        ctx.fillStyle = theme.editorA;
+        ctx.fillRect(x*cellPx, y*cellPx, cellPx, cellPx);
+        ctx.fillStyle = theme.editorB;
+        for (let k = 0; k < cellPx; k += 8) {
+          for (let l = (k%16 === 0 ? 0 : 8); l < cellPx; l += 16) {
+            ctx.fillRect(x*cellPx + l, y*cellPx + k, 8, 8);
+          }
+        }
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.strokeRect(x*cellPx + 0.5, y*cellPx + 0.5, cellPx - 1, cellPx - 1);
+    }
+  }
+  document.getElementById('editing-tile-idx').textContent =
+    '0x' + tileIdx.toString(16).padStart(2, '0').toUpperCase();
+
+  const uses = findTileUsage(tileIdx, selectedSpriteIdx, selectedCell.r, selectedCell.c);
+  const warn = document.getElementById('shared-warn-inline');
+  if (!cell) {
+    warn.textContent = 'No cell selected';
+  } else if (uses.length === 0) {
+    warn.textContent = '✓ unique to this cell — safe to edit';
+    warn.style.color = 'var(--good)';
+  } else {
+    warn.textContent = '⚠ shared with ' + uses.length + ' other place' + (uses.length === 1 ? '' : 's') + ' — edits will propagate';
+    warn.style.color = 'var(--warn)';
+  }
+  refreshColourButtons();
+}
+
+// --- Palettes ----------------------------------------------
+function renderPalettes() {
+  const spHost = document.getElementById('sp-palettes');
+  spHost.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const row = document.createElement('div');
+    row.className = 'palette-row';
+    const cellData = currentCell();
+    if (selectedPaletteKind === 'sprite' && i === selectedPaletteIdx ||
+        (cellData && cellData.palette === i)) row.classList.add('active');
+    const lab = document.createElement('span');
+    lab.className = 'pal-label';
+    lab.textContent = 'SP' + i;
+    lab.title = 'Sprite palette ' + i + ' — click to use it for the selected cell';
+    lab.style.cursor = 'pointer';
+    lab.addEventListener('click', () => {
+      if (!currentCell()) return;
+      pushUndo();
+      currentCell().palette = i;
+      markDirty();
+      renderSpriteCanvas();
+      renderCellInspector();
+      renderTileset();
+      renderTileEditor();
+      renderPalettes();
+    });
+    row.appendChild(lab);
+    row.appendChild(makePaletteSlot('sprite', i, 0, -1, true));
+    for (let s = 1; s <= 3; s++) {
+      const idx = state.sprite_palettes[i].slots[s - 1];
+      row.appendChild(makePaletteSlot('sprite', i, s, idx, false));
+    }
+    spHost.appendChild(row);
+  }
+  const bgHost = document.getElementById('bg-palettes-ro');
+  bgHost.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const row = document.createElement('div');
+    row.className = 'palette-row';
+    const lab = document.createElement('span');
+    lab.className = 'pal-label';
+    lab.textContent = 'BG' + i;
+    lab.title = 'Background palette (edit on the Backgrounds page)';
+    row.appendChild(lab);
+    row.appendChild(makePaletteSlot('bg-ro', i, 0, state.universal_bg, true));
+    for (let s = 1; s <= 3; s++) {
+      const idx = state.bg_palettes[i].slots[s - 1];
+      row.appendChild(makePaletteSlot('bg-ro', i, s, idx, true));
+    }
+    bgHost.appendChild(row);
+  }
+}
+
+function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
+  const el = document.createElement('div');
+  el.className = 'palette-slot';
+  if (slot === 0 && kind === 'sprite') {
+    el.classList.add('transparent');
+    el.title = 'Sprite slot 0 is always transparent';
+    return el;
+  }
+  if (readonly) el.classList.add('readonly');
+  el.style.background = nesRgb(colourIdx);
+  el.style.color = nesRgbContrast(colourIdx);
+  const hex = document.createElement('span');
+  hex.className = 'hex';
+  hex.textContent = '0x' + colourIdx.toString(16).padStart(2, '0').toUpperCase();
+  el.appendChild(hex);
+  if (!readonly) {
+    el.title = 'Sprite palette ' + palIdx + ' slot ' + slot + ' — click to select, then pick a colour in the master grid';
+    if (selectedPaletteKind === kind && selectedPaletteIdx === palIdx && selectedPaletteSlot === slot) {
+      el.classList.add('selected');
+    }
+    el.addEventListener('click', () => {
+      selectedPaletteKind = kind;
+      selectedPaletteIdx = palIdx;
+      selectedPaletteSlot = slot;
+      renderPalettes();
+      renderMasterGrid();
+    });
+  } else {
+    el.title = 'Read-only (background palette — edit on Backgrounds page)';
+  }
+  return el;
+}
+
+function renderMasterGrid() {
+  const grid = document.getElementById('master-grid');
+  grid.innerHTML = '';
+  const chosen = currentChosenColourIdx();
+  for (let i = 0; i < 64; i++) {
+    const el = document.createElement('div');
+    el.className = 'master-cell';
+    el.style.background = nesRgb(i);
+    el.style.color = nesRgbContrast(i);
+    el.title = '0x' + i.toString(16).padStart(2,'0').toUpperCase()
+             + ' · rgb(' + NES_PALETTE_RGB[i].join(',') + ')';
+    if (i === chosen) el.classList.add('chosen');
+    el.addEventListener('click', () => assignColour(i));
+    grid.appendChild(el);
+  }
+}
+function currentChosenColourIdx() {
+  if (selectedPaletteKind === 'sprite' && selectedPaletteSlot > 0) {
+    return state.sprite_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1];
+  }
+  return -1;
+}
+function assignColour(nesIdx) {
+  if (selectedPaletteKind !== 'sprite' || selectedPaletteSlot === 0) return;
+  pushUndo();
+  state.sprite_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1] = nesIdx;
+  markDirty();
+  renderPalettes();
+  renderMasterGrid();
+  renderSpriteCanvas();
+  renderTileset();
+  renderTileEditor();
+  renderSpriteList();
+}
+
+// --- Colour buttons ----------------------------------------
+function refreshColourButtons() {
+  document.querySelectorAll('.color-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.color,10) === currentColour);
+    const c = parseInt(b.dataset.color, 10);
+    if (c === 0) return;
+    const pal = activeCellPalette();
+    const idx = c===1?pal.slot1:c===2?pal.slot2:pal.slot3;
+    b.style.background = nesRgb(idx);
+    b.style.color = nesRgbContrast(idx);
+  });
+}
+
+// ================================================================
+// Pixel editor painting (with shared-tile guard)
+// ================================================================
+let teDragging = false;
+let teGuardChecked = false;   // true for the current drag after resolution
+let spDragging = false;
+let spGuardChecked = false;
+
+function spApply(evt, initial) {
+  const sp = currentSprite();
+  if (!sp) return;
+  const pos = spriteCanvasPixel(evt);
+  if (!pos) return;
+
+  // Switch selected cell as the drag crosses boundaries.
+  if (pos.cellR !== selectedCell.r || pos.cellC !== selectedCell.c) {
+    selectedCell = { r: pos.cellR, c: pos.cellC };
+    renderCellInspector();
+    renderTileset();
+    renderTileEditor();
+    renderPalettes();
+    refreshColourButtons();
+    // A cell switch mid-drag restarts the guard-check for the new tile.
+    spGuardChecked = false;
+  }
+  const cell = sp.cells[pos.cellR][pos.cellC];
+  if (cell.empty) {
+    // No tile assigned yet — don't paint. Tell the pupil what to do.
+    setStatus('warn', '● This cell is empty — pick a tile from the tileset first');
+    spDragging = false;
+    return;
+  }
+  const srcX = cell.flipH ? 7 - pos.localX : pos.localX;
+  const srcY = cell.flipV ? 7 - pos.localY : pos.localY;
+
+  const pick = evt.shiftKey || evt.button === 2;
+  if (pick) {
+    currentColour = state.tiles[cell.tile].pixels[srcY][srcX];
+    refreshColourButtons();
+    return;
+  }
+
+  if (initial) {
+    const uses = findTileUsage(cell.tile, selectedSpriteIdx, pos.cellR, pos.cellC);
+    if (uses.length > 0 && !spGuardChecked) {
+      spDragging = false;
+      openSharedTileDialog(cell.tile, uses, (resolution) => {
+        if (resolution === 'cancel') return;
+        spGuardChecked = true;
+        spDragging = true;
+        pushUndo();
+        const c2 = currentSprite().cells[pos.cellR][pos.cellC];
+        const sx2 = c2.flipH ? 7 - pos.localX : pos.localX;
+        const sy2 = c2.flipV ? 7 - pos.localY : pos.localY;
+        if (state.tiles[c2.tile].pixels[sy2][sx2] !== currentColour) {
+          state.tiles[c2.tile].pixels[sy2][sx2] = currentColour;
+          markDirty();
+          renderSpriteCanvas(); renderTileset(); renderTileEditor(); renderSpriteList();
+        }
+      });
+      return;
+    }
+    pushUndo();
+  }
+
+  if (state.tiles[cell.tile].pixels[srcY][srcX] === currentColour) return;
+  state.tiles[cell.tile].pixels[srcY][srcX] = currentColour;
+  markDirty();
+  renderSpriteCanvas();
+  renderTileset();
+  renderTileEditor();
+  renderSpriteList();
+}
+
+function tileCanvasCell(evt) {
+  const canvas = document.getElementById('tile-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const cellPx = canvas.width / 8;
+  return {
+    x: Math.floor((evt.clientX - rect.left) / cellPx),
+    y: Math.floor((evt.clientY - rect.top) / cellPx),
+  };
+}
+
+function teApply(evt, initial) {
+  const cell = currentCell();
+  if (!cell) return;
+  if (cell.empty) {
+    setStatus('warn', '● Cell is empty — assign a tile first');
+    teDragging = false;
+    return;
+  }
+  const { x, y } = tileCanvasCell(evt);
+  if (x < 0 || x > 7 || y < 0 || y > 7) return;
+
+  const pick = evt.shiftKey || evt.button === 2;
+  if (pick) {
+    currentColour = state.tiles[cell.tile].pixels[y][x];
+    refreshColourButtons();
+    return;
+  }
+
+  if (initial) {
+    // Shared-tile check on the FIRST pixel of a drag.
+    const uses = findTileUsage(cell.tile, selectedSpriteIdx, selectedCell.r, selectedCell.c);
+    if (uses.length > 0 && !teGuardChecked) {
+      teDragging = false;
+      openSharedTileDialog(cell.tile, uses, (resolution) => {
+        if (resolution === 'cancel') return;
+        teGuardChecked = true;
+        teDragging = true;
+        // Apply the pending first pixel now.
+        pushUndo();
+        if (state.tiles[currentCell().tile].pixels[y][x] !== currentColour) {
+          state.tiles[currentCell().tile].pixels[y][x] = currentColour;
+          markDirty();
+          renderTileEditor();
+          renderTileset();
+          renderSpriteCanvas();
+          renderSpriteList();
+        }
+      });
+      return;
+    }
+    pushUndo();
+  }
+  const tIdx = currentCell().tile;
+  if (state.tiles[tIdx].pixels[y][x] === currentColour) return;
+  state.tiles[tIdx].pixels[y][x] = currentColour;
+  markDirty();
+  renderTileEditor();
+  renderTileset();
+  renderSpriteCanvas();
+  renderSpriteList();
+}
+
+function openSharedTileDialog(tileIdx, uses, cb) {
+  const dlg = document.getElementById('shared-tile-dialog');
+  document.getElementById('shared-tile-idx').textContent =
+    '0x' + tileIdx.toString(16).padStart(2, '0').toUpperCase();
+  document.getElementById('shared-count').textContent = String(uses.length);
+  const ul = document.getElementById('shared-list');
+  ul.innerHTML = '';
+  uses.slice(0, 20).forEach(u => {
+    const li = document.createElement('li');
+    li.textContent = u.text;
+    ul.appendChild(li);
+  });
+  if (uses.length > 20) {
+    const li = document.createElement('li');
+    li.textContent = '…and ' + (uses.length - 20) + ' more';
+    ul.appendChild(li);
+  }
+
+  const onCancel = () => { cleanup(); cb('cancel'); };
+  const onEverywhere = () => { cleanup(); cb('everywhere'); };
+  const onDup = () => {
+    const dst = findNextEmptyTileSlot();
+    if (dst < 0) {
+      alert('No empty tile slots left — all 256 CHR tiles are in use.\n\n'
+          + 'Free a slot first (on the Backgrounds page or by clearing a tile), then try again.');
+      cleanup();
+      cb('cancel');
+      return;
+    }
+    pushUndo();
+    const src = state.tiles[tileIdx];
+    state.tiles[dst] = {
+      pixels: clonePixels(src.pixels),
+      name: src.name ? src.name + '_copy' : '',
+    };
+    currentCell().tile = dst;
+    markDirty();
+    cleanup();
+    renderAll();
+    cb('duplicated');
+  };
+
+  function cleanup() {
+    dlg.close();
+    document.getElementById('btn-shared-cancel').removeEventListener('click', onCancel);
+    document.getElementById('btn-shared-dup').removeEventListener('click', onDup);
+    document.getElementById('btn-shared-everywhere').removeEventListener('click', onEverywhere);
+  }
+  document.getElementById('btn-shared-cancel').addEventListener('click', onCancel);
+  document.getElementById('btn-shared-dup').addEventListener('click', onDup);
+  document.getElementById('btn-shared-everywhere').addEventListener('click', onEverywhere);
+  dlg.showModal();
+}
+
+// ================================================================
+// Full-screen preview — tile all sprites onto a dark backdrop.
+// ================================================================
+function renderFullPreview() {
+  const dlg = document.getElementById('preview-dialog');
+  if (!dlg.open) return;
+  const canvas = document.getElementById('preview-canvas');
+  const ctx = canvas.getContext('2d');
+
+  // Backdrop is full NES screen (256×240).
+  const srcW = 256, srcH = 240;
+  const margin = 48;
+  const availW = window.innerWidth  - margin;
+  const availH = window.innerHeight - margin;
+  let scale = Math.max(1, Math.floor(Math.min(availW / srcW, availH / srcH)));
+  canvas.width = srcW; canvas.height = srcH;
+  canvas.style.width = (srcW * scale) + 'px';
+  canvas.style.height = (srcH * scale) + 'px';
+  ctx.imageSmoothingEnabled = false;
+
+  ctx.fillStyle = '#1a1b2a';
+  ctx.fillRect(0, 0, srcW, srcH);
+  // faint diagonals
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  for (let d = -srcH; d < srcW; d += 16) {
+    ctx.beginPath();
+    ctx.moveTo(d, 0); ctx.lineTo(d + srcH, srcH);
+    ctx.stroke();
+  }
+
+  // Layout sprites left-to-right, wrap, 4px gutter, outlined selected.
+  let x = 8, y = 8, rowMax = 0;
+  for (let i = 0; i < state.sprites.length; i++) {
+    const sp = state.sprites[i];
+    const w = sp.width * 8, h = sp.height * 8;
+    if (x + w > srcW - 8) { x = 8; y += rowMax + 8; rowMax = 0; }
+    if (y + h > srcH - 8) break;
+    // Outline if selected
+    if (i === selectedSpriteIdx) {
+      ctx.strokeStyle = 'rgba(255,216,102,0.7)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x - 1, y - 1, w + 2, h + 2);
+    }
+    for (let cr = 0; cr < sp.height; cr++) {
+      for (let cc = 0; cc < sp.width; cc++) {
+        const cell = sp.cells[cr][cc];
+        if (cell.empty) continue;
+        const tile = state.tiles[cell.tile];
+        const pal = spritePaletteFor(cell.palette);
+        for (let py = 0; py < 8; py++) {
+          for (let pxl = 0; pxl < 8; pxl++) {
+            const sx = cell.flipH ? 7 - pxl : pxl;
+            const sy = cell.flipV ? 7 - py : py;
+            const v = tile.pixels[sy][sx];
+            const rgb = pixelRgb(v, pal);
+            if (!rgb) continue;
+            ctx.fillStyle = rgb;
+            ctx.fillRect(x + cc*8 + pxl, y + cr*8 + py, 1, 1);
+          }
+        }
+      }
+    }
+    // label
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '6px monospace';
+    ctx.fillText(sp.name || '?', x, y + h + 6);
+    x += w + 10;
+    rowMax = Math.max(rowMax, h + 8);
+  }
+
+  const hud = document.getElementById('preview-hud-info');
+  if (hud) {
+    hud.textContent = state.sprites.length + ' sprite' + (state.sprites.length === 1 ? '' : 's')
+      + '  ·  NES ' + srcW + '×' + srcH + '  ·  ' + scale + '× scale  ·  Esc or F to close';
+  }
+}
+function togglePreview() {
+  const dlg = document.getElementById('preview-dialog');
+  if (dlg.open) { dlg.close(); }
+  else { dlg.showModal(); renderFullPreview(); }
+}
+
+// ================================================================
+// Floating tileset
+// ================================================================
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+let floatingTilesetZoom = 20;
+
+function makeFloatingPanel({
+  panel, header, resize, toggleBtn, closeBtn,
+  storageKey,
+  minWidth = 200, minHeight = 160,
+  onOpen = null,
+  extraPersist = null,
+  initFromSaved = null,
+}) {
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); }
+    catch (e) { return {}; }
+  })();
+
+  if (Number.isFinite(saved.x)) panel.style.left = saved.x + 'px';
+  if (Number.isFinite(saved.y)) panel.style.top  = saved.y + 'px';
+  if (Number.isFinite(saved.w)) panel.style.width  = Math.max(minWidth, saved.w) + 'px';
+  if (Number.isFinite(saved.h)) panel.style.height = Math.max(minHeight, saved.h) + 'px';
+  initFromSaved && initFromSaved(saved);
+
+  function clampIntoViewport() {
+    const r = panel.getBoundingClientRect();
+    const nx = clamp(r.left, 0, Math.max(0, window.innerWidth - 40));
+    const ny = clamp(r.top,  0, Math.max(0, window.innerHeight - 40));
+    panel.style.left = nx + 'px';
+    panel.style.top  = ny + 'px';
+  }
+  function persist() {
+    const r = panel.getBoundingClientRect();
+    const data = {
+      open: panel.classList.contains('open'),
+      x: r.left, y: r.top, w: r.width, h: r.height,
+    };
+    if (extraPersist) Object.assign(data, extraPersist());
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  }
+  function openPanel() {
+    panel.classList.add('open');
+    clampIntoViewport();
+    onOpen && onOpen();
+    persist();
+  }
+  function closePanel() {
+    panel.classList.remove('open');
+    persist();
+  }
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      panel.classList.contains('open') ? closePanel() : openPanel();
+    });
+  }
+  if (closeBtn) closeBtn.addEventListener('click', closePanel);
+
+  let dragStart = null;
+  header.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    const r = panel.getBoundingClientRect();
+    dragStart = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    header.classList.add('dragging');
+    header.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  header.addEventListener('pointermove', (e) => {
+    if (!dragStart) return;
+    panel.style.left = clamp(e.clientX - dragStart.dx, 0, window.innerWidth - 40) + 'px';
+    panel.style.top  = clamp(e.clientY - dragStart.dy, 0, window.innerHeight - 40) + 'px';
+  });
+  header.addEventListener('pointerup', (e) => {
+    if (!dragStart) return;
+    dragStart = null;
+    header.classList.remove('dragging');
+    try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+    persist();
+  });
+
+  if (resize) {
+    let rs = null;
+    resize.addEventListener('pointerdown', (e) => {
+      const r = panel.getBoundingClientRect();
+      rs = { x: e.clientX, y: e.clientY, w: r.width, h: r.height };
+      resize.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    resize.addEventListener('pointermove', (e) => {
+      if (!rs) return;
+      panel.style.width  = Math.max(minWidth,  rs.w + (e.clientX - rs.x)) + 'px';
+      panel.style.height = Math.max(minHeight, rs.h + (e.clientY - rs.y)) + 'px';
+    });
+    resize.addEventListener('pointerup', (e) => {
+      if (!rs) return;
+      rs = null;
+      try { resize.releasePointerCapture(e.pointerId); } catch (_) {}
+      persist();
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    if (panel.classList.contains('open')) clampIntoViewport();
+  });
+
+  if (saved.open) openPanel();
+  return { open: openPanel, close: closePanel, persist };
+}
+
+function renderFloatingTileset() {
+  const panel = document.getElementById('floating-tileset');
+  if (!panel || !panel.classList.contains('open')) return;
+  const canvas = document.getElementById('floating-tileset-canvas');
+  const ctx = canvas.getContext('2d');
+  const cell = floatingTilesetZoom;
+  const cols = 16, rows = 16;
+  const size = cell * cols;
+  if (canvas.width !== size) { canvas.width = size; canvas.height = size; }
+
+  const cellData = currentCell();
+  const pal = cellData ? spritePaletteFor(cellData.palette)
+                       : spritePaletteFor(selectedPaletteIdx);
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < NUM_TILES; i++) {
+    const cx = (i % cols) * cell;
+    const cy = Math.floor(i / cols) * cell;
+    const tile = state.tiles[i];
+    const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
+    if (!anyPixel) {
+      ctx.fillStyle = '#1a1630';
+      ctx.fillRect(cx, cy, cell, cell);
+      if (cell >= 14) {
+        ctx.fillStyle = '#4a4270';
+        ctx.font = Math.max(8, Math.floor(cell * 0.4)) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(i.toString(16).padStart(2, '0'),
+                     cx + cell / 2, cy + cell / 2);
+      }
+    } else {
+      const p = cell / 8;
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const v = tile.pixels[y][x];
+          const rgb = pixelRgb(v, pal);
+          if (rgb) {
+            ctx.fillStyle = rgb;
+            ctx.fillRect(cx + x * p, cy + y * p, p, p);
+          } else {
+            ctx.fillStyle = '#2a2440';
+            ctx.fillRect(cx + x * p, cy + y * p, p, p);
+          }
+        }
+      }
+    }
+    const isHighlighted = i === selectedTileIdx;
+    const isCellTile = cellData && !cellData.empty && cellData.tile === i;
+    if (isHighlighted) {
+      ctx.strokeStyle = '#ff9f6a';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(cx + 1.5, cy + 1.5, cell - 3, cell - 3);
+    }
+    if (isCellTile) {
+      ctx.strokeStyle = '#ffd866';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    } else if (!isHighlighted && cell >= 10) {
+      ctx.strokeStyle = 'rgba(60,60,80,0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    }
+  }
+
+  const stats = document.getElementById('floating-tileset-stats');
+  if (stats) {
+    stats.textContent = '0x' + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
+  }
+}
+
+function initFloatingTileset() {
+  const panel   = document.getElementById('floating-tileset');
+  const header  = document.getElementById('floating-tileset-header');
+  const body    = document.getElementById('floating-tileset-body');
+  const canvas  = document.getElementById('floating-tileset-canvas');
+  const close   = document.getElementById('floating-tileset-close');
+  const resize  = document.getElementById('floating-tileset-resize');
+  const zoom    = document.getElementById('floating-tileset-zoom');
+  const zoomLbl = document.getElementById('floating-tileset-zoom-label');
+  const toggle  = document.getElementById('btn-popout-tileset');
+  if (!panel || !toggle) return;
+
+  const handle = makeFloatingPanel({
+    panel, header, resize, toggleBtn: toggle, closeBtn: close,
+    storageKey: 'floating-tileset-sprites',
+    minWidth: 200, minHeight: 200,
+    onOpen: () => renderFloatingTileset(),
+    extraPersist: () => ({ zoom: floatingTilesetZoom }),
+    initFromSaved: (s) => {
+      if (Number.isFinite(s.zoom)) floatingTilesetZoom = clamp(s.zoom, 8, 48);
+      zoom.value = String(floatingTilesetZoom);
+      zoomLbl.textContent = floatingTilesetZoom + ' px';
+    },
+  });
+
+  zoom.addEventListener('input', () => {
+    floatingTilesetZoom = clamp(parseInt(zoom.value, 10) || 20, 8, 48);
+    zoomLbl.textContent = floatingTilesetZoom + ' px';
+    renderFloatingTileset();
+    handle.persist();
+  });
+  body.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const dir = e.deltaY < 0 ? 1 : -1;
+    floatingTilesetZoom = clamp(floatingTilesetZoom + dir * 2, 8, 48);
+    zoom.value = String(floatingTilesetZoom);
+    zoomLbl.textContent = floatingTilesetZoom + ' px';
+    renderFloatingTileset();
+    handle.persist();
+  }, { passive: false });
+
+  // Left-click = assign tile to selected cell. Right-click = jump to first
+  // sprite that uses this tile. Mirrors the main tileset panel exactly.
+  function floatingCoord(e) {
+    const rect = canvas.getBoundingClientRect();
+    const cell = canvas.width / 16;
+    const x = Math.floor((e.clientX - rect.left) * (canvas.width  / rect.width)  / cell);
+    const y = Math.floor((e.clientY - rect.top)  * (canvas.height / rect.height) / cell);
+    if (x < 0 || y < 0 || x > 15 || y > 15) return -1;
+    return y * 16 + x;
+  }
+  canvas.addEventListener('click', (e) => {
+    const idx = floatingCoord(e);
+    if (idx < 0) return;
+    selectTilesetTile(idx, { assign: true });
+  });
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const idx = floatingCoord(e);
+    if (idx < 0) return;
+    selectTilesetTile(idx, { jumpToUser: true });
+  });
+}
+
+// ================================================================
+// Exporters
+// ================================================================
+function triggerDownload(filename, data, mime) {
+  const blob = data instanceof Uint8Array
+    ? new Blob([data], { type: mime || 'application/octet-stream' })
+    : new Blob([data], { type: mime || 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+}
+function safeFilename(name) {
+  return (name || 'untitled').replace(/[^A-Za-z0-9_-]/g, '_');
+}
+function cIdent(name, fallback) {
+  const cleaned = (name || '').replace(/[^A-Za-z0-9_]/g, '_').replace(/^[0-9]/, '_$&');
+  return cleaned || fallback;
+}
+
+function exportSpritesJSON() {
+  const text = JSON.stringify(state, null, 2);
+  triggerDownload(safeFilename(state.name) + '.json', text, 'application/json');
+}
+
+// Build the NES OAM byte stream for a sprite, laid out top-to-bottom,
+// left-to-right. Top-left cell is at (0, 0) relative to the sprite's origin.
+// Each cell contributes 4 bytes: y, tile, attr, x
+//   attr bits: 0-1 palette, 5 priority (behind BG), 6 flip-H, 7 flip-V
+function spriteOamBytes(sp) {
+  const bytes = [];
+  for (let r = 0; r < sp.height; r++) {
+    for (let c = 0; c < sp.width; c++) {
+      const cell = sp.cells[r][c];
+      if (cell.empty) continue;  // unassigned cells don't render
+      const attr = (cell.palette & 3)
+                 | (cell.priority ? 0x20 : 0)
+                 | (cell.flipH    ? 0x40 : 0)
+                 | (cell.flipV    ? 0x80 : 0);
+      bytes.push({ y: r * 8, tile: cell.tile & 0xFF, attr, x: c * 8 });
+    }
+  }
+  return bytes;
+}
+function hexByte(n) {
+  return '0x' + (n & 0xFF).toString(16).padStart(2, '0').toUpperCase();
+}
+function exportSpritesInc() {
+  const lines = [];
+  lines.push('// sprites.inc  —  generated by the NES Sprite Editor');
+  lines.push('// Project: ' + (state.name || 'untitled'));
+  lines.push('// Exported: ' + new Date().toISOString());
+  lines.push('//');
+  lines.push('// Each sprite is laid out as an OAM byte stream:');
+  lines.push('//   { y, tile, attr, x }  for every cell (top-to-bottom, left-to-right).');
+  lines.push('//   attr: bits 0-1 = palette, 5 = behind-BG, 6 = flip-H, 7 = flip-V.');
+  lines.push('// Copy a sprite into PPU OAM by adding a base (cam_x, cam_y) offset to each');
+  lines.push('// entry\'s x/y before writing it to $2004 / the shadow OAM buffer.');
+  lines.push('');
+  const seen = new Map();
+  for (let i = 0; i < state.sprites.length; i++) {
+    const sp = state.sprites[i];
+    let base = cIdent(sp.name, 'sprite_' + i);
+    const count = (seen.get(base) || 0) + 1;
+    seen.set(base, count);
+    if (count > 1) base = base + '_' + count;
+
+    const bytes = spriteOamBytes(sp);
+    lines.push('// ' + base + '  (' + sp.width + '×' + sp.height + ' tiles, '
+               + bytes.length + ' OAM entr' + (bytes.length === 1 ? 'y' : 'ies') + ')');
+    lines.push('#define ' + base.toUpperCase() + '_CELLS ' + bytes.length);
+    lines.push('const unsigned char ' + base + '_oam[] = {');
+    for (const b of bytes) {
+      lines.push('    ' + hexByte(b.y)    + ', '
+                        + hexByte(b.tile) + ', '
+                        + hexByte(b.attr) + ', '
+                        + hexByte(b.x)    + ','
+                 + '  // cell tile=0x' + b.tile.toString(16).padStart(2,'0'));
+    }
+    lines.push('};');
+    lines.push('');
+  }
+  triggerDownload('sprites.inc', lines.join('\n'), 'text/plain');
+}
+
+function exportSpritesH() {
+  const lines = [];
+  lines.push('// sprites.h  —  generated by the NES Sprite Editor');
+  lines.push('// Include sprites.inc from exactly one .c file to get definitions.');
+  lines.push('#ifndef SPRITES_H');
+  lines.push('#define SPRITES_H');
+  lines.push('');
+  lines.push('// OAM attribute bit helpers');
+  lines.push('#define OAM_PAL(p)    ((p) & 0x03)');
+  lines.push('#define OAM_BEHIND_BG 0x20');
+  lines.push('#define OAM_FLIP_H    0x40');
+  lines.push('#define OAM_FLIP_V    0x80');
+  lines.push('');
+  const seen = new Map();
+  for (let i = 0; i < state.sprites.length; i++) {
+    const sp = state.sprites[i];
+    let base = cIdent(sp.name, 'sprite_' + i);
+    const count = (seen.get(base) || 0) + 1;
+    seen.set(base, count);
+    if (count > 1) base = base + '_' + count;
+    const cells = spriteOamBytes(sp).length;
+    lines.push('extern const unsigned char ' + base + '_oam[' + (cells * 4) + '];  // '
+               + sp.width + '×' + sp.height + ' — ' + cells + ' cell' + (cells === 1 ? '' : 's'));
+  }
+  lines.push('');
+  lines.push('#endif');
+  triggerDownload('sprites.h', lines.join('\n'), 'text/plain');
+}
+
+function importSpritesFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try { parsed = JSON.parse(reader.result); }
+    catch (e) { alert('Not a valid JSON file: ' + e.message); return; }
+    const err = validateState(parsed);
+    if (err) {
+      alert('This JSON file does not look like a tile editor project (' + err + ').');
+      return;
+    }
+    migrateState(parsed);
+    Storage.saveSnapshot(state, 'before_import_sprites');
+
+    // Only pull in sprites-related data. The background (nametable,
+    // bg palettes, universal BG) stays exactly as the pupil left it,
+    // so importing a sprite pack can't clobber their level. Tiles are
+    // shared hardware CHR, so they come in with the sprites -- otherwise
+    // the imported sprites would render with whatever art happens to
+    // be in the tile pool right now.
+    state.sprites = parsed.sprites || [];
+    state.sprite_palettes = parsed.sprite_palettes;
+    state.tiles = parsed.tiles;
+    selectedSpriteIdx = state.sprites.length ? 0 : -1;
+    selectedCell = { r: 0, c: 0 };
+
+    afterStateReplaced();
+    setStatus('saved', '● Imported sprites from ' + (file.name || 'file'));
+  };
+  reader.readAsText(file);
+}
+
+// ================================================================
+// First-run onboarding
+// ================================================================
+function maybeShowSpriteOnboarding() {
+  if (localStorage.getItem('sprites-help-seen') === '1') return;
+  setTimeout(() => {
+    const dlg = document.getElementById('help-dialog');
+    if (dlg && !dlg.open) dlg.showModal();
+  }, 200);
+}
+
+// ================================================================
+// Recovery dialog
+// ================================================================
+function openRecoveryDialog() {
+  const ul = document.getElementById('snapshot-list');
+  ul.innerHTML = '';
+  const all = []
+    .concat(Storage.listSnapshots().map(s => ({ ...s, kind: 'snapshot' })))
+    .concat(Storage.listBackups().map(s => ({ ...s, kind: 'backup' })));
+  all.sort((a, b) => b.ts - a.ts);
+  if (!all.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No snapshots or backups yet.';
+    ul.appendChild(li);
+  } else {
+    all.forEach(entry => {
+      const li = document.createElement('li');
+      const date = new Date(entry.ts).toLocaleString();
+      const label = document.createElement('span');
+      label.textContent = (entry.kind === 'backup' ? '🛟 backup' : '📸 snapshot')
+        + ' · ' + date + ' · ' + (entry.name || 'untitled') + ' · ' + (entry.reason || '');
+      const btn = document.createElement('button');
+      btn.className = 'primary';
+      btn.textContent = 'Restore';
+      btn.addEventListener('click', () => {
+        const s = Storage.loadSnapshot(entry.key);
+        if (!s) { alert('Snapshot missing or invalid.'); return; }
+        Storage.saveSnapshot(state, 'before_recover');
+        state = s;
+        afterStateReplaced();
+        document.getElementById('recovery-dialog').close();
+      });
+      li.appendChild(label);
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+  }
+  document.getElementById('recovery-dialog').showModal();
+}
+
+function afterStateReplaced() {
+  // Clamp selection
+  if (selectedSpriteIdx >= state.sprites.length) {
+    selectedSpriteIdx = state.sprites.length ? 0 : -1;
+  }
+  const sp = currentSprite();
+  if (sp) {
+    selectedCell.r = Math.min(selectedCell.r, sp.height - 1);
+    selectedCell.c = Math.min(selectedCell.c, sp.width - 1);
+  }
+  markDirty();
+  updateUndoButtons();
+  renderAll();
+}
+
+// ================================================================
+// Play in NES — sends the scene to tools/playground_server.py
+// ================================================================
+const PLAYGROUND_SERVER = (location.protocol === 'http:' || location.protocol === 'https:')
+  ? (location.origin + '/play')
+  : 'http://127.0.0.1:8765/play';
+
+const pgState = {
+  playerIdx: -1,
+  playerStart: { x: 60, y: 120 },
+  scene: [],            // [{ spriteIdx, x, y }]
+  highlightedScene: -1, // index into pgState.scene (for click-to-place)
+  placeMode: 'player',  // 'player' | 'scene'
+};
+
+function pgSetStatus(msg, cls) {
+  const el = document.getElementById('pg-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'pg-status' + (cls ? ' ' + cls : '');
+}
+
+function setPgMode(m) {
+  pgState.placeMode = (m === 'scene') ? 'scene' : 'player';
+  document.getElementById('pg-mode-player').classList.toggle('active', pgState.placeMode === 'player');
+  document.getElementById('pg-mode-scene').classList.toggle('active', pgState.placeMode === 'scene');
+}
+
+function spriteSizePx(sp) {
+  return { w: sp.width * 8, h: sp.height * 8 };
+}
+
+function clampScenePos(x, y, sp) {
+  const s = spriteSizePx(sp);
+  return {
+    x: Math.max(0, Math.min(256 - s.w, x)),
+    y: Math.max(16, Math.min(232 - s.h, y)),
+  };
+}
+
+function openPlaygroundDialog() {
+  if (!state.sprites || state.sprites.length === 0) {
+    alert('Make at least one sprite first — it becomes your player.');
+    return;
+  }
+  if (pgState.playerIdx < 0 || pgState.playerIdx >= state.sprites.length) {
+    pgState.playerIdx = 0;
+  }
+  // Keep scene entries pointing at real sprites.
+  pgState.scene = pgState.scene.filter(e =>
+    e.spriteIdx >= 0 && e.spriteIdx < state.sprites.length && e.spriteIdx !== pgState.playerIdx);
+  // If nothing placed yet, pre-populate with up to 2 other sprites as a friendly default.
+  if (pgState.scene.length === 0) {
+    let px = 96;
+    for (let i = 0; i < state.sprites.length && pgState.scene.length < 2; i++) {
+      if (i === pgState.playerIdx) continue;
+      const sp = state.sprites[i];
+      const pos = clampScenePos(px, 120, sp);
+      pgState.scene.push({ spriteIdx: i, x: pos.x, y: pos.y });
+      px += (sp.width * 8) + 24;
+    }
+  }
+  pgState.highlightedScene = pgState.scene.length ? 0 : -1;
+  setPgMode('player');
+  pgSetStatus('Ready. Click the preview to move the player, or pick a scene sprite and click to place it. Then hit Play.');
+  renderPlaygroundSpriteList();
+  renderPlaygroundPreview();
+  document.getElementById('playground-dialog').showModal();
+}
+
+function renderPlaygroundSpriteList() {
+  const listEl = document.getElementById('pg-sprite-list');
+  listEl.innerHTML = '';
+  for (let i = 0; i < state.sprites.length; i++) {
+    const sp = state.sprites[i];
+    const row = document.createElement('div');
+    row.className = 'pg-sprite-row';
+    const isPlayer = (i === pgState.playerIdx);
+    const sceneEntryIdx = pgState.scene.findIndex(e => e.spriteIdx === i);
+    const isScene = sceneEntryIdx >= 0;
+    if (isPlayer) row.classList.add('is-player');
+    if (isScene)  row.classList.add('is-scene');
+
+    // thumbnail
+    const thumb = document.createElement('canvas');
+    thumb.width = 28; thumb.height = 28;
+    drawSpriteIntoCtx(sp, thumb.getContext('2d'), 28, 28);
+    row.appendChild(thumb);
+
+    // name + size
+    const meta = document.createElement('div');
+    meta.innerHTML = `<div class="pg-name">${sp.name ? escapeHtml(sp.name) : 'Sprite ' + (i + 1)}</div><div class="pg-size">${sp.width}×${sp.height} tiles</div>`;
+    row.appendChild(meta);
+
+    // Player radio
+    const playerLbl = document.createElement('label');
+    playerLbl.title = 'Use this sprite as the D-pad-controlled player';
+    const playerInput = document.createElement('input');
+    playerInput.type = 'radio';
+    playerInput.name = 'pg-player';
+    playerInput.checked = isPlayer;
+    playerInput.addEventListener('change', () => {
+      if (playerInput.checked) {
+        // if it was a scene sprite, take it out of the scene list
+        pgState.scene = pgState.scene.filter(e => e.spriteIdx !== i);
+        pgState.playerIdx = i;
+        pgState.highlightedScene = pgState.scene.length ? 0 : -1;
+        renderPlaygroundSpriteList();
+        renderPlaygroundPreview();
+      }
+    });
+    playerLbl.appendChild(playerInput);
+    playerLbl.appendChild(document.createTextNode(' Player'));
+    row.appendChild(playerLbl);
+
+    // Scene toggle
+    const sceneLbl = document.createElement('label');
+    sceneLbl.title = 'Place this sprite on the background';
+    const sceneInput = document.createElement('input');
+    sceneInput.type = 'checkbox';
+    sceneInput.checked = isScene;
+    sceneInput.disabled = isPlayer;
+    sceneInput.addEventListener('change', () => {
+      if (sceneInput.checked) {
+        const pos = clampScenePos(100 + (pgState.scene.length * 24), 120, sp);
+        pgState.scene.push({ spriteIdx: i, x: pos.x, y: pos.y });
+        pgState.highlightedScene = pgState.scene.length - 1;
+        setPgMode('scene');
+      } else {
+        pgState.scene = pgState.scene.filter(e => e.spriteIdx !== i);
+        pgState.highlightedScene = pgState.scene.length ? 0 : -1;
+      }
+      renderPlaygroundSpriteList();
+      renderPlaygroundPreview();
+    });
+    sceneLbl.appendChild(sceneInput);
+    sceneLbl.appendChild(document.createTextNode(' Scene'));
+    row.appendChild(sceneLbl);
+
+    // X / Y inputs (only when placed)
+    const xy = document.createElement('span');
+    xy.className = 'pg-xy';
+    if (isPlayer) {
+      xy.innerHTML = `<label>x<input type="number" id="pg-px" min="0" max="255" value="${pgState.playerStart.x}"></label><label>y<input type="number" id="pg-py" min="0" max="232" value="${pgState.playerStart.y}"></label>`;
+      xy.querySelector('#pg-px').addEventListener('input', e => {
+        const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) {
+          const p = clampScenePos(v, pgState.playerStart.y, sp);
+          pgState.playerStart = p; renderPlaygroundPreview();
+        }
+      });
+      xy.querySelector('#pg-py').addEventListener('input', e => {
+        const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) {
+          const p = clampScenePos(pgState.playerStart.x, v, sp);
+          pgState.playerStart = p; renderPlaygroundPreview();
+        }
+      });
+    } else if (isScene) {
+      const entry = pgState.scene[sceneEntryIdx];
+      xy.innerHTML = `<label>x<input type="number" min="0" max="255" value="${entry.x}"></label><label>y<input type="number" min="16" max="232" value="${entry.y}"></label>`;
+      const [xi, yi] = xy.querySelectorAll('input');
+      // Focusing a row's XY also highlights it for click-to-move.
+      const highlight = () => {
+        pgState.highlightedScene = sceneEntryIdx;
+        setPgMode('scene');
+        renderPlaygroundPreview();
+      };
+      xi.addEventListener('focus', highlight);
+      yi.addEventListener('focus', highlight);
+      xi.addEventListener('input', () => {
+        const v = parseInt(xi.value, 10); if (!Number.isFinite(v)) return;
+        const p = clampScenePos(v, entry.y, sp);
+        entry.x = p.x; renderPlaygroundPreview();
+      });
+      yi.addEventListener('input', () => {
+        const v = parseInt(yi.value, 10); if (!Number.isFinite(v)) return;
+        const p = clampScenePos(entry.x, v, sp);
+        entry.y = p.y; renderPlaygroundPreview();
+      });
+    }
+    row.appendChild(xy);
+
+    // Clicking the row highlights that scene sprite for click-to-place.
+    row.addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
+      if (isScene) {
+        pgState.highlightedScene = sceneEntryIdx;
+        setPgMode('scene');
+        renderPlaygroundPreview();
+      } else if (isPlayer) {
+        setPgMode('player');
+      }
+    });
+
+    listEl.appendChild(row);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, m => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+  ));
+}
+
+function nesRgbFromIdx(idx) { return nesRgb(idx); }
+
+function bgPaletteFor(palIdx) {
+  const p = state.bg_palettes[palIdx & 3];
+  return { slot0: state.universal_bg, slot1: p.slots[0], slot2: p.slots[1], slot3: p.slots[2] };
+}
+
+function renderPlaygroundPreview() {
+  const cv = document.getElementById('pg-preview');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // Universal-BG fill.
+  ctx.fillStyle = nesRgb(state.universal_bg);
+  ctx.fillRect(0, 0, cv.width, cv.height);
+
+  // Background nametable (32x30 tiles, 8x8 pixels each).
+  const nt = state.nametable || [];
+  for (let r = 0; r < Math.min(30, nt.length); r++) {
+    const row = nt[r];
+    for (let c = 0; c < Math.min(32, row.length); c++) {
+      const cell = row[c] || { tile: 0, palette: 0 };
+      const tile = state.tiles[cell.tile] || state.tiles[0];
+      const pal = bgPaletteFor(cell.palette);
+      const bx = c * 8, by = r * 8;
+      for (let py = 0; py < 8; py++) {
+        for (let px = 0; px < 8; px++) {
+          const v = tile.pixels[py][px];
+          const rgb = pixelRgb(v, pal);
+          // BG tiles are opaque -- if v === 0 show universal bg (already painted).
+          if (v === 0) continue;
+          ctx.fillStyle = rgb;
+          ctx.fillRect(bx + px, by + py, 1, 1);
+        }
+      }
+    }
+  }
+
+  // Scene sprites + player.
+  function drawSpriteAt(sp, sx, sy) {
+    for (let cr = 0; cr < sp.height; cr++) {
+      for (let cc = 0; cc < sp.width; cc++) {
+        const cell = sp.cells[cr][cc];
+        if (cell.empty) continue;
+        const tile = state.tiles[cell.tile];
+        const pal = spritePaletteFor(cell.palette);
+        for (let py = 0; py < 8; py++) {
+          for (let px = 0; px < 8; px++) {
+            const tx = cell.flipH ? 7 - px : px;
+            const ty = cell.flipV ? 7 - py : py;
+            const v = tile.pixels[ty][tx];
+            const rgb = pixelRgb(v, pal);
+            if (!rgb) continue;
+            ctx.fillStyle = rgb;
+            ctx.fillRect(sx + cc * 8 + px, sy + cr * 8 + py, 1, 1);
+          }
+        }
+      }
+    }
+  }
+
+  // Scene sprites first, player drawn on top so it's always visible.
+  for (let i = 0; i < pgState.scene.length; i++) {
+    const e = pgState.scene[i];
+    const sp = state.sprites[e.spriteIdx];
+    if (!sp) continue;
+    drawSpriteAt(sp, e.x, e.y);
+    // Highlight ring for the currently selected scene sprite.
+    if (i === pgState.highlightedScene) {
+      ctx.strokeStyle = '#78dce8';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(e.x - 0.5, e.y - 0.5, sp.width * 8 + 1, sp.height * 8 + 1);
+    }
+  }
+
+  if (pgState.playerIdx >= 0 && state.sprites[pgState.playerIdx]) {
+    const sp = state.sprites[pgState.playerIdx];
+    drawSpriteAt(sp, pgState.playerStart.x, pgState.playerStart.y);
+    ctx.strokeStyle = '#47d16c';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(pgState.playerStart.x - 0.5, pgState.playerStart.y - 0.5,
+                   sp.width * 8 + 1, sp.height * 8 + 1);
+  }
+}
+
+function onPgPreviewClick(e) {
+  const cv = document.getElementById('pg-preview');
+  const rect = cv.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) * (cv.width  / rect.width));
+  const y = Math.floor((e.clientY - rect.top)  * (cv.height / rect.height));
+
+  if (pgState.placeMode === 'player') {
+    const sp = state.sprites[pgState.playerIdx];
+    if (!sp) return;
+    // Centre the sprite on the click for a nicer feel.
+    const cx = x - sp.width * 4, cy = y - sp.height * 4;
+    pgState.playerStart = clampScenePos(cx, cy, sp);
+  } else {
+    const i = pgState.highlightedScene;
+    if (i < 0 || i >= pgState.scene.length) {
+      pgSetStatus('Tick a sprite\'s "Scene" checkbox first, then click to place it.', 'err');
+      return;
+    }
+    const entry = pgState.scene[i];
+    const sp = state.sprites[entry.spriteIdx];
+    if (!sp) return;
+    const cx = x - sp.width * 4, cy = y - sp.height * 4;
+    const pos = clampScenePos(cx, cy, sp);
+    entry.x = pos.x; entry.y = pos.y;
+  }
+  renderPlaygroundSpriteList();
+  renderPlaygroundPreview();
+}
+
+async function sendPlayToServer() {
+  const btn = document.getElementById('btn-pg-play');
+  if (pgState.playerIdx < 0) {
+    pgSetStatus('Choose which sprite is the player first.', 'err');
+    return;
+  }
+  // Save first so the ROM reflects what's in storage.
+  Storage.saveCurrent(state);
+
+  btn.disabled = true;
+  pgSetStatus('Compiling your scene...', null);
+  try {
+    const payload = {
+      state: state,
+      playerSpriteIdx: pgState.playerIdx,
+      playerStart: pgState.playerStart,
+      sceneSprites: pgState.scene.map(e => ({ spriteIdx: e.spriteIdx, x: e.x, y: e.y })),
+    };
+    const res = await fetch(PLAYGROUND_SERVER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    let body;
+    try { body = await res.json(); } catch { body = { ok: false, log: 'server returned non-JSON' }; }
+    if (body.ok) {
+      pgSetStatus('✓ Scene compiled — FCEUX window should appear. Use the D-pad to move!\n\n' + (body.log || '').split('\n').slice(-6).join('\n'), 'ok');
+    } else {
+      const stage = body.stage ? `[${body.stage}] ` : '';
+      pgSetStatus('✗ ' + stage + 'build failed.\n\n' + (body.log || 'no details'), 'err');
+    }
+  } catch (err) {
+    pgSetStatus(
+      '✗ Could not reach the playground server at ' + PLAYGROUND_SERVER + '.\n\n' +
+      'Start it with the "Start Playground Server" VSCode task (or run\n' +
+      '  python3 tools/playground_server.py\n' +
+      'from the project root) and try again.',
+      'err'
+    );
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ================================================================
+// Init
+// ================================================================
+function init() {
+  const loaded = Storage.loadCurrent();
+  state = loaded || createDefaultState();
+  migrateState(state);
+  if (!loaded) Storage.saveCurrent(state);
+  prefs = Storage.readPrefs();
+  selectedSpriteIdx = state.sprites.length ? 0 : -1;
+
+  // Header
+  document.getElementById('project-name').addEventListener('input', e => {
+    pushUndo();
+    state.name = e.target.value || 'untitled';
+    markDirty();
+  });
+  document.getElementById('btn-undo').addEventListener('click', undo);
+  document.getElementById('btn-redo').addEventListener('click', redo);
+  document.getElementById('btn-recover').addEventListener('click', openRecoveryDialog);
+  document.getElementById('btn-recovery-cancel').addEventListener('click', () => {
+    document.getElementById('recovery-dialog').close();
+  });
+  document.getElementById('btn-help').addEventListener('click', () => {
+    document.getElementById('help-dialog').showModal();
+  });
+  document.getElementById('btn-help-close').addEventListener('click', () => {
+    document.getElementById('help-dialog').close();
+  });
+  document.getElementById('btn-play').addEventListener('click', openPlaygroundDialog);
+  document.getElementById('btn-pg-cancel').addEventListener('click', () => {
+    document.getElementById('playground-dialog').close();
+  });
+  document.getElementById('btn-pg-play').addEventListener('click', sendPlayToServer);
+  document.getElementById('pg-mode-player').addEventListener('click', () => setPgMode('player'));
+  document.getElementById('pg-mode-scene').addEventListener('click', () => setPgMode('scene'));
+  document.getElementById('pg-preview').addEventListener('click', onPgPreviewClick);
+  document.querySelectorAll('.help-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const which = tab.dataset.tab;
+      document.querySelectorAll('.help-tab').forEach(t =>
+        t.classList.toggle('active', t === tab));
+      document.querySelectorAll('.help-tab-panel').forEach(p =>
+        p.hidden = p.dataset.panel !== which);
+    });
+  });
+
+  // Sprite list buttons
+  document.getElementById('btn-sprite-new').addEventListener('click', () => {
+    pushUndo();
+    const name = 'sprite_' + (state.sprites.length + 1);
+    state.sprites.push(createSprite(name, 2, 2));
+    selectedSpriteIdx = state.sprites.length - 1;
+    selectedCell = { r: 0, c: 0 };
+    markDirty();
+    renderAll();
+  });
+  document.getElementById('btn-sprite-dup').addEventListener('click', () => {
+    const sp = currentSprite();
+    if (!sp) return;
+    pushUndo();
+    const copy = JSON.parse(JSON.stringify(sp));
+    copy.name = (sp.name || 'sprite') + '_copy';
+    state.sprites.splice(selectedSpriteIdx + 1, 0, copy);
+    selectedSpriteIdx = selectedSpriteIdx + 1;
+    markDirty();
+    renderAll();
+  });
+  document.getElementById('btn-sprite-del').addEventListener('click', () => {
+    const sp = currentSprite();
+    if (!sp) return;
+    const dlg = document.getElementById('confirm-dialog');
+    document.getElementById('confirm-title').textContent = 'Delete sprite?';
+    document.getElementById('confirm-body').textContent =
+      'Delete "' + (sp.name || 'sprite') + '"? This can be undone.';
+    const onYes = () => {
+      pushUndo();
+      state.sprites.splice(selectedSpriteIdx, 1);
+      selectedSpriteIdx = Math.min(selectedSpriteIdx, state.sprites.length - 1);
+      markDirty();
+      renderAll();
+      cleanup();
+    };
+    const onNo = () => cleanup();
+    function cleanup() {
+      dlg.close();
+      document.getElementById('btn-confirm-yes').removeEventListener('click', onYes);
+      document.getElementById('btn-confirm-no').removeEventListener('click', onNo);
+    }
+    document.getElementById('btn-confirm-yes').addEventListener('click', onYes);
+    document.getElementById('btn-confirm-no').addEventListener('click', onNo);
+    dlg.showModal();
+  });
+
+  // Name + dimensions
+  document.getElementById('sprite-name-input').addEventListener('input', e => {
+    const sp = currentSprite();
+    if (!sp) return;
+    pushUndo();
+    sp.name = e.target.value;
+    markDirty();
+    renderSpriteList();
+  });
+  const onResize = () => {
+    const sp = currentSprite();
+    if (!sp) return;
+    const w = parseInt(document.getElementById('sprite-w').value, 10) || 1;
+    const h = parseInt(document.getElementById('sprite-h').value, 10) || 1;
+    if (w === sp.width && h === sp.height) return;
+    pushUndo();
+    resizeSprite(sp, w, h);
+    selectedCell.r = Math.min(selectedCell.r, sp.height - 1);
+    selectedCell.c = Math.min(selectedCell.c, sp.width - 1);
+    markDirty();
+    renderAll();
+  };
+  document.getElementById('sprite-w').addEventListener('change', onResize);
+  document.getElementById('sprite-h').addEventListener('change', onResize);
+
+  // Sprite canvas — in paint mode, clicks paint pixels; in browse mode,
+  // they just select the cell under the cursor. Shift-click eyedrops;
+  // right-click assigns the currently highlighted tile to the clicked cell
+  // (quick way to stamp tiles from the tileset into the sprite).
+  const sc = document.getElementById('sprite-canvas');
+  sc.addEventListener('contextmenu', e => e.preventDefault());
+  sc.addEventListener('mousedown', e => {
+    if (!currentSprite()) return;
+    const pos = spriteCanvasPixel(e);
+    if (!pos) return;
+    // Always move the selection to the clicked cell.
+    if (pos.cellR !== selectedCell.r || pos.cellC !== selectedCell.c) {
+      selectedCell = { r: pos.cellR, c: pos.cellC };
+    }
+    // Right-click = assign highlighted tile into this cell (works in any mode).
+    if (e.button === 2) {
+      e.preventDefault();
+      assignSelectedTileToCell();
+      return;
+    }
+    // Left-click just selects the cell — the tileset highlight is independent.
+    renderSpriteCanvas();
+    renderCellInspector();
+    renderTileset();
+    renderTileEditor();
+    renderPalettes();
+    refreshColourButtons();
+    if (editMode === 'paint') {
+      spDragging = true;
+      spApply(e, true);
+    }
+  });
+  sc.addEventListener('mousemove', e => {
+    if (editMode === 'paint' && spDragging) spApply(e, false);
+  });
+  window.addEventListener('mouseup', () => { spDragging = false; spGuardChecked = false; });
+  document.getElementById('sprite-zoom').addEventListener('input', e => {
+    spriteZoom = parseInt(e.target.value, 10);
+    document.getElementById('sprite-zoom-label').textContent = spriteZoom + '×';
+    renderSpriteCanvas();
+  });
+  document.getElementById('show-checker').addEventListener('change', renderSpriteCanvas);
+  document.getElementById('show-cell-grid').addEventListener('change', renderSpriteCanvas);
+  document.getElementById('btn-fullscreen-preview').addEventListener('click', togglePreview);
+
+  // Cell inspector controls
+  document.getElementById('cell-tile').addEventListener('change', e => {
+    const cell = currentCell();
+    if (!cell) return;
+    const v = Math.max(0, Math.min(255, parseInt(e.target.value, 10) || 0));
+    if (v === cell.tile && !cell.empty) return;
+    pushUndo();
+    cell.tile = v;
+    cell.empty = false;
+    selectedTileIdx = v;
+    markDirty();
+    renderSpriteCanvas();
+    renderCellInspector();
+    renderTileset();
+    renderTileEditor();
+    renderSpriteList();
+  });
+  document.getElementById('cell-palette').addEventListener('change', e => {
+    const cell = currentCell();
+    if (!cell) return;
+    pushUndo();
+    cell.palette = parseInt(e.target.value, 10) & 3;
+    markDirty();
+    renderSpriteCanvas();
+    renderCellInspector();
+    renderTileset();
+    renderTileEditor();
+    renderPalettes();
+    renderSpriteList();
+  });
+  ['cell-flipH', 'cell-flipV', 'cell-priority'].forEach(id => {
+    document.getElementById(id).addEventListener('change', e => {
+      const cell = currentCell();
+      if (!cell) return;
+      pushUndo();
+      if (id === 'cell-flipH')    cell.flipH = e.target.checked;
+      if (id === 'cell-flipV')    cell.flipV = e.target.checked;
+      if (id === 'cell-priority') cell.priority = e.target.checked;
+      markDirty();
+      renderSpriteCanvas();
+      renderCellInspector();
+      renderSpriteList();
+    });
+  });
+  document.getElementById('btn-cell-clear').addEventListener('click', () => {
+    const cell = currentCell();
+    if (!cell) return;
+    pushUndo();
+    cell.tile = 0;
+    cell.flipH = false;
+    cell.flipV = false;
+    cell.priority = false;
+    cell.empty = true;  // clearing turns it back into an empty placeholder
+    markDirty();
+    renderSpriteCanvas();
+    renderCellInspector();
+    renderTileset();
+    renderTileEditor();
+    renderSpriteList();
+  });
+
+  // Mode toggle
+  document.getElementById('btn-mode-browse').addEventListener('click', () => setEditMode('browse'));
+  document.getElementById('btn-mode-paint') .addEventListener('click', () => setEditMode('paint'));
+
+  // Background-theme picker
+  document.querySelectorAll('.bg-theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => setBgTheme(btn.dataset.theme));
+  });
+
+  // Assign highlighted tile to the current cell
+  document.getElementById('btn-assign-tile').addEventListener('click', () => {
+    assignSelectedTileToCell();
+  });
+
+  // Tileset picker:
+  //   Left-click  = assign this tile to the currently selected sprite cell.
+  //   Right-click = jump to the first sprite that already uses this tile
+  //                 (handy for "where did I put that tile?").
+  // The highlighted tile is independent of the selected cell's tile.
+  const ts = document.getElementById('tileset-canvas');
+  function tilesetCoord(e) {
+    const rect = ts.getBoundingClientRect();
+    const cellPx = rect.width / 16;
+    const x = Math.floor((e.clientX - rect.left) / cellPx);
+    const y = Math.floor((e.clientY - rect.top) / cellPx);
+    if (x < 0 || y < 0 || x > 15 || y > 15) return -1;
+    return y * 16 + x;
+  }
+  ts.addEventListener('click', e => {
+    const idx = tilesetCoord(e);
+    if (idx < 0) return;
+    selectTilesetTile(idx, { assign: true });
+  });
+  ts.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const idx = tilesetCoord(e);
+    if (idx < 0) return;
+    selectTilesetTile(idx, { jumpToUser: true });
+  });
+
+  // Tile pixel editor — only accepts paint input in paint mode.
+  const tc = document.getElementById('tile-canvas');
+  tc.addEventListener('contextmenu', e => e.preventDefault());
+  tc.addEventListener('mousedown', e => {
+    if (!currentCell()) return;
+    if (editMode !== 'paint' && !(e.shiftKey || e.button === 2)) {
+      setStatus('warn', '● Switch to Paint mode (press M) to edit pixels');
+      return;
+    }
+    teDragging = true;
+    teApply(e, true);
+  });
+  tc.addEventListener('mousemove', e => {
+    if (editMode !== 'paint') return;
+    if (teDragging) teApply(e, false);
+  });
+  window.addEventListener('mouseup', () => { teDragging = false; teGuardChecked = false; });
+
+  // Colour buttons
+  document.querySelectorAll('.color-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      currentColour = parseInt(b.dataset.color, 10);
+      refreshColourButtons();
+    });
+  });
+
+  // Preview close + window resize
+  const previewDlg = document.getElementById('preview-dialog');
+  document.getElementById('btn-preview-close').addEventListener('click', () => previewDlg.close());
+  previewDlg.addEventListener('click', e => {
+    if (e.target === previewDlg) previewDlg.close();
+  });
+  window.addEventListener('resize', () => { if (previewDlg.open) renderFullPreview(); });
+
+  // Keyboard
+  window.addEventListener('keydown', e => {
+    if (e.target.matches('input, textarea, select')) return;
+    // Undo / redo / save
+    if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if (e.ctrlKey && (e.key === 'Z' || e.key.toLowerCase() === 'y')) { e.preventDefault(); redo(); return; }
+    if (e.ctrlKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      if (saveTimer) clearTimeout(saveTimer);
+      Storage.saveCurrent(state);
+      Storage.saveSnapshot(state, 'manual_ctrl_s');
+      lastSaveTs = Date.now();
+      dirty = false;
+      setStatus('saved', '● Saved + snapshot');
+      return;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'z') { e.preventDefault(); undo(); return; }
+      if (e.key === 'y') { e.preventDefault(); redo(); return; }
+    }
+    // Colour
+    if (e.key >= '0' && e.key <= '3') {
+      currentColour = parseInt(e.key, 10);
+      refreshColourButtons();
+      return;
+    }
+    if (e.key === '`') { currentColour = 0; refreshColourButtons(); return; }
+    // Mode toggle
+    if (e.key === 'm' || e.key === 'M') {
+      setEditMode(editMode === 'paint' ? 'browse' : 'paint');
+      return;
+    }
+    // Tile picker step — just walks the highlighted tile in the tileset.
+    // Use Enter/Space to assign it to the selected cell.
+    const cell = currentCell();
+    if (e.key === '[' || e.key === ']') {
+      const dir = e.key === '[' ? NUM_TILES - 1 : 1;
+      const next = (selectedTileIdx + dir) % NUM_TILES;
+      selectTilesetTile(next, {});
+      return;
+    }
+    // Enter / Space = assign highlighted tile to the current cell.
+    if ((e.key === 'Enter' || e.key === ' ') && cell) {
+      e.preventDefault();
+      assignSelectedTileToCell();
+      return;
+    }
+    // Cell navigation
+    const sp = currentSprite();
+    if (sp && (e.key === 'ArrowLeft' || e.key === 'ArrowRight'
+           || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      if (e.key === 'ArrowLeft')  selectedCell.c = (selectedCell.c + sp.width - 1) % sp.width;
+      if (e.key === 'ArrowRight') selectedCell.c = (selectedCell.c + 1) % sp.width;
+      if (e.key === 'ArrowUp')    selectedCell.r = (selectedCell.r + sp.height - 1) % sp.height;
+      if (e.key === 'ArrowDown')  selectedCell.r = (selectedCell.r + 1) % sp.height;
+      renderSpriteCanvas(); renderCellInspector(); renderTileset(); renderTileEditor(); renderPalettes();
+      refreshColourButtons();
+      return;
+    }
+    // Flip / duplicate
+    if (e.key === 'h' && cell) {
+      pushUndo(); cell.flipH = !cell.flipH; markDirty();
+      renderSpriteCanvas(); renderCellInspector(); renderSpriteList();
+      return;
+    }
+    if (e.key === 'H' && cell) {
+      pushUndo(); cell.flipV = !cell.flipV; markDirty();
+      renderSpriteCanvas(); renderCellInspector(); renderSpriteList();
+      return;
+    }
+    if (e.key === 'd' && cell) {
+      if (cell.empty) {
+        setStatus('warn', '● Assign a tile before duplicating');
+        return;
+      }
+      const dst = findNextEmptyTileSlot();
+      if (dst < 0) { alert('No empty tile slots left.'); return; }
+      pushUndo();
+      const src = state.tiles[cell.tile];
+      state.tiles[dst] = { pixels: clonePixels(src.pixels), name: src.name ? src.name + '_copy' : '' };
+      cell.tile = dst;
+      selectedTileIdx = dst;
+      markDirty();
+      renderAll();
+      return;
+    }
+    // View
+    if (e.key === 'f') { togglePreview(); return; }
+    if (e.key === '?') { document.getElementById('help-dialog').showModal(); return; }
+  });
+
+  // Auto-save timers
+  let lastSnapshotStamp = '';
+  snapshotTimer = setInterval(() => {
+    const stamp = state.metadata.modified;
+    if (stamp !== lastSnapshotStamp) {
+      Storage.saveSnapshot(state, 'auto_30s_sprites');
+      lastSnapshotStamp = stamp;
+    }
+  }, SNAPSHOT_INTERVAL_MS);
+
+  let lastBackupStamp = '';
+  backupTimer = setInterval(() => {
+    const stamp = state.metadata.modified;
+    if (stamp === lastBackupStamp) return;
+    lastBackupStamp = stamp;
+    Storage.saveBackup(state);
+  }, BACKUP_INTERVAL_MS);
+
+  setInterval(updateSavedTimeLabel, 1000);
+
+  // Final save on unload
+  window.addEventListener('beforeunload', () => {
+    Storage.saveCurrent(state);
+    Storage.saveSnapshot(state, 'beforeunload_sprites');
+  });
+
+  // Export menu
+  document.querySelectorAll('.export-menu [data-export]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.export;
+      ({
+        json: exportSpritesJSON,
+        inc:  exportSpritesInc,
+        h:    exportSpritesH,
+      })[kind]();
+      document.querySelector('.export-menu').open = false;
+    });
+  });
+
+  // Import JSON
+  const fileInput = document.getElementById('file-input');
+  document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (f) importSpritesFromFile(f);
+    fileInput.value = '';
+  });
+
+  // Floating tileset window
+  initFloatingTileset();
+
+  // Mark onboarding seen when help dialog is dismissed.
+  document.getElementById('help-dialog').addEventListener('close', () => {
+    localStorage.setItem('sprites-help-seen', '1');
+  });
+
+  // Initial render
+  setEditMode(editMode);  // sync body class + toggle-button state
+  setBgTheme(bgTheme);    // highlight the stored theme button
+  renderAll();
+  refreshColourButtons();
+  updateUndoButtons();
+  setStatus('saved', '● Ready');
+  lastSaveTs = Date.now();
+
+  // If the project has no sprites yet, create a starter so the pupil
+  // has something to look at.
+  if (state.sprites.length === 0) {
+    state.sprites.push(createSprite('hero', 2, 2));
+    selectedSpriteIdx = 0;
+    markDirty();
+    renderAll();
+  }
+
+  maybeShowSpriteOnboarding();
+}
+
+init();
+</script>
+</body>
+</html>
