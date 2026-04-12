@@ -6,7 +6,10 @@
 // through the two generated headers written by tools/playground_server.py.
 //
 // Controls: D-pad moves the player sprite.  Sprite flips horizontally when
-// moving left.  The player is clamped to the visible screen area.
+// moving left.  The player is clamped to the visible screen area.  If the
+// pupil has assigned a walk / jump animation in the sprites editor, the
+// player cycles through those frames; otherwise the static player_tiles
+// layout is used unchanged.
 // =============================================================================
 
 #include <nes.h>
@@ -21,6 +24,8 @@
 #define PPU_ADDR      *((unsigned char*)0x2006)
 #define PPU_DATA      *((unsigned char*)0x2007)
 #define JOYPAD1       *((unsigned char*)0x4016)
+
+#define PLAYER_TILES_PER_FRAME (PLAYER_W * PLAYER_H)
 
 extern void load_background(void);
 
@@ -38,6 +43,20 @@ unsigned char sx;
 unsigned char sy;
 unsigned char tile;
 unsigned char attr;
+
+// Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
+// changes we reset frame/tick so a new animation always plays from its
+// first frame.  anim_base is the byte offset of the current frame inside
+// the active tiles/attrs table (frame_index * PLAYER_W * PLAYER_H).
+unsigned char anim_mode;
+unsigned char anim_prev_mode;
+unsigned char anim_frame;
+unsigned char anim_tick;
+unsigned char anim_frame_count;
+unsigned char anim_frame_ticks;
+unsigned int  anim_base;
+const unsigned char *anim_tiles;
+const unsigned char *anim_attrs;
 
 unsigned char read_controller(void) {
     unsigned char result = 0;
@@ -74,6 +93,10 @@ void main(void) {
     px = PLAYER_X;
     py = PLAYER_Y;
     plrdir = 0x00;
+    anim_mode = 0;
+    anim_prev_mode = 0xFF;
+    anim_frame = 0;
+    anim_tick = 0;
 
     while (1) {
         pad = read_controller();
@@ -95,6 +118,50 @@ void main(void) {
             if (py > 16) py--;
         }
 
+        // Pick the active animation for this frame.  UP wins over LEFT/RIGHT
+        // so holding the jump direction plays the jump cycle even while
+        // drifting sideways.  Unassigned animations (count == 0) fall
+        // through to the static player_tiles layout.
+        anim_mode = 0;
+#if JUMP_FRAME_COUNT > 0
+        if (pad & 0x08) anim_mode = 2;
+#endif
+#if WALK_FRAME_COUNT > 0
+        if (anim_mode == 0 && (pad & 0x03)) anim_mode = 1;
+#endif
+
+        if (anim_mode == 2) {
+            anim_tiles = jump_tiles;
+            anim_attrs = jump_attrs;
+            anim_frame_count = JUMP_FRAME_COUNT;
+            anim_frame_ticks = JUMP_FRAME_TICKS;
+        } else if (anim_mode == 1) {
+            anim_tiles = walk_tiles;
+            anim_attrs = walk_attrs;
+            anim_frame_count = WALK_FRAME_COUNT;
+            anim_frame_ticks = WALK_FRAME_TICKS;
+        } else {
+            anim_tiles = player_tiles;
+            anim_attrs = player_attrs;
+            anim_frame_count = 1;
+            anim_frame_ticks = 1;
+        }
+
+        if (anim_mode != anim_prev_mode) {
+            anim_frame = 0;
+            anim_tick = 0;
+            anim_prev_mode = anim_mode;
+        }
+        if (anim_frame_count > 1) {
+            anim_tick++;
+            if (anim_tick >= anim_frame_ticks) {
+                anim_tick = 0;
+                anim_frame++;
+                if (anim_frame >= anim_frame_count) anim_frame = 0;
+            }
+        }
+        anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
+
         waitvsync();
         PPU_SCROLL = 0;
         PPU_SCROLL = 0;
@@ -112,8 +179,8 @@ void main(void) {
                 } else {
                     sx = px + (c << 3);
                 }
-                tile = player_tiles[r * PLAYER_W + c];
-                attr = player_attrs[r * PLAYER_W + c] ^ plrdir;
+                tile = anim_tiles[anim_base + r * PLAYER_W + c];
+                attr = anim_attrs[anim_base + r * PLAYER_W + c] ^ plrdir;
                 OAM_DATA = sy;
                 OAM_DATA = tile;
                 OAM_DATA = attr;

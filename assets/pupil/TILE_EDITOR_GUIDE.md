@@ -30,6 +30,31 @@ digits). They're compatible — you can swap between them any time.
 - **Composite sprite** in the middle — up to 8×8 tiles, with flip-H / flip-V / priority per cell.
 - **Shared tileset** on the right — the same 256 slots, but a different pool from the backgrounds page (so you can't clobber BG art by editing sprite tiles).
 - **🖱 Browse / ✏️ Paint mode** (top of the sprite area) — Browse lets you click cells to select without painting by accident.
+- **Animations** panel (below the sprite list) — group sprites into a walking or jumping cycle. See the next section.
+
+### Making an animation
+
+An animation is just a list of your **full sprites** played in order. A
+walk cycle might be three poses; a jump might be two. The same sprite
+can appear in more than one animation, and frames can repeat.
+
+1. In the **Animations** panel, click **+ New animation** and give it a name (e.g. `walk`).
+2. Choose a sprite from the dropdown and click **+ Add frame**. Repeat to build the cycle.
+3. Drag the **FPS** slider to speed it up or slow it down. The preview window plays it live.
+4. Use **▲ / ▼** beside a frame to reorder, or **✕** to drop it.
+
+### Using it in the game
+
+At the bottom of the panel, pick an animation for **Walking** and
+another (optionally) for **Jumping**. When you press **▶ Play in NES**:
+
+- Holding **← / →** plays the walk animation.
+- Holding **↑** plays the jump animation.
+- Standing still shows the player's plain (non-animated) sprite.
+
+All frames of one animation must be the **same width × height** as the
+Player sprite you chose in the Play dialog. The editor warns you if a
+frame doesn't match, and the server silently skips the mismatched ones.
 
 ### Handy keys
 

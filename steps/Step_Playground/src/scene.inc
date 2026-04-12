@@ -4,13 +4,31 @@
 
 #define PLAYER_W 1
 #define PLAYER_H 2
-#define PLAYER_X 60
-#define PLAYER_Y 120
+#define PLAYER_X 54
+#define PLAYER_Y 155
 
 static const unsigned char player_tiles[2] = {
     0x01, 0x03
 };
 static const unsigned char player_attrs[2] = {
+    0x00, 0x01
+};
+
+#define WALK_FRAME_COUNT 2
+#define WALK_FRAME_TICKS 8
+static const unsigned char walk_tiles[4] = {
+    0x01, 0x03, 0x01, 0x02
+};
+static const unsigned char walk_attrs[4] = {
+    0x00, 0x01, 0x00, 0x01
+};
+
+#define JUMP_FRAME_COUNT 1
+#define JUMP_FRAME_TICKS 8
+static const unsigned char jump_tiles[2] = {
+    0x01, 0x03
+};
+static const unsigned char jump_attrs[2] = {
     0x00, 0x01
 };
 

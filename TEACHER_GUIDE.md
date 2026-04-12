@@ -71,11 +71,22 @@ The editor state object (what JSON export writes and import reads) is:
   backgrounds: [{name, dimensions:{screens_x,screens_y}, nametable:[[...]]}],
   selectedBgIdx: 0,
   sprites: [{name, width, height, cells:[[{tile,palette,flipH,flipV,priority,empty}]]}],
+  animations: [{id, name, fps, frames:[spriteIdx, ...]}],
+  animation_assignments: {walk: id|null, jump: id|null},
+  nextAnimationId: 1,
   metadata: {created, modified}
 }
 ```
 
 Two independent 256-tile pools (`sprite_tiles` / `bg_tiles`) mirror the NES pattern tables and stop the two pages clobbering each other's art. Legacy saves with a single `tiles` pool are migrated by `migrateState()` on load — they duplicate across both pools.
+
+### Animations
+
+Animations are ordered lists of sprite indices — nothing more. The same sprite can appear in multiple animations, and can repeat within one. Animations have a monotonically-allocated **`id`** (via `nextAnimationId`) so walk/jump **assignments are id-based**, not index-based — deleting or reordering animations doesn't break the walking/jumping selection. `migrateState()` also clears assignments whose target id no longer exists.
+
+When a sprite is deleted, `btn-sprite-del` rewrites every animation's `frames` array to filter the removed index and decrement higher indices, keeping the cascade consistent. Bounds-checks on load catch anything missed by older saves.
+
+`animations[].fps` is 1..60 and converts to **vblank ticks** on the server side: `ticks = max(1, round(60/fps))`. A frame of 1 tick advances every vblank (≈60 fps); 30 ticks is about half a second per frame.
 
 ### Playground Server (`tools/playground_server.py`)
 
@@ -88,7 +99,11 @@ The server is stdlib-only — no pip installs needed. Keep it that way.
 
 **VSCode tasks**: `Start Playground Server` is auto-run on folder open. `Open Editor via Playground Server` is the canonical entry — opens the browser on the served URL (the Play button fails on `file://` with a CORS hint in the status bar).
 
-**Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, and `ss_*` arrays for the extra static sprites — if you rename these symbols, update `build_scene_inc()` in the server to match.
+**Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, `ss_*` arrays (extra static sprites), and the animation tables **`walk_tiles` / `walk_attrs` / `WALK_FRAME_COUNT` / `WALK_FRAME_TICKS`** (and the `jump_*` equivalents). If you rename any of these symbols, update `build_scene_inc()` in the server to match.
+
+**Walk/jump contract:** for each kind, the server emits a compile-time count (0 when no animation is assigned), a tick interval, and two flat byte arrays sized `count * PLAYER_W * PLAYER_H` that concatenate every frame's tile + attribute cells row-major. All frames of a given animation must share the Player sprite's W×H — `_resolve_animation()` in the server silently drops frames that don't. When the count is 0, cc65 still needs a valid array so the server emits a 1-element stub; `main.c` gates the use behind the macros with `#if WALK_FRAME_COUNT > 0`.
+
+**main.c state machine:** UP held selects jump (if assigned), else LEFT/RIGHT held selects walk (if assigned), else the static `player_tiles` layout. Switching mode resets `anim_frame` / `anim_tick` so every animation enters from its first frame. The frame index is advanced each vblank when `anim_tick >= FRAME_TICKS`. `plrdir` still XORs the flip-H bit into every attribute byte so a left-facing walk still mirrors correctly.
 
 ### Converting pupil's legacy `my_tiles.txt`
 

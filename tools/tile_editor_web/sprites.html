@@ -242,6 +242,130 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 .dim-row input[type=number] { width: 54px; }
 #sprite-name-input { width: 100%; }
 
+/* --- Animations panel ------------------------------------- */
+.animations-section {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.animations-section h2 { margin-top: 0; }
+.anim-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+}
+.anim-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9em;
+}
+.anim-list li:last-child { border-bottom: none; }
+.anim-list li:hover { background: var(--panel2); }
+.anim-list li.selected { background: #3a2f50; color: var(--accent); }
+.anim-list li .anim-meta {
+  font-size: 0.75em;
+  color: var(--muted);
+  margin-left: auto;
+}
+.anim-empty-hint {
+  color: var(--muted);
+  font-size: 0.8em;
+  padding: 10px 8px;
+  text-align: center;
+  font-style: italic;
+}
+.anim-frames {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  margin: 6px 0;
+  min-height: 52px;
+  background: var(--bg);
+}
+.anim-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel2);
+  font-size: 0.7em;
+  color: var(--muted);
+}
+.anim-frame canvas {
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  background: #000;
+  border: 1px solid var(--border);
+}
+.anim-frame-row {
+  display: flex;
+  gap: 2px;
+}
+.anim-frame-row button {
+  padding: 1px 4px;
+  font-size: 0.9em;
+  min-width: 18px;
+}
+.anim-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #1a1630;
+  margin: 6px 0;
+}
+#anim-preview-canvas {
+  image-rendering: pixelated;
+  background:
+    linear-gradient(45deg, #0a0a0f 25%, transparent 25%) 0 0 / 8px 8px,
+    linear-gradient(-45deg, #0a0a0f 25%, transparent 25%) 0 0 / 8px 8px,
+    linear-gradient(45deg, transparent 75%, #0a0a0f 75%) 0 0 / 8px 8px,
+    linear-gradient(-45deg, transparent 75%, #0a0a0f 75%) 0 0 / 8px 8px,
+    #1a1630;
+}
+.anim-preview-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.8em;
+  color: var(--muted);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.anim-assignments {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.85em;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.anim-assignments label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.anim-assignments select { max-width: 110px; }
+
 /* --- Composite sprite canvas ------------------------------ */
 .sprite-canvas-wrap {
   border: 1px solid var(--border);
@@ -823,6 +947,58 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
     <div class="empty-hint" id="sprite-dim-hint">
       Existing cells are preserved when you resize.
     </div>
+
+    <!-- ============ Animations sub-panel ============ -->
+    <div class="animations-section">
+      <h2>Animations</h2>
+      <div class="sprite-list-buttons">
+        <button type="button" id="btn-anim-new" title="Create a new empty animation">+ New</button>
+        <button type="button" id="btn-anim-dup" title="Duplicate the selected animation">⎘ Duplicate</button>
+        <button type="button" id="btn-anim-rename" title="Rename the selected animation">✎ Rename</button>
+        <button type="button" id="btn-anim-del" class="warn" title="Delete the selected animation">🗑 Delete</button>
+      </div>
+      <ul id="anim-list" class="anim-list" role="listbox" aria-label="Animations"></ul>
+      <div id="anim-empty" class="anim-empty-hint">
+        No animations yet. Click <b>+ New</b> to make one, then add frames from your sprite list.
+      </div>
+
+      <div id="anim-edit" hidden>
+        <div class="dim-row">
+          <label>fps
+            <input type="number" id="anim-fps" min="1" max="60" value="8" title="Frames-per-second for this animation (1–60)">
+          </label>
+          <button type="button" id="btn-anim-add-frame" title="Append the sprite selected in the Sprites list above as a new frame">Add current sprite →</button>
+        </div>
+        <div id="anim-frames" class="anim-frames" aria-label="Frames"></div>
+
+        <div class="anim-preview">
+          <canvas id="anim-preview-canvas" width="64" height="64"></canvas>
+          <div class="anim-preview-controls">
+            <button type="button" id="btn-anim-play" title="Play / pause the preview">▶ Play</button>
+            <label>Preview
+              <select id="anim-preview-fps" title="Override fps for preview only (does not save)">
+                <option value="">use anim fps</option>
+                <option value="1">1 fps</option>
+                <option value="2">2 fps</option>
+                <option value="4">4 fps</option>
+                <option value="8">8 fps</option>
+                <option value="15">15 fps</option>
+                <option value="30">30 fps</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="anim-assignments">
+          <label>Walk
+            <select id="anim-assign-walk" title="Which animation to play while walking in the Play-in-NES test"></select>
+          </label>
+          <label>Jump
+            <select id="anim-assign-jump" title="Which animation to play while jumping (UP held) in the Play-in-NES test"></select>
+          </label>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ============ Center: composition + palettes + pixel editor ============ -->
@@ -1262,6 +1438,9 @@ function createDefaultState() {
     backgrounds: [emptyBackground('background')],
     selectedBgIdx: 0,
     sprites: [],
+    animations: [],
+    animation_assignments: { walk: null, jump: null },
+    nextAnimationId: 1,
     metadata: { created: new Date().toISOString(), modified: new Date().toISOString() },
   };
 }
@@ -1392,8 +1571,37 @@ function migrateState(s) {
   }
   delete s.nametable;
   delete s.dimensions;
+  // --- Animations -------------------------------------------------------
+  if (!Array.isArray(s.animations)) s.animations = [];
+  if (!s.animation_assignments || typeof s.animation_assignments !== 'object') {
+    s.animation_assignments = { walk: null, jump: null };
+  }
+  if (typeof s.nextAnimationId !== 'number' || s.nextAnimationId < 1) {
+    s.nextAnimationId = 1;
+  }
+  for (const an of s.animations) {
+    if (!an || typeof an !== 'object') continue;
+    if (typeof an.id !== 'number') { an.id = s.nextAnimationId++; }
+    else { s.nextAnimationId = Math.max(s.nextAnimationId, an.id + 1); }
+    if (typeof an.name !== 'string' || !an.name) an.name = 'anim';
+    if (!Array.isArray(an.frames)) an.frames = [];
+    an.frames = an.frames
+      .map(f => f | 0)
+      .filter(f => f >= 0);
+    an.fps = Math.max(1, Math.min(60, (an.fps | 0) || 8));
+  }
+  const validIds = new Set(s.animations.map(a => a.id));
+  for (const k of ['walk', 'jump']) {
+    const v = s.animation_assignments[k];
+    if (v != null && !validIds.has(v)) s.animation_assignments[k] = null;
+  }
   // Sanity-patch each sprite.
   if (Array.isArray(s.sprites)) {
+    // Drop any animation frames that point past the end of the sprites array
+    // (can happen if a sprite is deleted and the animation kept a stale idx).
+    for (const an of s.animations) {
+      an.frames = an.frames.filter(f => f >= 0 && f < s.sprites.length);
+    }
     for (const sp of s.sprites) {
       if (!sp || typeof sp !== 'object') continue;
       sp.name ??= 'sprite';
@@ -1771,6 +1979,7 @@ function renderAll() {
   renderTileEditor();
   renderPalettes();
   renderMasterGrid();
+  renderAnimations();
   updateHeaderFields();
 }
 
@@ -1845,6 +2054,292 @@ function selectSprite(idx) {
     selectedCell = { r: 0, c: 0 };
   }
   renderAll();
+}
+
+// =============================================================
+// Animations panel
+// =============================================================
+let selectedAnimId = null;
+let animPreview = { timer: null, frameIdx: 0, playing: false };
+
+function currentAnim() {
+  if (selectedAnimId == null) return null;
+  return state.animations.find(a => a.id === selectedAnimId) || null;
+}
+function allocAnimId() {
+  const id = state.nextAnimationId | 0 || 1;
+  state.nextAnimationId = id + 1;
+  return id;
+}
+
+function renderAnimations() {
+  renderAnimationList();
+  renderAnimationEditor();
+  renderAnimationAssignments();
+}
+
+function renderAnimationList() {
+  const ul = document.getElementById('anim-list');
+  const empty = document.getElementById('anim-empty');
+  const editEl = document.getElementById('anim-edit');
+  ul.innerHTML = '';
+  const anims = state.animations || [];
+  if (!anims.length) {
+    ul.style.display = 'none';
+    empty.hidden = false;
+    editEl.hidden = true;
+    document.getElementById('btn-anim-dup').disabled = true;
+    document.getElementById('btn-anim-rename').disabled = true;
+    document.getElementById('btn-anim-del').disabled = true;
+    stopAnimPreview();
+    return;
+  }
+  ul.style.display = '';
+  empty.hidden = true;
+  document.getElementById('btn-anim-dup').disabled = false;
+  document.getElementById('btn-anim-rename').disabled = false;
+  document.getElementById('btn-anim-del').disabled = false;
+  if (!anims.find(a => a.id === selectedAnimId)) {
+    selectedAnimId = anims[0].id;
+  }
+  for (const a of anims) {
+    const li = document.createElement('li');
+    if (a.id === selectedAnimId) li.classList.add('selected');
+    const label = document.createElement('span');
+    label.textContent = a.name || '(unnamed)';
+    li.appendChild(label);
+    const meta = document.createElement('span');
+    meta.className = 'anim-meta';
+    meta.textContent = a.frames.length + ' frame' + (a.frames.length === 1 ? '' : 's')
+                     + ' · ' + a.fps + ' fps';
+    li.appendChild(meta);
+    li.addEventListener('click', () => {
+      selectedAnimId = a.id;
+      animPreview.frameIdx = 0;
+      renderAnimations();
+    });
+    ul.appendChild(li);
+  }
+  editEl.hidden = false;
+}
+
+function renderAnimationEditor() {
+  const a = currentAnim();
+  if (!a) return;
+  document.getElementById('anim-fps').value = a.fps;
+
+  const framesEl = document.getElementById('anim-frames');
+  framesEl.innerHTML = '';
+  if (a.frames.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'anim-empty-hint';
+    hint.textContent = 'No frames yet. Pick a sprite above and click "Add current sprite →".';
+    framesEl.appendChild(hint);
+  } else {
+    a.frames.forEach((spriteIdx, frameIdx) => {
+      const sp = state.sprites[spriteIdx];
+      const wrap = document.createElement('div');
+      wrap.className = 'anim-frame';
+      const canvas = document.createElement('canvas');
+      canvas.width = 32; canvas.height = 32;
+      if (sp) drawSpriteIntoCtx(sp, canvas.getContext('2d'), 32, 32);
+      wrap.appendChild(canvas);
+      const label = document.createElement('span');
+      label.textContent = sp ? (sp.name || ('#' + spriteIdx)) : '(missing)';
+      wrap.appendChild(label);
+      const row = document.createElement('div');
+      row.className = 'anim-frame-row';
+      const left = document.createElement('button');
+      left.type = 'button'; left.textContent = '◀'; left.title = 'Move frame left';
+      left.disabled = frameIdx === 0;
+      left.addEventListener('click', () => moveAnimFrame(frameIdx, -1));
+      const right = document.createElement('button');
+      right.type = 'button'; right.textContent = '▶'; right.title = 'Move frame right';
+      right.disabled = frameIdx === a.frames.length - 1;
+      right.addEventListener('click', () => moveAnimFrame(frameIdx, +1));
+      const del = document.createElement('button');
+      del.type = 'button'; del.textContent = '✕'; del.title = 'Remove frame';
+      del.className = 'warn';
+      del.addEventListener('click', () => removeAnimFrame(frameIdx));
+      row.append(left, right, del);
+      wrap.appendChild(row);
+      framesEl.appendChild(wrap);
+    });
+  }
+  renderAnimPreview();
+}
+
+function renderAnimPreview() {
+  const a = currentAnim();
+  const canvas = document.getElementById('anim-preview-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!a || a.frames.length === 0) return;
+  const idx = animPreview.frameIdx % a.frames.length;
+  const sp = state.sprites[a.frames[idx]];
+  if (!sp) return;
+  // Scale so the sprite fits in 64x64 preserving aspect.
+  const srcW = sp.width * 8, srcH = sp.height * 8;
+  const scale = Math.min(64 / srcW, 64 / srcH);
+  const dw = Math.max(1, Math.floor(srcW * scale));
+  const dh = Math.max(1, Math.floor(srcH * scale));
+  const off = document.createElement('canvas');
+  off.width = dw; off.height = dh;
+  drawSpriteIntoCtx(sp, off.getContext('2d'), dw, dh);
+  ctx.drawImage(off, Math.floor((64 - dw) / 2), Math.floor((64 - dh) / 2));
+}
+
+function stopAnimPreview() {
+  if (animPreview.timer != null) {
+    clearInterval(animPreview.timer);
+    animPreview.timer = null;
+  }
+  animPreview.playing = false;
+  const btn = document.getElementById('btn-anim-play');
+  if (btn) btn.textContent = '▶ Play';
+}
+
+function startAnimPreview() {
+  stopAnimPreview();
+  const a = currentAnim();
+  if (!a || a.frames.length === 0) return;
+  const override = document.getElementById('anim-preview-fps').value;
+  const fps = override ? parseInt(override, 10) : a.fps;
+  const interval = Math.max(16, Math.floor(1000 / fps));
+  animPreview.timer = setInterval(() => {
+    const cur = currentAnim();
+    if (!cur || cur.frames.length === 0) { stopAnimPreview(); return; }
+    animPreview.frameIdx = (animPreview.frameIdx + 1) % cur.frames.length;
+    renderAnimPreview();
+  }, interval);
+  animPreview.playing = true;
+  document.getElementById('btn-anim-play').textContent = '⏸ Pause';
+}
+
+function moveAnimFrame(frameIdx, delta) {
+  const a = currentAnim();
+  if (!a) return;
+  const j = frameIdx + delta;
+  if (j < 0 || j >= a.frames.length) return;
+  pushUndo();
+  const t = a.frames[frameIdx]; a.frames[frameIdx] = a.frames[j]; a.frames[j] = t;
+  markDirty();
+  renderAnimations();
+}
+function removeAnimFrame(frameIdx) {
+  const a = currentAnim();
+  if (!a) return;
+  pushUndo();
+  a.frames.splice(frameIdx, 1);
+  if (animPreview.frameIdx >= a.frames.length) animPreview.frameIdx = 0;
+  markDirty();
+  renderAnimations();
+}
+
+function renderAnimationAssignments() {
+  for (const kind of ['walk', 'jump']) {
+    const sel = document.getElementById('anim-assign-' + kind);
+    const current = state.animation_assignments[kind];
+    sel.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = ''; none.textContent = '(none)';
+    sel.appendChild(none);
+    for (const a of state.animations) {
+      const opt = document.createElement('option');
+      opt.value = String(a.id);
+      opt.textContent = a.name;
+      sel.appendChild(opt);
+    }
+    sel.value = current == null ? '' : String(current);
+  }
+}
+
+function initAnimationHandlers() {
+  document.getElementById('btn-anim-new').addEventListener('click', () => {
+    pushUndo();
+    const a = { id: allocAnimId(), name: 'anim' + state.animations.length, frames: [], fps: 8 };
+    state.animations.push(a);
+    selectedAnimId = a.id;
+    animPreview.frameIdx = 0;
+    markDirty();
+    renderAnimations();
+  });
+  document.getElementById('btn-anim-dup').addEventListener('click', () => {
+    const a = currentAnim();
+    if (!a) return;
+    pushUndo();
+    const copy = { id: allocAnimId(), name: a.name + '_copy', frames: a.frames.slice(), fps: a.fps };
+    const idx = state.animations.indexOf(a);
+    state.animations.splice(idx + 1, 0, copy);
+    selectedAnimId = copy.id;
+    markDirty();
+    renderAnimations();
+  });
+  document.getElementById('btn-anim-rename').addEventListener('click', () => {
+    const a = currentAnim();
+    if (!a) return;
+    const next = prompt('Rename animation:', a.name);
+    if (next == null) return;
+    const trimmed = next.trim();
+    if (!trimmed) return;
+    pushUndo();
+    a.name = trimmed;
+    markDirty();
+    renderAnimations();
+  });
+  document.getElementById('btn-anim-del').addEventListener('click', () => {
+    const a = currentAnim();
+    if (!a) return;
+    if (!confirm('Delete animation "' + a.name + '"? This cannot be undone from the list, but Undo (Ctrl+Z) will bring it back.')) return;
+    pushUndo();
+    const idx = state.animations.indexOf(a);
+    state.animations.splice(idx, 1);
+    // Clear assignments pointing at the deleted id.
+    for (const k of ['walk', 'jump']) {
+      if (state.animation_assignments[k] === a.id) state.animation_assignments[k] = null;
+    }
+    selectedAnimId = state.animations.length ? state.animations[Math.max(0, idx - 1)].id : null;
+    animPreview.frameIdx = 0;
+    markDirty();
+    renderAnimations();
+  });
+  document.getElementById('anim-fps').addEventListener('change', e => {
+    const a = currentAnim();
+    if (!a) return;
+    pushUndo();
+    a.fps = Math.max(1, Math.min(60, parseInt(e.target.value, 10) || 8));
+    markDirty();
+    renderAnimations();
+    if (animPreview.playing) startAnimPreview();
+  });
+  document.getElementById('btn-anim-add-frame').addEventListener('click', () => {
+    const a = currentAnim();
+    if (!a) return;
+    if (selectedSpriteIdx < 0 || selectedSpriteIdx >= state.sprites.length) {
+      setStatus('warn', '● Select a sprite in the list above first');
+      return;
+    }
+    pushUndo();
+    a.frames.push(selectedSpriteIdx);
+    markDirty();
+    renderAnimations();
+  });
+  document.getElementById('btn-anim-play').addEventListener('click', () => {
+    if (animPreview.playing) stopAnimPreview();
+    else startAnimPreview();
+  });
+  document.getElementById('anim-preview-fps').addEventListener('change', () => {
+    if (animPreview.playing) startAnimPreview();
+  });
+  for (const kind of ['walk', 'jump']) {
+    document.getElementById('anim-assign-' + kind).addEventListener('change', e => {
+      pushUndo();
+      const v = e.target.value;
+      state.animation_assignments[kind] = v === '' ? null : parseInt(v, 10);
+      markDirty();
+      renderAnimationAssignments();
+    });
+  }
 }
 
 // --- Composite sprite canvas -------------------------------
@@ -3579,7 +4074,15 @@ function init() {
       'Delete "' + (sp.name || 'sprite') + '"? This can be undone.';
     const onYes = () => {
       pushUndo();
-      state.sprites.splice(selectedSpriteIdx, 1);
+      const removed = selectedSpriteIdx;
+      state.sprites.splice(removed, 1);
+      // Animations reference sprite indices — drop the removed one and
+      // decrement every later index by 1 so references stay valid.
+      for (const an of state.animations) {
+        an.frames = an.frames
+          .filter(f => f !== removed)
+          .map(f => (f > removed ? f - 1 : f));
+      }
       selectedSpriteIdx = Math.min(selectedSpriteIdx, state.sprites.length - 1);
       markDirty();
       renderAll();
@@ -3965,6 +4468,9 @@ function init() {
 
   // Floating tileset window
   initFloatingTileset();
+
+  // Animations panel
+  initAnimationHandlers();
 
   // Mark onboarding seen when help dialog is dismissed.
   document.getElementById('help-dialog').addEventListener('close', () => {

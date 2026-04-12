@@ -193,6 +193,47 @@ def cell_attr(cell):
     return attr & 0xFF
 
 
+def _resolve_animation(state, kind, pw, ph):
+    """Return (frames, fps) for assignment `kind` if valid, else None.
+
+    Each frame is a sprite; all frames in an animation must share (pw, ph)
+    so the player's footprint in C is a fixed W*H. Frames that don't
+    match are dropped (server-side defensive — the editor also warns).
+    """
+    assigns = state.get("animation_assignments") or {}
+    anim_id = assigns.get(kind)
+    if anim_id is None:
+        return None
+    anims = state.get("animations") or []
+    anim = next((a for a in anims if a.get("id") == anim_id), None)
+    if not anim:
+        return None
+    frames = anim.get("frames") or []
+    if not frames:
+        return None
+    sprites = state.get("sprites") or []
+    good = []
+    for fi in frames:
+        if not (0 <= fi < len(sprites)):
+            continue
+        sp = sprites[fi]
+        if int(sp.get("width", 0)) == pw and int(sp.get("height", 0)) == ph:
+            good.append(sp)
+    if not good:
+        return None
+    fps = max(1, min(60, int(anim.get("fps", 8) or 8)))
+    return good, fps
+
+
+def _flatten_sprite(sp):
+    """Flatten a sprite's cells (row-major) into (tiles, attrs) byte lists."""
+    w = int(sp["width"])
+    h = int(sp["height"])
+    tiles = [cell_tile(sp["cells"][r][c]) for r in range(h) for c in range(w)]
+    attrs = [cell_attr(sp["cells"][r][c]) for r in range(h) for c in range(w)]
+    return tiles, attrs
+
+
 def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y):
     sprites = state.get("sprites") or []
     if not sprites:
@@ -215,6 +256,11 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y):
     p_tiles = [cell_tile(cells[r][c]) for r in range(ph) for c in range(pw)]
     p_attrs = [cell_attr(cells[r][c]) for r in range(ph) for c in range(pw)]
 
+    # Resolve walk / jump animations (if any). All frames must share the
+    # player sprite's (pw, ph) so the C loop has a fixed tile count.
+    walk = _resolve_animation(state, "walk", pw, ph)
+    jump = _resolve_animation(state, "jump", pw, ph)
+
     lines += [
         f"#define PLAYER_W {pw}",
         f"#define PLAYER_H {ph}",
@@ -229,6 +275,43 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y):
         "};",
         "",
     ]
+
+    # --- Walk / Jump animation tables ------------------------------------
+    # For each assigned animation, emit:
+    #   <kind>_frame_count, <kind>_frame_ticks (vblanks between frame advances),
+    #   <kind>_tiles[N*W*H] and <kind>_attrs[N*W*H].
+    # If an animation isn't set, emit a count of 0 and a 1-element stub
+    # (cc65 rejects zero-length arrays); main.c's "if count > 0" gate
+    # keeps the stubs unread.
+    for kind, resolved in (("walk", walk), ("jump", jump)):
+        if resolved is None:
+            lines += [
+                f"#define {kind.upper()}_FRAME_COUNT 0",
+                f"#define {kind.upper()}_FRAME_TICKS 0",
+                f"static const unsigned char {kind}_tiles[1] = {{ 0 }};",
+                f"static const unsigned char {kind}_attrs[1] = {{ 0 }};",
+                "",
+            ]
+            continue
+        frames, fps = resolved
+        ticks = max(1, round(60 / fps))
+        flat_tiles = []
+        flat_attrs = []
+        for sp in frames:
+            t, a = _flatten_sprite(sp)
+            flat_tiles += t
+            flat_attrs += a
+        lines += [
+            f"#define {kind.upper()}_FRAME_COUNT {len(frames)}",
+            f"#define {kind.upper()}_FRAME_TICKS {ticks}",
+            f"static const unsigned char {kind}_tiles[{len(flat_tiles)}] = {{",
+            "    " + ", ".join(f"0x{t:02X}" for t in flat_tiles),
+            "};",
+            f"static const unsigned char {kind}_attrs[{len(flat_attrs)}] = {{",
+            "    " + ", ".join(f"0x{a:02X}" for a in flat_attrs),
+            "};",
+            "",
+        ]
 
     # --- Static sprites --------------------------------------------------
     n = len(scene_sprites)
