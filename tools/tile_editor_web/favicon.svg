@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- NES tile editor favicon: a tiny pixel hero on a sky-blue tile.
+       Colours are from the NES master palette (approximations). -->
+  <rect width="16" height="16" fill="#6CB7E8"/>
+  <!-- Hair / hat -->
+  <g fill="#B53120">
+    <rect x="5" y="2" width="6" height="1"/>
+    <rect x="4" y="3" width="8" height="1"/>
+  </g>
+  <!-- Face -->
+  <g fill="#FCA044">
+    <rect x="4" y="4" width="8" height="3"/>
+    <rect x="5" y="7" width="6" height="1"/>
+  </g>
+  <!-- Eyes -->
+  <rect x="5" y="5" width="1" height="1" fill="#0F0F0F"/>
+  <rect x="10" y="5" width="1" height="1" fill="#0F0F0F"/>
+  <!-- Body -->
+  <g fill="#2844AC">
+    <rect x="3" y="8" width="10" height="4"/>
+    <rect x="4" y="12" width="8" height="1"/>
+  </g>
+  <!-- Belt -->
+  <rect x="3" y="10" width="10" height="1" fill="#FCFCFC"/>
+  <!-- Legs -->
+  <g fill="#58381C">
+    <rect x="5" y="13" width="2" height="2"/>
+    <rect x="9" y="13" width="2" height="2"/>
+  </g>
+  <!-- Subtle 1px grid to read as "a tile being drawn" -->
+  <g stroke="#000" stroke-opacity="0.12" stroke-width="0.05" fill="none">
+    <path d="M0 8h16M8 0v16"/>
+  </g>
+</svg>
