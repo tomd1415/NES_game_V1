@@ -3730,6 +3730,10 @@ function renderPinnedSwatches() {
     });
     host.appendChild(sw);
   }
+  // Keep the floating palette popout in lockstep with the inline pins —
+  // any colour/palette/cell change flows through here, so one hook covers
+  // paint clicks, palette cycles, cell selection and undo.
+  renderFloatingPalette();
 }
 
 // ================================================================
@@ -4186,6 +4190,90 @@ function renderFloatingTileset() {
   if (stats) {
     stats.textContent = '0x' + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
   }
+}
+
+// --- Floating palette popout ----------------------------------
+// Draggable, resizable palette picker so a pupil can keep the four
+// current colours next to the sprite canvas while painting. Follows the
+// same makeFloatingPanel pattern as the tileset popout. The palette
+// shown defaults to the selected cell's palette but can be overridden
+// from the inline SP0–SP3 picker at the top of the popout body.
+let floatingPaletteIdx = null;   // null = follow selected cell
+let floatingPaletteHandle = null;
+
+function renderFloatingPalette() {
+  const panel = document.getElementById('floating-palette');
+  if (!panel || !panel.classList.contains('open')) return;
+  const cell = currentCell();
+  const idx = floatingPaletteIdx != null
+    ? floatingPaletteIdx
+    : (cell && !cell.empty ? cell.palette : selectedPaletteIdx);
+  const pal = spritePaletteFor(idx);
+  const picker = document.getElementById('floating-palette-picker');
+  picker.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'SP' + i;
+    if (i === idx) btn.classList.add('active');
+    btn.title = 'Show sprite palette SP' + i;
+    btn.addEventListener('click', () => {
+      floatingPaletteIdx = i;
+      renderFloatingPalette();
+      if (floatingPaletteHandle) floatingPaletteHandle.persist();
+    });
+    picker.appendChild(btn);
+  }
+  const host = document.getElementById('floating-palette-swatches');
+  host.innerHTML = '';
+  const slots = [
+    { v: 0, label: '0 (transparent)', rgb: null },
+    { v: 1, label: '1', rgb: nesRgb(pal.slot1) },
+    { v: 2, label: '2', rgb: nesRgb(pal.slot2) },
+    { v: 3, label: '3', rgb: nesRgb(pal.slot3) },
+  ];
+  for (const s of slots) {
+    const sw = document.createElement('button');
+    sw.type = 'button';
+    sw.className = 'fp-swatch';
+    if (s.v === 0) sw.classList.add('transparent');
+    else sw.style.background = s.rgb;
+    if (s.v === currentColour) sw.classList.add('active');
+    sw.textContent = s.label;
+    sw.title = s.v === 0
+      ? 'Colour 0 — transparent for sprites (shows the background)'
+      : 'Colour ' + s.v + ' — click to paint with it';
+    sw.addEventListener('click', () => {
+      currentColour = s.v;
+      refreshColourButtons();
+      renderFloatingPalette();
+    });
+    host.appendChild(sw);
+  }
+  const stats = document.getElementById('floating-palette-stats');
+  if (stats) stats.textContent = 'SP' + idx
+    + (floatingPaletteIdx == null ? ' (follows cell)' : '');
+}
+
+function initFloatingPalette() {
+  const panel   = document.getElementById('floating-palette');
+  const header  = document.getElementById('floating-palette-header');
+  const close   = document.getElementById('floating-palette-close');
+  const resize  = document.getElementById('floating-palette-resize');
+  const toggle  = document.getElementById('btn-popout-palette');
+  if (!panel || !toggle) return;
+  floatingPaletteHandle = makeFloatingPanel({
+    panel, header, resize, toggleBtn: toggle, closeBtn: close,
+    storageKey: 'floating-palette-sprites',
+    minWidth: 170, minHeight: 200,
+    onOpen: () => renderFloatingPalette(),
+    extraPersist: () => ({ idx: floatingPaletteIdx }),
+    initFromSaved: (s) => {
+      if (s.idx === null || (Number.isFinite(s.idx) && s.idx >= 0 && s.idx <= 3)) {
+        floatingPaletteIdx = s.idx;
+      }
+    },
+  });
 }
 
 function initFloatingTileset() {
@@ -5858,6 +5946,7 @@ function init() {
 
   // Floating tileset window
   initFloatingTileset();
+  initFloatingPalette();
 
   // Animations panel
   initAnimationHandlers();
