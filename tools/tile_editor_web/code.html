@@ -248,6 +248,29 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 .lesson-dialog .lesson-item .summary { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .lesson-dialog .actions { margin-top: 14px; display: flex; gap: 8px; justify-content: flex-end; }
 
+/* Snippet picker — extends the lesson-dialog layout with badge rows and
+   a live preview pane below the list. */
+.lesson-dialog .lesson-item .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.lesson-dialog .lesson-item .badge {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 1px 7px; border-radius: 10px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.lesson-dialog .lesson-item .badge.region { color: var(--good); border-color: var(--good); }
+.lesson-dialog .lesson-item .badge.tag    { color: var(--info); border-color: var(--info); }
+.lesson-dialog .lesson-item.fits { box-shadow: inset 3px 0 0 var(--good); }
+.snippet-preview {
+  margin-top: 10px; padding: 8px 10px;
+  background: #13101c; border: 1px solid var(--border); border-radius: 6px;
+  font-family: 'Menlo', 'Consolas', monospace; font-size: 12px;
+  color: var(--fg); white-space: pre; overflow: auto; max-height: 180px;
+}
+.snippet-preview.empty { color: var(--muted); font-style: italic; font-family: inherit; }
+.snippet-hint {
+  margin-top: 6px; font-size: 12px; color: var(--muted);
+}
+.snippet-hint.warn { color: var(--warn); }
+
 /* Symbol hover tooltip — a floating panel above the editor. */
 .sym-tooltip {
   position: absolute; z-index: 9999;
@@ -311,7 +334,12 @@ li.CodeMirror-hint-active {
       <button type="button" id="btn-mode-guided"   class="active" title="Guided: only the highlighted lines are editable. Perfect if you're just starting out.">🎓 Guided</button>
       <button type="button" id="btn-mode-advanced"              title="Advanced: edit anything in main.c. Use this once you're confident.">⚙️ Advanced</button>
     </span>
+    <span class="mode-toggle" role="group" aria-label="Language">
+      <button type="button" id="btn-lang-c"   class="active" title="Edit main.c — compiled with cc65.">C</button>
+      <button type="button" id="btn-lang-asm"              title="Edit main.s — 6502 assembly, assembled with ca65. No nes.lib: the starter writes its own iNES header and vectors.">Asm</button>
+    </span>
     <button type="button" id="btn-lesson-chip" class="lesson-chip empty" title="Pick a lesson from the library">📚 <span id="lesson-chip-label">Pick a lesson…</span></button>
+    <button type="button" id="btn-snippets" title="Insert a pre-written block of code at your cursor">🧩 Snippets…</button>
     <button type="button" id="btn-restore" title="Replace your code with the stock platformer starter. Your current version is saved to a snapshot first.">↻ Restore default</button>
     <button type="button" id="btn-symbols" title="See the auto-generated symbols (player_tiles, walk_tiles…) your code can use">⌨ Symbols…</button>
     <label class="pg-runon" title="Where the compiled ROM gets played">
@@ -394,6 +422,19 @@ li.CodeMirror-hint-active {
   </div>
 </dialog>
 
+<!-- Snippet picker -->
+<dialog id="snippet-dialog" class="lesson-dialog">
+  <h2>🧩 Snippet library</h2>
+  <p class="snippet-hint">Pick a snippet to paste at your cursor. In Guided mode, your cursor must be on an editable (green) line — snippets marked <span style="color: var(--good)">fits: &lt;region&gt;</span> match the region you're in now.</p>
+  <div class="lesson-list" id="snippet-list">Loading…</div>
+  <div class="snippet-preview empty" id="snippet-preview">Select a snippet to preview the code that will be inserted.</div>
+  <div class="snippet-hint" id="snippet-cursor-hint"></div>
+  <div class="actions">
+    <button type="button" id="btn-snippet-cancel">Cancel</button>
+    <button type="button" class="primary" id="btn-snippet-insert" disabled>Insert at cursor</button>
+  </div>
+</dialog>
+
 <!-- Lesson picker -->
 <dialog id="lesson-dialog" class="lesson-dialog">
   <h2>📚 Lesson library</h2>
@@ -442,6 +483,7 @@ li.CodeMirror-hint-active {
 const STORAGE_KEY = 'nes_tile_editor.current.v1';
 const RUNON_KEY   = 'playground.runon.v1';
 const MODE_KEY    = 'playground.codemode.v1';   // 'guided' | 'advanced'
+const LANG_KEY    = 'playground.codelang.v1';   // 'c' | 'asm'
 
 const PLAYGROUND_ORIGIN = (location.protocol === 'http:' || location.protocol === 'https:')
   ? location.origin
@@ -449,7 +491,9 @@ const PLAYGROUND_ORIGIN = (location.protocol === 'http:' || location.protocol ==
 const PLAYGROUND_PLAY     = PLAYGROUND_ORIGIN + '/play';
 const PLAYGROUND_HEALTH   = PLAYGROUND_ORIGIN + '/health';
 const PLAYGROUND_DEFAULTC = PLAYGROUND_ORIGIN + '/default-main-c';
+const PLAYGROUND_DEFAULTS = PLAYGROUND_ORIGIN + '/default-main-s';
 const PLAYGROUND_LESSONS  = PLAYGROUND_ORIGIN + '/lessons';
+const PLAYGROUND_SNIPPETS = PLAYGROUND_ORIGIN + '/snippets';
 
 // Minimal load: we don't need the full state-validation rig that the other
 // pages ship, because this page only touches state.customMainC and
@@ -471,6 +515,7 @@ function saveState(s) {
 
 let state = loadState() || { name: 'untitled', customMainC: null };
 if (typeof state.customMainC !== 'string') state.customMainC = null;
+if (typeof state.customMainAsm !== 'string') state.customMainAsm = null;
 if (typeof state.name !== 'string') state.name = 'untitled';
 // currentLesson: string id of the lesson the pupil is following, or null.
 // We persist it in the same shared state blob so imports/exports carry it.
@@ -483,6 +528,12 @@ let editorMode = 'guided';
 try {
   const saved = localStorage.getItem(MODE_KEY);
   if (saved === 'advanced' || saved === 'guided') editorMode = saved;
+} catch {}
+
+let codeLang = 'c';                       // 'c' | 'asm' — which main.? the editor is showing
+try {
+  const saved = localStorage.getItem(LANG_KEY);
+  if (saved === 'c' || saved === 'asm') codeLang = saved;
 } catch {}
 
 // ================================================================
@@ -581,19 +632,25 @@ function scheduleSave() {
   setSaveStatus('saving', '● Saving…');
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    state.customMainC = cm.getValue();
+    if (codeLang === 'asm') state.customMainAsm = cm.getValue();
+    else                    state.customMainC   = cm.getValue();
     state.name = document.getElementById('project-name').value || 'untitled';
     saveState(state);
     setSaveStatus('saved', '● Saved');
   }, 400);
 }
 
-async function fetchDefaultSource() {
-  if (defaultSource !== null) return defaultSource;
-  const r = await fetch(PLAYGROUND_DEFAULTC, { cache: 'no-store' });
+// Starter source is cached per language — the C and asm starters live at
+// different endpoints and the pupil can flip between them.
+const defaultSourceCache = { c: null, asm: null };
+async function fetchDefaultSource(lang) {
+  lang = lang || codeLang;
+  if (defaultSourceCache[lang] !== null) return defaultSourceCache[lang];
+  const url = (lang === 'asm') ? PLAYGROUND_DEFAULTS : PLAYGROUND_DEFAULTC;
+  const r = await fetch(url, { cache: 'no-store' });
   if (!r.ok) throw new Error('server returned ' + r.status);
-  defaultSource = await r.text();
-  return defaultSource;
+  defaultSourceCache[lang] = await r.text();
+  return defaultSourceCache[lang];
 }
 
 async function initEditor() {
@@ -624,25 +681,89 @@ async function initEditor() {
     }
   });
 
-  // First load: either the pupil's saved code, or the stock starter pulled
-  // from the server.  A network failure on fresh profiles leaves an
-  // explanatory placeholder so they aren't staring at a blank editor.
-  if (state.customMainC && state.customMainC.trim().length > 0) {
-    cm.setValue(state.customMainC);
+  // First load: either the pupil's saved code for the current language, or
+  // the stock starter pulled from the server.  A network failure on fresh
+  // profiles leaves an explanatory placeholder.
+  const saved = (codeLang === 'asm') ? state.customMainAsm : state.customMainC;
+  if (saved && saved.trim().length > 0) {
+    cm.setValue(saved);
     setSaveStatus('saved', '● Saved');
   } else {
     try {
-      const src = await fetchDefaultSource();
+      const src = await fetchDefaultSource(codeLang);
       cm.setValue(src);
       setSaveStatus('saved', '● Saved (starter)');
-      state.customMainC = src;
+      if (codeLang === 'asm') state.customMainAsm = src;
+      else                    state.customMainC   = src;
       saveState(state);
     } catch (e) {
-      cm.setValue('// Could not reach the playground server to fetch the\n// starter template. Start it and reload this page.\n// Error: ' + e.message + '\n');
+      const prefix = (codeLang === 'asm') ? '; ' : '// ';
+      cm.setValue(prefix + 'Could not reach the playground server to fetch the\n' + prefix + 'starter template. Start it and reload this page.\n' + prefix + 'Error: ' + e.message + '\n');
       setSaveStatus('saving', '● No server');
     }
   }
+  applyLanguageUI();
   setEditorMode(editorMode, { persist: false });
+}
+
+// ================================================================
+// Language toggle — swap between main.c and main.s.  We persist the
+// per-language source separately so flipping back restores the pupil's
+// previous work, not a reset.
+// ================================================================
+function applyLanguageUI() {
+  document.getElementById('btn-lang-c').classList.toggle('active', codeLang === 'c');
+  document.getElementById('btn-lang-asm').classList.toggle('active', codeLang === 'asm');
+  // Lessons and snippets are C-only (for now).  Dim the chips when in asm
+  // mode so pupils aren't confused about why the dialog is empty.
+  const asm = codeLang === 'asm';
+  const chip = document.getElementById('btn-lesson-chip');
+  const sbtn = document.getElementById('btn-snippets');
+  for (const b of [chip, sbtn]) {
+    b.disabled = asm;
+    b.style.opacity = asm ? '0.45' : '';
+    b.title = asm
+      ? 'Lessons and snippets are C-only for now. Switch to C to use them.'
+      : (b === chip ? 'Pick a lesson from the library' : 'Insert a pre-written block of code at your cursor');
+  }
+}
+
+async function switchLanguage(next) {
+  if (next !== 'c' && next !== 'asm') return;
+  if (next === codeLang) return;
+  // Stash the editor's current contents under the OLD language before swap.
+  if (codeLang === 'asm') state.customMainAsm = cm.getValue();
+  else                    state.customMainC   = cm.getValue();
+  saveState(state);
+
+  codeLang = next;
+  try { localStorage.setItem(LANG_KEY, next); } catch {}
+
+  const saved = (next === 'asm') ? state.customMainAsm : state.customMainC;
+  let src = saved;
+  if (!src || !src.trim()) {
+    try {
+      src = await fetchDefaultSource(next);
+      if (next === 'asm') state.customMainAsm = src;
+      else                state.customMainC   = src;
+      saveState(state);
+    } catch (e) {
+      const prefix = (next === 'asm') ? '; ' : '// ';
+      src = prefix + 'Could not reach the playground server to fetch the\n' + prefix + 'starter template. Error: ' + e.message + '\n';
+    }
+  }
+  // setValue with live read-only marks can wedge the doc; drop them first.
+  clearGuidedMarks();
+  cm.setValue(src);
+  setSaveStatus('saved', '● Saved');
+  applyLanguageUI();
+  reapplyGuidedIfActive();
+  // Goal panel is tied to C lessons; hide it while the pupil is in asm mode.
+  if (codeLang === 'asm') {
+    document.getElementById('lesson-goal').classList.remove('visible');
+  } else {
+    renderGoalPanel();
+  }
 }
 
 // ================================================================
@@ -655,16 +776,20 @@ let guidedLineClasses = [];  // {line, klass} pairs — cleared on mode switch
 let guidedRegions = [];      // [{ id, hint, markerLine, startLine, endLine }]
 
 function parseEditableRegions(source) {
+  // Accept both C-style (//>> / //<<) and asm-style (;>> / ;<<) markers so
+  // the same guided-mode machinery serves main.c and main.s.
   const lines = source.split('\n');
   const regions = [];
   let open = null;
+  const openRe = /^\s*(?:\/\/|;)>>\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/;
+  const closeRe = /^\s*(?:\/\/|;)<<\s*$/;
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^\s*\/\/>>\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
+    const m = lines[i].match(openRe);
     if (m) {
       open = { id: m[1], hint: m[2].trim(), markerLine: i, startLine: i + 1 };
       continue;
     }
-    if (/^\s*\/\/<<\s*$/.test(lines[i]) && open) {
+    if (closeRe.test(lines[i]) && open) {
       open.endLine = i - 1;
       open.closerLine = i;
       regions.push(open);
@@ -943,6 +1068,170 @@ async function syncActiveLessonFromState() {
 }
 
 // ================================================================
+// Snippet library — pick a pre-written block and paste it at the cursor.
+// The picker also shows a live preview of what will be inserted, and
+// highlights snippets whose `regions` include the pupil's current region.
+// ================================================================
+let snippetCache = null;
+let snippetBodies = {};        // id -> cached body text (filled on first insert / preview)
+let snippetPickerSelectedId = null;
+
+async function fetchSnippets() {
+  if (snippetCache) return snippetCache;
+  const r = await fetch(PLAYGROUND_SNIPPETS, { cache: 'no-store' });
+  if (!r.ok) throw new Error('snippets endpoint returned ' + r.status);
+  snippetCache = await r.json();
+  return snippetCache;
+}
+
+async function fetchSnippetBody(id) {
+  if (snippetBodies[id] != null) return snippetBodies[id];
+  const r = await fetch(PLAYGROUND_SNIPPETS + '/' + encodeURIComponent(id), { cache: 'no-store' });
+  if (!r.ok) throw new Error('snippet ' + id + ' returned ' + r.status);
+  const body = await r.text();
+  snippetBodies[id] = body;
+  return body;
+}
+
+function currentEditableRegion() {
+  if (editorMode !== 'guided' || !guidedRegions.length) return null;
+  const line = cm.getCursor().line;
+  return guidedRegions.find(r => line >= r.startLine && line <= r.endLine) || null;
+}
+
+function cursorCanInsert() {
+  if (editorMode !== 'guided' || !guidedRegions.length) return true;
+  return currentEditableRegion() != null;
+}
+
+function updateSnippetCursorHint() {
+  const el = document.getElementById('snippet-cursor-hint');
+  if (!el) return;
+  if (editorMode !== 'guided' || !guidedRegions.length) {
+    el.className = 'snippet-hint';
+    el.textContent = 'Cursor is in free-edit mode — the snippet will be inserted wherever the cursor is.';
+    return;
+  }
+  const r = currentEditableRegion();
+  if (r) {
+    el.className = 'snippet-hint';
+    el.textContent = 'Cursor is inside the editable region "' + r.id + '". The snippet will be inserted on the next line.';
+  } else {
+    el.className = 'snippet-hint warn';
+    el.textContent = 'Your cursor is on a locked line. Click inside a green-highlighted region first, then re-open this dialog.';
+  }
+}
+
+function renderSnippetPreview(meta, body) {
+  const pre = document.getElementById('snippet-preview');
+  if (!meta) {
+    pre.className = 'snippet-preview empty';
+    pre.textContent = 'Select a snippet to preview the code that will be inserted.';
+    return;
+  }
+  if (body == null) {
+    pre.className = 'snippet-preview empty';
+    pre.textContent = 'Loading preview…';
+    return;
+  }
+  pre.className = 'snippet-preview';
+  pre.textContent = body;
+}
+
+function renderSnippetList(snippets, activeRegionId) {
+  const list = document.getElementById('snippet-list');
+  list.innerHTML = '';
+  for (const s of snippets) {
+    const el = document.createElement('div');
+    const regions = Array.isArray(s.regions) ? s.regions : [];
+    const fits = activeRegionId && regions.includes(activeRegionId);
+    el.className = 'lesson-item' + (fits ? ' fits' : '') + (s.id === snippetPickerSelectedId ? ' selected' : '');
+    el.dataset.id = s.id;
+    const tags = (s.tags || []).map(t => `<span class="badge tag">${escapeHtml(t)}</span>`).join('');
+    const regs = regions.map(r => `<span class="badge region">fits: ${escapeHtml(r)}</span>`).join('');
+    el.innerHTML = `
+      <h3>${escapeHtml(s.title)}</h3>
+      <div class="summary">${escapeHtml(s.summary || s.description || '')}</div>
+      <div class="badges">${regs}${tags}</div>`;
+    el.addEventListener('click', async () => {
+      snippetPickerSelectedId = s.id;
+      for (const c of list.querySelectorAll('.lesson-item')) c.classList.toggle('selected', c.dataset.id === s.id);
+      document.getElementById('btn-snippet-insert').disabled = !cursorCanInsert();
+      renderSnippetPreview(s, null);
+      try {
+        const body = await fetchSnippetBody(s.id);
+        // Only render if this snippet is still the selected one (guards
+        // against stale fetches completing after the user clicks another).
+        if (snippetPickerSelectedId === s.id) renderSnippetPreview(s, body);
+      } catch (e) {
+        renderSnippetPreview(s, '(could not load preview: ' + e.message + ')');
+      }
+    });
+    list.appendChild(el);
+  }
+}
+
+async function openSnippetPicker() {
+  const dlg = document.getElementById('snippet-dialog');
+  snippetPickerSelectedId = null;
+  document.getElementById('btn-snippet-insert').disabled = true;
+  renderSnippetPreview(null, null);
+  updateSnippetCursorHint();
+  document.getElementById('snippet-list').textContent = 'Loading…';
+  dlg.showModal();
+  try {
+    const data = await fetchSnippets();
+    const snippets = data?.snippets || [];
+    if (!snippets.length) {
+      document.getElementById('snippet-list').innerHTML = '<p style="color: var(--muted);">No snippets found. Drop <code>.c</code> files into the <code>snippets/</code> folder.</p>';
+      return;
+    }
+    const region = currentEditableRegion();
+    const activeRegionId = region ? region.id : null;
+    // Sort so the snippets that fit the current region come first.
+    const sorted = snippets.slice().sort((a, b) => {
+      const af = activeRegionId && (a.regions || []).includes(activeRegionId) ? 0 : 1;
+      const bf = activeRegionId && (b.regions || []).includes(activeRegionId) ? 0 : 1;
+      if (af !== bf) return af - bf;
+      return String(a.title).localeCompare(String(b.title));
+    });
+    renderSnippetList(sorted, activeRegionId);
+  } catch (e) {
+    document.getElementById('snippet-list').innerHTML = '<p style="color: var(--warn);">Could not reach the snippet library: ' + escapeHtml(e.message) + '</p>';
+  }
+}
+
+async function insertSelectedSnippet() {
+  if (!snippetPickerSelectedId) return;
+  if (!cursorCanInsert()) {
+    alert('Your cursor is on a locked line. Close this dialog, click inside a green-highlighted region, and try again.');
+    return;
+  }
+  let body;
+  try {
+    body = await fetchSnippetBody(snippetPickerSelectedId);
+  } catch (e) {
+    alert('Could not load snippet: ' + e.message);
+    return;
+  }
+  const cur = cm.getCursor();
+  const lineText = cm.getLine(cur.line);
+  const insertAt = { line: cur.line, ch: lineText.length };
+  // Body is newline-terminated; drop the trailing newline so we don't
+  // leave a blank line below. Prepend a newline so the paste starts on a
+  // fresh line regardless of where the cursor sits on the current line.
+  const payload = '\n' + body.replace(/\n+$/, '');
+  cm.replaceRange(payload, insertAt, insertAt);
+  // Leave the cursor at the end of the pasted block so the pupil can see
+  // what was inserted and keep typing.
+  const addedLines = payload.split('\n').length - 1;
+  cm.setCursor({ line: cur.line + addedLines, ch: cm.getLine(cur.line + addedLines).length });
+  cm.focus();
+  document.getElementById('snippet-dialog').close();
+  scheduleSave();
+}
+
+// ================================================================
 // Symbol hover tooltip — look up HINT_SYMBOLS by identifier under the
 // pointer, and show a floating panel.
 // ================================================================
@@ -988,13 +1277,17 @@ function onEditorMouseLeave() {
 // Restore default
 // ================================================================
 async function restoreDefault() {
-  if (!confirm('Replace your current code with the default platformer starter?\n\nA snapshot of your current version is kept in localStorage under "nes_tile_editor.code-backup".')) return;
+  const label = codeLang === 'asm' ? 'main.s' : 'main.c';
+  if (!confirm(`Replace your current ${label} with the default platformer starter?\n\nA snapshot of your current version is kept in localStorage under "nes_tile_editor.code-backup".`)) return;
   try { localStorage.setItem('nes_tile_editor.code-backup.' + Date.now(), cm.getValue()); } catch {}
   try {
-    const src = await fetchDefaultSource();
+    // Force a fresh fetch: the pupil may expect the freshest starter when
+    // they explicitly ask to restore the default.
+    defaultSourceCache[codeLang] = null;
+    const src = await fetchDefaultSource(codeLang);
     clearGuidedMarks();      // setValue() with live readOnly marks can wedge the doc
     cm.setValue(src);
-    clearLessonFollowing();
+    if (codeLang === 'c') clearLessonFollowing();
     scheduleSave();
     reapplyGuidedIfActive();
   } catch (e) {
@@ -1071,7 +1364,9 @@ async function play() {
   const btn = document.getElementById('btn-play');
   const mode = (document.getElementById('pg-runon')?.value) || 'browser';
   // Flush any pending debounced save first so the server sees this keystroke.
-  state.customMainC = cm.getValue();
+  const src = cm.getValue();
+  if (codeLang === 'asm') state.customMainAsm = src;
+  else                    state.customMainC   = src;
   saveState(state);
 
   btn.disabled = true;
@@ -1084,12 +1379,13 @@ async function play() {
   // pupils don't have to visit every tab before a single press works.
   const payload = {
     state: state,
-    customMainC: cm.getValue(),
     playerSpriteIdx: 0,
     playerStart: { x: 60, y: 155 },
     sceneSprites: [],
     mode,
   };
+  if (codeLang === 'asm') payload.customMainAsm = src;
+  else                    payload.customMainC   = src;
 
   try {
     const res = await fetch(PLAYGROUND_PLAY, {
@@ -1239,11 +1535,20 @@ document.getElementById('btn-mode-advanced').addEventListener('click', () => {
   const ok = confirm('Advanced mode lets you edit any line in main.c.\n\nIf you break the template, press ↻ Restore default to go back to the starter. Continue?');
   if (ok) setEditorMode('advanced');
 });
+document.getElementById('btn-lang-c').addEventListener('click', () => switchLanguage('c'));
+document.getElementById('btn-lang-asm').addEventListener('click', () => {
+  if (codeLang === 'asm') return;
+  const ok = confirm('Switch to assembly mode?\n\nYour C code is saved and restored whenever you come back. Lessons and snippets are C-only for now — use Guided mode on main.s and the //>> style markers become ;>> / ;<< for asm.');
+  if (ok) switchLanguage('asm');
+});
 document.getElementById('hint-banner').addEventListener('click', onBannerClick);
 
 document.getElementById('btn-lesson-chip').addEventListener('click', openLessonPicker);
 document.getElementById('btn-lesson-cancel').addEventListener('click', () => document.getElementById('lesson-dialog').close());
 document.getElementById('btn-lesson-load').addEventListener('click', loadSelectedLesson);
+document.getElementById('btn-snippets').addEventListener('click', openSnippetPicker);
+document.getElementById('btn-snippet-cancel').addEventListener('click', () => document.getElementById('snippet-dialog').close());
+document.getElementById('btn-snippet-insert').addEventListener('click', insertSelectedSnippet);
 document.getElementById('btn-lesson-clear').addEventListener('click', () => {
   clearLessonFollowing();
   document.getElementById('lesson-dialog').close();

@@ -240,6 +240,109 @@ Unknown ids 404. The pupil's chosen lesson is persisted in `state.currentLesson`
 
 **Authoring new lessons.** Copy the closest existing lesson, change the JSON header, add / remove `//>> … //<<` regions around whatever you want the pupil to edit. Anything outside those markers becomes read-only in Guided mode, so keep the editable ranges narrow to reinforce the teaching point. `make -C steps/Step_Playground` with your lesson swapped in as `src/main.c` is the fastest way to verify it compiles before serving it to a class.
 
+### Phase 3d — Snippet library
+
+A sibling of the lesson library: `snippets/` at the repo root holds short blocks of pre-tested C that the pupil can paste into whatever editable region they happen to be in. Each snippet is a `.c` file with a `/*! SNIPPET { JSON } */` header and a body of plain C (no `main`, no includes — the snippet is pasted *inside* existing code):
+
+```c
+/*! SNIPPET
+{
+  "id": "teleport-on-b",
+  "title": "Teleport on B button",
+  "summary": "Short sentence shown in the picker.",
+  "description": "Longer paragraph shown as hover-help, optional.",
+  "regions": ["magic_button"],
+  "tags": ["input", "movement"]
+}
+*/
+        if ((pad & 0x40) && !(prev_pad & 0x40)) {
+            px = 16;
+            py = 24;
+            ground_y = 24;
+        }
+```
+
+`regions` is an optional list of lesson-region ids (`player_start`, `walk_speed`, `magic_button`, …) where this snippet is most useful. Snippets whose `regions` list matches the pupil's current cursor region get a green left-border and sort first in the picker. Leave the list empty to offer the snippet everywhere.
+
+**Seed snippets:**
+
+| File                                                 | Fits region    | Effect                                                  |
+|------------------------------------------------------|----------------|---------------------------------------------------------|
+| [snippets/teleport-on-b.c](snippets/teleport-on-b.c) | `magic_button` | Pressing B warps the hero to the top-left corner.       |
+| [snippets/sprint-on-a.c](snippets/sprint-on-a.c)     | `magic_button` | Hold A to double walking speed.                         |
+| [snippets/wrap-screen.c](snippets/wrap-screen.c)     | `magic_button` | Walking off either edge re-enters from the other side.  |
+| [snippets/rainbow-background.c](snippets/rainbow-background.c) | `magic_button` | Rewrites PPU $3F00 every frame for a palette strobe. |
+| [snippets/auto-bounce.c](snippets/auto-bounce.c)     | `magic_button` | Re-fires a jump the instant the hero lands.             |
+
+**Server endpoints:**
+
+- `GET /snippets` → `{"ok": true, "snippets": [<meta>...]}` sorted by `id`.
+- `GET /snippets/<id>` → the raw body *after* the header comment, with leading/trailing blank lines trimmed.
+
+Unknown ids 404 (same id-validation as lessons: `[A-Za-z0-9][A-Za-z0-9._-]*`). The server re-scans `snippets/*.c` on every request so teachers can author without restarting.
+
+**UI on the Code page:**
+
+- **🧩 Snippets…** button next to the lesson chip opens the picker.
+- Each item shows title, summary, region badges (`fits: <id>`) and tag badges.
+- The picker sorts snippets that match the current region to the top and marks them with a green left-border.
+- A **live preview pane** shows the exact text that will be pasted.
+- A footer hint tells the pupil whether the cursor is on a locked line (Guided) or in free-edit mode, and warns if the insert won't land (cursor on a `//<<` / header / locked line).
+- **Insert at cursor** pastes the snippet body on a new line after the current cursor line, then moves the cursor to the end of the pasted block. In Guided mode, CodeMirror's `readOnly, atomic: true` marks backstop the UI guard — the insert is silently rejected if the pupil does land on a locked line despite the hint.
+
+**Authoring new snippets.** Drop a new `.c` file into `snippets/`, write the JSON header, then paste the body indented to match its usual context (the seed snippets use 8-space indent because `magic_button` regions live two scopes deep inside `main()`'s `while (1)` loop). Snippets are free to reference any variable already in scope at the target region — when in doubt, temporarily stash the body into `steps/Step_Playground/src/main.c` and `make` before shipping it.
+
+### Phase 3e — Assembly mode (C / 6502 toggle)
+
+The Code page carries a second mode-toggle pair beside **Guided / Advanced**: **C / Asm**. Advanced pupils can flip the editor's source between [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c) (cc65) and a standalone 6502 starter at [steps/Step_Playground/src/main.s.starter](steps/Step_Playground/src/main.s.starter) (ca65). Each language keeps its own working copy inside the same shared state blob (`state.customMainC`, `state.customMainAsm`), so switching back and forth never loses work.
+
+**Why a standalone asm starter (no `nes.lib`).** The starter writes its own `.segment "HEADER"` iNES bytes and its own `.segment "VECTORS"` block, and the asm build path links `main.o + graphics.o` directly with `ld65 -C cfg/nes.cfg` — no crt0, no `nes.lib`. This keeps the boot path visible end-to-end: `reset:` disables rendering, double-waits for vblank, writes palettes, calls `_load_background`, sets `PPU_CTRL`/`PPU_MASK`/scroll, then drops into `game_loop`. An empty `.segment "STARTUP"` stub silences the nes.cfg-declared segment without pulling any runtime in.
+
+**Asm-flavoured includes.** Where the C path writes `palettes.inc` / `scene.inc`, the asm path writes sibling files `palettes.asminc` / `scene.asminc`, generated by `build_palettes_asminc()` and `build_scene_asminc()`:
+
+- Constants (`PLAYER_X`, `PLAYER_Y`, `PLAYER_W/H`, `NUM_STATIC_SPRITES`, `WALK_FRAME_COUNT/TICKS`, `JUMP_FRAME_COUNT/TICKS`) become `.define NAME value` — ca65 text-replacement macros.
+- Tables (`palette_bytes`, `player_tiles`, `player_attrs`, `walk_tiles/attrs`, `jump_tiles/attrs`, `ss_x/y/w/h/offset/tiles/attrs`) become labelled `.byte` data inside `.pushseg` / `.segment "RODATA"` / `.popseg` so the include can drop anywhere in the pupil's file without clobbering the current segment. Empty data sets emit a 1-byte `$00` stub to keep the labels valid.
+
+**Guided markers work in both languages.** `parseEditableRegions()` accepts either comment style:
+
+```c
+//>> player_start: Change these two numbers to move where the hero spawns.
+//<<
+```
+
+```asm
+;>> player_start: Change these two numbers to move where the hero spawns.
+;<<
+```
+
+The starter ships two regions (`player_start`, `movement`) so Guided mode and the tile-editor's "Where should the hero start?" picker both keep working when the pupil is writing asm.
+
+**Server endpoints:**
+
+- `GET /default-main-c` → stock `main.c.starter` (unchanged from 3b/3c).
+- `GET /default-main-s` → stock `main.s.starter`.
+
+**`/play` accepts either language.** The contract now allows `customMainC` *or* `customMainAsm` (never both — the server 400s if both are present). Dispatch in `_build_rom()`:
+
+| Body field          | Build path                                 | Includes written                  |
+|---------------------|--------------------------------------------|-----------------------------------|
+| `customMainC` set   | `_build_in_tempdir()` (cc65 + nes.lib)     | `palettes.inc`, `scene.inc`       |
+| `customMainAsm` set | `_build_asm_in_tempdir()` (ca65, no .lib)  | `palettes.asminc`, `scene.asminc` |
+| neither             | `_build_in_shared_dir()` (native workflow) | `palettes.inc`, `scene.inc`       |
+
+The asm path copies `STEP_DIR` to a tempdir, removes `main.c` / `scene.inc` / `palettes.inc`, drops the pupil's `main.s` + generated `.asminc` files, overwrites `Makefile` with the in-memory `ASM_MAKEFILE` (ca65-only, two `.o` → `ld65`), then runs `make`. CHR (`assets/sprites/game.chr`) and NAM (`assets/backgrounds/level.nam`) assets are written the same way as the C path — `graphics.s` reads them at assemble time.
+
+**UI on the Code page:**
+
+- Second `.mode-toggle` pair sits beside Guided/Advanced. **C** is default-active; clicking **Asm** pops a one-time confirm explaining that C code is preserved on switch and that lessons + snippets stay C-only for now.
+- In asm mode the lesson chip and **🧩 Snippets…** button are greyed out with an explanatory tooltip.
+- `switchLanguage(next)` saves the editor buffer to `state.custom*` for the *current* lang, loads the target lang's saved source (or fetches the starter), clears guided marks, sets the editor value, and re-applies guided marks if Guided mode is active.
+- **▶ Play** reads `cm.getValue()` once, saves it to the right state field, and sends `customMainC` *or* `customMainAsm` based on `codeLang`.
+- **Restore default** is lang-aware: it confirms `"Replace your main.s with the default?"` in asm mode and invalidates only that lang's cache slot.
+- CodeMirror still uses the `clike` mode for both languages (asm mode is not loaded). 6502 highlighting is close enough to C for this classroom use — authoring a proper ca65 mode is a future task.
+
+**Authoring notes.** The asm starter is deliberately minimal — no walk animation, no jump — so the 6502 bookkeeping doesn't drown the interesting bits. Compare `main.s.starter` side-by-side with `main.c.starter` to see the same game in both languages. Asm lessons / snippets are not implemented yet; if you add them, gate them on `lang === 'asm'` in the lesson/snippet pickers and reuse the `;>>` / `;<<` marker style for editable regions.
+
 ### `/play` endpoint contract
 
 POST body:

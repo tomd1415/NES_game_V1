@@ -1,0 +1,167 @@
+; =============================================================================
+; main.s - NES Playground (assembly starter)
+; =============================================================================
+; Same game as the default C main.c: show the player sprite from the
+; Sprites page, read the controller, walk left/right with the D-pad.
+; Kept intentionally minimal (no walk animation, no jump) so the 6502
+; bookkeeping doesn't drown out the interesting bits. Compare against the
+; C main.c side-by-side.
+;
+; Self-contained: this file writes its own iNES header and hardware
+; vectors, and does NOT link against nes.lib. That makes the boot path
+; visible - reset: -> initialise PPU -> game_loop -> jmp game_loop.
+; =============================================================================
+
+.include "palettes.asminc"
+.include "scene.asminc"
+
+PPU_CTRL   = $2000
+PPU_MASK   = $2001
+PPU_STATUS = $2002
+OAM_ADDR   = $2003
+OAM_DATA   = $2004
+PPU_SCROLL = $2005
+PPU_ADDR   = $2006
+PPU_DATA   = $2007
+JOYPAD1    = $4016
+
+; ---- iNES header ----------------------------------------------------------
+.segment "HEADER"
+    .byte "NES", $1A      ; magic
+    .byte 2               ; 2 x 16K PRG ROM
+    .byte 1               ; 1 x 8K CHR ROM
+    .byte %00000001       ; mapper 0, vertical mirroring
+    .byte %00000000       ; mapper hi-nibble
+    .res 8, 0             ; padding
+
+; ---- Zero-page variables --------------------------------------------------
+.segment "ZEROPAGE"
+px:    .res 1
+py:    .res 1
+pad:   .res 1
+
+; nes.cfg declares a STARTUP segment (normally used by nes.lib's crt0).
+; We're not using it, so emit an empty stub to silence the linker warning.
+.segment "STARTUP"
+
+; ---- Reset + main game loop -----------------------------------------------
+.segment "CODE"
+
+.import _load_background
+
+reset:
+        sei
+        cld
+        ldx #$FF
+        txs
+        inx                 ; x = 0 - disable rendering while we boot
+        stx PPU_CTRL
+        stx PPU_MASK
+
+        ; Two vblank waits warm the PPU up after reset.
+        bit PPU_STATUS
+@wait1:
+        bit PPU_STATUS
+        bpl @wait1
+@wait2:
+        bit PPU_STATUS
+        bpl @wait2
+
+        jsr write_palettes
+        jsr _load_background
+
+        lda #$10            ; sprites from pattern table 0, BG from 1
+        sta PPU_CTRL
+        lda #0
+        sta PPU_SCROLL
+        sta PPU_SCROLL
+        lda #$1E            ; show BG + sprites, no left-8 masking
+        sta PPU_MASK
+
+;>> player_start: Change these two numbers to move where the hero spawns.
+        lda #PLAYER_X
+        sta px
+        lda #PLAYER_Y
+        sta py
+;<<
+
+game_loop:
+        jsr read_controller
+
+;>> movement: Change how the player reacts to the D-pad.
+        lda pad
+        and #$01             ; right
+        beq @no_right
+        inc px
+@no_right:
+        lda pad
+        and #$02             ; left
+        beq @no_left
+        dec px
+@no_left:
+;<<
+
+        jsr wait_vsync
+
+        ; One 4-byte OAM entry for the player sprite.
+        lda #0
+        sta OAM_ADDR
+        lda py
+        sta OAM_DATA         ; Y
+        lda #$01             ; tile index 1 - the first player tile
+        sta OAM_DATA
+        lda #0
+        sta OAM_DATA         ; attributes (palette 0, no flip)
+        lda px
+        sta OAM_DATA         ; X
+
+        ; Scroll reset after every vblank or the PPU drifts.
+        lda #0
+        sta PPU_SCROLL
+        sta PPU_SCROLL
+
+        jmp game_loop
+
+; ---- Helpers --------------------------------------------------------------
+wait_vsync:
+@wait:
+        bit PPU_STATUS
+        bpl @wait
+        rts
+
+write_palettes:
+        lda #$3F
+        sta PPU_ADDR
+        lda #$00
+        sta PPU_ADDR
+        ldx #0
+@loop:
+        lda palette_bytes, x
+        sta PPU_DATA
+        inx
+        cpx #32
+        bne @loop
+        rts
+
+read_controller:
+        lda #1
+        sta JOYPAD1
+        lda #0
+        sta JOYPAD1
+        ldx #8
+@loop:
+        lda JOYPAD1
+        lsr a
+        rol pad
+        dex
+        bne @loop
+        rts
+
+nmi:    rti                  ; unused - no vblank interrupt work
+irq:    rti
+
+; ---- Hardware vectors (NMI, RESET, IRQ) -----------------------------------
+.segment "VECTORS"
+    .word nmi
+    .word reset
+    .word irq
