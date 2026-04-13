@@ -158,6 +158,88 @@ cc65 output is rendered in a panel below the editor with clickable `file.c(line)
 
 **Caveats.** `state.customMainC` is per-browser-profile. If a pupil switches machine, they need to copy-paste their `main.c` across (or use **Export → JSON**, which now includes the field). `load_background()`, the cc65 headers, and the `PPU_*` MMIO macros are all fair game to edit; removing `waitvsync()` or `PPU_MASK = 0x1E` will give a visibly broken ROM, which is a useful teaching moment.
 
+### Phase 3b — Guided mode + autocomplete
+
+The Code page has two modes, toggled in its header:
+
+- **🎓 Guided** (default for new pupils) parses `//>> id: hint` … `//<<` markers in `main.c` and makes everything *outside* those ranges read-only. The pupil sees a banner listing each region (e.g. `player_start`, `jump_height`, `walk_speed`), clicking a region scrolls the editor to it. Editable lines get a green wash so they're visually unmistakable. The `//>>` and `//<<` marker lines themselves are locked but visible.
+- **⚙️ Advanced** clears all the read-only marks and lets the pupil edit any line. A confirmation dialog fires the first time they switch, and the choice is persisted in `playground.codemode.v1`.
+
+**Marker syntax.** Each region is delimited by:
+
+```c
+//>> some_id: One-line explanation that shows up in the jump-to banner.
+    <editable C code>
+//<<
+```
+
+`//>>` requires an identifier (`[A-Za-z_][A-Za-z0-9_]*`) followed by a colon and free-text hint; `//<<` stands alone on its own line. Anything cc65 accepts between the two is fine. The C compiler treats both lines as ordinary comments so builds in Advanced mode, at the terminal, or via `make -C steps/Step_Playground` are unaffected.
+
+**Seed regions in [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c):**
+
+- `walk_speed` — how many pixels the player moves per frame (a module-scope variable referenced by the LEFT / RIGHT branches).
+- `player_start` — where the player spawns (`px = PLAYER_X; py = PLAYER_Y; ground_y = PLAYER_Y;`).
+- `jump_height` — the `jmp_up = 20;` initialiser inside the jump branch.
+
+Add more by dropping `//>> … //<<` pairs around any block you want pupils to tweak in a given lesson.
+
+**Autocomplete.** The editor vendors `codemirror/addon/hint/show-hint` and ships a custom hint source (`nesHint` in [code.html](tools/tile_editor_web/code.html)) that offers:
+
+- Generated scene symbols (`PLAYER_X`, `player_tiles`, `walk_tiles`, `NUM_STATIC_SPRITES`, `palette_bytes`, the `ss_*` arrays, etc.).
+- NES MMIO macros the template defines (`PPU_CTRL`, `OAM_DATA`, `JOYPAD1`, …).
+- cc65 helpers (`waitvsync`, `load_background`, `read_controller`).
+- A short C keyword list.
+
+Each symbol carries a one-line description shown inline in the completion popup. Triggered automatically while typing identifier characters and explicitly via `Ctrl-Space`. If you rename a generated symbol in `build_scene_inc()`, update the `HINT_SYMBOLS` table to match or the hint shown to pupils will drift.
+
+### Phase 3c — Lesson library + hover tooltips
+
+The Code page now ships a lesson library backed by the `lessons/` directory at the repo root. Each lesson is a **complete, compilable `main.c`** with a JSON metadata block pinned to the top:
+
+```c
+/*! LESSON
+{
+  "id": "01-move-player",
+  "title": "Move the Player",
+  "difficulty": 1,
+  "summary": "Short sentence shown in the picker.",
+  "description": "Longer paragraph shown before the pupil loads the lesson.",
+  "goal": "What the pupil should achieve.",
+  "hints": [
+    "First hint, shown under the collapsible 💡 Show hints panel.",
+    "Second hint."
+  ]
+}
+*/
+```
+
+The `/*! LESSON … */` is a plain C block comment — `cc65` ignores it, `make -C steps/Step_Playground` still builds when the lesson file is swapped in. The server re-reads `lessons/*.c` on every `/lessons` request so teachers can author, tweak, and save without restarting the playground. Malformed JSON is logged to stderr and the file is dropped from the list rather than 500-ing the whole request.
+
+**Seed lessons** (ship with the repo, ordered by difficulty):
+
+| File                                            | Region(s) unlocked         | Teaching goal                                             |
+|-------------------------------------------------|----------------------------|-----------------------------------------------------------|
+| [lessons/01-move-player.c](lessons/01-move-player.c)    | `player_start`             | Change three numbers to reposition the spawn.             |
+| [lessons/02-speed-and-jump.c](lessons/02-speed-and-jump.c) | `walk_speed`, `jump_height` | Tune two constants to change game feel.                   |
+| [lessons/03-magic-button.c](lessons/03-magic-button.c)  | `magic_button`             | Write a per-frame `if (pad & 0x40)` branch for the B button. |
+
+**Server endpoints:**
+
+- `GET /lessons` → `{"ok": true, "lessons": [<meta>...]}` sorted by `(difficulty, id)`.
+- `GET /lessons/<id>` → the raw `main.c` (JSON header still attached).
+
+Unknown ids 404. The pupil's chosen lesson is persisted in `state.currentLesson` inside the shared `nes_tile_editor.current.v1` localStorage blob, so it survives reloads and rides along with Export → JSON. `migrateState()` in index.html / sprites.html normalises the new field.
+
+**UI on the Code page:**
+
+- **📚 chip** in the toolbar opens the picker dialog. When a lesson is active the chip shows its title and a solid info border; empty it shows dashed "Pick a lesson…".
+- **Goal panel** sits below the hint banner while a lesson is active — shows title, difficulty chip, goal sentence, and a collapsed `<details>` with hints. A `×` dismiss button hides the panel for the session (the chip still indicates the active lesson).
+- **Restore default** button now also clears the `currentLesson` pointer so pupils who bail back to the free-form scaffolding don't see a stale goal panel.
+
+**Hover tooltips for generated symbols.** Moving the mouse over any identifier in the editor looks it up in `HINT_SYMBOLS` (same table that feeds autocomplete) and floats a tooltip above the cursor with the one-line description. Unknown tokens hide the tooltip silently. Implementation: `cm.coordsChar()` + `cm.getTokenAt()` on the wrapper element's `mousemove`, with a small timer to hide on `mouseleave`.
+
+**Authoring new lessons.** Copy the closest existing lesson, change the JSON header, add / remove `//>> … //<<` regions around whatever you want the pupil to edit. Anything outside those markers becomes read-only in Guided mode, so keep the editable ranges narrow to reinforce the teaching point. `make -C steps/Step_Playground` with your lesson swapped in as `src/main.c` is the fastest way to verify it compiles before serving it to a class.
+
 ### `/play` endpoint contract
 
 POST body:

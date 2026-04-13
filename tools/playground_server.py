@@ -30,6 +30,7 @@ import http.server
 import json
 import os
 import pathlib
+import re
 import shutil
 import socket
 import socketserver
@@ -40,7 +41,7 @@ import threading
 import traceback
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
@@ -50,6 +51,14 @@ PAL_INC = STEP_DIR / "src" / "palettes.inc"
 CHR_PATH = STEP_DIR / "assets" / "sprites" / "game.chr"
 NAM_PATH = STEP_DIR / "assets" / "backgrounds" / "level.nam"
 DEFAULT_MAIN_C = STEP_DIR / "src" / "main.c"
+LESSONS_DIR = ROOT / "lessons"
+
+# Lesson files carry a JSON metadata block at the top, delimited by
+# `/*! LESSON` and `*/`.  The rest of the file is a fully-compilable
+# `main.c`.  Lessons are re-read on every /lessons request so teachers can
+# author and tweak without restarting the server.
+LESSON_HEADER_RE = re.compile(r"/\*!\s*LESSON\s*(\{.*?\})\s*\*/", re.DOTALL)
+LESSON_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 # HOST defaults to 127.0.0.1 for single-pupil / local dev; set to 0.0.0.0 on
 # the classroom LXC so pupils on the LAN can browse to it.  PORT likewise
@@ -505,6 +514,64 @@ class BuildError(RuntimeError):
     """cc65 build failed — .args[0] is the full build log."""
 
 
+# ---------------------------------------------------------------------------
+# Lesson library
+# ---------------------------------------------------------------------------
+
+def _parse_lesson(path):
+    """Read a lesson .c file and return (metadata_dict, source_text) or None."""
+    try:
+        text = path.read_text()
+    except OSError:
+        return None
+    m = LESSON_HEADER_RE.search(text)
+    if not m:
+        return None
+    try:
+        meta = json.loads(m.group(1))
+    except json.JSONDecodeError as e:
+        # Surface malformed lesson metadata via the server log so teachers
+        # see the problem without digging through request responses.
+        sys.stderr.write(f"[playground] bad lesson JSON in {path.name}: {e}\n")
+        return None
+    if not isinstance(meta, dict) or "id" not in meta:
+        return None
+    # Default the summary/goal/hints fields so the UI can render without
+    # each lesson restating the whole schema.
+    meta.setdefault("title", meta["id"])
+    meta.setdefault("difficulty", 1)
+    meta.setdefault("summary", "")
+    meta.setdefault("description", "")
+    meta.setdefault("goal", "")
+    meta.setdefault("hints", [])
+    return meta, text
+
+
+def _scan_lessons():
+    """Return a sorted list of (metadata, path) for every lesson .c file."""
+    if not LESSONS_DIR.exists():
+        return []
+    out = []
+    for p in sorted(LESSONS_DIR.glob("*.c")):
+        parsed = _parse_lesson(p)
+        if parsed is None:
+            continue
+        meta, _text = parsed
+        out.append((meta, p))
+    # Stable sort by (difficulty, id) so the picker has a predictable order.
+    out.sort(key=lambda mp: (int(mp[0].get("difficulty", 1)), str(mp[0]["id"])))
+    return out
+
+
+def _find_lesson(lesson_id):
+    if not LESSON_ID_RE.match(lesson_id or ""):
+        return None
+    for meta, path in _scan_lessons():
+        if str(meta.get("id")) == lesson_id:
+            return meta, path
+    return None
+
+
 def run_play(body):
     # mode: "browser" (default) returns ROM bytes for jsnes to run in the
     # tab; "native" launches fceux on the server's desktop (only useful for
@@ -571,7 +638,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
         if parsed.path == "/default-main-c":
             return self._default_main_c()
+        if parsed.path == "/lessons":
+            return self._lessons_index()
+        if parsed.path.startswith("/lessons/"):
+            return self._lesson_body(unquote(parsed.path[len("/lessons/"):]))
         return super().do_GET()
+
+    def _lessons_index(self):
+        metas = [m for m, _p in _scan_lessons()]
+        return self._json(200, {"ok": True, "lessons": metas})
+
+    def _lesson_body(self, lesson_id):
+        found = _find_lesson(lesson_id)
+        if not found:
+            return self.send_error(404, f"no such lesson: {lesson_id}")
+        meta, path = found
+        try:
+            data = path.read_bytes()
+        except OSError as e:
+            return self.send_error(500, f"could not read {path.name}: {e}")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _default_main_c(self):
         try:

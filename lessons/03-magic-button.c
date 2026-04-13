@@ -1,22 +1,26 @@
+/*! LESSON
+{
+  "id": "03-magic-button",
+  "title": "Magic Button",
+  "difficulty": 3,
+  "summary": "Write your own controller code. Make the B button do something cool.",
+  "description": "So far the D-pad and UP button already do things. In this lesson YOU write the code for the B button (that's Z on the keyboard in the browser emulator). When the pupil presses B, something special should happen.",
+  "goal": "Make the B button do ONE of these: (a) TELEPORT the player back to where they started, (b) FREEZE gravity so they float in the air, or (c) TURN the player's direction around. Any of them counts.",
+  "hints": [
+    "The `pad` variable holds every button that is currently pressed. `pad & 0x40` is true when B is held (A is 0x80, START is 0x10, SELECT is 0x20).",
+    "For a teleport, set px and py back to numbers. The player's starting X/Y came from PLAYER_X / PLAYER_Y.",
+    "The magic_button region is inside the main game loop, so any code you write runs every single frame. That is why holding B keeps the effect going.",
+    "Try starting simple: `if (pad & 0x40) { px = 16; }` snaps the player to the left edge whenever B is held."
+  ]
+}
+*/
+
 // =============================================================================
-// NES PLAYGROUND - auto-generated scene driver
+// LESSON 3 — Magic Button
 // =============================================================================
-// This file is part of the one-click "Play in NES" pipeline.  Everything it
-// needs -- palettes, player tile layout, static sprite table -- is injected
-// through the two generated headers written by tools/playground_server.py.
-//
-// Controls: LEFT / RIGHT walk along the ground; UP jumps.  The "ground" is
-// whatever Y the player was placed at in the editor's Play-in-NES dialog.
-// Gravity pulls the player back down to that line, so the scene behaves
-// like a simple side-on platformer.  Sprite flips horizontally when moving
-// left.  If the pupil has assigned a walk / jump animation in the sprites
-// editor, the player cycles through those frames; otherwise the static
-// player_tiles layout is used unchanged.
-//
-// The `//>> id: hint` and `//<<` markers below mark up the bits pupils
-// are meant to change in Guided mode on the Code page.  They are plain
-// comments, so Advanced-mode pupils (and anyone building this file
-// straight with `make`) see them as normal source.
+// One editable region (`magic_button`) is placed inside the main loop,
+// after the controller read but before the sprite render pass.  Anything
+// the pupil writes there runs every frame.
 // =============================================================================
 
 #include <nes.h>
@@ -39,14 +43,12 @@ extern void load_background(void);
 unsigned char px;
 unsigned char py;
 unsigned char pad;
-unsigned char prev_pad;      // for edge-triggering the jump
-unsigned char ground_y;      // Y the player was placed at — the "floor"
-unsigned char jumping;       // 1 while airborne
-unsigned char jmp_up;        // ascent frames remaining (0 = falling)
-unsigned char plrdir;        // 0x40 when facing left (flip-H on every tile)
-//>> walk_speed: How many pixels the player moves each frame. 1 = slow, 2 = normal, 3 = fast.
+unsigned char prev_pad;
+unsigned char ground_y;
+unsigned char jumping;
+unsigned char jmp_up;
+unsigned char plrdir;
 unsigned char walk_speed = 1;
-//<<
 unsigned char i;
 unsigned char r;
 unsigned char c;
@@ -58,10 +60,6 @@ unsigned char sy;
 unsigned char tile;
 unsigned char attr;
 
-// Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
-// changes we reset frame/tick so a new animation always plays from its
-// first frame.  anim_base is the byte offset of the current frame inside
-// the active tiles/attrs table (frame_index * PLAYER_W * PLAYER_H).
 unsigned char anim_mode;
 unsigned char anim_prev_mode;
 unsigned char anim_frame;
@@ -99,16 +97,14 @@ void main(void) {
     write_palettes();
     load_background();
 
-    PPU_CTRL = 0x10;          // BG uses pattern table 1; sprites use table 0
+    PPU_CTRL = 0x10;
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
     PPU_MASK = 0x1E;
 
-//>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200).
     px = PLAYER_X;
     py = PLAYER_Y;
     ground_y = PLAYER_Y;
-//<<
     jumping = 0;
     jmp_up = 0;
     prev_pad = 0;
@@ -121,28 +117,21 @@ void main(void) {
     while (1) {
         pad = read_controller();
 
-        // Horizontal walk with screen-bounds clamp.
-        if (pad & 0x01) {                     // RIGHT
+        if (pad & 0x01) {
             if (px < (256 - PLAYER_W * 8)) px += walk_speed;
             plrdir = 0x00;
         }
-        if (pad & 0x02) {                     // LEFT
+        if (pad & 0x02) {
             if (px >= walk_speed) px -= walk_speed;
             plrdir = 0x40;
         }
 
-        // UP = jump.  Edge-triggered: must release and re-press to
-        // bounce again, and only takes off from the ground.
         if ((pad & 0x08) && !(prev_pad & 0x08) && !jumping) {
             jumping = 1;
-//>> jump_height: How high the player jumps. Bigger number = higher jump (try 10 to 40).
             jmp_up = 20;
-//<<
         }
         prev_pad = pad;
 
-        // Gravity: during the ascent phase move up 2 px/frame for
-        // jmp_up frames, then fall 2 px/frame until we reach ground_y.
         if (jumping) {
             if (jmp_up > 0) {
                 if (py >= 18) py -= 2; else py = 16;
@@ -156,10 +145,14 @@ void main(void) {
             }
         }
 
-        // Pick the active animation for this frame.  Jumping wins over
-        // walking so the jump cycle plays even while drifting sideways.
-        // Unassigned animations (count == 0) fall through to the static
-        // player_tiles layout.
+//>> magic_button: Write code here that runs every frame. Try checking `if (pad & 0x40)` for the B button.
+        // Example (remove the // to enable it):
+        // if (pad & 0x40) {
+        //     px = PLAYER_X;
+        //     py = PLAYER_Y;
+        // }
+//<<
+
         anim_mode = 0;
 #if JUMP_FRAME_COUNT > 0
         if (jumping) anim_mode = 2;
@@ -205,10 +198,6 @@ void main(void) {
         PPU_SCROLL = 0;
         OAM_ADDR = 0x00;
 
-        // --- Player -------------------------------------------------------
-        // When facing left, flip every tile horizontally AND draw the
-        // columns in reverse order so the two-wide-or-wider sprite mirrors
-        // correctly as a whole.
         for (r = 0; r < PLAYER_H; r++) {
             for (c = 0; c < PLAYER_W; c++) {
                 sy = py + (r << 3);
@@ -226,7 +215,6 @@ void main(void) {
             }
         }
 
-        // --- Static scene sprites ---------------------------------------
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             off = ss_offset[i];
             sw = ss_w[i];

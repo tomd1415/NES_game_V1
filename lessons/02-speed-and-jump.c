@@ -1,22 +1,25 @@
+/*! LESSON
+{
+  "id": "02-speed-and-jump",
+  "title": "Speed and Jump",
+  "difficulty": 2,
+  "summary": "Make your hero fast and bouncy — or slow and heavy.",
+  "description": "Every platformer feels different: Mario is floaty, Mega Man is snappy, Sonic is fast. In this lesson you'll change two numbers that control the FEEL of your hero.",
+  "goal": "Pick a style and make it real. Try one of these: (a) a FAST, HIGH-JUMPING ninja, (b) a SLOW, SHORT-JUMPING tank, or (c) make up your own combination. Press ▶ Play after each change to feel the difference.",
+  "hints": [
+    "walk_speed is how many pixels you move per frame. 1 = walking, 2 = jogging, 3 = sprinting. Anything over 4 feels wild.",
+    "jump_height is how many frames the ascent lasts. 20 is default. Try 10 for a short hop or 35 for a moon jump.",
+    "Careful: if jump_height is too big, the player will vanish off the top of the screen before falling back down!",
+    "If you change walk_speed to 0, the player won't move at all. That's also a valid 'tank' build."
+  ]
+}
+*/
+
 // =============================================================================
-// NES PLAYGROUND - auto-generated scene driver
+// LESSON 2 — Speed and Jump
 // =============================================================================
-// This file is part of the one-click "Play in NES" pipeline.  Everything it
-// needs -- palettes, player tile layout, static sprite table -- is injected
-// through the two generated headers written by tools/playground_server.py.
-//
-// Controls: LEFT / RIGHT walk along the ground; UP jumps.  The "ground" is
-// whatever Y the player was placed at in the editor's Play-in-NES dialog.
-// Gravity pulls the player back down to that line, so the scene behaves
-// like a simple side-on platformer.  Sprite flips horizontally when moving
-// left.  If the pupil has assigned a walk / jump animation in the sprites
-// editor, the player cycles through those frames; otherwise the static
-// player_tiles layout is used unchanged.
-//
-// The `//>> id: hint` and `//<<` markers below mark up the bits pupils
-// are meant to change in Guided mode on the Code page.  They are plain
-// comments, so Advanced-mode pupils (and anyone building this file
-// straight with `make`) see them as normal source.
+// The `walk_speed` and `jump_height` regions are unlocked.  The player
+// still starts at PLAYER_X / PLAYER_Y from the Sprites page.
 // =============================================================================
 
 #include <nes.h>
@@ -39,12 +42,12 @@ extern void load_background(void);
 unsigned char px;
 unsigned char py;
 unsigned char pad;
-unsigned char prev_pad;      // for edge-triggering the jump
-unsigned char ground_y;      // Y the player was placed at — the "floor"
-unsigned char jumping;       // 1 while airborne
-unsigned char jmp_up;        // ascent frames remaining (0 = falling)
-unsigned char plrdir;        // 0x40 when facing left (flip-H on every tile)
-//>> walk_speed: How many pixels the player moves each frame. 1 = slow, 2 = normal, 3 = fast.
+unsigned char prev_pad;
+unsigned char ground_y;
+unsigned char jumping;
+unsigned char jmp_up;
+unsigned char plrdir;
+//>> walk_speed: How many pixels the player walks per frame. 1 = slow, 2 = normal, 3 = fast.
 unsigned char walk_speed = 1;
 //<<
 unsigned char i;
@@ -58,10 +61,6 @@ unsigned char sy;
 unsigned char tile;
 unsigned char attr;
 
-// Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
-// changes we reset frame/tick so a new animation always plays from its
-// first frame.  anim_base is the byte offset of the current frame inside
-// the active tiles/attrs table (frame_index * PLAYER_W * PLAYER_H).
 unsigned char anim_mode;
 unsigned char anim_prev_mode;
 unsigned char anim_frame;
@@ -99,16 +98,14 @@ void main(void) {
     write_palettes();
     load_background();
 
-    PPU_CTRL = 0x10;          // BG uses pattern table 1; sprites use table 0
+    PPU_CTRL = 0x10;
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
     PPU_MASK = 0x1E;
 
-//>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200).
     px = PLAYER_X;
     py = PLAYER_Y;
     ground_y = PLAYER_Y;
-//<<
     jumping = 0;
     jmp_up = 0;
     prev_pad = 0;
@@ -121,28 +118,23 @@ void main(void) {
     while (1) {
         pad = read_controller();
 
-        // Horizontal walk with screen-bounds clamp.
-        if (pad & 0x01) {                     // RIGHT
+        if (pad & 0x01) {
             if (px < (256 - PLAYER_W * 8)) px += walk_speed;
             plrdir = 0x00;
         }
-        if (pad & 0x02) {                     // LEFT
+        if (pad & 0x02) {
             if (px >= walk_speed) px -= walk_speed;
             plrdir = 0x40;
         }
 
-        // UP = jump.  Edge-triggered: must release and re-press to
-        // bounce again, and only takes off from the ground.
         if ((pad & 0x08) && !(prev_pad & 0x08) && !jumping) {
             jumping = 1;
-//>> jump_height: How high the player jumps. Bigger number = higher jump (try 10 to 40).
+//>> jump_height: Frames of upward motion after pressing UP. Bigger = higher jump.
             jmp_up = 20;
 //<<
         }
         prev_pad = pad;
 
-        // Gravity: during the ascent phase move up 2 px/frame for
-        // jmp_up frames, then fall 2 px/frame until we reach ground_y.
         if (jumping) {
             if (jmp_up > 0) {
                 if (py >= 18) py -= 2; else py = 16;
@@ -156,10 +148,6 @@ void main(void) {
             }
         }
 
-        // Pick the active animation for this frame.  Jumping wins over
-        // walking so the jump cycle plays even while drifting sideways.
-        // Unassigned animations (count == 0) fall through to the static
-        // player_tiles layout.
         anim_mode = 0;
 #if JUMP_FRAME_COUNT > 0
         if (jumping) anim_mode = 2;
@@ -205,10 +193,6 @@ void main(void) {
         PPU_SCROLL = 0;
         OAM_ADDR = 0x00;
 
-        // --- Player -------------------------------------------------------
-        // When facing left, flip every tile horizontally AND draw the
-        // columns in reverse order so the two-wide-or-wider sprite mirrors
-        // correctly as a whole.
         for (r = 0; r < PLAYER_H; r++) {
             for (c = 0; c < PLAYER_W; c++) {
                 sy = py + (r << 3);
@@ -226,7 +210,6 @@ void main(void) {
             }
         }
 
-        // --- Static scene sprites ---------------------------------------
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             off = ss_offset[i];
             sw = ss_w[i];

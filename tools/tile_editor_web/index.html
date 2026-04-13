@@ -1228,6 +1228,10 @@ function migrateState(s) {
   if (typeof s.customMainC !== 'string' && s.customMainC !== null) {
     s.customMainC = null;
   }
+  // Phase 3c: which lesson (if any) the pupil is following.
+  if (typeof s.currentLesson !== 'string' && s.currentLesson !== null) {
+    s.currentLesson = null;
+  }
   return s;
 }
 

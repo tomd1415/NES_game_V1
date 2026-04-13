@@ -9,9 +9,12 @@
 <!-- CodeMirror 5 (MIT) -->
 <link rel="stylesheet" href="codemirror.min.css">
 <link rel="stylesheet" href="codemirror-theme-dracula.min.css">
+<link rel="stylesheet" href="codemirror-show-hint.min.css">
 <script src="codemirror.min.js"></script>
 <script src="codemirror-clike.min.js"></script>
 <script src="codemirror-active-line.min.js"></script>
+<script src="codemirror-show-hint.min.js"></script>
+<script src="codemirror-anyword-hint.min.js"></script>
 
 <!-- jsnes for in-browser play -->
 <script src="jsnes.min.js"></script>
@@ -153,6 +156,122 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   border-bottom: 1px solid var(--border);
 }
 .hint code { background: var(--panel2); padding: 1px 5px; border-radius: 3px; color: var(--info); }
+.hint.guided { color: var(--fg); line-height: 1.55; }
+.hint.guided strong { color: var(--accent); }
+.hint.guided .region-jump {
+  display: inline-block; margin: 2px 4px 2px 0;
+  padding: 2px 8px; background: #3a2f50; border: 1px solid var(--accent);
+  border-radius: 10px; color: var(--accent); cursor: pointer;
+  font-size: 11px;
+}
+.hint.guided .region-jump:hover { background: var(--accent); color: #1a1623; }
+
+/* Mode toggle */
+.mode-toggle {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  margin-right: 4px;
+}
+.mode-toggle button {
+  border: 0; border-radius: 0; padding: 4px 10px; font-size: 12px;
+  background: var(--panel2); color: var(--muted);
+}
+.mode-toggle button.active {
+  background: #3a2f50; color: var(--accent); font-weight: 600;
+}
+
+/* Guided-mode editable region highlighting. The locked lines stay at
+   the default dracula background; editable lines get a subtle green
+   tint + a yellow left border so pupils can see at a glance where
+   they're allowed to type. */
+.cm-editable-line        { background: rgba(71, 209, 108, 0.08) !important; }
+.cm-editable-line.CodeMirror-activeline-background { background: rgba(71, 209, 108, 0.16) !important; }
+.CodeMirror .cm-editable-line-gutter { color: var(--good); }
+.CodeMirror .cm-editable-marker      { border-left: 3px solid var(--accent); padding-left: 2px; }
+.CodeMirror .cm-editable-marker.end  { border-left-color: var(--good); }
+/* The //>> id: hint line itself: dimmer, italic, the hint text glows. */
+.cm-marker-hint { color: var(--accent) !important; font-style: italic; }
+
+/* Active-lesson chip in the toolbar */
+.lesson-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; background: var(--panel2); border: 1px solid var(--info);
+  border-radius: 10px; color: var(--info); font-size: 12px; cursor: pointer;
+}
+.lesson-chip:hover { background: #2e3548; }
+.lesson-chip.empty { border-style: dashed; color: var(--muted); }
+
+/* Lesson goal panel sits below the hint banner when a lesson is active. */
+.lesson-goal {
+  padding: 10px 14px; background: #1a2032; border-bottom: 1px solid var(--border);
+  font-size: 13px; line-height: 1.55; color: var(--fg);
+  display: none;
+}
+.lesson-goal.visible { display: block; }
+.lesson-goal .lg-head {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px;
+}
+.lesson-goal .lg-head h3 { color: var(--info); font-size: 14px; }
+.lesson-goal .lg-diff {
+  font-size: 11px; padding: 1px 8px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 10px; color: var(--muted);
+}
+.lesson-goal .lg-goal strong { color: var(--accent); }
+.lesson-goal details { margin-top: 6px; }
+.lesson-goal summary {
+  color: var(--good); cursor: pointer; font-size: 12px; user-select: none;
+}
+.lesson-goal details ul { margin: 6px 0 0 22px; padding: 0; color: var(--muted); }
+.lesson-goal details li { margin: 3px 0; }
+.lesson-goal .lg-close {
+  float: right; background: transparent; border: 0; color: var(--muted);
+  cursor: pointer; font-size: 16px; padding: 0 4px;
+}
+.lesson-goal .lg-close:hover { color: var(--fg); }
+
+/* Lesson picker dialog */
+.lesson-dialog { max-width: 720px; width: min(100%, 720px); }
+.lesson-dialog h2 { color: var(--accent); margin-bottom: 10px; }
+.lesson-dialog .lesson-list { display: grid; gap: 10px; margin: 10px 0; }
+.lesson-dialog .lesson-item {
+  padding: 10px 12px; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer;
+}
+.lesson-dialog .lesson-item:hover { border-color: var(--accent); }
+.lesson-dialog .lesson-item.selected {
+  border-color: var(--accent); background: #2d2445;
+}
+.lesson-dialog .lesson-item h3 { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--fg); }
+.lesson-dialog .lesson-item .diff {
+  font-size: 11px; color: var(--muted); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px;
+}
+.lesson-dialog .lesson-item .summary { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.lesson-dialog .actions { margin-top: 14px; display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Symbol hover tooltip — a floating panel above the editor. */
+.sym-tooltip {
+  position: absolute; z-index: 9999;
+  max-width: 360px; padding: 6px 10px;
+  background: var(--panel); border: 1px solid var(--accent);
+  border-radius: 4px; box-shadow: var(--shadow);
+  font-size: 12px; color: var(--fg); line-height: 1.4;
+  pointer-events: none;
+  display: none;
+}
+.sym-tooltip.visible { display: block; }
+.sym-tooltip .st-name { color: var(--accent); font-family: 'Menlo', 'Consolas', monospace; font-weight: 600; }
+.sym-tooltip .st-desc { color: var(--muted); margin-top: 2px; }
+
+/* show-hint popup: make it legible against dracula. */
+.CodeMirror-hints {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+  color: var(--fg); font-family: 'Menlo', 'Consolas', monospace; font-size: 13px;
+  box-shadow: var(--shadow);
+}
+.CodeMirror-hint { color: var(--fg); padding: 3px 10px; }
+li.CodeMirror-hint-active {
+  background: #3a2f50; color: var(--accent);
+}
 
 /* Reused in-browser emulator dialog (same structure as sprites.html). */
 .emu-dialog { max-width: 640px; width: min(100%, 640px); padding: 12px; }
@@ -188,6 +307,11 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
     <input id="project-name" type="text" value="untitled" title="Project name (shared with the other pages)" aria-label="Project name">
   </div>
   <div class="toolbar">
+    <span class="mode-toggle" role="group" aria-label="Editor mode">
+      <button type="button" id="btn-mode-guided"   class="active" title="Guided: only the highlighted lines are editable. Perfect if you're just starting out.">🎓 Guided</button>
+      <button type="button" id="btn-mode-advanced"              title="Advanced: edit anything in main.c. Use this once you're confident.">⚙️ Advanced</button>
+    </span>
+    <button type="button" id="btn-lesson-chip" class="lesson-chip empty" title="Pick a lesson from the library">📚 <span id="lesson-chip-label">Pick a lesson…</span></button>
     <button type="button" id="btn-restore" title="Replace your code with the stock platformer starter. Your current version is saved to a snapshot first.">↻ Restore default</button>
     <button type="button" id="btn-symbols" title="See the auto-generated symbols (player_tiles, walk_tiles…) your code can use">⌨ Symbols…</button>
     <label class="pg-runon" title="Where the compiled ROM gets played">
@@ -201,8 +325,21 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   </div>
 </header>
 
-<div class="hint">
-  This file <b>replaces</b> <code>steps/Step_Playground/src/main.c</code> for the Play button. Everything from the Backgrounds and Sprites pages (CHR, palettes, nametable, animations) is still auto-generated as <code>scene.inc</code> and <code>palettes.inc</code> — so <code>player_tiles</code>, <code>walk_tiles</code>, <code>NUM_STATIC_SPRITES</code> etc. are all available. Click <b>Symbols…</b> to see the full list.
+<div class="hint" id="hint-banner">
+  This file <b>replaces</b> <code>steps/Step_Playground/src/main.c</code> for the Play button. Everything from the Backgrounds and Sprites pages (CHR, palettes, nametable, animations) is still auto-generated as <code>scene.inc</code> and <code>palettes.inc</code> — so <code>player_tiles</code>, <code>walk_tiles</code>, <code>NUM_STATIC_SPRITES</code> etc. are all available. Press <kbd>Ctrl</kbd>+<kbd>Space</kbd> for autocomplete. Click <b>Symbols…</b> to see the full list.
+</div>
+
+<div class="lesson-goal" id="lesson-goal" aria-live="polite">
+  <button type="button" class="lg-close" id="btn-lesson-goal-close" title="Dismiss this lesson's goal panel (you can re-open it from the 📚 chip)">×</button>
+  <div class="lg-head">
+    <h3 id="lg-title">—</h3>
+    <span class="lg-diff" id="lg-diff">—</span>
+  </div>
+  <div class="lg-goal"><strong>Goal:</strong> <span id="lg-goal-text">—</span></div>
+  <details id="lg-hints-details">
+    <summary>💡 Show hints</summary>
+    <ul id="lg-hints-list"></ul>
+  </details>
 </div>
 
 <main class="app-main">
@@ -257,6 +394,24 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   </div>
 </dialog>
 
+<!-- Lesson picker -->
+<dialog id="lesson-dialog" class="lesson-dialog">
+  <h2>📚 Lesson library</h2>
+  <p style="color: var(--muted); line-height: 1.55;">Pick a lesson to load its starter code into the editor. Your current work is saved to a backup in localStorage first. Leave Guided mode on — each lesson only unlocks the parts you need.</p>
+  <div class="lesson-list" id="lesson-list">Loading…</div>
+  <div class="actions">
+    <button type="button" id="btn-lesson-clear" title="Stop following any lesson (keeps your current code)">Clear lesson</button>
+    <button type="button" id="btn-lesson-cancel">Cancel</button>
+    <button type="button" class="primary" id="btn-lesson-load" disabled>Load selected</button>
+  </div>
+</dialog>
+
+<!-- Symbol hover tooltip (floating; positioned relative to document.body) -->
+<div class="sym-tooltip" id="sym-tooltip" role="tooltip" aria-hidden="true">
+  <div class="st-name" id="st-name"></div>
+  <div class="st-desc" id="st-desc"></div>
+</div>
+
 <!-- In-browser emulator -->
 <dialog id="emu-dialog" class="emu-dialog">
   <div class="emu-header">
@@ -286,6 +441,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 // ================================================================
 const STORAGE_KEY = 'nes_tile_editor.current.v1';
 const RUNON_KEY   = 'playground.runon.v1';
+const MODE_KEY    = 'playground.codemode.v1';   // 'guided' | 'advanced'
 
 const PLAYGROUND_ORIGIN = (location.protocol === 'http:' || location.protocol === 'https:')
   ? location.origin
@@ -293,6 +449,7 @@ const PLAYGROUND_ORIGIN = (location.protocol === 'http:' || location.protocol ==
 const PLAYGROUND_PLAY     = PLAYGROUND_ORIGIN + '/play';
 const PLAYGROUND_HEALTH   = PLAYGROUND_ORIGIN + '/health';
 const PLAYGROUND_DEFAULTC = PLAYGROUND_ORIGIN + '/default-main-c';
+const PLAYGROUND_LESSONS  = PLAYGROUND_ORIGIN + '/lessons';
 
 // Minimal load: we don't need the full state-validation rig that the other
 // pages ship, because this page only touches state.customMainC and
@@ -315,6 +472,97 @@ function saveState(s) {
 let state = loadState() || { name: 'untitled', customMainC: null };
 if (typeof state.customMainC !== 'string') state.customMainC = null;
 if (typeof state.name !== 'string') state.name = 'untitled';
+// currentLesson: string id of the lesson the pupil is following, or null.
+// We persist it in the same shared state blob so imports/exports carry it.
+if (typeof state.currentLesson !== 'string') state.currentLesson = null;
+
+let lessonCache = null;   // { lessons: [meta...] } from /lessons, cached once per page load
+let activeLesson = null;  // meta object for state.currentLesson, or null
+
+let editorMode = 'guided';
+try {
+  const saved = localStorage.getItem(MODE_KEY);
+  if (saved === 'advanced' || saved === 'guided') editorMode = saved;
+} catch {}
+
+// ================================================================
+// Autocomplete — C keywords + NES MMIO + generated-symbol table.
+// The generated-symbol list mirrors tools/playground_server.py's
+// build_scene_inc() / build_palettes_inc() output so pupils see the
+// same names their code can actually reference.
+// ================================================================
+const HINT_SYMBOLS = [
+  // Generated by scene.inc
+  { text: 'PLAYER_X',          d: 'Player start X (from the editor).' },
+  { text: 'PLAYER_Y',          d: 'Player start Y (from the editor).' },
+  { text: 'PLAYER_W',          d: 'Player width in 8×8 tiles.' },
+  { text: 'PLAYER_H',          d: 'Player height in 8×8 tiles.' },
+  { text: 'player_tiles',      d: 'unsigned char[PLAYER_W*PLAYER_H] — static player tile ids.' },
+  { text: 'player_attrs',      d: 'unsigned char[...] — static player attribute bytes.' },
+  { text: 'WALK_FRAME_COUNT',  d: 'How many frames in the walk animation (0 if none).' },
+  { text: 'WALK_FRAME_TICKS',  d: 'Vblanks between walk frames.' },
+  { text: 'walk_tiles',        d: 'Flat table of all walk-frame tiles, row-major.' },
+  { text: 'walk_attrs',        d: 'Flat table of all walk-frame attribute bytes.' },
+  { text: 'JUMP_FRAME_COUNT',  d: 'How many frames in the jump animation (0 if none).' },
+  { text: 'JUMP_FRAME_TICKS',  d: 'Vblanks between jump frames.' },
+  { text: 'jump_tiles',        d: 'Flat table of all jump-frame tiles.' },
+  { text: 'jump_attrs',        d: 'Flat table of all jump-frame attribute bytes.' },
+  { text: 'NUM_STATIC_SPRITES', d: 'Count of static scene sprites placed in the editor.' },
+  { text: 'ss_x', d: 'Static-sprite X positions.' },
+  { text: 'ss_y', d: 'Static-sprite Y positions.' },
+  { text: 'ss_w', d: 'Static-sprite widths (tiles).' },
+  { text: 'ss_h', d: 'Static-sprite heights (tiles).' },
+  { text: 'ss_offset', d: 'Index into ss_tiles/ss_attrs for each static sprite.' },
+  { text: 'ss_tiles',  d: 'Flat static-sprite tile table.' },
+  { text: 'ss_attrs',  d: 'Flat static-sprite attribute-byte table.' },
+  { text: 'palette_bytes', d: 'unsigned char[32] — 16 BG + 16 sprite colours.' },
+  // NES MMIO macros the template defines
+  { text: 'PPU_CTRL',   d: '$2000 — control bits (NMI enable, sprite table, etc.).' },
+  { text: 'PPU_MASK',   d: '$2001 — enable BG / sprites, greyscale, colour emphasis.' },
+  { text: 'OAM_ADDR',   d: '$2003 — set OAM write address (usually 0).' },
+  { text: 'OAM_DATA',   d: '$2004 — write one byte to OAM (y, tile, attr, x).' },
+  { text: 'PPU_SCROLL', d: '$2005 — scroll register, write X then Y.' },
+  { text: 'PPU_ADDR',   d: '$2006 — set PPU address, write high byte then low.' },
+  { text: 'PPU_DATA',   d: '$2007 — read/write the byte at PPU_ADDR (auto-increment).' },
+  { text: 'JOYPAD1',    d: '$4016 — controller 1 strobe + shift.' },
+  // cc65 / helpers
+  { text: 'waitvsync',       d: 'cc65 helper: block until the next vblank.' },
+  { text: 'load_background', d: 'Copy the auto-generated CHR + nametable into the PPU.' },
+  { text: 'read_controller', d: 'Returns a bitmask of held buttons (RIGHT=1, LEFT=2, DOWN=4, UP=8, START=0x10, SELECT=0x20, B=0x40, A=0x80).' },
+];
+const C_KEYWORDS = [
+  'if','else','while','for','do','switch','case','default','break','continue','return',
+  'void','unsigned','signed','char','short','int','long','const','static','extern',
+  'struct','typedef','sizeof','include','define','ifdef','ifndef','endif',
+];
+
+function nesHint(cm) {
+  const cur = cm.getCursor();
+  const line = cm.getLine(cur.line);
+  // Walk back from the cursor to find the start of the current word.
+  let start = cur.ch;
+  while (start > 0 && /[A-Za-z0-9_]/.test(line.charAt(start - 1))) start--;
+  const word = line.slice(start, cur.ch);
+  const lower = word.toLowerCase();
+  const matches = [];
+  for (const s of HINT_SYMBOLS) {
+    if (!word || s.text.toLowerCase().startsWith(lower)) {
+      matches.push({
+        text: s.text,
+        displayText: s.text + '  — ' + s.d,
+      });
+    }
+  }
+  for (const k of C_KEYWORDS) {
+    if (!word || k.startsWith(lower)) matches.push({ text: k, displayText: k });
+  }
+  if (!matches.length) return null;
+  return {
+    list: matches,
+    from: CodeMirror.Pos(cur.line, start),
+    to: CodeMirror.Pos(cur.line, cur.ch),
+  };
+}
 
 // ================================================================
 // CodeMirror
@@ -358,12 +606,23 @@ async function initEditor() {
     tabSize: 4,
     indentWithTabs: false,
     lineWrapping: false,
+    hintOptions: { hint: nesHint, completeSingle: false },
     extraKeys: {
-      'Ctrl-S': (c) => { c.save(); scheduleSave(); },
-      'Cmd-S':  (c) => { c.save(); scheduleSave(); },
+      'Ctrl-S':     (c) => { c.save(); scheduleSave(); },
+      'Cmd-S':      (c) => { c.save(); scheduleSave(); },
+      'Ctrl-Space': 'autocomplete',
     },
   });
   cm.on('change', scheduleSave);
+  // Auto-popup after typing letters (but not while the popup is already
+  // open and not when the pupil is just typing whitespace/punctuation).
+  cm.on('inputRead', (c, ev) => {
+    if (ev.origin !== '+input') return;
+    const t = ev.text.join('');
+    if (/[A-Za-z_]/.test(t) && !c.state.completionActive) {
+      c.showHint({ hint: nesHint, completeSingle: false });
+    }
+  });
 
   // First load: either the pupil's saved code, or the stock starter pulled
   // from the server.  A network failure on fresh profiles leaves an
@@ -383,6 +642,346 @@ async function initEditor() {
       setSaveStatus('saving', '● No server');
     }
   }
+  setEditorMode(editorMode, { persist: false });
+}
+
+// ================================================================
+// Guided mode — parse //>> id: hint / //<< markers and lock down
+// everything outside them.  The //>> and //<< lines are kept visible
+// but read-only so pupils can see the region boundaries.
+// ================================================================
+let guidedMarks = [];        // cm.markText results — cleared on mode switch
+let guidedLineClasses = [];  // {line, klass} pairs — cleared on mode switch
+let guidedRegions = [];      // [{ id, hint, markerLine, startLine, endLine }]
+
+function parseEditableRegions(source) {
+  const lines = source.split('\n');
+  const regions = [];
+  let open = null;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^\s*\/\/>>\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
+    if (m) {
+      open = { id: m[1], hint: m[2].trim(), markerLine: i, startLine: i + 1 };
+      continue;
+    }
+    if (/^\s*\/\/<<\s*$/.test(lines[i]) && open) {
+      open.endLine = i - 1;
+      open.closerLine = i;
+      regions.push(open);
+      open = null;
+    }
+  }
+  return regions;
+}
+
+function clearGuidedMarks() {
+  for (const m of guidedMarks) m.clear();
+  guidedMarks = [];
+  for (const { line, klass, where } of guidedLineClasses) {
+    cm.removeLineClass(line, where || 'background', klass);
+  }
+  guidedLineClasses = [];
+}
+
+function markLocked(from, to) {
+  const m = cm.markText(from, to, {
+    readOnly: true,
+    atomic: true,
+    inclusiveLeft: from.line === 0 && from.ch === 0,
+    inclusiveRight: false,
+    className: 'cm-locked',
+  });
+  guidedMarks.push(m);
+}
+
+function addLineClass(line, klass, where) {
+  cm.addLineClass(line, where || 'background', klass);
+  guidedLineClasses.push({ line, klass, where });
+}
+
+function applyGuidedMode() {
+  clearGuidedMarks();
+  guidedRegions = parseEditableRegions(cm.getValue());
+  if (!guidedRegions.length) {
+    // Nothing to lock: fall through to free editing but keep the banner.
+    renderGuidedBanner();
+    return;
+  }
+  let cursor = { line: 0, ch: 0 };
+  for (const r of guidedRegions) {
+    // Lock [cursor .. end of marker line] so the //>> hint line itself is
+    // read-only.  Then the body of the region (startLine..endLine) is
+    // editable.  Then lock the //<< line and carry on.
+    const markerEnd = { line: r.markerLine, ch: cm.getLine(r.markerLine).length };
+    markLocked(cursor, markerEnd);
+    // Extra styling on the marker line to mark it as guidance.
+    addLineClass(r.markerLine, 'cm-marker-hint', 'text');
+    // Editable lines get a green wash.
+    for (let ln = r.startLine; ln <= r.endLine; ln++) {
+      addLineClass(ln, 'cm-editable-line', 'background');
+    }
+    // Lock the //<< closer too; inclusiveRight=true for the very last one.
+    const closerLineLen = cm.getLine(r.closerLine).length;
+    const closerStart = { line: r.closerLine, ch: 0 };
+    const closerEnd   = { line: r.closerLine, ch: closerLineLen };
+    markLocked(closerStart, closerEnd);
+    addLineClass(r.closerLine, 'cm-marker-hint', 'text');
+    // Next lock starts on the line after //<<.
+    cursor = { line: r.closerLine + 1, ch: 0 };
+  }
+  // Tail lock from last region end to end of document.
+  const lastLine = cm.lastLine();
+  const lastCh = cm.getLine(lastLine).length;
+  if (cursor.line < lastLine || cursor.ch < lastCh) {
+    markLocked(cursor, { line: lastLine, ch: lastCh });
+  }
+  renderGuidedBanner();
+}
+
+function renderGuidedBanner() {
+  const banner = document.getElementById('hint-banner');
+  if (editorMode !== 'guided') {
+    banner.className = 'hint';
+    banner.innerHTML = 'This file <b>replaces</b> <code>steps/Step_Playground/src/main.c</code> for the Play button. Everything from the other pages (CHR, palettes, nametable, animations) is available via the auto-generated <code>scene.inc</code> and <code>palettes.inc</code> — press <kbd>Ctrl</kbd>+<kbd>Space</kbd> for autocomplete. Click <b>Symbols…</b> for the full reference.';
+    return;
+  }
+  banner.className = 'hint guided';
+  if (!guidedRegions.length) {
+    banner.innerHTML = '<strong>🎓 Guided mode:</strong> no editable regions found in this source. Click <b>↻ Restore default</b> to reload the starter, or switch to <b>⚙️ Advanced</b> if you meant to edit everything.';
+    return;
+  }
+  let html = '<strong>🎓 Guided mode:</strong> only the <span style="background: rgba(71,209,108,0.2); padding: 0 4px;">green-highlighted</span> lines can be changed. Jump to a region: ';
+  for (const r of guidedRegions) {
+    html += `<span class="region-jump" data-line="${r.startLine}" title="${escapeHtml(r.hint)}">${escapeHtml(r.id)}</span>`;
+  }
+  html += ' — switch to <b>⚙️ Advanced</b> if you want to edit anything in the file.';
+  banner.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function onBannerClick(e) {
+  const jump = e.target.closest('.region-jump');
+  if (!jump) return;
+  const line = parseInt(jump.dataset.line, 10);
+  if (!isFinite(line)) return;
+  cm.focus();
+  cm.setCursor({ line, ch: cm.getLine(line).length });
+  cm.scrollIntoView({ line, ch: 0 }, 120);
+}
+
+function setEditorMode(next, { persist = true } = {}) {
+  if (next !== 'guided' && next !== 'advanced') return;
+  editorMode = next;
+  if (persist) {
+    try { localStorage.setItem(MODE_KEY, editorMode); } catch {}
+  }
+  document.getElementById('btn-mode-guided').classList.toggle('active', editorMode === 'guided');
+  document.getElementById('btn-mode-advanced').classList.toggle('active', editorMode === 'advanced');
+  if (editorMode === 'guided') applyGuidedMode();
+  else { clearGuidedMarks(); guidedRegions = []; renderGuidedBanner(); }
+}
+
+// Re-apply guided marks whenever the source is replaced wholesale
+// (restore default, first load, switching modes back).  Incremental
+// edits inside a region don't invalidate the outer locks because
+// CodeMirror keeps them anchored across changes.
+function reapplyGuidedIfActive() {
+  if (editorMode === 'guided') applyGuidedMode();
+}
+
+// ================================================================
+// Lesson library — picker, goal panel, chip.
+// ================================================================
+async function fetchLessons() {
+  if (lessonCache) return lessonCache;
+  const r = await fetch(PLAYGROUND_LESSONS, { cache: 'no-store' });
+  if (!r.ok) throw new Error('lessons endpoint returned ' + r.status);
+  lessonCache = await r.json();
+  return lessonCache;
+}
+
+function findLesson(id) {
+  if (!id || !lessonCache?.lessons) return null;
+  return lessonCache.lessons.find(l => l.id === id) || null;
+}
+
+function renderLessonChip() {
+  const chip = document.getElementById('btn-lesson-chip');
+  const label = document.getElementById('lesson-chip-label');
+  if (activeLesson) {
+    chip.classList.remove('empty');
+    label.textContent = activeLesson.title;
+    chip.title = 'Current lesson: ' + activeLesson.title + '. Click to switch.';
+  } else {
+    chip.classList.add('empty');
+    label.textContent = 'Pick a lesson…';
+    chip.title = 'Open the lesson library';
+  }
+}
+
+function renderGoalPanel() {
+  const panel = document.getElementById('lesson-goal');
+  if (!activeLesson) {
+    panel.classList.remove('visible');
+    return;
+  }
+  panel.classList.add('visible');
+  document.getElementById('lg-title').textContent = activeLesson.title;
+  document.getElementById('lg-diff').textContent = 'Level ' + (activeLesson.difficulty ?? 1);
+  document.getElementById('lg-goal-text').textContent = activeLesson.goal || '—';
+  const ul = document.getElementById('lg-hints-list');
+  ul.innerHTML = '';
+  for (const h of (activeLesson.hints || [])) {
+    const li = document.createElement('li');
+    li.textContent = h;
+    ul.appendChild(li);
+  }
+  // Hide the <details> entirely if there are no hints so the bare summary
+  // doesn't dangle.
+  document.getElementById('lg-hints-details').style.display =
+    (activeLesson.hints && activeLesson.hints.length) ? '' : 'none';
+}
+
+let pickerSelectedId = null;
+async function openLessonPicker() {
+  const dlg = document.getElementById('lesson-dialog');
+  const list = document.getElementById('lesson-list');
+  const loadBtn = document.getElementById('btn-lesson-load');
+  pickerSelectedId = state.currentLesson;
+  loadBtn.disabled = !pickerSelectedId;
+  list.textContent = 'Loading…';
+  dlg.showModal();
+  try {
+    const data = await fetchLessons();
+    const lessons = data?.lessons || [];
+    if (!lessons.length) {
+      list.innerHTML = '<p style="color: var(--muted);">No lessons found. Drop <code>.c</code> files into the <code>lessons/</code> folder.</p>';
+      return;
+    }
+    list.innerHTML = '';
+    for (const l of lessons) {
+      const el = document.createElement('div');
+      el.className = 'lesson-item' + (l.id === pickerSelectedId ? ' selected' : '');
+      el.dataset.id = l.id;
+      el.innerHTML = `
+        <h3>${escapeHtml(l.title)} <span class="diff">Level ${l.difficulty ?? 1}</span></h3>
+        <div class="summary">${escapeHtml(l.summary || l.description || '')}</div>`;
+      el.addEventListener('click', () => {
+        pickerSelectedId = l.id;
+        for (const c of list.querySelectorAll('.lesson-item')) c.classList.toggle('selected', c.dataset.id === l.id);
+        loadBtn.disabled = false;
+      });
+      list.appendChild(el);
+    }
+  } catch (e) {
+    list.innerHTML = '<p style="color: var(--warn);">Could not reach the lesson library: ' + escapeHtml(e.message) + '</p>';
+  }
+}
+
+async function loadSelectedLesson() {
+  if (!pickerSelectedId) return;
+  const meta = findLesson(pickerSelectedId);
+  if (!meta) return;
+  const dirty = cm.getValue() !== (state.customMainC || '');
+  if (state.customMainC && !confirm(
+        `Load "${meta.title}"?\n\n`
+      + 'Your current code will be replaced. A backup is kept in localStorage.')) {
+    return;
+  }
+  try { localStorage.setItem('nes_tile_editor.code-backup.' + Date.now(), cm.getValue()); } catch {}
+  try {
+    const r = await fetch(PLAYGROUND_LESSONS + '/' + encodeURIComponent(meta.id), { cache: 'no-store' });
+    if (!r.ok) throw new Error('server returned ' + r.status);
+    const src = await r.text();
+    clearGuidedMarks();
+    cm.setValue(src);
+    state.currentLesson = meta.id;
+    state.customMainC = src;
+    activeLesson = meta;
+    saveState(state);
+    renderLessonChip();
+    renderGoalPanel();
+    reapplyGuidedIfActive();
+    document.getElementById('lesson-dialog').close();
+    setSaveStatus('saved', '● Saved (lesson)');
+  } catch (e) {
+    alert('Could not load lesson: ' + e.message);
+  }
+  // Mark dirty flag no-op: we just rewrote the editor contents.
+  void dirty;
+}
+
+function clearLessonFollowing() {
+  state.currentLesson = null;
+  activeLesson = null;
+  saveState(state);
+  renderLessonChip();
+  renderGoalPanel();
+}
+
+async function syncActiveLessonFromState() {
+  if (!state.currentLesson) {
+    activeLesson = null;
+    renderLessonChip();
+    renderGoalPanel();
+    return;
+  }
+  try {
+    await fetchLessons();
+    activeLesson = findLesson(state.currentLesson);
+    // If the file was removed server-side, clear the stale pointer quietly.
+    if (!activeLesson) state.currentLesson = null;
+  } catch {
+    // Server unreachable: leave the chip empty but don't wipe the pointer.
+    activeLesson = null;
+  }
+  renderLessonChip();
+  renderGoalPanel();
+}
+
+// ================================================================
+// Symbol hover tooltip — look up HINT_SYMBOLS by identifier under the
+// pointer, and show a floating panel.
+// ================================================================
+const HINT_SYMBOL_INDEX = Object.fromEntries(HINT_SYMBOLS.map(s => [s.text, s.d]));
+let tooltipHideTimer = 0;
+
+function showSymbolTooltip(name, desc, clientX, clientY) {
+  const tt = document.getElementById('sym-tooltip');
+  document.getElementById('st-name').textContent = name;
+  document.getElementById('st-desc').textContent = desc;
+  // Position just above/right of the cursor, clamped to viewport.
+  const x = Math.min(window.innerWidth - 380, clientX + 10) + window.scrollX;
+  const y = Math.max(4, clientY - 10 - 48) + window.scrollY;
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+  tt.classList.add('visible');
+  tt.setAttribute('aria-hidden', 'false');
+}
+
+function hideSymbolTooltip() {
+  const tt = document.getElementById('sym-tooltip');
+  tt.classList.remove('visible');
+  tt.setAttribute('aria-hidden', 'true');
+}
+
+function onEditorMouseMove(e) {
+  // Debounce-ish: always reset the hide timer, so a still pointer that
+  // was on an identifier keeps the tooltip up.
+  if (tooltipHideTimer) { clearTimeout(tooltipHideTimer); tooltipHideTimer = 0; }
+  if (!cm) return;
+  const pos = cm.coordsChar({ left: e.clientX, top: e.clientY }, 'window');
+  const token = cm.getTokenAt(pos, true);
+  if (!token || !token.string) { hideSymbolTooltip(); return; }
+  const desc = HINT_SYMBOL_INDEX[token.string];
+  if (!desc) { hideSymbolTooltip(); return; }
+  showSymbolTooltip(token.string, desc, e.clientX, e.clientY);
+}
+function onEditorMouseLeave() {
+  tooltipHideTimer = setTimeout(hideSymbolTooltip, 100);
 }
 
 // ================================================================
@@ -393,8 +992,11 @@ async function restoreDefault() {
   try { localStorage.setItem('nes_tile_editor.code-backup.' + Date.now(), cm.getValue()); } catch {}
   try {
     const src = await fetchDefaultSource();
+    clearGuidedMarks();      // setValue() with live readOnly marks can wedge the doc
     cm.setValue(src);
+    clearLessonFollowing();
     scheduleSave();
+    reapplyGuidedIfActive();
   } catch (e) {
     alert('Could not fetch the default: ' + e.message);
   }
@@ -631,6 +1233,27 @@ document.getElementById('build-log').addEventListener('click', onLogClick);
 document.getElementById('btn-clear-log').addEventListener('click', () => {
   renderBuildLog(''); setBuildPill('', 'idle'); setBuildSummary('');
 });
+document.getElementById('btn-mode-guided').addEventListener('click', () => setEditorMode('guided'));
+document.getElementById('btn-mode-advanced').addEventListener('click', () => {
+  if (editorMode === 'advanced') return;
+  const ok = confirm('Advanced mode lets you edit any line in main.c.\n\nIf you break the template, press ↻ Restore default to go back to the starter. Continue?');
+  if (ok) setEditorMode('advanced');
+});
+document.getElementById('hint-banner').addEventListener('click', onBannerClick);
+
+document.getElementById('btn-lesson-chip').addEventListener('click', openLessonPicker);
+document.getElementById('btn-lesson-cancel').addEventListener('click', () => document.getElementById('lesson-dialog').close());
+document.getElementById('btn-lesson-load').addEventListener('click', loadSelectedLesson);
+document.getElementById('btn-lesson-clear').addEventListener('click', () => {
+  clearLessonFollowing();
+  document.getElementById('lesson-dialog').close();
+});
+document.getElementById('btn-lesson-goal-close').addEventListener('click', () => {
+  document.getElementById('lesson-goal').classList.remove('visible');
+});
+
+// Symbol hover tooltip: bind to the CodeMirror wrapper after it exists.
+// (cm.getWrapperElement() is valid once initEditor has returned.)
 
 emu.canvas = document.getElementById('emu-canvas');
 emuFitCanvasCtx();
@@ -650,7 +1273,14 @@ document.addEventListener('fullscreenchange', () => {
   if (document.fullscreenElement) emu.canvas.focus();
 });
 
-initEditor().then(pgProbeServer);
+initEditor().then(() => {
+  // Wire the hover-tooltip listeners now that CodeMirror has mounted.
+  const wrap = cm.getWrapperElement();
+  wrap.addEventListener('mousemove', onEditorMouseMove);
+  wrap.addEventListener('mouseleave', onEditorMouseLeave);
+  pgProbeServer();
+  syncActiveLessonFromState();
+});
 </script>
 </body>
 </html>
