@@ -25,13 +25,17 @@ then browse http://127.0.0.1:8765/sprites.html  (or let the VSCode task
 
 from __future__ import annotations
 
+import base64
 import http.server
 import json
+import os
 import pathlib
+import shutil
 import socket
 import socketserver
 import subprocess
 import sys
+import tempfile
 import threading
 import traceback
 import urllib.error
@@ -45,7 +49,24 @@ SCENE_INC = STEP_DIR / "src" / "scene.inc"
 PAL_INC = STEP_DIR / "src" / "palettes.inc"
 CHR_PATH = STEP_DIR / "assets" / "sprites" / "game.chr"
 NAM_PATH = STEP_DIR / "assets" / "backgrounds" / "level.nam"
-PORT = 8765
+DEFAULT_MAIN_C = STEP_DIR / "src" / "main.c"
+
+# HOST defaults to 127.0.0.1 for single-pupil / local dev; set to 0.0.0.0 on
+# the classroom LXC so pupils on the LAN can browse to it.  PORT likewise
+# overridable for school networks that ring-fence the default.
+HOST = os.environ.get("PLAYGROUND_HOST", "127.0.0.1")
+PORT = int(os.environ.get("PLAYGROUND_PORT", "8765"))
+
+# All filesystem writes + `make` invocations funnel through this lock, so
+# multiple pupils pressing Play at once serialise on the shared
+# steps/Step_Playground work dir instead of racing.  cc65 builds in ~1 s,
+# which is fine for a classroom queue.
+BUILD_LOCK = threading.Lock()
+
+# fceux availability is probed once at startup (not per request).  Browser
+# mode is the default; only pupils on the offline workstation build need
+# the native launcher.
+FCEUX_PATH = shutil.which("fceux")
 
 SCREEN_COLS = 32
 SCREEN_ROWS = 30
@@ -373,10 +394,26 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y):
 # Build + launch pipeline
 # ---------------------------------------------------------------------------
 
-def run_play(body):
+def _build_rom(body):
+    """Generate + compile the ROM. Returns (rom_bytes, build_log) or raises.
+
+    When body includes a non-empty ``customMainC`` string, the shared
+    ``steps/Step_Playground`` tree is cloned into a per-request tempdir and
+    the pupil's main.c is written in place of the stock template.  This
+    keeps concurrent Play clicks from stomping each other's code, and
+    leaves the repo's canonical main.c untouched for the native / offline
+    workflow.  Without customMainC the build happens in-place under the
+    shared STEP_DIR the way it always has.
+    """
     state = body.get("state")
     if not isinstance(state, dict):
-        return {"ok": False, "stage": "input", "log": "missing 'state' in request body"}
+        raise ValueError("missing 'state' in request body")
+
+    custom_main = body.get("customMainC")
+    if custom_main is not None and not isinstance(custom_main, str):
+        raise ValueError("'customMainC' must be a string if provided")
+    if isinstance(custom_main, str) and not custom_main.strip():
+        custom_main = None
 
     player_idx = int(body.get("playerSpriteIdx", 0))
     scene_sprites = body.get("sceneSprites") or []
@@ -384,52 +421,130 @@ def run_play(body):
     start_x = int(start.get("x", 60))
     start_y = int(start.get("y", 120))
 
-    try:
-        chr_bytes = build_chr(state)
-        nam_bytes = build_nam(state)
-        pal_src = build_palettes_inc(state)
-        scene_src = build_scene_inc(state, player_idx, scene_sprites, start_x, start_y)
-    except Exception as e:
-        return {"ok": False, "stage": "generate", "log": f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"}
+    chr_bytes = build_chr(state)
+    nam_bytes = build_nam(state)
+    pal_src = build_palettes_inc(state)
+    scene_src = build_scene_inc(state, player_idx, scene_sprites, start_x, start_y)
 
-    CHR_PATH.parent.mkdir(parents=True, exist_ok=True)
-    NAM_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SCENE_INC.parent.mkdir(parents=True, exist_ok=True)
-
-    CHR_PATH.write_bytes(chr_bytes)
-    NAM_PATH.write_bytes(nam_bytes)
-    SCENE_INC.write_text(scene_src)
-    PAL_INC.write_text(pal_src)
-
-    build = subprocess.run(
-        ["make", "-C", str(STEP_DIR)],
-        capture_output=True, text=True,
-    )
-    build_log = (build.stdout or "") + (build.stderr or "")
-    if build.returncode != 0:
-        return {"ok": False, "stage": "build", "log": build_log}
-
-    rom = STEP_DIR / "game.nes"
-    if not rom.exists():
-        return {"ok": False, "stage": "build", "log": build_log + "\ngame.nes missing after build"}
-
-    # Launch FCEUX detached -- we do NOT wait on it, so the pupil can keep
-    # playing while the server accepts further 'Play' presses.
-    try:
-        subprocess.Popen(
-            ["fceux", str(rom)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
+    if custom_main is not None:
+        return _build_in_tempdir(
+            custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
         )
-    except FileNotFoundError:
-        return {"ok": False, "stage": "launch",
-                "log": build_log + "\nfceux is not on PATH"}
-    except Exception as e:
-        return {"ok": False, "stage": "launch",
-                "log": build_log + f"\nfailed to launch fceux: {e}"}
+    return _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src)
 
-    return {"ok": True, "stage": "launched", "log": build_log, "rom": str(rom)}
+
+def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src):
+    # Serialise the shared-directory writes + make.  Multiple pupils pressing
+    # Play at once queue here instead of corrupting each other's scene.inc.
+    with BUILD_LOCK:
+        CHR_PATH.parent.mkdir(parents=True, exist_ok=True)
+        NAM_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SCENE_INC.parent.mkdir(parents=True, exist_ok=True)
+
+        CHR_PATH.write_bytes(chr_bytes)
+        NAM_PATH.write_bytes(nam_bytes)
+        SCENE_INC.write_text(scene_src)
+        PAL_INC.write_text(pal_src)
+
+        build = subprocess.run(
+            ["make", "-C", str(STEP_DIR)],
+            capture_output=True, text=True,
+        )
+        build_log = (build.stdout or "") + (build.stderr or "")
+        if build.returncode != 0:
+            raise BuildError(build_log)
+
+        rom_path = STEP_DIR / "game.nes"
+        if not rom_path.exists():
+            raise BuildError(build_log + "\ngame.nes missing after build")
+        rom_bytes = rom_path.read_bytes()
+
+    return rom_bytes, build_log
+
+
+def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src):
+    # Clone STEP_DIR into a throwaway directory so the pupil's main.c and
+    # generated asset files don't touch the shared tree.  Concurrent custom
+    # builds can therefore proceed in parallel without the BUILD_LOCK.
+    with tempfile.TemporaryDirectory(prefix="nesgame_build_") as td:
+        tmp_root = pathlib.Path(td) / "Step_Playground"
+        shutil.copytree(
+            STEP_DIR, tmp_root,
+            ignore=shutil.ignore_patterns("game.nes", "*.o", "*.map", "build"),
+        )
+        (tmp_root / "src" / "main.c").write_text(custom_main)
+
+        (tmp_root / "assets" / "sprites").mkdir(parents=True, exist_ok=True)
+        (tmp_root / "assets" / "backgrounds").mkdir(parents=True, exist_ok=True)
+        (tmp_root / "assets" / "sprites" / "game.chr").write_bytes(chr_bytes)
+        (tmp_root / "assets" / "backgrounds" / "level.nam").write_bytes(nam_bytes)
+        (tmp_root / "src" / "scene.inc").write_text(scene_src)
+        (tmp_root / "src" / "palettes.inc").write_text(pal_src)
+
+        build = subprocess.run(
+            ["make", "-C", str(tmp_root)],
+            capture_output=True, text=True,
+        )
+        build_log = (build.stdout or "") + (build.stderr or "")
+        # Strip the tempdir prefix out of diagnostics so clickable error
+        # locations in the editor read as "src/main.c(42): Error ..." rather
+        # than an unreachable /tmp/... path.
+        build_log = build_log.replace(str(tmp_root) + "/", "").replace(str(tmp_root), "")
+        if build.returncode != 0:
+            raise BuildError(build_log)
+
+        rom_path = tmp_root / "game.nes"
+        if not rom_path.exists():
+            raise BuildError(build_log + "\ngame.nes missing after build")
+        rom_bytes = rom_path.read_bytes()
+
+    return rom_bytes, build_log
+
+
+class BuildError(RuntimeError):
+    """cc65 build failed — .args[0] is the full build log."""
+
+
+def run_play(body):
+    # mode: "browser" (default) returns ROM bytes for jsnes to run in the
+    # tab; "native" launches fceux on the server's desktop (only useful for
+    # the offline single-user workflow).  "native" auto-falls-back to
+    # browser behaviour with a warning if fceux isn't on PATH.
+    mode = (body.get("mode") or "browser").lower()
+
+    try:
+        rom_bytes, build_log = _build_rom(body)
+    except BuildError as e:
+        return {"ok": False, "stage": "build", "log": str(e)}
+    except Exception as e:
+        return {"ok": False, "stage": "generate",
+                "log": f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"}
+
+    result = {"ok": True, "log": build_log, "size": len(rom_bytes)}
+
+    if mode == "native":
+        if not FCEUX_PATH:
+            result["stage"] = "launched-browser-fallback"
+            result["warning"] = "fceux is not installed on the server; returning ROM for in-browser play instead."
+            result["rom_b64"] = base64.b64encode(rom_bytes).decode("ascii")
+            return result
+        try:
+            subprocess.Popen(
+                [FCEUX_PATH, str(STEP_DIR / "game.nes")],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as e:
+            return {"ok": False, "stage": "launch",
+                    "log": build_log + f"\nfailed to launch fceux: {e}"}
+        result["stage"] = "launched-native"
+        return result
+
+    # Browser mode: stream the ROM back, let jsnes run it in the tab.
+    result["stage"] = "built"
+    result["rom_b64"] = base64.b64encode(rom_bytes).decode("ascii")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -449,8 +564,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
-            return self._json(200, {"ok": True})
+            return self._json(200, {
+                "ok": True,
+                "fceux": FCEUX_PATH is not None,
+                "modes": ["browser"] + (["native"] if FCEUX_PATH else []),
+            })
+        if parsed.path == "/default-main-c":
+            return self._default_main_c()
         return super().do_GET()
+
+    def _default_main_c(self):
+        try:
+            data = DEFAULT_MAIN_C.read_bytes()
+        except OSError as e:
+            return self.send_error(500, f"could not read default main.c: {e}")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -522,26 +654,31 @@ def main():
     # Idempotent start: VSCode's 'runOn: folderOpen' can fire this task more
     # than once across window reloads.  If another playground server is
     # already listening, just print a friendly message and exit 0.
-    if _port_in_use("127.0.0.1", PORT):
-        if _ping_existing_playground("127.0.0.1", PORT):
+    probe_host = "127.0.0.1" if HOST in ("0.0.0.0", "") else HOST
+    if _port_in_use(probe_host, PORT):
+        if _ping_existing_playground(probe_host, PORT):
             print(
-                f"Playground server already running on http://127.0.0.1:{PORT}/ -- nothing to do.\n"
-                f"  Editor:  http://127.0.0.1:{PORT}/index.html\n"
-                f"  Sprites: http://127.0.0.1:{PORT}/sprites.html",
+                f"Playground server already running on http://{probe_host}:{PORT}/ -- nothing to do.\n"
+                f"  Editor:  http://{probe_host}:{PORT}/index.html\n"
+                f"  Sprites: http://{probe_host}:{PORT}/sprites.html",
                 file=sys.stderr, flush=True,
             )
             return
         sys.exit(
             f"Port {PORT} is in use by something else (not a playground server).\n"
             f"  Find it with:  lsof -iTCP:{PORT} -sTCP:LISTEN\n"
-            f"  Or change PORT at the top of tools/playground_server.py."
+            f"  Or change PLAYGROUND_PORT in the env."
         )
 
-    srv = ThreadedHTTPServer(("127.0.0.1", PORT), Handler)
+    srv = ThreadedHTTPServer((HOST, PORT), Handler)
+    display_host = "0.0.0.0 (all interfaces)" if HOST == "0.0.0.0" else HOST
+    fceux_note = f"fceux: {FCEUX_PATH}" if FCEUX_PATH else "fceux: not installed (browser mode only)"
     banner = (
-        f"Playground server listening on http://127.0.0.1:{PORT}/\n"
-        f"  Editor:    http://127.0.0.1:{PORT}/index.html\n"
-        f"  Sprites:   http://127.0.0.1:{PORT}/sprites.html\n"
+        f"Playground server listening on {display_host}:{PORT}\n"
+        f"  Editor:    http://{probe_host}:{PORT}/index.html\n"
+        f"  Sprites:   http://{probe_host}:{PORT}/sprites.html\n"
+        f"  Code:      http://{probe_host}:{PORT}/code.html\n"
+        f"  {fceux_note}\n"
         f"Press Ctrl-C to stop."
     )
     print(banner, file=sys.stderr, flush=True)

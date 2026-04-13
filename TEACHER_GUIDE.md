@@ -99,6 +99,96 @@ The server is stdlib-only — no pip installs needed. Keep it that way.
 
 **VSCode tasks**: `Start Playground Server` is auto-run on folder open. `Open Editor via Playground Server` is the canonical entry — opens the browser on the served URL (the Play button fails on `file://` with a CORS hint in the status bar).
 
+### Classroom deployment (Proxmox LXC)
+
+For class-wide use the server runs on a shared host; pupils browse to its LAN IP. No install on pupil machines — just a modern browser.
+
+**LXC setup (Debian/Ubuntu):**
+
+```bash
+# Inside the container
+apt update && apt install -y python3 make cc65 git
+git clone <this-repo> /opt/nesgame
+cd /opt/nesgame
+PLAYGROUND_HOST=0.0.0.0 PLAYGROUND_PORT=8765 python3 tools/playground_server.py
+```
+
+**systemd unit** (survives reboots and tty closes) — save as `/etc/systemd/system/nesgame.service`:
+
+```ini
+[Unit]
+Description=NES Game Playground Server
+After=network.target
+
+[Service]
+User=nesgame
+WorkingDirectory=/opt/nesgame
+Environment=PLAYGROUND_HOST=0.0.0.0 PLAYGROUND_PORT=8765
+ExecStart=/usr/bin/python3 tools/playground_server.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then `systemctl enable --now nesgame`. Pupils open `http://<lxc-ip>:8765/sprites.html`.
+
+**No fceux on the server.** The classroom path is browser-only — `/health` reports `fceux: false` and the Play dialog only shows "This browser (jsnes)" as the Run-on option. Pupils who want the real FCEUX emulator run the stack on their own laptop (see the single-user dev instructions above).
+
+**Per-pupil state.** Everything lives in each pupil's `localStorage`, keyed to the origin. Clearing browser data wipes their project — the **Export → JSON** button is the escape hatch. There is intentionally no user-facing account system.
+
+**Concurrency.** A `threading.Lock()` wraps the shared `steps/Step_Playground/` writes + `make` invocation, so two pupils pressing Play at the same instant serialise on the ~1 s build rather than clobbering each other's `scene.inc`. Pupils using the Code page (Phase 3a) bypass this lock — their builds clone `Step_Playground` into a throwaway tempdir and compile in parallel.
+
+### Phase 3a — pupil-editable `main.c` (the Code page)
+
+[tools/tile_editor_web/code.html](tools/tile_editor_web/code.html) adds a third editor tab that opens the stock [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c) in a CodeMirror 5 editor. The pupil's edited source is saved to `state.customMainC` in the shared `nes_tile_editor.current.v1` localStorage record (null = "use the built-in template").
+
+On Play, the Code page posts `customMainC` alongside the usual scene payload. The server:
+
+1. Clones `steps/Step_Playground/` into `tempfile.TemporaryDirectory()` (skipping `game.nes`, object files, and `build/`).
+2. Overwrites `src/main.c` in the copy with the pupil's version.
+3. Writes the auto-generated `game.chr`, `level.nam`, `scene.inc`, `palettes.inc` into the copy.
+4. Runs `make -C <tempdir>` and returns the resulting ROM.
+
+The tempdir is torn down automatically. Because each request has its own working directory, concurrent Code-page builds do not take `BUILD_LOCK` — they run in parallel, limited only by `cc65` CPU.
+
+A `GET /default-main-c` endpoint serves the stock `main.c` as `text/plain` so the Code page's **↻ Restore default** button can round-trip back to the template.
+
+cc65 output is rendered in a panel below the editor with clickable `file.c(line)` locations. The tempdir prefix is stripped from diagnostics before send-back so those jumps land at `src/main.c(42)` rather than an unreachable path.
+
+**Caveats.** `state.customMainC` is per-browser-profile. If a pupil switches machine, they need to copy-paste their `main.c` across (or use **Export → JSON**, which now includes the field). `load_background()`, the cc65 headers, and the `PPU_*` MMIO macros are all fair game to edit; removing `waitvsync()` or `PPU_MASK = 0x1E` will give a visibly broken ROM, which is a useful teaching moment.
+
+### `/play` endpoint contract
+
+POST body:
+
+```json
+{
+  "state": { /* full editor state */ },
+  "customMainC": "// optional — full contents of src/main.c",
+  "playerSpriteIdx": 0,
+  "playerStart": { "x": 60, "y": 155 },
+  "sceneSprites": [{ "spriteIdx": 2, "x": 96, "y": 120 }],
+  "mode": "browser"
+}
+```
+
+`mode` is `"browser"` (default) or `"native"`. Native auto-falls-back to browser (with a warning in the response) if `fceux` isn't on PATH. When `customMainC` is present and non-empty, the build runs in a per-request tempdir so concurrent pupil edits don't race; without it, the shared `steps/Step_Playground/` build path is used (serialised through `BUILD_LOCK`).
+
+Response on success:
+
+```json
+{
+  "ok": true,
+  "stage": "built" | "launched-native" | "launched-browser-fallback",
+  "log": "<cc65 build output>",
+  "size": 49168,
+  "rom_b64": "<base64 iNES ROM, only in browser/fallback modes>"
+}
+```
+
+Browser mode decodes `rom_b64` and hands it to `jsnes.NES.loadROM()` in [tools/tile_editor_web/sprites.html](tools/tile_editor_web/sprites.html). Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load.
+
 **Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, `ss_*` arrays (extra static sprites), and the animation tables **`walk_tiles` / `walk_attrs` / `WALK_FRAME_COUNT` / `WALK_FRAME_TICKS`** (and the `jump_*` equivalents). If you rename any of these symbols, update `build_scene_inc()` in the server to match.
 
 **Walk/jump contract:** for each kind, the server emits a compile-time count (0 when no animation is assigned), a tick interval, and two flat byte arrays sized `count * PLAYER_W * PLAYER_H` that concatenate every frame's tile + attribute cells row-major. All frames of a given animation must share the Player sprite's W×H — `_resolve_animation()` in the server silently drops frames that don't. When the count is 0, cc65 still needs a valid array so the server emits a 1-element stub; `main.c` gates the use behind the macros with `#if WALK_FRAME_COUNT > 0`.

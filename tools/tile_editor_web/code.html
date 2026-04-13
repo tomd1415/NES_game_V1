@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Code Editor</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+<!-- CodeMirror 5 (MIT) -->
+<link rel="stylesheet" href="codemirror.min.css">
+<link rel="stylesheet" href="codemirror-theme-dracula.min.css">
+<script src="codemirror.min.js"></script>
+<script src="codemirror-clike.min.js"></script>
+<script src="codemirror-active-line.min.js"></script>
+
+<!-- jsnes for in-browser play -->
+<script src="jsnes.min.js"></script>
+
+<style>
+:root {
+  --bg:        #14121f;
+  --panel:     #1f1b30;
+  --panel2:    #2a2440;
+  --border:    #3a3352;
+  --fg:        #f4f4f4;
+  --muted:     #9a97ad;
+  --accent:    #ffd866;
+  --good:      #47d16c;
+  --warn:      #ff6188;
+  --info:      #78dce8;
+  --shadow:    0 4px 16px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg); color: var(--fg);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+}
+h1, h2, h3 { margin: 0; }
+h1 { font-size: 1.15em; color: var(--accent); }
+button, select, input[type=text] {
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 10px; font-size: 0.9em; cursor: pointer;
+  font-family: inherit;
+}
+input[type=text] { cursor: text; }
+button:hover:not(:disabled) { background: #3a3560; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: #3a2f50; border-color: var(--accent); color: var(--accent); }
+button.play-btn { font-weight: 600; background: #1f4a2c; border-color: #47d16c; color: #c9f7cd; }
+button.play-btn:hover:not(:disabled) { background: #285c36; }
+button.play-btn:disabled { opacity: 0.6; cursor: progress; }
+kbd {
+  background: var(--panel2); border: 1px solid var(--border);
+  border-bottom-width: 2px; border-radius: 3px;
+  padding: 1px 5px; font-family: 'Courier New', monospace; font-size: 0.85em;
+}
+
+dialog {
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 24px; max-width: 640px;
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(0,0,0,0.6); }
+
+.app-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.page-nav { display: flex; gap: 4px; margin-left: 8px; }
+.page-link {
+  padding: 5px 10px; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--fg); text-decoration: none; font-size: 0.9em;
+}
+.page-link:hover { background: #3a3560; }
+.page-link.active { background: #3a2f50; border-color: var(--accent); color: var(--accent); font-weight: bold; }
+
+.app-header .status-group { display: flex; align-items: center; gap: 10px; margin-left: 16px; }
+.app-header .toolbar { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+
+#save-status {
+  font-size: 0.85em; padding: 3px 10px; border-radius: 10px;
+  background: var(--panel2); border: 1px solid var(--border);
+  min-width: 110px; text-align: center;
+}
+#save-status.saved  { color: var(--good); border-color: var(--good); }
+#save-status.saving { color: var(--accent); }
+
+.app-main {
+  display: grid;
+  grid-template-rows: 1fr 220px;
+  height: calc(100vh - 53px);
+}
+.editor-wrap { position: relative; overflow: hidden; }
+.CodeMirror {
+  height: 100%;
+  font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+}
+.CodeMirror-linenumber { color: var(--muted); }
+
+.build-pane {
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.build-pane-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85em; color: var(--muted);
+}
+.build-pane-header .pill {
+  font-size: 11px; padding: 1px 7px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--border);
+}
+.build-pane-header .pill.ok   { color: var(--good); border-color: var(--good); }
+.build-pane-header .pill.err  { color: var(--warn); border-color: var(--warn); }
+.build-pane-header .pill.run  { color: var(--accent); border-color: var(--accent); }
+.build-log {
+  flex: 1 1 auto; margin: 0; padding: 8px 12px;
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 12px; line-height: 1.45; color: #d6d4e0;
+  overflow: auto; white-space: pre-wrap;
+}
+.build-log .err  { color: var(--warn); }
+.build-log .warn { color: var(--accent); }
+.build-log .loc  { color: var(--info); text-decoration: underline; cursor: pointer; }
+.build-log .loc:hover { color: var(--fg); }
+
+.pg-runon {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--muted);
+}
+.pg-runon select {
+  background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 3px 6px; font-size: 12px;
+}
+.pg-runon select:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.hint {
+  padding: 6px 12px; font-size: 12px; color: var(--muted);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.hint code { background: var(--panel2); padding: 1px 5px; border-radius: 3px; color: var(--info); }
+
+/* Reused in-browser emulator dialog (same structure as sprites.html). */
+.emu-dialog { max-width: 640px; width: min(100%, 640px); padding: 12px; }
+.emu-dialog::backdrop { background: rgba(0,0,0,0.75); }
+.emu-dialog .emu-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.emu-dialog h2 { margin: 0; font-size: 15px; }
+.emu-controls-hint { flex: 1; display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 11px; color: var(--muted); }
+.emu-controls-hint kbd { background: #1a1623; border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; font-size: 11px; font-family: inherit; }
+.emu-actions { display: flex; gap: 6px; }
+.emu-actions button { font-size: 12px; padding: 4px 10px; }
+#emu-canvas { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; background: #000; border: 1px solid var(--border); border-radius: 4px; outline: none; aspect-ratio: 256 / 240; }
+#emu-canvas:focus { border-color: var(--accent); }
+.emu-status { margin-top: 6px; font-size: 12px; color: var(--muted); min-height: 1.2em; }
+.emu-status.err { color: #f28b82; }
+.emu-status.ok  { color: #8ae88a; }
+.emu-dialog:fullscreen { max-width: none; width: 100vw; height: 100vh; padding: 8px; background: #000; display: flex; flex-direction: column; }
+.emu-dialog:fullscreen .emu-header { flex: 0 0 auto; }
+.emu-dialog:fullscreen #emu-canvas { flex: 1 1 auto; width: auto; height: auto; max-width: 100%; max-height: 100%; margin: 0 auto; border: none; aspect-ratio: 256 / 240; }
+.emu-dialog:fullscreen .emu-status { flex: 0 0 auto; }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>📝 NES Code Editor</h1>
+  <nav class="page-nav" aria-label="Editor pages">
+    <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
+    <a class="page-link" href="sprites.html" title="Design sprites from the shared tileset">🦸 Sprites</a>
+    <a class="page-link active" href="code.html" title="You are here — edit the C code that drives the NES game">📝 Code</a>
+  </nav>
+  <div class="status-group">
+    <span id="save-status" class="saved">● Loading…</span>
+    <input id="project-name" type="text" value="untitled" title="Project name (shared with the other pages)" aria-label="Project name">
+  </div>
+  <div class="toolbar">
+    <button type="button" id="btn-restore" title="Replace your code with the stock platformer starter. Your current version is saved to a snapshot first.">↻ Restore default</button>
+    <button type="button" id="btn-symbols" title="See the auto-generated symbols (player_tiles, walk_tiles…) your code can use">⌨ Symbols…</button>
+    <label class="pg-runon" title="Where the compiled ROM gets played">
+      <span>Run on:</span>
+      <select id="pg-runon">
+        <option value="browser">This browser (jsnes)</option>
+        <option value="native">FCEUX (server desktop)</option>
+      </select>
+    </label>
+    <button type="button" id="btn-play" class="primary play-btn" title="Compile this C file and launch it">▶ Play in NES</button>
+  </div>
+</header>
+
+<div class="hint">
+  This file <b>replaces</b> <code>steps/Step_Playground/src/main.c</code> for the Play button. Everything from the Backgrounds and Sprites pages (CHR, palettes, nametable, animations) is still auto-generated as <code>scene.inc</code> and <code>palettes.inc</code> — so <code>player_tiles</code>, <code>walk_tiles</code>, <code>NUM_STATIC_SPRITES</code> etc. are all available. Click <b>Symbols…</b> to see the full list.
+</div>
+
+<main class="app-main">
+  <div class="editor-wrap">
+    <textarea id="editor"></textarea>
+  </div>
+  <section class="build-pane">
+    <div class="build-pane-header">
+      <strong>cc65 output</strong>
+      <span id="build-pill" class="pill">idle</span>
+      <span id="build-summary" style="flex:1"></span>
+      <button type="button" id="btn-clear-log" title="Clear the output pane">Clear</button>
+    </div>
+    <pre class="build-log" id="build-log">Press <kbd>▶ Play in NES</kbd> to compile and run. cc65 errors and warnings appear here.</pre>
+  </section>
+</main>
+
+<!-- Symbols reference -->
+<dialog id="symbols-dialog">
+  <h2 style="color: var(--accent); margin-bottom: 8px;">Auto-generated symbols available to your code</h2>
+  <p style="color: var(--muted); line-height: 1.55;">
+    Every time you press Play, the server regenerates two headers from whatever you built on the other pages:
+  </p>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0;">
+    <div>
+      <h3 style="color: var(--info);"><code>palettes.inc</code></h3>
+      <ul style="padding-left: 18px; line-height: 1.7; color: var(--muted);">
+        <li><code>palette_bytes[32]</code> — 16 BG + 16 sprite colours</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color: var(--info);"><code>scene.inc</code></h3>
+      <ul style="padding-left: 18px; line-height: 1.7; color: var(--muted);">
+        <li><code>PLAYER_X / PLAYER_Y</code> — where you placed the player</li>
+        <li><code>PLAYER_W / PLAYER_H</code> — sprite size in 8×8 tiles</li>
+        <li><code>player_tiles[]</code> / <code>player_attrs[]</code></li>
+        <li><code>WALK_FRAME_COUNT / WALK_FRAME_TICKS</code></li>
+        <li><code>walk_tiles[] / walk_attrs[]</code></li>
+        <li><code>JUMP_FRAME_COUNT / JUMP_FRAME_TICKS</code></li>
+        <li><code>jump_tiles[] / jump_attrs[]</code></li>
+        <li><code>NUM_STATIC_SPRITES</code></li>
+        <li><code>ss_x / ss_y / ss_w / ss_h / ss_offset</code></li>
+        <li><code>ss_tiles[] / ss_attrs[]</code></li>
+      </ul>
+    </div>
+  </div>
+  <p style="color: var(--muted); line-height: 1.55;">
+    <code>load_background()</code> (from <code>graphics.s</code>) copies the auto-generated <code>.chr</code> and <code>.nam</code> into PPU memory. You only need to call it once, before enabling rendering.
+  </p>
+  <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+    <button type="button" onclick="document.getElementById('symbols-dialog').close()">Close</button>
+  </div>
+</dialog>
+
+<!-- In-browser emulator -->
+<dialog id="emu-dialog" class="emu-dialog">
+  <div class="emu-header">
+    <h2>▶ Your game</h2>
+    <div class="emu-controls-hint" title="Keyboard mapping for the NES controller">
+      <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> D-pad</span>
+      <span><kbd>Z</kbd> B · <kbd>X</kbd> A</span>
+      <span><kbd>Enter</kbd> Start · <kbd>Shift</kbd> Select</span>
+      <span><kbd>F</kbd> fullscreen · <kbd>P</kbd> pause · <kbd>R</kbd> reset</span>
+    </div>
+    <div class="emu-actions">
+      <button type="button" id="btn-emu-pause" title="Pause/resume (P)">⏸ Pause</button>
+      <button type="button" id="btn-emu-reset" title="Reset the ROM (R)">↺ Reset</button>
+      <button type="button" id="btn-emu-fullscreen" title="Toggle fullscreen (F or Esc to exit)">⛶ Fullscreen</button>
+      <button type="button" id="btn-emu-close">Close</button>
+    </div>
+  </div>
+  <canvas id="emu-canvas" width="256" height="240" tabindex="0"></canvas>
+  <div id="emu-status" class="emu-status"></div>
+</dialog>
+
+<script>
+'use strict';
+
+// ================================================================
+// Shared storage (same keys as index.html / sprites.html)
+// ================================================================
+const STORAGE_KEY = 'nes_tile_editor.current.v1';
+const RUNON_KEY   = 'playground.runon.v1';
+
+const PLAYGROUND_ORIGIN = (location.protocol === 'http:' || location.protocol === 'https:')
+  ? location.origin
+  : 'http://127.0.0.1:8765';
+const PLAYGROUND_PLAY     = PLAYGROUND_ORIGIN + '/play';
+const PLAYGROUND_HEALTH   = PLAYGROUND_ORIGIN + '/health';
+const PLAYGROUND_DEFAULTC = PLAYGROUND_ORIGIN + '/default-main-c';
+
+// Minimal load: we don't need the full state-validation rig that the other
+// pages ship, because this page only touches state.customMainC and
+// state.name.  Anything malformed is replaced by a blank shell; the
+// authoritative migration happens on the other pages when they save.
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || typeof s !== 'object') return null;
+    return s;
+  } catch { return null; }
+}
+function saveState(s) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); return true; }
+  catch { return false; }
+}
+
+let state = loadState() || { name: 'untitled', customMainC: null };
+if (typeof state.customMainC !== 'string') state.customMainC = null;
+if (typeof state.name !== 'string') state.name = 'untitled';
+
+// ================================================================
+// CodeMirror
+// ================================================================
+let cm = null;
+let defaultSource = null;          // fetched from the server, cached
+let saveTimer = 0;
+
+function setSaveStatus(kind, msg) {
+  const el = document.getElementById('save-status');
+  el.textContent = msg;
+  el.className = kind;
+}
+
+function scheduleSave() {
+  setSaveStatus('saving', '● Saving…');
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    state.customMainC = cm.getValue();
+    state.name = document.getElementById('project-name').value || 'untitled';
+    saveState(state);
+    setSaveStatus('saved', '● Saved');
+  }, 400);
+}
+
+async function fetchDefaultSource() {
+  if (defaultSource !== null) return defaultSource;
+  const r = await fetch(PLAYGROUND_DEFAULTC, { cache: 'no-store' });
+  if (!r.ok) throw new Error('server returned ' + r.status);
+  defaultSource = await r.text();
+  return defaultSource;
+}
+
+async function initEditor() {
+  cm = CodeMirror.fromTextArea(document.getElementById('editor'), {
+    mode: 'text/x-csrc',
+    theme: 'dracula',
+    lineNumbers: true,
+    styleActiveLine: true,
+    indentUnit: 4,
+    tabSize: 4,
+    indentWithTabs: false,
+    lineWrapping: false,
+    extraKeys: {
+      'Ctrl-S': (c) => { c.save(); scheduleSave(); },
+      'Cmd-S':  (c) => { c.save(); scheduleSave(); },
+    },
+  });
+  cm.on('change', scheduleSave);
+
+  // First load: either the pupil's saved code, or the stock starter pulled
+  // from the server.  A network failure on fresh profiles leaves an
+  // explanatory placeholder so they aren't staring at a blank editor.
+  if (state.customMainC && state.customMainC.trim().length > 0) {
+    cm.setValue(state.customMainC);
+    setSaveStatus('saved', '● Saved');
+  } else {
+    try {
+      const src = await fetchDefaultSource();
+      cm.setValue(src);
+      setSaveStatus('saved', '● Saved (starter)');
+      state.customMainC = src;
+      saveState(state);
+    } catch (e) {
+      cm.setValue('// Could not reach the playground server to fetch the\n// starter template. Start it and reload this page.\n// Error: ' + e.message + '\n');
+      setSaveStatus('saving', '● No server');
+    }
+  }
+}
+
+// ================================================================
+// Restore default
+// ================================================================
+async function restoreDefault() {
+  if (!confirm('Replace your current code with the default platformer starter?\n\nA snapshot of your current version is kept in localStorage under "nes_tile_editor.code-backup".')) return;
+  try { localStorage.setItem('nes_tile_editor.code-backup.' + Date.now(), cm.getValue()); } catch {}
+  try {
+    const src = await fetchDefaultSource();
+    cm.setValue(src);
+    scheduleSave();
+  } catch (e) {
+    alert('Could not fetch the default: ' + e.message);
+  }
+}
+
+// ================================================================
+// Build log panel
+// ================================================================
+function setBuildPill(kind, text) {
+  const pill = document.getElementById('build-pill');
+  pill.className = 'pill' + (kind ? ' ' + kind : '');
+  pill.textContent = text;
+}
+
+function setBuildSummary(text) {
+  document.getElementById('build-summary').textContent = text || '';
+}
+
+// Render cc65 output with the classic "file.c(LINE): Error/Warning: msg"
+// pattern highlighted and jumpable.  Clicking a location focuses the
+// editor on that line.
+function renderBuildLog(log) {
+  const el = document.getElementById('build-log');
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const lines = (log || '').split('\n');
+  const out = lines.map((raw) => {
+    // src/main.c(42): Error: some message
+    const m = raw.match(/^(.*?\.(?:c|h|inc))\((\d+)\):\s*(Error|Warning|Note):\s*(.*)$/);
+    if (m) {
+      const [, file, ln, kind, msg] = m;
+      const klass = kind === 'Error' ? 'err' : (kind === 'Warning' ? 'warn' : '');
+      return `<span class="loc" data-line="${ln}">${esc(file)}(${ln})</span>: <span class="${klass}">${esc(kind)}</span>: ${esc(msg)}`;
+    }
+    return esc(raw);
+  }).join('\n');
+  el.innerHTML = out || 'No output.';
+}
+
+function parseErrorCounts(log) {
+  const errs = (log.match(/:\s*Error:/g)   || []).length;
+  const warns = (log.match(/:\s*Warning:/g) || []).length;
+  return { errs, warns };
+}
+
+// ================================================================
+// Server probe (mirrors sprites.html)
+// ================================================================
+const pgServerCaps = { fceux: false, probed: false };
+async function pgProbeServer() {
+  try {
+    const r = await fetch(PLAYGROUND_HEALTH, { cache: 'no-store' });
+    const j = await r.json();
+    pgServerCaps.fceux = !!j.fceux;
+  } catch { /* server not reachable; play click will surface it */ }
+  pgServerCaps.probed = true;
+  const sel = document.getElementById('pg-runon');
+  const nativeOpt = sel.querySelector('option[value="native"]');
+  if (nativeOpt) nativeOpt.disabled = !pgServerCaps.fceux;
+  let pref = null;
+  try { pref = localStorage.getItem(RUNON_KEY); } catch {}
+  if (pref === 'native' && !pgServerCaps.fceux) pref = 'browser';
+  if (pref === 'native' || pref === 'browser') sel.value = pref;
+  sel.addEventListener('change', () => {
+    try { localStorage.setItem(RUNON_KEY, sel.value); } catch {}
+  });
+}
+
+// ================================================================
+// Play
+// ================================================================
+async function play() {
+  const btn = document.getElementById('btn-play');
+  const mode = (document.getElementById('pg-runon')?.value) || 'browser';
+  // Flush any pending debounced save first so the server sees this keystroke.
+  state.customMainC = cm.getValue();
+  saveState(state);
+
+  btn.disabled = true;
+  setBuildPill('run', 'compiling…');
+  setBuildSummary('');
+  renderBuildLog('(building)');
+
+  // playerSpriteIdx etc. come from whatever the pupil last set on the
+  // Sprites page; the Code page sends sensible defaults so first-time
+  // pupils don't have to visit every tab before a single press works.
+  const payload = {
+    state: state,
+    customMainC: cm.getValue(),
+    playerSpriteIdx: 0,
+    playerStart: { x: 60, y: 155 },
+    sceneSprites: [],
+    mode,
+  };
+
+  try {
+    const res = await fetch(PLAYGROUND_PLAY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    let body;
+    try { body = await res.json(); } catch { body = { ok: false, log: 'server returned non-JSON' }; }
+    renderBuildLog(body.log || '');
+    const { errs, warns } = parseErrorCounts(body.log || '');
+    if (body.ok) {
+      setBuildPill('ok', 'built');
+      setBuildSummary((warns ? warns + ' warning' + (warns===1?'':'s') : 'clean')
+        + (body.warning ? ' — ' + body.warning : ''));
+      if (body.rom_b64) openEmulator(decodeRomBase64(body.rom_b64));
+    } else {
+      setBuildPill('err', body.stage || 'failed');
+      setBuildSummary(errs + ' error' + (errs===1?'':'s'));
+    }
+  } catch (e) {
+    setBuildPill('err', 'unreachable');
+    renderBuildLog('Could not reach the playground server at ' + PLAYGROUND_PLAY + '.\n\n' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Click a "file(line)" span in the log to jump to that line.
+function onLogClick(e) {
+  const loc = e.target.closest('.loc');
+  if (!loc) return;
+  const line = parseInt(loc.dataset.line, 10);
+  if (!isFinite(line)) return;
+  cm.focus();
+  cm.setCursor({ line: Math.max(0, line - 1), ch: 0 });
+  cm.scrollIntoView({ line: line - 1, ch: 0 }, 120);
+}
+
+// ================================================================
+// In-browser emulator (same as sprites.html — shared logic, duplicated
+// because the two pages are standalone single-file apps)
+// ================================================================
+const emu = { nes: null, canvas: null, ctx: null, image: null, imgBuf32: null, running: false, paused: false, rafId: 0, currentRom: null };
+function decodeRomBase64(b64) { return atob(b64); }
+function emuFitCanvasCtx() {
+  emu.ctx = emu.canvas.getContext('2d');
+  emu.image = emu.ctx.getImageData(0, 0, 256, 240);
+  emu.imgBuf32 = new Uint32Array(emu.image.data.buffer);
+  for (let i = 0; i < emu.imgBuf32.length; i++) emu.imgBuf32[i] = 0xFF000000;
+}
+function onEmuFrame(fb) {
+  for (let i = 0; i < fb.length; i++) emu.imgBuf32[i] = 0xFF000000 | fb[i];
+  emu.ctx.putImageData(emu.image, 0, 0);
+}
+function emuInitCore() {
+  if (emu.nes) return;
+  emu.nes = new jsnes.NES({ onFrame: onEmuFrame, onStatusUpdate: () => {} });
+}
+const EMU_KEY_MAP = {
+  'ArrowUp': jsnes.Controller.BUTTON_UP, 'ArrowDown': jsnes.Controller.BUTTON_DOWN,
+  'ArrowLeft': jsnes.Controller.BUTTON_LEFT, 'ArrowRight': jsnes.Controller.BUTTON_RIGHT,
+  'KeyW': jsnes.Controller.BUTTON_UP, 'KeyS': jsnes.Controller.BUTTON_DOWN,
+  'KeyA': jsnes.Controller.BUTTON_LEFT, 'KeyD': jsnes.Controller.BUTTON_RIGHT,
+  'KeyZ': jsnes.Controller.BUTTON_B, 'KeyX': jsnes.Controller.BUTTON_A,
+  'Enter': jsnes.Controller.BUTTON_START,
+  'ShiftLeft': jsnes.Controller.BUTTON_SELECT, 'ShiftRight': jsnes.Controller.BUTTON_SELECT,
+};
+function onEmuKey(e, down) {
+  const btn = EMU_KEY_MAP[e.code];
+  if (btn !== undefined) { e.preventDefault();
+    if (down) emu.nes.buttonDown(1, btn); else emu.nes.buttonUp(1, btn);
+    return;
+  }
+  if (down && e.code === 'KeyP') { e.preventDefault(); toggleEmuPause(); }
+  if (down && e.code === 'KeyR') { e.preventDefault(); resetEmuRom(); }
+  if (down && e.code === 'KeyF') { e.preventDefault(); toggleEmuFullscreen(); }
+}
+function emuLoop() {
+  if (!emu.running) return;
+  if (!emu.paused) emu.nes.frame();
+  emu.rafId = requestAnimationFrame(emuLoop);
+}
+function openEmulator(rom) {
+  emuInitCore();
+  emu.currentRom = rom;
+  emu.nes.loadROM(rom);
+  emu.paused = false;
+  document.getElementById('btn-emu-pause').textContent = '⏸ Pause';
+  const dlg = document.getElementById('emu-dialog');
+  if (!dlg.open) dlg.showModal();
+  emu.canvas.focus();
+  if (!emu.running) {
+    emu.running = true;
+    emu.rafId = requestAnimationFrame(emuLoop);
+  }
+  setEmuStatus('Running — click the canvas if keys aren\'t responding.', 'ok');
+}
+function closeEmulator() {
+  if (emu.rafId) cancelAnimationFrame(emu.rafId);
+  emu.running = false; emu.rafId = 0;
+  const dlg = document.getElementById('emu-dialog');
+  if (dlg.open) dlg.close();
+}
+function toggleEmuPause() {
+  emu.paused = !emu.paused;
+  document.getElementById('btn-emu-pause').textContent = emu.paused ? '▶ Resume' : '⏸ Pause';
+  setEmuStatus(emu.paused ? 'Paused.' : 'Running.', emu.paused ? null : 'ok');
+}
+function resetEmuRom() {
+  if (!emu.currentRom || !emu.nes) return;
+  emu.nes.loadROM(emu.currentRom);
+  emu.paused = false;
+  document.getElementById('btn-emu-pause').textContent = '⏸ Pause';
+  setEmuStatus('Reset.', 'ok');
+}
+function toggleEmuFullscreen() {
+  const dlg = document.getElementById('emu-dialog');
+  if (!document.fullscreenElement) {
+    (dlg.requestFullscreen?.() ?? Promise.reject()).catch(() => setEmuStatus('Fullscreen was blocked by the browser.', 'err'));
+  } else { document.exitFullscreen?.(); }
+}
+function updateFullscreenBtn() {
+  const btn = document.getElementById('btn-emu-fullscreen');
+  if (btn) btn.textContent = document.fullscreenElement ? '⛶ Exit fullscreen' : '⛶ Fullscreen';
+}
+function setEmuStatus(msg, kind) {
+  const el = document.getElementById('emu-status');
+  el.textContent = msg || ''; el.className = 'emu-status' + (kind ? ' ' + kind : '');
+}
+
+// ================================================================
+// Init
+// ================================================================
+document.getElementById('project-name').value = state.name || 'untitled';
+document.getElementById('project-name').addEventListener('input', scheduleSave);
+document.getElementById('btn-restore').addEventListener('click', restoreDefault);
+document.getElementById('btn-symbols').addEventListener('click', () => document.getElementById('symbols-dialog').showModal());
+document.getElementById('btn-play').addEventListener('click', play);
+document.getElementById('build-log').addEventListener('click', onLogClick);
+document.getElementById('btn-clear-log').addEventListener('click', () => {
+  renderBuildLog(''); setBuildPill('', 'idle'); setBuildSummary('');
+});
+
+emu.canvas = document.getElementById('emu-canvas');
+emuFitCanvasCtx();
+emu.canvas.addEventListener('keydown', (e) => onEmuKey(e, true));
+emu.canvas.addEventListener('keyup',   (e) => onEmuKey(e, false));
+document.getElementById('btn-emu-close').addEventListener('click', closeEmulator);
+document.getElementById('btn-emu-pause').addEventListener('click', toggleEmuPause);
+document.getElementById('btn-emu-reset').addEventListener('click', resetEmuRom);
+document.getElementById('btn-emu-fullscreen').addEventListener('click', toggleEmuFullscreen);
+document.getElementById('emu-dialog').addEventListener('close', () => {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  if (emu.rafId) cancelAnimationFrame(emu.rafId);
+  emu.running = false;
+});
+document.addEventListener('fullscreenchange', () => {
+  updateFullscreenBtn();
+  if (document.fullscreenElement) emu.canvas.focus();
+});
+
+initEditor().then(pgProbeServer);
+</script>
+</body>
+</html>

@@ -693,6 +693,7 @@ kbd {
   <nav class="page-nav" aria-label="Editor pages">
     <a class="page-link active" href="index.html" title="You are here — edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
     <a class="page-link" href="sprites.html" title="Design sprites from the same shared tileset — hero, enemies, items">🦸 Sprites</a>
+    <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
   </nav>
   <div class="status-group">
     <span id="save-status" class="saved">● Loading…</span>
@@ -1222,6 +1223,11 @@ function migrateState(s) {
   }
   delete s.nametable;
   delete s.dimensions;
+  // Phase 3a: pupils can override the stock main.c on the Code page. null
+  // means "use the built-in template"; any string replaces it at build time.
+  if (typeof s.customMainC !== 'string' && s.customMainC !== null) {
+    s.customMainC = null;
+  }
   return s;
 }
 
