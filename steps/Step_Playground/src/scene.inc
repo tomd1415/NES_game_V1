@@ -4,8 +4,8 @@
 
 #define PLAYER_W 1
 #define PLAYER_H 2
-#define PLAYER_X 54
-#define PLAYER_Y 155
+#define PLAYER_X 60
+#define PLAYER_Y 120
 
 static const unsigned char player_tiles[2] = {
     0x01, 0x03
@@ -23,22 +23,22 @@ static const unsigned char walk_attrs[4] = {
     0x00, 0x01, 0x00, 0x01
 };
 
-#define JUMP_FRAME_COUNT 1
+#define JUMP_FRAME_COUNT 6
 #define JUMP_FRAME_TICKS 8
-static const unsigned char jump_tiles[2] = {
-    0x01, 0x03
+static const unsigned char jump_tiles[12] = {
+    0x01, 0x03, 0x01, 0x02, 0x40, 0x50, 0x40, 0x50, 0x01, 0x02, 0x01, 0x03
 };
-static const unsigned char jump_attrs[2] = {
-    0x00, 0x01
+static const unsigned char jump_attrs[12] = {
+    0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01
 };
 
 #define NUM_STATIC_SPRITES 2
 static const unsigned char ss_x[2] = { 96, 128 };
 static const unsigned char ss_y[2] = { 120, 120 };
-static const unsigned char ss_w[2] = { 1, 2 };
-static const unsigned char ss_h[2] = { 2, 3 };
+static const unsigned char ss_w[2] = { 1, 1 };
+static const unsigned char ss_h[2] = { 2, 2 };
 static const unsigned char ss_offset[2] = { 0, 2 };
-static const unsigned char ss_tiles[8] = { 0x01, 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09 };
-static const unsigned char ss_attrs[8] = { 0x00, 0x01, 0x00, 0x01, 0x02, 0x03, 0x00, 0x01 };
+static const unsigned char ss_tiles[4] = { 0x01, 0x02, 0x40, 0x50 };
+static const unsigned char ss_attrs[4] = { 0x00, 0x01, 0x00, 0x01 };
 
 #endif

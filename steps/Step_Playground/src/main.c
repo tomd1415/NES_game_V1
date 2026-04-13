@@ -5,11 +5,13 @@
 // needs -- palettes, player tile layout, static sprite table -- is injected
 // through the two generated headers written by tools/playground_server.py.
 //
-// Controls: D-pad moves the player sprite.  Sprite flips horizontally when
-// moving left.  The player is clamped to the visible screen area.  If the
-// pupil has assigned a walk / jump animation in the sprites editor, the
-// player cycles through those frames; otherwise the static player_tiles
-// layout is used unchanged.
+// Controls: LEFT / RIGHT walk along the ground; UP jumps.  The "ground" is
+// whatever Y the player was placed at in the editor's Play-in-NES dialog.
+// Gravity pulls the player back down to that line, so the scene behaves
+// like a simple side-on platformer.  Sprite flips horizontally when moving
+// left.  If the pupil has assigned a walk / jump animation in the sprites
+// editor, the player cycles through those frames; otherwise the static
+// player_tiles layout is used unchanged.
 // =============================================================================
 
 #include <nes.h>
@@ -32,6 +34,10 @@ extern void load_background(void);
 unsigned char px;
 unsigned char py;
 unsigned char pad;
+unsigned char prev_pad;      // for edge-triggering the jump
+unsigned char ground_y;      // Y the player was placed at — the "floor"
+unsigned char jumping;       // 1 while airborne
+unsigned char jmp_up;        // ascent frames remaining (0 = falling)
 unsigned char plrdir;        // 0x40 when facing left (flip-H on every tile)
 unsigned char i;
 unsigned char r;
@@ -92,6 +98,10 @@ void main(void) {
 
     px = PLAYER_X;
     py = PLAYER_Y;
+    ground_y = PLAYER_Y;
+    jumping = 0;
+    jmp_up = 0;
+    prev_pad = 0;
     plrdir = 0x00;
     anim_mode = 0;
     anim_prev_mode = 0xFF;
@@ -101,8 +111,7 @@ void main(void) {
     while (1) {
         pad = read_controller();
 
-        // D-pad with screen-bounds clamp.  (PLAYER_W * 8 <= 255 so the
-        // subtraction cannot underflow for any reasonable sprite.)
+        // Horizontal walk with screen-bounds clamp.
         if (pad & 0x01) {                     // RIGHT
             if (px < (256 - PLAYER_W * 8)) px++;
             plrdir = 0x00;
@@ -111,20 +120,37 @@ void main(void) {
             if (px > 0) px--;
             plrdir = 0x40;
         }
-        if (pad & 0x04) {                     // DOWN
-            if (py < (232 - PLAYER_H * 8)) py++;
+
+        // UP = jump.  Edge-triggered: must release and re-press to
+        // bounce again, and only takes off from the ground.
+        if ((pad & 0x08) && !(prev_pad & 0x08) && !jumping) {
+            jumping = 1;
+            jmp_up = 20;
         }
-        if (pad & 0x08) {                     // UP
-            if (py > 16) py--;
+        prev_pad = pad;
+
+        // Gravity: during the ascent phase move up 2 px/frame for
+        // jmp_up frames, then fall 2 px/frame until we reach ground_y.
+        if (jumping) {
+            if (jmp_up > 0) {
+                if (py >= 18) py -= 2; else py = 16;
+                jmp_up--;
+            } else {
+                py += 2;
+                if (py >= ground_y) {
+                    py = ground_y;
+                    jumping = 0;
+                }
+            }
         }
 
-        // Pick the active animation for this frame.  UP wins over LEFT/RIGHT
-        // so holding the jump direction plays the jump cycle even while
-        // drifting sideways.  Unassigned animations (count == 0) fall
-        // through to the static player_tiles layout.
+        // Pick the active animation for this frame.  Jumping wins over
+        // walking so the jump cycle plays even while drifting sideways.
+        // Unassigned animations (count == 0) fall through to the static
+        // player_tiles layout.
         anim_mode = 0;
 #if JUMP_FRAME_COUNT > 0
-        if (pad & 0x08) anim_mode = 2;
+        if (jumping) anim_mode = 2;
 #endif
 #if WALK_FRAME_COUNT > 0
         if (anim_mode == 0 && (pad & 0x03)) anim_mode = 1;
