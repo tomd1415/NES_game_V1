@@ -494,6 +494,35 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   color: var(--fg);
   margin-right: 4px;
 }
+.sprite-side-controls .side-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.18);
+}
+.sprite-side-controls .side-group + .side-group { margin-left: 0; }
+/* Compact sprite-palette rows for the side strip */
+.sp-palettes-compact { display: inline-flex; gap: 6px; }
+.sp-palettes-compact .palette-row { gap: 1px; padding: 0; background: transparent; border: none; }
+.sp-palettes-compact .palette-row.active { outline: 2px solid var(--accent); border-radius: 3px; }
+.sp-palettes-compact .pal-label {
+  font-size: 0.7em; padding: 0 3px; color: var(--muted); cursor: pointer;
+}
+.sp-palettes-compact .palette-slot {
+  width: 16px; height: 16px;
+}
+/* Compact NES master grid in the side strip */
+.master-grid-compact {
+  grid-template-columns: repeat(16, 13px);
+  gap: 1px;
+}
+.master-grid-compact .master-cell {
+  width: 13px; height: 13px; aspect-ratio: auto;
+  font-size: 0; /* hide hex labels at this size */
+}
 .palette-pills {
   display: inline-flex;
   gap: 4px;
@@ -1244,6 +1273,166 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   color: var(--muted);
   font-size: 0.85em;
 }
+
+/* --- Collapsible sub-section helper --------------------------- */
+details.collapsible {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel2);
+  margin: 8px 0;
+}
+details.collapsible > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 0.95em;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  border-radius: 4px;
+}
+details.collapsible > summary::-webkit-details-marker { display: none; }
+details.collapsible > summary::before {
+  content: "▸";
+  font-size: 0.8em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  display: inline-block;
+  width: 10px;
+}
+details.collapsible[open] > summary::before { transform: rotate(90deg); }
+details.collapsible > summary:hover { background: rgba(255,255,255,0.04); }
+details.collapsible > .collapsible-body {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+}
+details.collapsible > summary .sub-count {
+  margin-left: auto;
+  font-weight: normal;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+/* --- Empty-cell placeholder (composition canvas overlay idea) - */
+.cell-empty-hint {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+/* --- Cell inspector states ----------------------------------- */
+.cell-inspector-state {
+  padding: 8px 10px;
+  margin: 6px 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 0.9em;
+}
+.cell-inspector-state.empty {
+  border-color: rgba(255,216,102,0.45);
+  background: rgba(255,216,102,0.08);
+}
+.cell-inspector-state.solo {
+  border-color: rgba(90,200,120,0.5);
+  background: rgba(90,200,120,0.08);
+}
+.cell-inspector-state.shared {
+  border-color: rgba(255,170,60,0.55);
+  background: rgba(255,170,60,0.08);
+}
+.cell-inspector-state .state-head {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--fg);
+}
+.cell-inspector-state .state-sub {
+  color: var(--muted);
+  font-size: 0.85em;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.cell-inspector-state .state-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cell-advanced-row {
+  margin-top: 6px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.cell-advanced-row > summary {
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+/* --- Tileset colour-coding overlays -------------------------- */
+.tile-state-legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.78em;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.tile-state-legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+.tile-state-legend .swatch.free    { background: transparent; border: 1px dashed #888; }
+.tile-state-legend .swatch.this    { background: #1b9e77; }
+.tile-state-legend .swatch.shared  { background: #d95f02; }
+.tile-state-legend .swatch.orphan  { background: #7570b3; }
+
+/* --- Auto-assign toast --------------------------------------- */
+.auto-assign-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 24px;
+  background: rgba(40,40,40,0.95);
+  color: #fff;
+  border: 1px solid var(--accent, #ffd866);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 9999;
+}
+.auto-assign-toast.show { opacity: 1; }
+
+/* --- Fork nudge ---------------------------------------------- */
+.fork-nudge {
+  background: rgba(255,170,60,0.12);
+  border: 1px solid rgba(255,170,60,0.5);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 6px 0;
+  font-size: 0.85em;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fork-nudge .close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: auto;
+}
 </style>
 </head>
 <body>
@@ -1336,8 +1525,8 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
     </div>
 
     <!-- ============ Animations sub-panel ============ -->
-    <div class="animations-section">
-      <h2>Animations</h2>
+    <details class="collapsible animations-section" data-collapse-key="sp-animations" open>
+      <summary><h2 style="display:inline;margin:0">Animations</h2></summary>
       <div class="sprite-list-buttons">
         <button type="button" id="btn-anim-new" title="Create a new empty animation">+ New</button>
         <button type="button" id="btn-anim-dup" title="Duplicate the selected animation">⎘ Duplicate</button>
@@ -1385,7 +1574,7 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
           </label>
         </div>
       </div>
-    </div>
+    </details>
   </section>
 
   <!-- ============ Center: composition + palettes + pixel editor ============ -->
@@ -1426,12 +1615,22 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
       <button type="button" id="btn-fullscreen-preview" title="Preview all sprites at NES pixel size (F)">🖥 Full preview</button>
     </div>
     <div class="sprite-side-controls" id="sprite-side-controls">
-      <span class="side-label" title="Colour to paint with (same as the right-hand picker)">Colour:</span>
-      <div id="sprite-side-swatches" class="pinned-swatches"
-           title="Click a swatch to pick the paint colour. 0 is transparent for sprites."></div>
-      <span class="side-label" title="Palette used by the selected 8×8 cell — click to change">Cell palette:</span>
-      <div id="sprite-side-palettes" class="palette-pills"
-           title="Which sprite palette (SP0–SP3) colours the selected cell"></div>
+      <div class="side-group" title="Paint colour — same as the pixel-editor swatches">
+        <span class="side-label">In use:</span>
+        <div id="sprite-side-swatches" class="pinned-swatches"></div>
+      </div>
+      <div class="side-group" title="Which sprite palette (SP0–SP3) colours the selected cell">
+        <span class="side-label">Cell palette:</span>
+        <div id="sprite-side-palettes" class="palette-pills"></div>
+      </div>
+      <div class="side-group" title="Sprite palettes — click a label to use for the selected cell">
+        <span class="side-label">Sprite palettes:</span>
+        <div id="sp-palettes" class="sp-palettes-compact"></div>
+      </div>
+      <div class="side-group" title="NES master colours — click to assign to the selected palette slot">
+        <span class="side-label">NES master:</span>
+        <div class="master-grid master-grid-compact" id="master-grid"></div>
+      </div>
       <label class="cbx" style="margin-left:auto"
              title="When the sprite grows, automatically claim free tile slots for the new cells so you can paint straight away.">
         <input type="checkbox" id="auto-allocate-resize" checked> auto-allocate tiles on resize
@@ -1448,34 +1647,39 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
 
     <div class="cell-inspector" id="cell-inspector">
       <h3>Selected cell: <span id="cell-coords">—</span> <span id="cell-status" class="muted-inline"></span></h3>
-      <div class="assign-row">
-        <span class="muted-inline" id="assign-hint">Highlighted tile:</span>
-        <button type="button" id="btn-assign-tile" title="Put the currently highlighted tile (from the tileset) into this cell">
-          📥 Assign 0x<span id="assign-tile-hex">00</span> to this cell
-        </button>
-      </div>
-      <div class="row">
-        <label>Tile
-          <input type="number" id="cell-tile" min="0" max="255" value="0" title="Tile index (0–255) from the shared tileset">
-        </label>
-        <span class="muted-inline">
-          = 0x<span id="cell-tile-hex">00</span>
-          <span id="cell-tile-usage" title="How many other places this tile appears in"></span>
-        </span>
-        <label title="Which sprite palette (SP0–SP3) to draw this tile with">Palette
-          <select id="cell-palette"></select>
-        </label>
-        <label class="cbx" title="Hardware flips the tile horizontally when drawn (no extra tile slot needed)">
-          <input type="checkbox" id="cell-flipH"> Flip H
-        </label>
-        <label class="cbx" title="Hardware flips the tile vertically when drawn">
-          <input type="checkbox" id="cell-flipV"> Flip V
-        </label>
-        <label class="cbx" title="Priority bit — draw this tile BEHIND background pixels">
-          <input type="checkbox" id="cell-priority"> Behind BG
-        </label>
-        <button type="button" id="btn-cell-clear" title="Empty this cell so you can assign a different tile">Clear cell</button>
-      </div>
+      <!-- Plain-English state banner with the obvious next action -->
+      <div class="cell-inspector-state" id="cell-state-banner"></div>
+
+      <details class="cell-advanced-row collapsible" data-collapse-key="sp-cell-advanced">
+        <summary>Advanced tile properties</summary>
+        <div class="row" style="margin-top:6px">
+          <label>Tile
+            <input type="number" id="cell-tile" min="0" max="255" value="0" title="Tile index (0–255) from the shared tileset">
+          </label>
+          <span class="muted-inline">
+            = 0x<span id="cell-tile-hex">00</span>
+            <span id="cell-tile-usage" title="How many other places this tile appears in"></span>
+          </span>
+          <label title="Which sprite palette (SP0–SP3) to draw this tile with">Palette
+            <select id="cell-palette"></select>
+          </label>
+          <label class="cbx" title="Hardware flips the tile horizontally when drawn (no extra tile slot needed)">
+            <input type="checkbox" id="cell-flipH"> Flip H
+          </label>
+          <label class="cbx" title="Hardware flips the tile vertically when drawn">
+            <input type="checkbox" id="cell-flipV"> Flip V
+          </label>
+          <label class="cbx" title="Priority bit — draw this tile BEHIND background pixels">
+            <input type="checkbox" id="cell-priority"> Behind BG
+          </label>
+          <button type="button" id="btn-cell-clear" title="Empty this cell so you can put a different tile here">Clear cell</button>
+        </div>
+      </details>
+
+      <!-- Legacy helper: kept hidden but referenced by older code paths. -->
+      <span id="assign-tile-hex" hidden>00</span>
+      <button type="button" id="btn-assign-tile" hidden
+              title="Put the currently highlighted tile into this cell"></button>
     </div>
 
     <div class="edit-row">
@@ -1503,29 +1707,26 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
         </div>
       </div>
       <div class="palettes-sub">
-        <h3>Sprite palettes (click a label to use for the selected cell)</h3>
-        <div id="sp-palettes"></div>
         <h3>Background palettes (reference only)</h3>
         <div id="bg-palettes-ro" class="faint"></div>
       </div>
     </div>
   </section>
 
-  <!-- ============ Right: shared tileset + master ============ -->
+  <!-- ============ Right: shared tileset ============ -->
   <section class="panel">
     <h2>Shared tileset</h2>
-    <canvas id="tileset-canvas" width="384" height="384" title="Left-click: assign tile to the selected cell. Right-click: jump to the first sprite that uses this tile."></canvas>
+    <canvas id="tileset-canvas" width="384" height="384" title="Left-click: put this tile into the selected cell. Right-click: jump to the first sprite that already uses it."></canvas>
     <div class="tileset-hints">
-      <b>Left-click</b> a tile to assign it to the selected cell.
+      <b>Left-click</b> a tile to put it into the selected cell.
       <b>Right-click</b> to jump to the first sprite that already uses it.
-      Use <kbd>[</kbd> / <kbd>]</kbd> to step the highlight, <kbd>Enter</kbd> to assign.
+      Use <kbd>[</kbd> / <kbd>]</kbd> to step through, <kbd>Enter</kbd> to use.
     </div>
-    <div class="master-palette">
-      <h3>NES master (click to assign to selected slot)</h3>
-      <div class="master-grid" id="master-grid"></div>
-      <div class="master-hint">
-        The NES can only show these 64 colours.
-      </div>
+    <div class="tile-state-legend" aria-label="Tile colour-coding legend">
+      <span><span class="swatch free"></span>free / empty</span>
+      <span><span class="swatch this"></span>in this sprite</span>
+      <span><span class="swatch shared"></span>shared with others</span>
+      <span><span class="swatch orphan"></span>has art, unused</span>
     </div>
   </section>
 </main>
@@ -2446,6 +2647,78 @@ function findFreeTileRun(count) {
   return -1;
 }
 
+// Transient toast used when the app silently does something for the pupil
+// (e.g. auto-assigning a free tile on first paint into an empty cell).
+// Reuses one DOM node — consecutive calls just update the text + restart
+// the fade-out timer.
+let _autoToastTimer = null;
+function showAutoToast(msg) {
+  let toast = document.getElementById('auto-assign-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'auto-assign-toast';
+    toast.className = 'auto-assign-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  if (_autoToastTimer) clearTimeout(_autoToastTimer);
+  _autoToastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 2200);
+}
+
+// Duplicate the current cell's tile into a free slot and repoint the
+// cell at the copy. Called by the `D` shortcut and the "Make my own
+// copy" button in the shared-tile state banner. No-op if cell is empty
+// or no free tile slots remain.
+function duplicateTileForCurrentCell() {
+  const cell = currentCell();
+  if (!cell) return false;
+  if (cell.empty) {
+    setStatus('warn', '● Put a tile here before making a copy');
+    return false;
+  }
+  const dst = findNextEmptyTileSlot();
+  if (dst < 0) {
+    alert('No empty tile slots left — clear one first.');
+    return false;
+  }
+  pushUndo();
+  const src = state.sprite_tiles[cell.tile];
+  state.sprite_tiles[dst] = {
+    pixels: clonePixels(src.pixels),
+    name: src.name ? src.name + '_copy' : '',
+  };
+  cell.tile = dst;
+  selectedTileIdx = dst;
+  markDirty();
+  renderAll();
+  const hex = '0x' + dst.toString(16).padStart(2, '0').toUpperCase();
+  showAutoToast('✂️ Copied into tile ' + hex + ' — this cell only');
+  return true;
+}
+
+// If a cell is empty, claim the next free tile slot for it so the pupil
+// can start painting without an explicit "pick a tile first" step.
+// Returns true if a tile was assigned; false if nothing was done (cell
+// already had a tile, or no free slot available).
+function autoAssignFreeTileToCell(sp, cr, cc) {
+  const cell = sp.cells[cr][cc];
+  if (!cell.empty) return false;
+  const idx = findFreeTileRun(1);
+  if (idx < 0) {
+    setStatus('warn', '● No free tile slot available — make room by clearing a tile');
+    return false;
+  }
+  cell.tile = idx;
+  cell.empty = false;
+  const hex = '0x' + idx.toString(16).padStart(2, '0').toUpperCase();
+  showAutoToast('✨ Used tile ' + hex + ' for this cell');
+  setStatus('ok', '● Claimed tile ' + hex + ' for cell ' + cr + ',' + cc);
+  return true;
+}
+
 function findTileUsage(tileIdx, excludeSprite, excludeCellR, excludeCellC) {
   const uses = [];
   // The background pool (bg_tiles) is now independent from sprite_tiles,
@@ -3265,6 +3538,93 @@ function renderCellInspector() {
   document.getElementById('cell-flipH').checked = !!cell.flipH;
   document.getElementById('cell-flipV').checked = !!cell.flipV;
   document.getElementById('cell-priority').checked = !!cell.priority;
+
+  renderCellStateBanner(sp, cell);
+}
+
+// Three-state plain-English banner shown at the top of the cell inspector.
+// States: empty / solo (used only in this sprite) / shared (also in others).
+function renderCellStateBanner(sp, cell) {
+  const host = document.getElementById('cell-state-banner');
+  if (!host) return;
+  host.className = 'cell-inspector-state';
+  host.innerHTML = '';
+  if (!sp || !cell) {
+    host.classList.add('empty');
+    host.innerHTML = '<div class="state-head">No cell selected.</div>' +
+                     '<div class="state-sub">Click a cell in the sprite above to start.</div>';
+    return;
+  }
+  const head = document.createElement('div'); head.className = 'state-head';
+  const sub  = document.createElement('div'); sub.className = 'state-sub';
+  const actions = document.createElement('div'); actions.className = 'state-actions';
+
+  if (cell.empty) {
+    host.classList.add('empty');
+    head.textContent = 'This cell is empty.';
+    sub.textContent = 'Start painting in the pixel editor below to use a fresh tile, or put an existing tile here.';
+    const bNew = document.createElement('button');
+    bNew.type = 'button';
+    bNew.textContent = '📄 New blank tile';
+    bNew.title = 'Claim the next free tile and put it in this cell';
+    bNew.addEventListener('click', () => {
+      pushUndo();
+      if (!autoAssignFreeTileToCell(sp, selectedCell.r, selectedCell.c)) return;
+      markDirty();
+      renderSpriteCanvas();
+      renderCellInspector();
+      renderTileset();
+      renderTileEditor();
+      renderPalettes();
+      renderSpriteList();
+    });
+    const bPick = document.createElement('button');
+    bPick.type = 'button';
+    bPick.textContent = '📋 Pick existing tile';
+    bPick.title = 'Open a picker showing every tile in the shared tileset';
+    bPick.addEventListener('click', () => openTilePicker(selectedCell.r, selectedCell.c));
+    actions.appendChild(bNew);
+    actions.appendChild(bPick);
+  } else {
+    const uses = findTileUsage(cell.tile, selectedSpriteIdx, selectedCell.r, selectedCell.c);
+    const hex = '0x' + cell.tile.toString(16).padStart(2, '0').toUpperCase();
+    if (uses.length === 0) {
+      host.classList.add('solo');
+      head.textContent = 'Using tile ' + hex + ' — only in this sprite.';
+      sub.textContent = 'Safe to paint. Changes here won\'t touch any other sprite.';
+    } else {
+      host.classList.add('shared');
+      const names = uses.slice(0, 3).map(u => u.text).join(', ');
+      const more = uses.length > 3 ? ' …and ' + (uses.length - 3) + ' more' : '';
+      head.textContent = 'Using tile ' + hex + ' — also in ' + uses.length +
+                         ' other place' + (uses.length === 1 ? '' : 's') + '.';
+      sub.textContent = 'Painting here will change those too: ' + names + more;
+      const bFork = document.createElement('button');
+      bFork.type = 'button';
+      bFork.textContent = '✂️ Make my own copy';
+      bFork.title = 'Duplicate this tile into a free slot and put the copy in this cell (keyboard: D)';
+      bFork.addEventListener('click', () => duplicateTileForCurrentCell());
+      actions.appendChild(bFork);
+    }
+    const bChange = document.createElement('button');
+    bChange.type = 'button';
+    bChange.textContent = '🔄 Change tile';
+    bChange.title = 'Open a picker to choose a different tile for this cell';
+    bChange.addEventListener('click', () => openTilePicker(selectedCell.r, selectedCell.c));
+    const bClear = document.createElement('button');
+    bClear.type = 'button';
+    bClear.textContent = 'Clear';
+    bClear.title = 'Empty this cell so nothing renders here';
+    bClear.addEventListener('click', () => {
+      document.getElementById('btn-cell-clear').click();
+    });
+    actions.appendChild(bChange);
+    actions.appendChild(bClear);
+  }
+
+  host.appendChild(head);
+  host.appendChild(sub);
+  host.appendChild(actions);
 }
 
 // Put the currently-highlighted tile into the selected cell.
@@ -3703,9 +4063,15 @@ function refreshColourButtons() {
 }
 
 function renderPinnedSwatches() {
-  const host = document.getElementById('pinned-swatches');
-  if (!host) return;
-  host.innerHTML = '';
+  // We render into two hosts: #sprite-side-swatches (the primary picker
+  // sitting directly above the composition canvas) and #pinned-swatches
+  // (secondary mirror inside the pixel-editor sub-panel). Both are
+  // wired identically so either can drive the active colour.
+  const hosts = [
+    document.getElementById('sprite-side-swatches'),
+    document.getElementById('pinned-swatches'),
+  ].filter(Boolean);
+  if (!hosts.length) return;
   const pal = activeCellPalette();
   const slots = [
     { v: 0, label: '0', rgb: null },
@@ -3713,22 +4079,25 @@ function renderPinnedSwatches() {
     { v: 2, label: '2', rgb: nesRgb(pal.slot2) },
     { v: 3, label: '3', rgb: nesRgb(pal.slot3) },
   ];
-  for (const s of slots) {
-    const sw = document.createElement('button');
-    sw.type = 'button';
-    sw.className = 'pin-swatch';
-    if (s.v === 0) sw.classList.add('transparent');
-    else sw.style.background = s.rgb;
-    if (s.v === currentColour) sw.classList.add('active');
-    sw.textContent = s.label;
-    sw.title = s.v === 0
-      ? 'Colour 0 — transparent for sprites (shows the background)'
-      : 'Colour ' + s.v + ' — click to paint with this colour';
-    sw.addEventListener('click', () => {
-      currentColour = s.v;
-      refreshColourButtons();
-    });
-    host.appendChild(sw);
+  for (const host of hosts) {
+    host.innerHTML = '';
+    for (const s of slots) {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'pin-swatch';
+      if (s.v === 0) sw.classList.add('transparent');
+      else sw.style.background = s.rgb;
+      if (s.v === currentColour) sw.classList.add('active');
+      sw.textContent = s.label;
+      sw.title = s.v === 0
+        ? 'Colour 0 — transparent for sprites (shows the background)'
+        : 'Colour ' + s.v + ' — click to paint with this colour';
+      sw.addEventListener('click', () => {
+        currentColour = s.v;
+        refreshColourButtons();
+      });
+      host.appendChild(sw);
+    }
   }
   // Keep the floating palette popout in lockstep with the inline pins —
   // any colour/palette/cell change flows through here, so one hook covers
@@ -3761,12 +4130,32 @@ function spApply(evt, initial) {
     // A cell switch mid-drag restarts the guard-check for the new tile.
     spGuardChecked = false;
   }
-  const cell = sp.cells[pos.cellR][pos.cellC];
+  let cell = sp.cells[pos.cellR][pos.cellC];
+  let undoAlreadyPushed = false;
   if (cell.empty) {
-    // No tile assigned yet — don't paint. Tell the pupil what to do.
-    setStatus('warn', '● This cell is empty — pick a tile from the tileset first');
-    spDragging = false;
-    return;
+    // Auto-assign the next free tile so the pupil can paint straight away.
+    // If nothing is free, we fall through to the old "pick a tile" hint.
+    const picker = evt.shiftKey || evt.button === 2;
+    if (!picker && initial) {
+      pushUndo();
+      undoAlreadyPushed = true;
+      if (autoAssignFreeTileToCell(sp, pos.cellR, pos.cellC)) {
+        cell = sp.cells[pos.cellR][pos.cellC];
+        // Brand-new tile belongs only to this cell, so no shared-guard needed.
+        spGuardChecked = true;
+        renderCellInspector();
+        renderTileset();
+        renderTileEditor();
+        renderPalettes();
+        // Fall through to the paint code below with the fresh tile.
+      } else {
+        spDragging = false;
+        return;
+      }
+    } else {
+      spDragging = false;
+      return;
+    }
   }
   const srcX = cell.flipH ? 7 - pos.localX : pos.localX;
   const srcY = cell.flipV ? 7 - pos.localY : pos.localY;
@@ -3798,7 +4187,7 @@ function spApply(evt, initial) {
       });
       return;
     }
-    pushUndo();
+    if (!undoAlreadyPushed) pushUndo();
   }
 
   if (state.sprite_tiles[cell.tile].pixels[srcY][srcX] === currentColour) return;
@@ -3821,12 +4210,31 @@ function tileCanvasCell(evt) {
 }
 
 function teApply(evt, initial) {
-  const cell = currentCell();
+  let cell = currentCell();
   if (!cell) return;
+  let undoAlreadyPushed = false;
   if (cell.empty) {
-    setStatus('warn', '● Cell is empty — assign a tile first');
-    teDragging = false;
-    return;
+    const picker = evt.shiftKey || evt.button === 2;
+    if (!picker && initial) {
+      const sp = currentSprite();
+      if (!sp) return;
+      pushUndo();
+      undoAlreadyPushed = true;
+      if (autoAssignFreeTileToCell(sp, selectedCell.r, selectedCell.c)) {
+        cell = currentCell();
+        teGuardChecked = true;
+        renderCellInspector();
+        renderTileset();
+        renderTileEditor();
+        renderPalettes();
+      } else {
+        teDragging = false;
+        return;
+      }
+    } else {
+      teDragging = false;
+      return;
+    }
   }
   const { x, y } = tileCanvasCell(evt);
   if (x < 0 || x > 7 || y < 0 || y > 7) return;
@@ -3860,7 +4268,7 @@ function teApply(evt, initial) {
       });
       return;
     }
-    pushUndo();
+    if (!undoAlreadyPushed) pushUndo();
   }
   const tIdx = currentCell().tile;
   if (state.sprite_tiles[tIdx].pixels[y][x] === currentColour) return;
@@ -5161,7 +5569,22 @@ async function sendPlayToServer() {
 // ================================================================
 // Init
 // ================================================================
+function initCollapsiblePersistence() {
+  document.querySelectorAll('details.collapsible[data-collapse-key]').forEach(d => {
+    const key = 'collapse:' + d.dataset.collapseKey;
+    try {
+      const v = localStorage.getItem(key);
+      if (v === 'open') d.open = true;
+      else if (v === 'closed') d.open = false;
+    } catch (_) {}
+    d.addEventListener('toggle', () => {
+      try { localStorage.setItem(key, d.open ? 'open' : 'closed'); } catch (_) {}
+    });
+  });
+}
+
 function init() {
+  initCollapsiblePersistence();
   const loaded = Storage.loadCurrent();
   state = loaded || createDefaultState();
   migrateState(state);
@@ -5876,19 +6299,7 @@ function init() {
       return;
     }
     if (e.key === 'd' && cell) {
-      if (cell.empty) {
-        setStatus('warn', '● Assign a tile before duplicating');
-        return;
-      }
-      const dst = findNextEmptyTileSlot();
-      if (dst < 0) { alert('No empty tile slots left.'); return; }
-      pushUndo();
-      const src = state.sprite_tiles[cell.tile];
-      state.sprite_tiles[dst] = { pixels: clonePixels(src.pixels), name: src.name ? src.name + '_copy' : '' };
-      cell.tile = dst;
-      selectedTileIdx = dst;
-      markDirty();
-      renderAll();
+      duplicateTileForCurrentCell();
       return;
     }
     // View
