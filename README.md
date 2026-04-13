@@ -130,6 +130,26 @@ This needs the **Playground Server** running — the
 "Open Editor via Playground Server" task starts it for you. If you see
 "is the server running?" in the status bar, run the task again.
 
+### 📝 Editing the game code (Code page)
+
+The **📝 Code** tab (alongside Backgrounds / Sprites) is an in-browser
+editor for the game's main source file. Your edits drive the ROM that
+**▶ Play in NES** builds.
+
+- **Guided mode** (default) locks everything except a few highlighted
+  regions — `player_start`, `walk_speed`, `magic_button`, and so on —
+  so you can change interesting numbers without breaking the rest.
+  Use the **📚 Lesson** chip to follow a short lesson, or drop in a
+  ready-made block of code from the **🧩 Snippets…** picker.
+- **Advanced mode** unlocks the whole file for free editing.
+- **C / Asm toggle** (advanced only): flip the editor between C
+  (cc65) and 6502 assembly (ca65). Both compile to a real NES ROM
+  through the same Play button. Your C and asm code are saved
+  separately so you can switch back and forth without losing work.
+
+Code auto-saves to the browser. **Restore default** reverts the file
+to the stock starter for the current language.
+
 ### 💾 Exporting your work
 
 The editor writes a few different formats. Most of the time you want
