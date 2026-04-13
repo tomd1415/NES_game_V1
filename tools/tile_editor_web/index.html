@@ -128,6 +128,47 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 }
 .app-header .export-menu > .menu-body button { text-align: left; }
 
+.projects-menu { position: relative; }
+.projects-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.projects-menu[open] > summary { background: #3a3560; }
+.projects-menu > .menu-body {
+  position: absolute;
+  left: 0; top: calc(100% + 4px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 280px;
+  box-shadow: var(--shadow);
+  z-index: 25;
+}
+.projects-menu .projects-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 180px; overflow-y: auto;
+}
+.projects-menu .projects-list button {
+  text-align: left; padding: 5px 8px;
+}
+.projects-menu .projects-list button.active {
+  background: var(--accent); color: #000; font-weight: 600;
+}
+.projects-menu hr {
+  border: 0; border-top: 1px solid var(--border); margin: 4px 0;
+}
+.projects-menu .menu-body button { text-align: left; }
+
 .pref-toggle {
   display: flex; align-items: center; gap: 6px;
   font-size: 0.85em; color: var(--muted);
@@ -257,6 +298,60 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   margin-top: 10px;
   text-align: center;
   line-height: 1.6;
+}
+.tile-zero-banner {
+  display: none;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  background: #3a2d0d;
+  border: 1px solid #c8a64a;
+  border-radius: 6px;
+  color: #ffe3a3;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+.tile-zero-banner.show { display: block; }
+.tile-zero-banner b { color: #ffd866; }
+/* Subtle "BG" badge drawn on the tile-0 cell in the tileset is painted
+   directly to the canvas in renderTileset(); no CSS needed. */
+
+/* --- Background colour swatch (nametable header) ---------- */
+.bg-colour-control {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  margin: 0 4px;
+}
+.bg-colour-swatch {
+  width: 28px; height: 28px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.4) inset;
+}
+.bg-colour-swatch:hover { border-color: var(--accent); }
+.bg-colour-label {
+  display: flex; flex-direction: column;
+  font-size: 0.78em; line-height: 1.15;
+  color: var(--muted);
+}
+.bg-colour-label b { color: var(--fg); font-weight: 600; }
+.bg-colour-dialog .master-grid {
+  display: grid;
+  grid-template-columns: repeat(16, 24px);
+  gap: 2px;
+  margin: 8px 0;
+}
+.bg-colour-dialog .master-cell {
+  width: 24px; height: 24px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.bg-colour-dialog .master-cell.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* --- Palettes ---------------------------------------------- */
@@ -530,6 +625,45 @@ body.nt-resizing { cursor: ns-resize; -webkit-user-select: none; user-select: no
   image-rendering: pixelated;
   cursor: crosshair;
 }
+.nt-canvas-wrap[data-mode="paint"] #nt-canvas { cursor: crosshair; }
+.nt-canvas-wrap[data-mode="palette"] #nt-canvas { cursor: cell; }
+.nt-canvas-wrap[data-mode="erase"] #nt-canvas { cursor: not-allowed; }
+.nt-canvas-wrap[data-mode="palette-rect"] #nt-canvas { cursor: cell; }
+.nt-canvas-wrap[data-mode="fill"] #nt-canvas { cursor: copy; }
+
+.nt-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.nt-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+.nt-mode:hover { background: var(--border); color: var(--fg); }
+.nt-mode[aria-pressed="true"] {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+.nt-mode-icon { font-size: 1.15em; line-height: 1; }
+.nt-advanced-tool {
+  color: var(--muted);
+  font-size: 0.78em;
+}
+.nt-advanced-tool select { font-size: 0.95em; }
 .nt-info {
   margin-top: 6px;
   color: var(--muted);
@@ -700,9 +834,20 @@ kbd {
     <input id="project-name" type="text" value="untitled" title="Project name" aria-label="Project name">
   </div>
   <div class="toolbar">
+    <details class="projects-menu" id="projects-menu">
+      <summary title="Switch project or create a new one"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
+      <div class="menu-body">
+        <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
+        <hr>
+        <button type="button" id="btn-project-new">+ New project…</button>
+        <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
+        <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
+        <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
+      </div>
+    </details>
     <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
     <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-    <button type="button" id="btn-new" title="Start a new project">New</button>
+    <button type="button" id="btn-new" title="Clear this project back to defaults (use Projects ▾ to create a new project)">Clear</button>
     <button id="btn-recover" type="button" title="Recover from a snapshot or backup">Recover…</button>
     <label class="pref-toggle" title="When on, a JSON backup file is also downloaded every 5 minutes. Backups in browser storage are always kept regardless of this setting.">
       <input id="auto-download" type="checkbox"> auto-download backups
@@ -745,6 +890,13 @@ kbd {
       Editing Tile <span id="selected-tile-idx">0x00</span>
       <input id="tile-name" class="tile-name-input" placeholder="name (optional)">
     </h2>
+    <div id="tile-zero-banner" class="tile-zero-banner" role="note">
+      <b>This is the background tile.</b> The NES fills every empty spot on
+      your background with this tile. Painting here changes how every
+      "blank" area looks. To change the <b>background colour</b> behind
+      everything, use the <b>Background colour</b> swatch below the
+      background / nametable panel.
+    </div>
     <canvas id="tile-canvas" width="384" height="384"></canvas>
     <div class="color-picker">
       <button type="button" class="color-btn active" data-color="0" title="0 - transparent">0</button>
@@ -807,6 +959,14 @@ kbd {
 <section class="nt-panel">
   <h2>Background / Nametable</h2>
   <div class="nt-controls">
+    <div class="bg-colour-control" title="Background colour: the NES shows this colour wherever no pixel is drawn. It's shared across every background palette (slot 0).">
+      <div class="bg-colour-label">
+        <b>Background colour</b>
+        <span>behind everything</span>
+      </div>
+      <div id="bg-colour-swatch" class="bg-colour-swatch" role="button"
+           tabindex="0" aria-label="Change background colour"></div>
+    </div>
     <label title="Switch between the backgrounds in this project. Tiles and palettes are shared; each background keeps its own layout + name + size.">Background
       <select id="bg-select" style="min-width:140px"></select>
     </label>
@@ -826,12 +986,29 @@ kbd {
       <input type="range" id="nt-zoom" min="1" max="4" step="1" value="2">
       <span id="nt-zoom-label">2×</span>
     </label>
-    <label>Tool
+    <div class="nt-mode-toggle" role="radiogroup" aria-label="Background painting mode">
+      <button type="button" class="nt-mode" data-mode="paint" aria-pressed="true"
+              title="Paint tile: click to stamp the selected tile. The 2×2 block also takes the selected palette.">
+        <span class="nt-mode-icon" aria-hidden="true">🖌</span>
+        <span>Paint tile</span>
+      </button>
+      <button type="button" class="nt-mode" data-mode="palette" aria-pressed="false"
+              title="Paint palette: click to change the palette on a 2×2 block. Tiles are not changed.">
+        <span class="nt-mode-icon" aria-hidden="true">🎨</span>
+        <span>Paint palette</span>
+      </button>
+      <button type="button" class="nt-mode" data-mode="erase" aria-pressed="false"
+              title="Erase: click to reset a cell back to tile 0.">
+        <span class="nt-mode-icon" aria-hidden="true">🧽</span>
+        <span>Erase</span>
+      </button>
+    </div>
+    <label class="nt-advanced-tool" title="Extra tools: palette rectangle paints a dragged rectangle of palette only; flood-fill replaces connected same-tile cells.">Advanced
       <select id="nt-tool">
         <option value="paint">Paint tile</option>
+        <option value="palette">Paint palette (2×2 block)</option>
         <option value="erase">Erase to tile 0</option>
-        <option value="palette">Set palette (single 2×2 block)</option>
-        <option value="palette-rect">Set palette (drag a rectangle — tiles unchanged)</option>
+        <option value="palette-rect">Palette rectangle (drag)</option>
         <option value="fill">Flood-fill tile</option>
       </select>
     </label>
@@ -846,7 +1023,7 @@ kbd {
     <button type="button" id="btn-popout-palettes" title="Show a floating palette picker. Click a BG palette then click in the background to assign it to that block.">🎨 Pop-out palettes</button>
     <button type="button" id="btn-fullscreen-preview" title="Preview the background in full screen at the correct NES aspect ratio — press F to toggle, Esc to close.">🖥 Full preview</button>
   </div>
-  <div class="nt-canvas-wrap">
+  <div class="nt-canvas-wrap" data-mode="paint">
     <canvas id="nt-canvas"></canvas>
   </div>
   <div class="nt-info" id="nt-info">
@@ -876,7 +1053,7 @@ kbd {
       <li><b>Pick a colour</b> — press <kbd>0</kbd>, <kbd>1</kbd>, <kbd>2</kbd>, or <kbd>3</kbd>. Colour 0 is always "transparent / show the universal background".</li>
       <li><b>Draw a tile</b> — click squares in the big Editing Tile canvas. Use <kbd>[</kbd> / <kbd>]</kbd> to move to the previous / next tile (there are 256).</li>
       <li><b>Choose colours for the palette</b> — in the Palettes panel, click a slot (e.g. BG0 slot 1) then click a colour in the 64-colour master grid to assign it.</li>
-      <li><b>Paint the background</b> — scroll to <i>Background / Nametable</i>. Click cells to stamp the selected tile. Try the <b>📌 Pop-out tileset</b> and <b>🎨 Pop-out palettes</b> windows for easy picking while you paint.</li>
+      <li><b>Paint the background</b> — scroll to <i>Background / Nametable</i>. Pick a mode at the top of the toolbar: <b>🖌 Paint tile</b> stamps the selected tile, <b>🎨 Paint palette</b> only recolours a 2×2 block, <b>🧽 Erase</b> resets to tile 0. Try the <b>📌 Pop-out tileset</b> and <b>🎨 Pop-out palettes</b> windows for easy picking while you paint.</li>
       <li><b>Preview it</b> — click <b>🖥 Full preview</b> (or press <kbd>F</kbd>) to see it at real NES size. Press <kbd>Esc</kbd> to close.</li>
     </ol>
     <p class="help-hint">
@@ -903,6 +1080,7 @@ kbd {
       <kbd>V</kbd><span>Paste clipboard onto current tile</span>
       <kbd>R</kbd><span>Rotate 90° clockwise</span>
       <kbd>H</kbd> / <kbd>Shift</kbd>+<kbd>H</kbd><span>Flip horizontal / vertical</span>
+      <kbd>Del</kbd> / <kbd>Backspace</kbd><span>Clear this tile (zero all 64 pixels)</span>
     </div>
     <h3>Undo / redo / save</h3>
     <div class="help-grid">
@@ -998,14 +1176,54 @@ kbd {
 </dialog>
 
 <dialog id="new-dialog">
-  <h2>Start a new project</h2>
+  <h2>Clear this project?</h2>
   <p style="color:var(--muted);line-height:1.5">
-    Your current project will be saved to a snapshot first, so you can always
-    recover it. Continue?
+    This resets the current project's tiles, palettes and backgrounds to
+    defaults. A snapshot is saved first so you can recover it. Your other
+    projects are not affected.
   </p>
   <div class="dialog-actions">
     <button type="button" id="btn-new-cancel">Cancel</button>
-    <button type="button" id="btn-new-yes" class="primary">Save & start fresh</button>
+    <button type="button" id="btn-new-yes" class="primary">Snapshot & clear</button>
+  </div>
+</dialog>
+
+<dialog id="new-project-dialog">
+  <h2>New project</h2>
+  <p style="color:var(--muted);line-height:1.5">
+    Creates a fresh project alongside your existing ones. The current project
+    is left untouched and you can switch back any time.
+  </p>
+  <label style="display:block;margin-bottom:10px">
+    Name
+    <input type="text" id="new-project-name" value="untitled"
+           style="width:100%;padding:6px 8px;margin-top:4px">
+  </label>
+  <label style="display:block;margin-bottom:10px">
+    Template
+    <select id="new-project-template" style="width:100%;padding:6px 8px;margin-top:4px">
+      <option value="platformer" selected>Platformer — side-view, gravity + jump</option>
+      <option value="topdown">Top-down — 4-way movement, no gravity</option>
+    </select>
+  </label>
+  <div class="dialog-actions">
+    <button type="button" id="btn-new-project-cancel">Cancel</button>
+    <button type="button" id="btn-new-project-yes" class="primary">Create project</button>
+  </div>
+</dialog>
+
+<dialog id="bg-colour-dialog" class="bg-colour-dialog">
+  <h2>Background colour</h2>
+  <p style="color:var(--muted);line-height:1.5;margin:0 0 6px">
+    The NES can only show these 64 colours. Your choice fills every "blank"
+    area in every background. It's also slot 0 of every background palette.
+  </p>
+  <div class="master-grid" id="bg-colour-grid"></div>
+  <div class="bg-colour-current" style="color:var(--muted);font-size:0.85em;margin:4px 0 8px">
+    Current: <span id="bg-colour-current-hex">0x21</span>
+  </div>
+  <div class="dialog-actions">
+    <button type="button" id="btn-bg-colour-close">Done</button>
   </div>
 </dialog>
 
@@ -1040,6 +1258,8 @@ kbd {
   <div class="floating-panel-resize" id="floating-palettes-resize" title="Drag to resize"></div>
 </div>
 
+<script src="storage.js"></script>
+<script src="tour.js"></script>
 <script>
 'use strict';
 
@@ -1232,6 +1452,13 @@ function migrateState(s) {
   if (typeof s.currentLesson !== 'string' && s.currentLesson !== null) {
     s.currentLesson = null;
   }
+  // Sprint 5: which starter template the pupil picked.
+  if (s.template !== 'platformer' && s.template !== 'topdown') {
+    s.template = 'platformer';
+  }
+  if (s.movement !== 'platformer' && s.movement !== 'fourway') {
+    s.movement = s.template === 'topdown' ? 'fourway' : 'platformer';
+  }
   return s;
 }
 
@@ -1301,113 +1528,11 @@ function resizeNametable(state) {
 // ================================================================
 // Storage layer — localStorage, snapshots, recovery
 // ================================================================
-const STORAGE_KEY           = 'nes_tile_editor.current.v1';
-const STORAGE_SNAP_PREFIX   = 'nes_tile_editor.snap.';
-const STORAGE_BACKUP_PREFIX = 'nes_tile_editor.backup.';
-const STORAGE_META_KEY      = 'nes_tile_editor.meta.v1';
-const STORAGE_PREF_KEY      = 'nes_tile_editor.prefs.v1';
-const MAX_SNAPSHOTS         = 8;
-const MAX_BACKUPS           = 5;   // long-lived; rotated every 5 min
 const BACKUP_INTERVAL_MS    = 5 * 60 * 1000;
 const SNAPSHOT_INTERVAL_MS  = 30 * 1000;
 
-const Storage = {
-  saveCurrent(state) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  },
-  loadCurrent() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = migrateState(JSON.parse(raw));
-      const err = validateState(parsed);
-      if (err) return null;
-      return parsed;
-    } catch (e) { return null; }
-  },
-  saveSnapshot(state, reason) {
-    try {
-      const meta = this._readMeta();
-      const ts = Date.now();
-      const key = STORAGE_SNAP_PREFIX + ts;
-      localStorage.setItem(key, JSON.stringify(state));
-      meta.snapshots = meta.snapshots || [];
-      meta.snapshots.push({ key, ts, reason, name: state.name });
-      // trim old snapshots
-      while (meta.snapshots.length > MAX_SNAPSHOTS) {
-        const dropped = meta.snapshots.shift();
-        try { localStorage.removeItem(dropped.key); } catch {}
-      }
-      this._writeMeta(meta);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  },
-  listSnapshots() {
-    const meta = this._readMeta();
-    return (meta.snapshots || []).slice().reverse();  // newest first
-  },
-  saveBackup(state) {
-    // Long-lived rotating backup ring. Separate from snapshots so brief
-    // edit bursts cannot evict the pupil's only safety net.
-    try {
-      const meta = this._readMeta();
-      const ts = Date.now();
-      const key = STORAGE_BACKUP_PREFIX + ts;
-      localStorage.setItem(key, JSON.stringify(state));
-      meta.backups = meta.backups || [];
-      meta.backups.push({ key, ts, name: state.name });
-      while (meta.backups.length > MAX_BACKUPS) {
-        const dropped = meta.backups.shift();
-        try { localStorage.removeItem(dropped.key); } catch {}
-      }
-      this._writeMeta(meta);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  },
-  listBackups() {
-    const meta = this._readMeta();
-    return (meta.backups || []).slice().reverse();
-  },
-  loadSnapshot(key) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      const s = migrateState(JSON.parse(raw));
-      const err = validateState(s);
-      if (err) return null;
-      return s;
-    } catch (e) { return null; }
-  },
-  readPrefs() {
-    try {
-      const raw = localStorage.getItem(STORAGE_PREF_KEY);
-      if (!raw) return {};
-      return JSON.parse(raw) || {};
-    } catch { return {}; }
-  },
-  writePrefs(p) {
-    try { localStorage.setItem(STORAGE_PREF_KEY, JSON.stringify(p)); } catch {}
-  },
-  _readMeta() {
-    try {
-      const raw = localStorage.getItem(STORAGE_META_KEY);
-      if (!raw) return { snapshots: [] };
-      return JSON.parse(raw);
-    } catch { return { snapshots: [] }; }
-  },
-  _writeMeta(m) {
-    localStorage.setItem(STORAGE_META_KEY, JSON.stringify(m));
-  },
-};
+// Shared layer — see tools/tile_editor_web/storage.js.
+const Storage = createTileEditorStorage({ migrateState, validateState });
 
 // ================================================================
 // Undo / redo
@@ -1787,6 +1912,8 @@ function renderTileEditor() {
   document.getElementById('selected-tile-idx').textContent =
     '0x' + selectedTileIdx.toString(16).padStart(2, '0').toUpperCase();
   document.getElementById('tile-name').value = tile.name || '';
+  const banner = document.getElementById('tile-zero-banner');
+  if (banner) banner.classList.toggle('show', selectedTileIdx === 0);
 }
 
 // --- Tileset panel (256 tile grid) ------------------------------
@@ -1840,6 +1967,19 @@ function renderTileset() {
       ctx.strokeStyle = 'rgba(60,60,80,0.6)';
       ctx.lineWidth = 1;
       ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    }
+    // BG badge on tile 0 — it's the default "empty" fill tile, painting here
+    // changes every blank cell across every background.
+    if (i === 0) {
+      const badgeH = Math.max(9, Math.floor(cell * 0.36));
+      const badgeW = Math.max(18, Math.floor(cell * 0.72));
+      ctx.fillStyle = 'rgba(255, 216, 102, 0.92)';
+      ctx.fillRect(cx + 1, cy + cell - badgeH - 1, badgeW, badgeH);
+      ctx.fillStyle = '#2a1e00';
+      ctx.font = 'bold ' + Math.max(7, Math.floor(badgeH * 0.8)) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('BG', cx + 1 + badgeW / 2, cy + cell - badgeH / 2 - 1);
     }
   }
 
@@ -1906,6 +2046,17 @@ function renderFloatingTileset() {
       ctx.strokeStyle = 'rgba(60,60,80,0.6)';
       ctx.lineWidth = 1;
       ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    }
+    if (i === 0 && cell >= 12) {
+      const badgeH = Math.max(9, Math.floor(cell * 0.36));
+      const badgeW = Math.max(18, Math.floor(cell * 0.72));
+      ctx.fillStyle = 'rgba(255, 216, 102, 0.92)';
+      ctx.fillRect(cx + 1, cy + cell - badgeH - 1, badgeW, badgeH);
+      ctx.fillStyle = '#2a1e00';
+      ctx.font = 'bold ' + Math.max(7, Math.floor(badgeH * 0.8)) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('BG', cx + 1 + badgeW / 2, cy + cell - badgeH / 2 - 1);
     }
   }
   const stats = document.getElementById('floating-tileset-stats');
@@ -2066,6 +2217,25 @@ function renderPalettes() {
   updatePreviewPaletteSelect();
   updateNtPaletteSelect();
   renderFloatingPalettes();
+  renderBgColourSwatch();
+}
+
+function renderBgColourSwatch() {
+  const sw = document.getElementById('bg-colour-swatch');
+  if (!sw) return;
+  const rgb = nesRgb(state.universal_bg);
+  sw.style.background = rgb;
+  const hex = '0x' + state.universal_bg.toString(16).padStart(2, '0').toUpperCase();
+  sw.title = 'Background colour: ' + hex + ' — click to change';
+  const current = document.getElementById('bg-colour-current-hex');
+  if (current) current.textContent = hex;
+  // Highlight the current cell inside the dialog if it's open/rendered.
+  const grid = document.getElementById('bg-colour-grid');
+  if (grid && grid.children.length === 64) {
+    for (let i = 0; i < 64; i++) {
+      grid.children[i].classList.toggle('selected', i === state.universal_bg);
+    }
+  }
 }
 
 function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
@@ -2301,6 +2471,7 @@ let ntPainting = false;
 let ntLastCellKey = null;
 let ntRectStart = null;
 let ntRectEnd = null;
+let ntHoverBlockKey = null;
 
 function normalisedBlockRect(a, b) {
   // Snap both corners outward to the 2×2 attribute-block grid.
@@ -2323,6 +2494,22 @@ function applyPaletteRect(a, b) {
   }
   markDirty();
   renderNametable();
+}
+
+function drawNtBlockHover(x, y) {
+  const canvas = document.getElementById('nt-canvas');
+  const ctx = canvas.getContext('2d');
+  const zoom = ntZoom();
+  const cellPx = 8 * zoom;
+  const bx = (x & ~1) * cellPx;
+  const by = (y & ~1) * cellPx;
+  const size = cellPx * 2;
+  ctx.save();
+  ctx.strokeStyle = '#ffd866';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(bx + 1, by + 1, size - 2, size - 2);
+  ctx.restore();
 }
 
 function drawNtRectOverlay(a, b) {
@@ -2524,6 +2711,8 @@ function init() {
   document.getElementById('project-name').addEventListener('input', e => {
     pushUndo();
     state.name = e.target.value || 'untitled';
+    Storage.renameProject(Storage.getActiveProjectId(), state.name);
+    document.getElementById('active-project-label').textContent = state.name;
     markDirty();
   });
   document.getElementById('btn-undo').addEventListener('click', undo);
@@ -2540,6 +2729,131 @@ function init() {
     afterStateReplaced();
     document.getElementById('new-dialog').close();
   });
+
+  // --- Projects menu ---
+  function renderProjectsMenu() {
+    const activeId = Storage.getActiveProjectId();
+    const list = document.getElementById('projects-list');
+    list.innerHTML = '';
+    for (const p of Storage.listProjects()) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = p.name + (p.id === activeId ? '  ● current' : '');
+      btn.classList.toggle('active', p.id === activeId);
+      btn.addEventListener('click', () => {
+        document.getElementById('projects-menu').open = false;
+        if (p.id !== activeId) switchProject(p.id);
+      });
+      list.appendChild(btn);
+    }
+    const active = Storage.getActiveProject();
+    document.getElementById('active-project-label').textContent =
+      (active && active.name) || state.name || 'untitled';
+    document.getElementById('btn-project-delete').disabled =
+      Storage.listProjects().length <= 1;
+    document.getElementById('btn-migration-download').hidden =
+      !Storage.hasPreMigrationBackup();
+  }
+  function switchProject(id) {
+    Storage.saveCurrent(state);
+    Storage.setActiveProjectId(id);
+    const loaded = Storage.loadCurrent();
+    state = loaded || createDefaultState();
+    if (!loaded) Storage.saveCurrent(state);
+    undoStack = []; redoStack = []; updateUndoButtons();
+    afterStateReplaced();
+    renderProjectsMenu();
+  }
+  document.getElementById('projects-menu').addEventListener('toggle', e => {
+    if (e.target.open) renderProjectsMenu();
+  });
+  document.getElementById('btn-project-new').addEventListener('click', () => {
+    document.getElementById('projects-menu').open = false;
+    document.getElementById('new-project-name').value = 'untitled';
+    document.getElementById('new-project-dialog').showModal();
+  });
+  document.getElementById('btn-new-project-cancel').addEventListener('click', () => {
+    document.getElementById('new-project-dialog').close();
+  });
+  document.getElementById('btn-new-project-yes').addEventListener('click', () => {
+    const name = (document.getElementById('new-project-name').value || '').trim() || 'untitled';
+    const template = document.getElementById('new-project-template').value || 'platformer';
+    Storage.saveCurrent(state);
+    const fresh = createDefaultState();
+    fresh.name = name;
+    fresh.template = template;
+    fresh.movement = template === 'topdown' ? 'fourway' : 'platformer';
+    Storage.createProject(name, fresh);
+    state = fresh;
+    undoStack = []; redoStack = []; updateUndoButtons();
+    afterStateReplaced();
+    document.getElementById('new-project-dialog').close();
+    renderProjectsMenu();
+  });
+  document.getElementById('btn-project-duplicate').addEventListener('click', () => {
+    document.getElementById('projects-menu').open = false;
+    Storage.saveCurrent(state);
+    const id = Storage.duplicateProject(Storage.getActiveProjectId());
+    if (id) {
+      const loaded = Storage.loadCurrent();
+      if (loaded) state = loaded;
+      undoStack = []; redoStack = []; updateUndoButtons();
+      afterStateReplaced();
+      renderProjectsMenu();
+    }
+  });
+  document.getElementById('btn-project-delete').addEventListener('click', () => {
+    if (Storage.listProjects().length <= 1) return;
+    const active = Storage.getActiveProject();
+    if (!confirm('Delete "' + (active && active.name || 'this project') + '"? This cannot be undone.')) return;
+    document.getElementById('projects-menu').open = false;
+    Storage.deleteProject(Storage.getActiveProjectId());
+    const loaded = Storage.loadCurrent();
+    state = loaded || createDefaultState();
+    if (!loaded) Storage.saveCurrent(state);
+    undoStack = []; redoStack = []; updateUndoButtons();
+    afterStateReplaced();
+    renderProjectsMenu();
+  });
+  document.getElementById('btn-migration-download').addEventListener('click', () => {
+    const b = Storage.getPreMigrationBackup();
+    if (!b) return;
+    const json = JSON.stringify({ ts: b.ts, keys: b.keys }, null, 2);
+    const stamp = new Date(b.ts).toISOString().slice(0,19).replace(/[:T]/g, '-');
+    triggerDownload('tile_editor_pre_upgrade_' + stamp + '.json', json, 'application/json');
+    Storage.clearPreMigrationBackup();
+    document.getElementById('btn-migration-download').hidden = true;
+  });
+  renderProjectsMenu();
+  // Background-colour dialog (universal_bg picker).
+  const bgColourDlg = document.getElementById('bg-colour-dialog');
+  const bgColourGrid = document.getElementById('bg-colour-grid');
+  for (let i = 0; i < 64; i++) {
+    const c = document.createElement('div');
+    c.className = 'master-cell';
+    c.style.background = nesRgb(i);
+    c.title = '0x' + i.toString(16).padStart(2, '0').toUpperCase();
+    c.addEventListener('click', () => {
+      if (state.universal_bg !== i) {
+        pushUndo();
+        state.universal_bg = i;
+        markDirty();
+        renderAll();
+      }
+    });
+    bgColourGrid.appendChild(c);
+  }
+  const openBgColour = () => {
+    renderBgColourSwatch();  // refresh "selected" highlight in dialog grid
+    bgColourDlg.showModal();
+  };
+  document.getElementById('bg-colour-swatch').addEventListener('click', openBgColour);
+  document.getElementById('bg-colour-swatch').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBgColour(); }
+  });
+  document.getElementById('btn-bg-colour-close').addEventListener('click', () => bgColourDlg.close());
+  bgColourDlg.addEventListener('click', e => { if (e.target === bgColourDlg) bgColourDlg.close(); });
+
   document.getElementById('btn-recover').addEventListener('click', openRecoveryDialog);
   document.getElementById('btn-recovery-cancel').addEventListener('click', () => {
     document.getElementById('recovery-dialog').close();
@@ -2806,6 +3120,38 @@ function init() {
     renderNametable();
   });
   document.getElementById('nt-zoom').addEventListener('input', renderNametable);
+
+  // --- Mode toggle (paint / palette / erase) ---
+  const ntToolSel = document.getElementById('nt-tool');
+  const ntWrap = document.querySelector('.nt-canvas-wrap');
+  const modeButtons = Array.from(document.querySelectorAll('.nt-mode'));
+  function syncModeUi(tool) {
+    ntWrap.setAttribute('data-mode', tool);
+    modeButtons.forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.mode === tool ? 'true' : 'false');
+    });
+  }
+  function setNtMode(tool) {
+    ntToolSel.value = tool;
+    syncModeUi(tool);
+    prefs.ntMode = tool;
+    Storage.writePrefs(prefs);
+    renderNametable();
+  }
+  modeButtons.forEach(btn => {
+    btn.addEventListener('click', () => setNtMode(btn.dataset.mode));
+  });
+  ntToolSel.addEventListener('change', () => {
+    syncModeUi(ntToolSel.value);
+    prefs.ntMode = ntToolSel.value;
+    Storage.writePrefs(prefs);
+  });
+  // Restore persisted mode (default 'paint').
+  const savedMode = prefs.ntMode && ['paint', 'palette', 'erase', 'palette-rect', 'fill']
+    .includes(prefs.ntMode) ? prefs.ntMode : 'paint';
+  ntToolSel.value = savedMode;
+  syncModeUi(savedMode);
+
   document.getElementById('btn-nt-clear').addEventListener('click', () => {
     pushUndo();
     for (const row of activeBg().nametable) {
@@ -2837,7 +3183,21 @@ function init() {
       'Cell (' + x + ', ' + y + ') — screen '
       + Math.floor(x / SCREEN_W) + ',' + Math.floor(y / SCREEN_H)
       + ' · local ' + (x % SCREEN_W) + ',' + (y % SCREEN_H);
-    if (!ntPainting) return;
+    if (!ntPainting) {
+      const tool = ntToolSel.value;
+      if (tool === 'palette' || tool === 'palette-rect') {
+        const hoverKey = (x & ~1) + ',' + (y & ~1);
+        if (hoverKey !== ntHoverBlockKey) {
+          ntHoverBlockKey = hoverKey;
+          renderNametable();
+          drawNtBlockHover(x, y);
+        }
+      } else if (ntHoverBlockKey) {
+        ntHoverBlockKey = null;
+        renderNametable();
+      }
+      return;
+    }
     if (ntRectStart) {
       ntRectEnd = { x, y };
       renderNametable();
@@ -2848,6 +3208,12 @@ function init() {
     if (key === ntLastCellKey) return;
     ntLastCellKey = key;
     applyNtTool(x, y);
+  });
+  ntc.addEventListener('mouseleave', () => {
+    if (ntHoverBlockKey) {
+      ntHoverBlockKey = null;
+      renderNametable();
+    }
   });
   window.addEventListener('mouseup', () => {
     if (ntRectStart && ntRectEnd) {
@@ -2954,6 +3320,13 @@ function init() {
     if (e.key === 'r') { document.getElementById('btn-rotate').click(); return; }
     if (e.key === 'h') { document.getElementById('btn-flip-h').click(); return; }
     if (e.key === 'H') { document.getElementById('btn-flip-v').click(); return; }
+    // Clear this tile's 8×8 pixels. Backspace prevented so it doesn't
+    // trigger "go back" in browsers that still honour that.
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      document.getElementById('btn-clear-tile').click();
+      return;
+    }
     // View.
     if (e.key === 'f') { togglePreview(); return; }
     if (e.key === 'g') {
@@ -3380,6 +3753,28 @@ window.addEventListener('DOMContentLoaded', () => {
   initNtResize();
   initFloatingTileset();
   initFloatingPalettes();
+  if (typeof runTileEditorTour === 'function') {
+    const p = Storage.readPrefs();
+    runTileEditorTour({
+      prefKey: 'tourSeenBackgrounds',
+      prefs: p,
+      savePrefs: pp => Storage.writePrefs(pp),
+      steps: [
+        { selector: '#bg-palettes',
+          title: 'Palettes',
+          body: 'Four background palettes. Each tile on the nametable uses one of these \u2014 palette is per 2\u00d72 block of cells.' },
+        { selector: '#tileset-canvas',
+          title: 'Tileset',
+          body: 'Click a tile here to pick it, then click the big canvas to stamp it. Switch to Paint-palette mode to recolour without stamping.' },
+        { selector: '#nt-canvas',
+          title: 'Background',
+          body: 'This is your screen. Three modes across the top: Paint tile, Paint palette, Erase. Click or drag to apply.' },
+        { selector: '.projects-menu',
+          title: 'Projects',
+          body: 'Make and switch between separate projects here \u2014 pupil work is kept isolated per project.' },
+      ],
+    });
+  }
 });
 </script>
 </body>

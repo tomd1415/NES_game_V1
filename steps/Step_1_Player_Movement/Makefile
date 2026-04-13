@@ -39,7 +39,7 @@ C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
 OBJECTS = $(C_OBJ) $(ASM_OBJ)
 
-.PHONY: all clean run
+.PHONY: all clean run rebuild-run
 
 all: $(ROM)
 
@@ -56,13 +56,21 @@ $(BUILD)/%.o: src/%.c | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $(BUILD)/$*.s
 	rm -f $(BUILD)/$*.s
 
-# Assemble .s files directly
+# Assemble .s files directly. graphics.s .incbins the sprite CHR, so list it
+# as a prerequisite — otherwise `make run` uses a stale ROM when a pupil
+# edits their art.
+$(BUILD)/graphics.o: src/graphics.s assets/sprites/walk1.chr | $(BUILD)
+	$(AS) -t $(TARGET) -o $@ $<
+
 $(BUILD)/%.o: src/%.s | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $<
 
 # Build and run in emulator
 run: $(ROM)
 	$(EMULATOR) $(ROM)
+
+# Safety belt: clean first, then build and run.
+rebuild-run: clean run
 
 clean:
 	rm -rf $(BUILD) $(ROM)

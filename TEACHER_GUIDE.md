@@ -4,6 +4,8 @@
 
 This project builds a NES ROM using the **cc65 toolchain** (a C compiler and assembler targeting the 6502 CPU). The game is written primarily in C with a small amount of 65xx assembly for graphics data loading. The cc65 library (`nes.lib`) provides the startup code (crt0), C runtime, and hardware abstraction.
 
+> **Pupil feedback log:** log and triage pupil-testing feedback in [PUPIL_FEEDBACK.md](PUPIL_FEEDBACK.md). Append new items as they come in; don't wait for a formal review.
+
 ## Two VS Code workspaces
 
 There are two workspace files in the project root. Pick the one that matches what you are doing:

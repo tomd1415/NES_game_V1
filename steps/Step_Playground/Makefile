@@ -25,7 +25,7 @@ C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
 OBJECTS = $(C_OBJ) $(ASM_OBJ)
 
-.PHONY: all clean run
+.PHONY: all clean run rebuild-run
 
 all: $(ROM)
 
@@ -46,6 +46,9 @@ $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(B
 
 run: $(ROM)
 	$(EMULATOR) $(ROM)
+
+# Safety belt: clean first, then build and run.
+rebuild-run: clean run
 
 clean:
 	rm -rf $(BUILD) $(ROM)
