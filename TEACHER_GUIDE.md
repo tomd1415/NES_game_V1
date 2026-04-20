@@ -268,13 +268,27 @@ A sibling of the lesson library: `snippets/` at the repo root holds short blocks
 
 **Seed snippets:**
 
-| File                                                 | Fits region    | Effect                                                  |
-|------------------------------------------------------|----------------|---------------------------------------------------------|
-| [snippets/teleport-on-b.c](snippets/teleport-on-b.c) | `magic_button` | Pressing B warps the hero to the top-left corner.       |
-| [snippets/sprint-on-a.c](snippets/sprint-on-a.c)     | `magic_button` | Hold A to double walking speed.                         |
-| [snippets/wrap-screen.c](snippets/wrap-screen.c)     | `magic_button` | Walking off either edge re-enters from the other side.  |
-| [snippets/rainbow-background.c](snippets/rainbow-background.c) | `magic_button` | Rewrites PPU $3F00 every frame for a palette strobe. |
-| [snippets/auto-bounce.c](snippets/auto-bounce.c)     | `magic_button` | Re-fires a jump the instant the hero lands.             |
+| File                                                                     | Fits region    | Effect                                                     |
+|--------------------------------------------------------------------------|----------------|------------------------------------------------------------|
+| [snippets/teleport-on-b.c](snippets/teleport-on-b.c)                     | `magic_button` | Pressing B warps the hero to the top-left corner.          |
+| [snippets/sprint-on-a.c](snippets/sprint-on-a.c)                         | `magic_button` | Hold A to double walking speed.                            |
+| [snippets/run-on-b.c](snippets/run-on-b.c)                               | `magic_button` | Hold B to triple walking speed.                            |
+| [snippets/wrap-screen.c](snippets/wrap-screen.c)                         | `magic_button` | Walking off either edge re-enters from the other side.     |
+| [snippets/wrap-vertical.c](snippets/wrap-vertical.c)                     | `magic_button` | Flying off the top/bottom re-enters from the other side.   |
+| [snippets/rainbow-background.c](snippets/rainbow-background.c)           | `magic_button` | Rewrites PPU $3F00 every frame for a palette strobe.       |
+| [snippets/rainbow-player.c](snippets/rainbow-player.c)                   | `magic_button` | Cycles the player's primary colour every frame.            |
+| [snippets/auto-bounce.c](snippets/auto-bounce.c)                         | `magic_button` | Re-fires a jump the instant the hero lands.                |
+| [snippets/fly-on-a.c](snippets/fly-on-a.c)                               | `magic_button` | Hold A to rise; release to fall.                           |
+| [snippets/fast-fall.c](snippets/fast-fall.c)                             | `magic_button` | Hold DOWN while airborne to slam back down.                |
+| [snippets/double-jump.c](snippets/double-jump.c)                         | `magic_button` | A second A-press mid-air gives one extra bounce.           |
+| [snippets/dash-on-b.c](snippets/dash-on-b.c)                             | `magic_button` | Tap B for a short horizontal dash in the facing direction. |
+| [snippets/high-jump.c](snippets/high-jump.c)                             | `magic_button` | Boosts every jump so it travels roughly twice as high.     |
+| [snippets/freeze-on-start.c](snippets/freeze-on-start.c)                 | `magic_button` | Hold START to pause gravity so you can walk on air.        |
+| [snippets/auto-walk-right.c](snippets/auto-walk-right.c)                 | `magic_button` | Autopilot: the player walks right without input.           |
+| [snippets/bounce-off-walls.c](snippets/bounce-off-walls.c)               | `magic_button` | Autopilot with direction flip at each screen edge.         |
+| [snippets/solid-obstacles.c](snippets/solid-obstacles.c)                 | `magic_button` | Scene sprites block horizontal movement (walls).           |
+| [snippets/stand-on-obstacles.c](snippets/stand-on-obstacles.c)           | `magic_button` | Scene sprites become platforms you can stand on.           |
+| [snippets/screen-shake-on-landing.c](snippets/screen-shake-on-landing.c) | `magic_button` | PPU scroll wobbles for 8 frames after each landing.        |
 
 **Server endpoints:**
 
