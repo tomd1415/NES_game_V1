@@ -186,6 +186,46 @@ was unnecessary, and what was deferred.
   the snippet body so pupils can edit it without wrestling with
   string literals.
 
+### Sprint 8 — 2026-04-20 palette UX + drawing tools
+
+- **8.2 Palette editor refactor.** Both pages now share one palette
+  idiom: an **active-palette editor** with the NES master grid inline,
+  and an **overview list** showing every palette with a radio selector.
+  On [index.html](tools/tile_editor_web/index.html) the editor has a
+  BG / Sprite kind toggle + `P0..P3` buttons and the overview shows
+  eight rows (BG0–BG3, SP0–SP3). On
+  [sprites.html](tools/tile_editor_web/sprites.html) the editor is
+  locked to the sprite kind (BG palettes live in a collapsible
+  read-only ref) and the overview shows the four sprite palettes.
+  A single `assignColourToSlot(kind, palIdx, slot, nesIdx)` helper is
+  the only mutation path; both click-assign from the master grid and
+  **drag-and-drop** from a master cell onto any non-read-only slot
+  route through it, so undo stays consistent. `paletteEditor` state
+  ({kind, row, slot}) persists in `prefs.paletteEditor`.
+  Removed: the `#floating-palettes` popout + `🎨 Pop-out palettes`
+  button + `initFloatingPalettes`/`renderFloatingPalettes`/`buildFpSwatch`
+  and their CSS on the Backgrounds page; `#sprite-side-palettes` pills
+  kept but now also open that palette in the editor on click; the
+  duplicated `#sp-palettes` compact strip and side-panel `#master-grid`
+  on the Sprites page (and their `.sp-palettes-compact` /
+  `.master-grid-compact` / `.master-palette` CSS).
+- **8.1 Drawing-tools popover (Sprites page).** A `🛠 Tools ▾` button
+  in the sprite-composition toolbar opens a compact popover with
+  **Pencil / Fill / Line / Rect / Circle / Select**. Pencil keeps the
+  existing `spApply` flow (auto-assign free tile, shared-tile guard,
+  eyedrop). The other tools work in **sprite-pixel coordinates**
+  (`width*8 × height*8`), writing through a new `setSpritePixel(sp,
+  x, y, colour)` helper that auto-assigns a free tile to any empty
+  cell the stroke touches and respects each cell's flipH/flipV. Shapes
+  therefore cross tile boundaries without losing pixels. Fill is a
+  4-connected flood, line is Bresenham, rect is an outlined rectangle,
+  circle is a midpoint ellipse over the drag bounding box. Holding
+  `Shift` snaps the line to 45° steps and the rect/circle to a
+  square/circle. Select is a marquee; `Delete` zeroes pixels inside
+  the selection (crossing tiles). All operations push one `pushUndo()`
+  at the start of the shape so a single `Ctrl-Z` reverts the whole
+  thing. Active tool persists in `prefs.spriteTool`.
+
 ---
 
 ## Not done / deferred
@@ -213,6 +253,19 @@ was unnecessary, and what was deferred.
 - **Detach / floating for pixel editor & sprite list.** Out of scope
   for this round, as flagged in the plan. Tileset and palette
   pop-outs were already in place.
+
+- **8.3 Inline animation strip.** Deferred to a later sprint as flagged
+  in [sprint8-plan.md](sprint8-plan.md) — the animation panel
+  restructure is independent of palette/tool UX.
+
+- **Select-tool move.** Marquee + Delete shipped; *drag to move the
+  selected region* was not. Comes with its own state machine
+  (start pos, floating copy, drop) that's worth its own sprint once
+  pupils tell us they want it.
+
+- **Mobile / touch drag-and-drop for palettes.** The HTML5 DnD API
+  is mouse-first; touch fallback (a pointer-events polyfill) is
+  deferred until we see pupils on tablets.
 
 ---
 

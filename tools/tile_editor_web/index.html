@@ -398,11 +398,6 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   border-radius: 2px;
   text-shadow: none;
 }
-.master-palette {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
 .master-grid {
   display: grid;
   grid-template-columns: repeat(16, 1fr);
@@ -413,7 +408,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 }
 .master-cell {
   aspect-ratio: 1;
-  cursor: pointer;
+  cursor: grab;
   position: relative;
   display: flex;
   align-items: center;
@@ -422,6 +417,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   color: #000;
   text-shadow: 0 0 2px #fff;
 }
+.master-cell:active { cursor: grabbing; }
 .master-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
 .master-cell.chosen { outline: 2px solid var(--good); z-index: 2; }
 .master-hint {
@@ -429,6 +425,115 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   font-size: 0.75em;
   margin-top: 6px;
   line-height: 1.5;
+}
+
+/* --- Palette editor (active palette + master grid) ----------- */
+.palette-hint-top {
+  color: var(--muted);
+  font-size: 0.8em;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.palette-editor {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  background: var(--panel2);
+  margin-bottom: 12px;
+}
+.palette-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.palette-kind-toggle,
+.palette-p-picker {
+  display: inline-flex;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.pe-kind-btn,
+.pe-p-btn {
+  background: var(--panel);
+  color: var(--fg);
+  border: 0;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.pe-kind-btn:hover,
+.pe-p-btn:hover { background: var(--panel2); }
+.pe-kind-btn.active,
+.pe-p-btn.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+.palette-editor-body {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.palette-editor-slots {
+  display: flex;
+  gap: 6px;
+}
+.palette-editor-slot {
+  width: 54px !important;
+  height: 54px !important;
+}
+.palette-editor-picker {
+  flex: 1;
+  min-width: 260px;
+}
+
+/* --- Palette overview (list of every palette) --------------- */
+.palette-overview-title {
+  margin-top: 14px;
+  margin-bottom: 6px;
+  font-size: 0.95em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.palette-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.palette-overview-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+.palette-overview-row.selected {
+  border-color: var(--accent);
+  background: rgba(255, 216, 102, 0.10);
+}
+.palette-overview-row .po-radio {
+  margin: 0 2px;
+  cursor: pointer;
+}
+.palette-overview-row .po-label {
+  width: 30px;
+  color: var(--muted);
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.palette-overview-row .palette-slot {
+  width: 28px;
+  height: 28px;
+}
+.palette-slot.drop-target {
+  border-color: var(--good);
+  box-shadow: 0 0 0 2px rgba(120, 220, 180, 0.45);
 }
 
 /* --- Nametable --------------------------------------------- */
@@ -570,56 +675,6 @@ body.nt-resizing { cursor: ns-resize; -webkit-user-select: none; user-select: no
       transparent 79%);
 }
 
-/* --- Floating palette window ---------------------------------- */
-#floating-palettes {
-  top: 540px;
-  left: calc(100vw - 380px);
-  width: 340px;
-  height: 360px;
-}
-#floating-palettes-grid { padding: 8px 10px; }
-#floating-palettes-grid h3 {
-  margin: 0 0 6px 0;
-  font-size: 0.75em;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: bold;
-}
-.fp-palette-row {
-  display: grid;
-  grid-template-columns: 44px repeat(4, 1fr);
-  gap: 4px;
-  padding: 4px;
-  border-radius: 4px;
-  border: 2px solid transparent;
-  align-items: center;
-  margin-bottom: 4px;
-}
-.fp-palette-row.selectable { cursor: pointer; }
-.fp-palette-row.selectable:hover { background: var(--panel2); }
-.fp-palette-row.selected {
-  border-color: var(--accent);
-  background: rgba(255,97,136,0.12);
-}
-.fp-palette-row .name {
-  font-size: 0.85em;
-  font-weight: bold;
-  color: var(--fg);
-}
-.fp-palette-swatch {
-  aspect-ratio: 1 / 1;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  font-size: 0.7em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(0, 0, 0, 0.65);
-  text-shadow: 0 0 2px rgba(255, 255, 255, 0.55);
-  -webkit-user-select: none;
-  user-select: none;
-}
 #nt-canvas {
   display: block;
   image-rendering: pixelated;
@@ -972,28 +1027,38 @@ kbd {
   <!-- ============ Palettes ============ -->
   <section class="panel palettes-panel">
     <h2>Palettes</h2>
-    <div style="color:var(--muted);font-size:0.8em;margin-bottom:8px">
-      Slot 0 is always shared (universal BG for backgrounds, transparent for
-      sprites). Click a coloured slot to change it.
+    <div class="palette-hint-top">
+      Pick a palette below, then pick a slot and a colour. Or drag a
+      colour from the NES grid onto any slot anywhere on this page.
     </div>
 
-    <h3>Universal BG</h3>
-    <div id="universal-bg" class="palette-row"></div>
-
-    <h3>Background palettes</h3>
-    <div id="bg-palettes"></div>
-
-    <h3>Sprite palettes</h3>
-    <div id="sp-palettes"></div>
-
-    <div class="master-palette">
-      <h3>NES master (click to assign to selected slot)</h3>
-      <div class="master-grid" id="master-grid"></div>
-      <div class="master-hint">
-        Hover shows hex code and RGB. The NES chip only knows these 64 colours —
-        some cells are duplicate black.
+    <!-- Active palette editor + embedded master grid -->
+    <div class="palette-editor" id="palette-editor">
+      <div class="palette-editor-toolbar">
+        <div class="palette-kind-toggle" role="tablist" aria-label="Palette kind">
+          <button type="button" class="pe-kind-btn" data-kind="bg"
+                  title="Edit the four background palettes">BG</button>
+          <button type="button" class="pe-kind-btn" data-kind="sprite"
+                  title="Edit the four sprite palettes">Sprite</button>
+        </div>
+        <div class="palette-p-picker" id="palette-p-picker" role="tablist"
+             aria-label="Which palette"></div>
+      </div>
+      <div class="palette-editor-body">
+        <div class="palette-editor-slots" id="palette-editor-slots"
+             title="Click a slot, then click a master colour. Or drag a master colour onto any slot."></div>
+        <div class="palette-editor-picker">
+          <div class="master-grid" id="master-grid"></div>
+          <div class="master-hint">
+            Hover shows hex code. Drag a cell onto any slot to assign.
+          </div>
+        </div>
       </div>
     </div>
+
+    <h3 class="palette-overview-title">All palettes</h3>
+    <div class="palette-overview" id="palette-overview"
+         title="Click a radio to pick a palette. Drop a master colour onto a slot to recolour it."></div>
   </section>
 </main>
 
@@ -1086,7 +1151,6 @@ kbd {
       </div>
     </details>
     <button type="button" id="btn-popout-tileset" title="Show a floating tileset window so you can pick tiles while painting the background">📌 Pop-out tileset</button>
-    <button type="button" id="btn-popout-palettes" title="Show a floating palette picker. Click a BG palette then click in the background to assign it to that block.">🎨 Pop-out palettes</button>
     <button type="button" id="btn-fullscreen-preview" title="Preview the background in full screen at the correct NES aspect ratio — press F to toggle, Esc to close.">🖥 Full preview</button>
   </div>
   <div class="nt-canvas-wrap" data-mode="paint">
@@ -1309,19 +1373,6 @@ kbd {
     <span id="floating-tileset-zoom-label">20 px</span>
   </div>
   <div class="floating-panel-resize" id="floating-tileset-resize" title="Drag to resize"></div>
-</div>
-
-<!-- ============ Floating palette picker ============ -->
-<div id="floating-palettes" class="floating-panel" role="dialog" aria-label="Floating palettes">
-  <div class="floating-panel-header" id="floating-palettes-header">
-    <span class="title">🎨 Palettes</span>
-    <span class="stats" id="floating-palettes-stats"></span>
-    <button type="button" class="close" id="floating-palettes-close" title="Close">×</button>
-  </div>
-  <div class="floating-panel-body" id="floating-palettes-body">
-    <div id="floating-palettes-grid"></div>
-  </div>
-  <div class="floating-panel-resize" id="floating-palettes-resize" title="Drag to resize"></div>
 </div>
 
 <script src="storage.js"></script>
@@ -2295,49 +2346,122 @@ function floatingTilesetPalette() {
 }
 
 // --- Palettes panel ---------------------------------------------
+// The palette UI has two halves:
+//   - an editor module (BG/SP toggle + P0..P3 buttons + four big slots
+//     + the NES master grid) that edits one palette at a time
+//   - an overview list showing every palette with a radio selector so
+//     you can jump to another palette without hunting
+// Drag-and-drop: master-grid cells are draggable, every non-readonly
+// palette-slot is a drop target. Both paths route through
+// assignColourToSlot() so undo behaves consistently.
 function renderPalettes() {
-  const ubg = document.getElementById('universal-bg');
-  ubg.innerHTML = '';
-  ubg.appendChild(makePaletteSlot('universal', 0, 0, state.universal_bg, false));
-
-  const bg = document.getElementById('bg-palettes');
-  bg.innerHTML = '';
-  state.bg_palettes.forEach((p, i) => {
-    const row = document.createElement('div');
-    row.className = 'palette-row';
-    const lbl = document.createElement('span');
-    lbl.className = 'pal-label';
-    lbl.textContent = 'BG' + i;
-    row.appendChild(lbl);
-    row.appendChild(makePaletteSlot('bg', i, 0, state.universal_bg, true));
-    for (let s = 0; s < 3; s++) {
-      row.appendChild(makePaletteSlot('bg', i, s + 1, p.slots[s], false));
-    }
-    bg.appendChild(row);
-  });
-
-  const sp = document.getElementById('sp-palettes');
-  sp.innerHTML = '';
-  state.sprite_palettes.forEach((p, i) => {
-    const row = document.createElement('div');
-    row.className = 'palette-row';
-    const lbl = document.createElement('span');
-    lbl.className = 'pal-label';
-    lbl.textContent = 'SP' + i;
-    row.appendChild(lbl);
-    const slot0 = makePaletteSlot('sprite', i, 0, -1, true);
-    slot0.classList.add('transparent');
-    row.appendChild(slot0);
-    for (let s = 0; s < 3; s++) {
-      row.appendChild(makePaletteSlot('sprite', i, s + 1, p.slots[s], false));
-    }
-    sp.appendChild(row);
-  });
-
+  renderPaletteEditor();
+  renderPaletteOverview();
   updatePreviewPaletteSelect();
   updateNtPaletteSelect();
-  renderFloatingPalettes();
   renderBgColourSwatch();
+}
+
+function renderPaletteEditor() {
+  // Kind toggle
+  const kindForUI = selectedPaletteKind === 'universal' ? 'bg' : selectedPaletteKind;
+  document.querySelectorAll('.pe-kind-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.kind === kindForUI);
+  });
+  // P0..P3 buttons (rebuild so handlers are fresh)
+  const picker = document.getElementById('palette-p-picker');
+  picker.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pe-p-btn';
+    b.dataset.p = String(i);
+    b.textContent = 'P' + i;
+    b.title = 'Switch to ' + (kindForUI === 'bg' ? 'BG' : 'SP') + i;
+    if (i === selectedPaletteIdx) b.classList.add('active');
+    b.addEventListener('click', () => {
+      selectedPaletteIdx = i;
+      if (selectedPaletteKind === 'universal') selectedPaletteKind = 'bg';
+      if (selectedPaletteSlot === 0 && kindForUI === 'sprite') selectedPaletteSlot = 1;
+      persistPaletteEditor();
+      renderPalettes();
+      renderMasterGrid();
+      renderTileset();
+      renderTileEditor();
+      renderNametable();
+    });
+    picker.appendChild(b);
+  }
+  // Four big slots for the active palette
+  const slotsHost = document.getElementById('palette-editor-slots');
+  slotsHost.innerHTML = '';
+  for (let s = 0; s < 4; s++) {
+    let colour;
+    let readonly = false;
+    let slot;
+    if (kindForUI === 'bg') {
+      if (s === 0) { colour = state.universal_bg; readonly = true; }
+      else colour = state.bg_palettes[selectedPaletteIdx].slots[s - 1];
+      slot = makePaletteSlot('bg', selectedPaletteIdx, s, colour, readonly);
+    } else {
+      if (s === 0) { colour = -1; readonly = true; }
+      else colour = state.sprite_palettes[selectedPaletteIdx].slots[s - 1];
+      slot = makePaletteSlot('sprite', selectedPaletteIdx, s, colour, readonly);
+      if (s === 0) slot.classList.add('transparent');
+    }
+    slot.classList.add('palette-editor-slot');
+    slotsHost.appendChild(slot);
+  }
+}
+
+function renderPaletteOverview() {
+  const host = document.getElementById('palette-overview');
+  host.innerHTML = '';
+  const selKindForUI = selectedPaletteKind === 'universal' ? 'bg' : selectedPaletteKind;
+  const groups = [
+    { kind: 'bg',     label: 'BG', data: state.bg_palettes,     slot0: () => state.universal_bg, slot0Transparent: false },
+    { kind: 'sprite', label: 'SP', data: state.sprite_palettes, slot0: () => -1,                  slot0Transparent: true  },
+  ];
+  for (const grp of groups) {
+    grp.data.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'palette-overview-row';
+      const isActive = selKindForUI === grp.kind && selectedPaletteIdx === i;
+      if (isActive) row.classList.add('selected');
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.className = 'po-radio';
+      radio.name = 'palette-overview-sel';
+      radio.checked = isActive;
+      radio.title = 'Edit ' + grp.label + i;
+      radio.addEventListener('change', () => selectPalette(grp.kind, i));
+      row.appendChild(radio);
+      const label = document.createElement('span');
+      label.className = 'po-label';
+      label.textContent = grp.label + i;
+      label.addEventListener('click', () => selectPalette(grp.kind, i));
+      row.appendChild(label);
+      const slot0 = makePaletteSlot(grp.kind, i, 0, grp.slot0(), true);
+      if (grp.slot0Transparent) slot0.classList.add('transparent');
+      row.appendChild(slot0);
+      for (let s = 0; s < 3; s++) {
+        row.appendChild(makePaletteSlot(grp.kind, i, s + 1, p.slots[s], false));
+      }
+      host.appendChild(row);
+    });
+  }
+}
+
+function selectPalette(kind, idx) {
+  selectedPaletteKind = kind;
+  selectedPaletteIdx = idx;
+  if (kind === 'sprite' && selectedPaletteSlot === 0) selectedPaletteSlot = 1;
+  persistPaletteEditor();
+  renderPalettes();
+  renderMasterGrid();
+  renderTileset();
+  renderTileEditor();
+  renderNametable();
 }
 
 function renderBgColourSwatch() {
@@ -2382,6 +2506,7 @@ function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
     selectedPaletteKind = kind;
     selectedPaletteIdx = palIdx;
     selectedPaletteSlot = slot;
+    persistPaletteEditor();
     renderPalettes();
     renderMasterGrid();
     // If picking a BG palette or universal, re-render tileset + tile preview.
@@ -2389,6 +2514,28 @@ function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
     renderTileEditor();
     renderNametable();
   });
+  // Drop target: drag a master-grid colour onto any non-readonly slot.
+  if (!(readonly && kind !== 'universal')) {
+    el.addEventListener('dragover', (ev) => {
+      if (!ev.dataTransfer) return;
+      const types = ev.dataTransfer.types;
+      if (types && (Array.prototype.indexOf.call(types, 'application/x-nes-colour') >= 0
+                 || Array.prototype.indexOf.call(types, 'application/x-nes-color') >= 0)) {
+        ev.preventDefault();
+        el.classList.add('drop-target');
+      }
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-target'));
+    el.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      el.classList.remove('drop-target');
+      const raw = ev.dataTransfer.getData('application/x-nes-colour')
+               || ev.dataTransfer.getData('application/x-nes-color');
+      const idx = parseInt(raw, 10);
+      if (isNaN(idx) || idx < 0 || idx > 63) return;
+      assignColourToSlot(kind, palIdx, slot, idx);
+    });
+  }
   return el;
 }
 
@@ -2402,10 +2549,20 @@ function renderMasterGrid() {
     c.style.background = nesRgb(i);
     c.style.color = nesRgbContrast(i);
     c.textContent = '0x' + i.toString(16).padStart(2,'0').toUpperCase();
-    c.title = 'Click to assign 0x' + i.toString(16).padStart(2,'0').toUpperCase()
-      + ' to ' + describeSelectedSlot();
+    c.title = 'Click to assign, or drag onto any palette slot. (' +
+      '0x' + i.toString(16).padStart(2,'0').toUpperCase() + ')';
     if (i === chosen) c.classList.add('chosen');
     c.addEventListener('click', () => assignColour(i));
+    c.draggable = true;
+    c.addEventListener('dragstart', (ev) => {
+      if (!ev.dataTransfer) return;
+      ev.dataTransfer.effectAllowed = 'copy';
+      ev.dataTransfer.setData('application/x-nes-colour', String(i));
+      ev.dataTransfer.setData('application/x-nes-color',  String(i));
+      ev.dataTransfer.setData('text/plain', '0x' + i.toString(16).padStart(2,'0').toUpperCase());
+      c.classList.add('dragging');
+    });
+    c.addEventListener('dragend', () => c.classList.remove('dragging'));
     grid.appendChild(c);
   }
 }
@@ -2428,15 +2585,22 @@ function describeSelectedSlot() {
     + ' slot ' + selectedPaletteSlot;
 }
 function assignColour(nesIdx) {
-  if (selectedPaletteKind === 'sprite' && selectedPaletteSlot === 0) return;
+  assignColourToSlot(selectedPaletteKind, selectedPaletteIdx, selectedPaletteSlot, nesIdx);
+}
+// Single mutation path — both click-assign from the master grid and
+// drag-drop onto a palette slot route through here so undo is consistent.
+function assignColourToSlot(kind, palIdx, slot, nesIdx) {
+  if (nesIdx < 0 || nesIdx > 63) return;
+  if (kind === 'sprite' && slot === 0) return;
   pushUndo();
-  if (selectedPaletteKind === 'universal'
-      || (selectedPaletteKind === 'bg' && selectedPaletteSlot === 0)) {
+  if (kind === 'universal' || (kind === 'bg' && slot === 0)) {
     state.universal_bg = nesIdx;
-  } else if (selectedPaletteKind === 'bg') {
-    state.bg_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1] = nesIdx;
-  } else if (selectedPaletteKind === 'sprite') {
-    state.sprite_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1] = nesIdx;
+  } else if (kind === 'bg') {
+    state.bg_palettes[palIdx].slots[slot - 1] = nesIdx;
+  } else if (kind === 'sprite') {
+    state.sprite_palettes[palIdx].slots[slot - 1] = nesIdx;
+  } else {
+    return;
   }
   markDirty();
   renderPalettes();
@@ -2444,6 +2608,49 @@ function assignColour(nesIdx) {
   renderTileset();
   renderTileEditor();
   renderNametable();
+}
+
+function persistPaletteEditor() {
+  try {
+    const p = Storage.readPrefs() || {};
+    p.paletteEditor = {
+      kind: selectedPaletteKind === 'universal' ? 'bg' : selectedPaletteKind,
+      row:  selectedPaletteIdx,
+      slot: selectedPaletteSlot,
+    };
+    Storage.writePrefs(p);
+  } catch (_) { /* non-fatal */ }
+}
+
+function initPaletteEditor() {
+  // Kind-toggle buttons — wire click handlers once; active state is
+  // re-computed inside renderPaletteEditor() every render.
+  document.querySelectorAll('.pe-kind-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.kind;
+      if (kind !== 'bg' && kind !== 'sprite') return;
+      selectedPaletteKind = kind;
+      if (kind === 'sprite' && selectedPaletteSlot === 0) selectedPaletteSlot = 1;
+      persistPaletteEditor();
+      renderPalettes();
+      renderMasterGrid();
+      renderTileset();
+      renderTileEditor();
+      renderNametable();
+    });
+  });
+  // Restore last-used palette selection from prefs.
+  try {
+    const p = Storage.readPrefs() || {};
+    const pe = p.paletteEditor;
+    if (pe && (pe.kind === 'bg' || pe.kind === 'sprite')
+        && pe.row >= 0 && pe.row <= 3
+        && pe.slot >= 0 && pe.slot <= 3) {
+      selectedPaletteKind = pe.kind;
+      selectedPaletteIdx = pe.row;
+      selectedPaletteSlot = (pe.kind === 'sprite' && pe.slot === 0) ? 1 : pe.slot;
+    }
+  } catch (_) { /* non-fatal */ }
 }
 
 function updatePreviewPaletteSelect() {
@@ -3850,112 +4057,11 @@ function initFloatingTileset() {
 }
 
 // --- Floating palette window ------------------------------------
-function initFloatingPalettes() {
-  const panel  = document.getElementById('floating-palettes');
-  const header = document.getElementById('floating-palettes-header');
-  const close  = document.getElementById('floating-palettes-close');
-  const resize = document.getElementById('floating-palettes-resize');
-  const toggle = document.getElementById('btn-popout-palettes');
-  if (!panel || !toggle) return;
-
-  makeFloatingPanel({
-    panel, header, resize, toggleBtn: toggle, closeBtn: close,
-    storageKey: 'floating-palettes',
-    minWidth: 240, minHeight: 220,
-    onOpen: () => renderFloatingPalettes(),
-  });
-
-  document.getElementById('nt-palette')
-    .addEventListener('change', () => {
-      renderFloatingPalettes();
-      renderFloatingTileset();
-    });
-}
-
-function renderFloatingPalettes() {
-  const panel = document.getElementById('floating-palettes');
-  if (!panel || !panel.classList.contains('open')) return;
-  const grid = document.getElementById('floating-palettes-grid');
-  const stats = document.getElementById('floating-palettes-stats');
-  if (!grid) return;
-  const ntSel = document.getElementById('nt-palette');
-  const activeBg = parseInt(ntSel.value, 10) || 0;
-  grid.innerHTML = '';
-
-  const bgHeader = document.createElement('h3');
-  bgHeader.textContent = 'Background palettes (click to select)';
-  grid.appendChild(bgHeader);
-
-  state.bg_palettes.forEach((p, i) => {
-    const row = document.createElement('div');
-    row.className = 'fp-palette-row selectable';
-    if (i === activeBg) row.classList.add('selected');
-    const name = document.createElement('div');
-    name.className = 'name';
-    name.textContent = 'BG' + i;
-    row.appendChild(name);
-    const slot0 = buildFpSwatch(state.universal_bg, '0', true);
-    row.appendChild(slot0);
-    for (let s = 0; s < 3; s++) {
-      row.appendChild(buildFpSwatch(p.slots[s], String(s + 1), false));
-    }
-    row.addEventListener('click', () => {
-      ntSel.value = String(i);
-      ntSel.dispatchEvent(new Event('change'));
-      const toolSel = document.getElementById('nt-tool');
-      const paletteTools = new Set(['paint', 'palette', 'palette-rect']);
-      if (!paletteTools.has(toolSel.value)) {
-        toolSel.value = 'palette';
-        toolSel.dispatchEvent(new Event('change'));
-      }
-      renderFloatingPalettes();
-    });
-    grid.appendChild(row);
-  });
-
-  const spHeader = document.createElement('h3');
-  spHeader.textContent = 'Sprite palettes (reference only)';
-  spHeader.style.marginTop = '10px';
-  grid.appendChild(spHeader);
-  state.sprite_palettes.forEach((p, i) => {
-    const row = document.createElement('div');
-    row.className = 'fp-palette-row read-only';
-    const name = document.createElement('div');
-    name.className = 'name';
-    name.textContent = 'SP' + i;
-    row.appendChild(name);
-    const slot0 = buildFpSwatch(-1, 'T', true);
-    slot0.classList.add('transparent');
-    row.appendChild(slot0);
-    for (let s = 0; s < 3; s++) {
-      row.appendChild(buildFpSwatch(p.slots[s], String(s + 1), false));
-    }
-    grid.appendChild(row);
-  });
-
-  if (stats) stats.textContent = 'Active: BG' + activeBg;
-}
-
-function buildFpSwatch(colourIdx, label, shared) {
-  const el = document.createElement('div');
-  el.className = 'fp-palette-swatch';
-  if (colourIdx >= 0) {
-    el.style.background = nesRgb(colourIdx);
-    el.title = 'Slot ' + label + '  —  0x' + colourIdx.toString(16).padStart(2, '0').toUpperCase();
-  } else {
-    el.style.background = 'repeating-linear-gradient(45deg,#2a2440 0 5px,#1a1630 5px 10px)';
-    el.title = 'Transparent';
-  }
-  el.textContent = label;
-  if (shared) el.style.opacity = '0.75';
-  return el;
-}
-
 window.addEventListener('DOMContentLoaded', () => {
   init();
   initNtResize();
   initFloatingTileset();
-  initFloatingPalettes();
+  initPaletteEditor();
   if (typeof runTileEditorTour === 'function') {
     const p = Storage.readPrefs();
     runTileEditorTour({
@@ -3963,9 +4069,9 @@ window.addEventListener('DOMContentLoaded', () => {
       prefs: p,
       savePrefs: pp => Storage.writePrefs(pp),
       steps: [
-        { selector: '#bg-palettes',
+        { selector: '#palette-editor',
           title: 'Palettes',
-          body: 'Four background palettes. Each tile on the nametable uses one of these \u2014 palette is per 2\u00d72 block of cells.' },
+          body: 'Pick a palette here and a slot, then click an NES colour or drag one onto any slot. Four BG palettes + four Sprite palettes.' },
         { selector: '#tileset-canvas',
           title: 'Tileset',
           body: 'Click a tile here to pick it, then click the big canvas to stamp it. Switch to Paint-palette mode to recolour without stamping.' },

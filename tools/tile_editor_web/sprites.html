@@ -504,25 +504,6 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   background: rgba(0,0,0,0.18);
 }
 .sprite-side-controls .side-group + .side-group { margin-left: 0; }
-/* Compact sprite-palette rows for the side strip */
-.sp-palettes-compact { display: inline-flex; gap: 6px; }
-.sp-palettes-compact .palette-row { gap: 1px; padding: 0; background: transparent; border: none; }
-.sp-palettes-compact .palette-row.active { outline: 2px solid var(--accent); border-radius: 3px; }
-.sp-palettes-compact .pal-label {
-  font-size: 0.7em; padding: 0 3px; color: var(--muted); cursor: pointer;
-}
-.sp-palettes-compact .palette-slot {
-  width: 16px; height: 16px;
-}
-/* Compact NES master grid in the side strip */
-.master-grid-compact {
-  grid-template-columns: repeat(16, 13px);
-  gap: 1px;
-}
-.master-grid-compact .master-cell {
-  width: 13px; height: 13px; aspect-ratio: auto;
-  font-size: 0; /* hide hex labels at this size */
-}
 .palette-pills {
   display: inline-flex;
   gap: 4px;
@@ -859,7 +840,6 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   outline: 1px dashed rgba(255, 216, 102, 0.7);
   outline-offset: -2px;
 }
-.master-palette { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 .master-grid {
   display: grid;
   grid-template-columns: repeat(16, 1fr);
@@ -879,9 +859,163 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   color: #000;
   text-shadow: 0 0 2px #fff;
 }
+.master-cell { cursor: grab; }
+.master-cell:active { cursor: grabbing; }
 .master-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
 .master-cell.chosen { outline: 2px solid var(--good); z-index: 2; }
 .master-hint { color: var(--muted); font-size: 0.75em; margin-top: 6px; line-height: 1.5; }
+
+/* --- Palette editor (active palette + master grid) ----------- */
+.palette-hint-top {
+  color: var(--muted);
+  font-size: 0.8em;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.palette-editor {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  background: var(--panel2);
+  margin-bottom: 12px;
+}
+.palette-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.palette-p-picker {
+  display: inline-flex;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.pe-p-btn {
+  background: var(--panel);
+  color: var(--fg);
+  border: 0;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.pe-p-btn:hover { background: var(--panel2); }
+.pe-p-btn.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+.palette-editor-body {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.palette-editor-slots {
+  display: flex;
+  gap: 6px;
+}
+.palette-editor-slot {
+  width: 54px !important;
+  height: 54px !important;
+}
+.palette-editor-picker {
+  flex: 1;
+  min-width: 260px;
+}
+.palette-overview-title {
+  margin-top: 14px;
+  margin-bottom: 6px;
+  font-size: 0.95em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.palette-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.palette-overview-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+.palette-overview-row.selected {
+  border-color: var(--accent);
+  background: rgba(255, 216, 102, 0.10);
+}
+.palette-overview-row .po-radio {
+  margin: 0 2px;
+  cursor: pointer;
+}
+.palette-overview-row .po-label {
+  width: 30px;
+  color: var(--muted);
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.palette-overview-row .palette-slot {
+  width: 28px;
+  height: 28px;
+}
+.palette-slot.drop-target {
+  border-color: var(--good);
+  box-shadow: 0 0 0 2px rgba(120, 220, 180, 0.45);
+}
+
+/* --- Drawing tools popover ---------------------------------- */
+.tools-btn {
+  background: var(--panel2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.tools-btn:hover { background: var(--panel); }
+.tools-btn[aria-expanded="true"] {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+.tools-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  min-width: 150px;
+}
+.tools-popover[hidden] { display: none; }
+.tool-opt {
+  text-align: left;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid transparent;
+  padding: 5px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.tool-opt:hover { background: var(--panel2); }
+.tool-opt.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
 
 /* --- Full-screen preview ---------------------------------- */
 .preview-dialog {
@@ -1635,23 +1769,28 @@ details.collapsible > summary .sub-count {
       <button type="button" id="btn-popout-tileset" title="Show a floating tileset window so you can pick tiles while painting">📌 Pop-out tileset</button>
       <button type="button" id="btn-popout-palette" title="Show a floating palette window — shows the four colours of the selected cell's sprite palette, click one to paint with it">🎨 Pop-out palette</button>
       <button type="button" id="btn-fullscreen-preview" title="Preview all sprites at NES pixel size (F)">🖥 Full preview</button>
+      <span class="tools-picker" style="position:relative">
+        <button type="button" id="btn-tools" class="tools-btn"
+                aria-haspopup="true" aria-expanded="false"
+                title="Drawing tools: pencil, fill, line, rect, circle, select. Shapes work across tile boundaries.">🛠 Tools <span id="tools-active-label">Pencil</span> ▾</button>
+        <div id="tools-popover" class="tools-popover" hidden>
+          <button type="button" class="tool-opt active" data-tool="pencil" title="Pencil — paint one pixel at a time (default)">✏️ Pencil</button>
+          <button type="button" class="tool-opt" data-tool="fill"   title="Fill — flood-fill the connected region of the starting pixel (crosses cell boundaries)">🪣 Fill</button>
+          <button type="button" class="tool-opt" data-tool="line"   title="Line — drag to draw a straight line. Hold Shift for 45° steps.">📏 Line</button>
+          <button type="button" class="tool-opt" data-tool="rect"   title="Rectangle — drag to draw an outlined rectangle. Hold Shift for a square.">▭ Rect</button>
+          <button type="button" class="tool-opt" data-tool="circle" title="Circle — drag to draw a circle/ellipse. Hold Shift for a circle.">○ Circle</button>
+          <button type="button" class="tool-opt" data-tool="select" title="Select — drag a marquee. Press Delete to zero pixels inside.">⬚ Select</button>
+        </div>
+      </span>
     </div>
     <div class="sprite-side-controls" id="sprite-side-controls">
       <div class="side-group" title="Paint colour — same as the pixel-editor swatches">
         <span class="side-label">In use:</span>
         <div id="sprite-side-swatches" class="pinned-swatches"></div>
       </div>
-      <div class="side-group" title="Which sprite palette (SP0–SP3) colours the selected cell">
+      <div class="side-group" title="Which sprite palette (SP0–SP3) colours the selected cell. Click to assign it to the cell AND open it in the palette editor below.">
         <span class="side-label">Cell palette:</span>
         <div id="sprite-side-palettes" class="palette-pills"></div>
-      </div>
-      <div class="side-group" title="Sprite palettes — click a label to use for the selected cell">
-        <span class="side-label">Sprite palettes:</span>
-        <div id="sp-palettes" class="sp-palettes-compact"></div>
-      </div>
-      <div class="side-group" title="NES master colours — click to assign to the selected palette slot">
-        <span class="side-label">NES master:</span>
-        <div class="master-grid master-grid-compact" id="master-grid"></div>
       </div>
       <label class="cbx" style="margin-left:auto"
              title="When the sprite grows, automatically claim free tile slots for the new cells so you can paint straight away.">
@@ -1729,13 +1868,41 @@ details.collapsible > summary .sub-count {
         </div>
       </div>
       <div class="palettes-sub">
-        <h3>Background palettes (reference only)</h3>
-        <p class="faint" style="margin:2px 0 6px; font-size:0.82em;">
-          Slot&nbsp;0 (🔒) is the <b>universal background colour</b> — the same
-          colour in every BG palette, and the colour behind every "empty" spot
-          on your scene. Change it on the <b>Backgrounds</b> page.
-        </p>
-        <div id="bg-palettes-ro" class="faint"></div>
+        <h3>Palettes</h3>
+        <div class="palette-hint-top">
+          Pick a sprite palette, a slot, and a colour. Or drag a colour
+          from the NES grid onto any slot below.
+        </div>
+        <div class="palette-editor" id="palette-editor">
+          <div class="palette-editor-toolbar">
+            <div class="palette-p-picker" id="palette-p-picker" role="tablist"
+                 aria-label="Which sprite palette"></div>
+          </div>
+          <div class="palette-editor-body">
+            <div class="palette-editor-slots" id="palette-editor-slots"
+                 title="Click a slot, then click a master colour. Or drag a master colour onto any slot."></div>
+            <div class="palette-editor-picker">
+              <div class="master-grid" id="master-grid"></div>
+              <div class="master-hint">
+                Drag a cell onto any slot to assign. (Slot 0 is always
+                transparent for sprites.)
+              </div>
+            </div>
+          </div>
+        </div>
+        <h3 class="palette-overview-title">All sprite palettes</h3>
+        <div class="palette-overview" id="palette-overview"
+             title="Click a radio to edit a palette. Drop a master colour onto a slot to recolour it."></div>
+        <details class="collapsible" data-collapse-key="sp-bg-palettes-ref"
+                 style="margin-top:10px">
+          <summary>Background palettes (reference)</summary>
+          <p class="faint" style="margin:6px 0; font-size:0.82em;">
+            Slot&nbsp;0 (🔒) is the <b>universal background colour</b> — shared
+            by every BG palette and drawn behind every "empty" spot. Edit
+            BG palettes on the <b>Backgrounds</b> page.
+          </p>
+          <div id="bg-palettes-ro" class="faint"></div>
+        </details>
       </div>
     </div>
   </section>
@@ -3432,6 +3599,9 @@ function renderSpriteCanvas() {
     selectedCell.r * 8 * px + 1,
     8 * px - 2, 8 * px - 2
   );
+  // Tool preview overlay — live outline for line/rect/circle/select.
+  drawToolPreview(ctx, sp, px);
+
   // Keep the mini-map + composition-side pills in sync with the main
   // canvas. Centralising this here means pixel paints, tile swaps, undo,
   // cell selection, and resize all refresh the auxiliary widgets without
@@ -3558,15 +3728,23 @@ function renderSpriteSideControls() {
     }
     pill.appendChild(dots);
     pill.addEventListener('click', () => {
-      if (!cell) return;
-      if (cell.palette === i && !cell.empty) return;
-      pushUndo();
-      cell.palette = i;
-      markDirty();
+      // Pills do two things at once: set the cell's palette AND open that
+      // palette in the editor below, so one click covers both.
+      selectedPaletteKind = 'sprite';
+      selectedPaletteIdx = i;
+      if (selectedPaletteSlot === 0) selectedPaletteSlot = 1;
+      persistPaletteEditor();
+      if (cell && (cell.palette !== i || cell.empty)) {
+        pushUndo();
+        cell.palette = i;
+        markDirty();
+      }
       renderSpriteCanvas();
       renderCellInspector();
+      renderTileset();
       renderTileEditor();
       renderPalettes();
+      renderMasterGrid();
       refreshColourButtons();
     });
     host.appendChild(pill);
@@ -4069,40 +4247,92 @@ function renderTileEditor() {
 }
 
 // --- Palettes ----------------------------------------------
+// --- palette-editor: keep in sync across index.html and sprites.html ---
+// Sprites page variant: locked to 'sprite' kind. BG palettes are rendered
+// read-only inside a collapsible for reference; edit them on the
+// Backgrounds page.
 function renderPalettes() {
-  const spHost = document.getElementById('sp-palettes');
-  spHost.innerHTML = '';
+  renderPaletteEditor();
+  renderPaletteOverview();
+  renderBgPalettesRef();
+}
+
+function renderPaletteEditor() {
+  const picker = document.getElementById('palette-p-picker');
+  if (!picker) return;
+  picker.innerHTML = '';
   for (let i = 0; i < 4; i++) {
-    const row = document.createElement('div');
-    row.className = 'palette-row';
-    const cellData = currentCell();
-    if (selectedPaletteKind === 'sprite' && i === selectedPaletteIdx ||
-        (cellData && cellData.palette === i)) row.classList.add('active');
-    const lab = document.createElement('span');
-    lab.className = 'pal-label';
-    lab.textContent = 'SP' + i;
-    lab.title = 'Sprite palette ' + i + ' — click to use it for the selected cell';
-    lab.style.cursor = 'pointer';
-    lab.addEventListener('click', () => {
-      if (!currentCell()) return;
-      pushUndo();
-      currentCell().palette = i;
-      markDirty();
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pe-p-btn';
+    b.dataset.p = String(i);
+    b.textContent = 'SP' + i;
+    b.title = 'Edit sprite palette SP' + i;
+    if (i === selectedPaletteIdx) b.classList.add('active');
+    b.addEventListener('click', () => {
+      selectedPaletteIdx = i;
+      selectedPaletteKind = 'sprite';
+      if (selectedPaletteSlot === 0) selectedPaletteSlot = 1;
+      persistPaletteEditor();
+      renderPalettes();
+      renderMasterGrid();
       renderSpriteCanvas();
-      renderCellInspector();
       renderTileset();
       renderTileEditor();
-      renderPalettes();
+      renderSpriteList();
     });
-    row.appendChild(lab);
-    row.appendChild(makePaletteSlot('sprite', i, 0, -1, true));
+    picker.appendChild(b);
+  }
+  const slotsHost = document.getElementById('palette-editor-slots');
+  if (!slotsHost) return;
+  slotsHost.innerHTML = '';
+  for (let s = 0; s < 4; s++) {
+    let colour; let readonly = false;
+    if (s === 0) { colour = -1; readonly = true; }
+    else colour = state.sprite_palettes[selectedPaletteIdx].slots[s - 1];
+    const slot = makePaletteSlot('sprite', selectedPaletteIdx, s, colour, readonly);
+    if (s === 0) slot.classList.add('transparent');
+    slot.classList.add('palette-editor-slot');
+    slotsHost.appendChild(slot);
+  }
+}
+
+function renderPaletteOverview() {
+  const host = document.getElementById('palette-overview');
+  if (!host) return;
+  host.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const row = document.createElement('div');
+    row.className = 'palette-overview-row';
+    const isActive = selectedPaletteKind === 'sprite' && selectedPaletteIdx === i;
+    if (isActive) row.classList.add('selected');
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.className = 'po-radio';
+    radio.name = 'palette-overview-sel';
+    radio.checked = isActive;
+    radio.title = 'Edit SP' + i;
+    radio.addEventListener('change', () => selectPalette('sprite', i));
+    row.appendChild(radio);
+    const label = document.createElement('span');
+    label.className = 'po-label';
+    label.textContent = 'SP' + i;
+    label.addEventListener('click', () => selectPalette('sprite', i));
+    row.appendChild(label);
+    const slot0 = makePaletteSlot('sprite', i, 0, -1, true);
+    slot0.classList.add('transparent');
+    row.appendChild(slot0);
     for (let s = 1; s <= 3; s++) {
       const idx = state.sprite_palettes[i].slots[s - 1];
       row.appendChild(makePaletteSlot('sprite', i, s, idx, false));
     }
-    spHost.appendChild(row);
+    host.appendChild(row);
   }
+}
+
+function renderBgPalettesRef() {
   const bgHost = document.getElementById('bg-palettes-ro');
+  if (!bgHost) return;
   bgHost.innerHTML = '';
   for (let i = 0; i < 4; i++) {
     const row = document.createElement('div');
@@ -4121,9 +4351,49 @@ function renderPalettes() {
   }
 }
 
+function selectPalette(kind, idx) {
+  if (kind !== 'sprite') return;   // Sprites page is locked to sprite kind.
+  selectedPaletteKind = 'sprite';
+  selectedPaletteIdx = idx;
+  if (selectedPaletteSlot === 0) selectedPaletteSlot = 1;
+  persistPaletteEditor();
+  renderPalettes();
+  renderMasterGrid();
+  renderSpriteCanvas();
+  renderTileset();
+  renderTileEditor();
+  renderSpriteList();
+}
+
+function persistPaletteEditor() {
+  try {
+    const p = Storage.readPrefs() || {};
+    p.paletteEditor = {
+      kind: 'sprite',
+      row: selectedPaletteIdx,
+      slot: selectedPaletteSlot,
+    };
+    Storage.writePrefs(p);
+  } catch (_) { /* non-fatal */ }
+}
+
+function initPaletteEditor() {
+  try {
+    const p = Storage.readPrefs() || {};
+    const pe = p.paletteEditor;
+    if (pe && pe.row >= 0 && pe.row <= 3 && pe.slot >= 1 && pe.slot <= 3) {
+      selectedPaletteIdx = pe.row;
+      selectedPaletteSlot = pe.slot;
+    }
+  } catch (_) { /* non-fatal */ }
+}
+
 function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
   const el = document.createElement('div');
   el.className = 'palette-slot';
+  el.dataset.kind = kind;
+  el.dataset.palIdx = palIdx;
+  el.dataset.slot = slot;
   if (slot === 0 && kind === 'sprite') {
     el.classList.add('transparent');
     el.title = 'Sprite slot 0 is always transparent';
@@ -4137,7 +4407,8 @@ function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
   hex.textContent = '0x' + colourIdx.toString(16).padStart(2, '0').toUpperCase();
   el.appendChild(hex);
   if (!readonly) {
-    el.title = 'Sprite palette ' + palIdx + ' slot ' + slot + ' — click to select, then pick a colour in the master grid';
+    el.title = 'Sprite palette ' + palIdx + ' slot ' + slot
+      + ' — click to select, then pick a colour. Or drag a colour onto this slot.';
     if (selectedPaletteKind === kind && selectedPaletteIdx === palIdx && selectedPaletteSlot === slot) {
       el.classList.add('selected');
     }
@@ -4145,8 +4416,28 @@ function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
       selectedPaletteKind = kind;
       selectedPaletteIdx = palIdx;
       selectedPaletteSlot = slot;
+      persistPaletteEditor();
       renderPalettes();
       renderMasterGrid();
+    });
+    el.addEventListener('dragover', (ev) => {
+      if (!ev.dataTransfer) return;
+      const types = ev.dataTransfer.types;
+      if (types && (Array.prototype.indexOf.call(types, 'application/x-nes-colour') >= 0
+                 || Array.prototype.indexOf.call(types, 'application/x-nes-color') >= 0)) {
+        ev.preventDefault();
+        el.classList.add('drop-target');
+      }
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-target'));
+    el.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      el.classList.remove('drop-target');
+      const raw = ev.dataTransfer.getData('application/x-nes-colour')
+               || ev.dataTransfer.getData('application/x-nes-color');
+      const idx = parseInt(raw, 10);
+      if (isNaN(idx) || idx < 0 || idx > 63) return;
+      assignColourToSlot(kind, palIdx, slot, idx);
     });
   } else {
     if (kind === 'bg-ro' && slot === 0) {
@@ -4166,6 +4457,7 @@ function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
 
 function renderMasterGrid() {
   const grid = document.getElementById('master-grid');
+  if (!grid) return;
   grid.innerHTML = '';
   const chosen = currentChosenColourIdx();
   for (let i = 0; i < 64; i++) {
@@ -4173,10 +4465,21 @@ function renderMasterGrid() {
     el.className = 'master-cell';
     el.style.background = nesRgb(i);
     el.style.color = nesRgbContrast(i);
-    el.title = '0x' + i.toString(16).padStart(2,'0').toUpperCase()
-             + ' · rgb(' + NES_PALETTE_RGB[i].join(',') + ')';
+    el.textContent = '0x' + i.toString(16).padStart(2,'0').toUpperCase();
+    el.title = 'Click to assign, or drag onto any palette slot. (' +
+      '0x' + i.toString(16).padStart(2,'0').toUpperCase() + ')';
     if (i === chosen) el.classList.add('chosen');
     el.addEventListener('click', () => assignColour(i));
+    el.draggable = true;
+    el.addEventListener('dragstart', (ev) => {
+      if (!ev.dataTransfer) return;
+      ev.dataTransfer.effectAllowed = 'copy';
+      ev.dataTransfer.setData('application/x-nes-colour', String(i));
+      ev.dataTransfer.setData('application/x-nes-color',  String(i));
+      ev.dataTransfer.setData('text/plain', '0x' + i.toString(16).padStart(2,'0').toUpperCase());
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => el.classList.remove('dragging'));
     grid.appendChild(el);
   }
 }
@@ -4187,9 +4490,13 @@ function currentChosenColourIdx() {
   return -1;
 }
 function assignColour(nesIdx) {
-  if (selectedPaletteKind !== 'sprite' || selectedPaletteSlot === 0) return;
+  assignColourToSlot(selectedPaletteKind, selectedPaletteIdx, selectedPaletteSlot, nesIdx);
+}
+function assignColourToSlot(kind, palIdx, slot, nesIdx) {
+  if (nesIdx < 0 || nesIdx > 63) return;
+  if (kind !== 'sprite' || slot === 0) return;
   pushUndo();
-  state.sprite_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1] = nesIdx;
+  state.sprite_palettes[palIdx].slots[slot - 1] = nesIdx;
   markDirty();
   renderPalettes();
   renderMasterGrid();
@@ -4263,6 +4570,316 @@ let teDragging = false;
 let teGuardChecked = false;   // true for the current drag after resolution
 let spDragging = false;
 let spGuardChecked = false;
+
+// --- Drawing tools (pencil / fill / line / rect / circle / select) ------
+// Pencil keeps its existing spApply flow (auto-assign, shared-tile guard,
+// eyedrop). The other tools work on sprite-pixel coordinates (width*8 ×
+// height*8) so shapes cross cell boundaries without losing pixels, and
+// write through setSpritePixel() which auto-assigns free tiles to empty
+// cells and respects each cell's flipH/flipV.
+let currentTool = 'pencil';
+let toolDrag = null;      // { startX, startY, endX, endY } in sprite-pixel coords
+let selectedRegion = null; // marquee in sprite-pixel coords
+let selectedRegionSpriteIdx = -1;
+
+function setCurrentTool(tool) {
+  currentTool = tool;
+  document.querySelectorAll('#tools-popover .tool-opt').forEach(b => {
+    b.classList.toggle('active', b.dataset.tool === tool);
+  });
+  const lab = document.getElementById('tools-active-label');
+  if (lab) lab.textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
+  try {
+    const p = Storage.readPrefs() || {};
+    p.spriteTool = tool;
+    Storage.writePrefs(p);
+  } catch (_) {}
+  if (tool !== 'select') selectedRegion = null;
+  renderSpriteCanvas();
+}
+
+function initSpriteTools() {
+  const btn = document.getElementById('btn-tools');
+  const pop = document.getElementById('tools-popover');
+  if (!btn || !pop) return;
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const open = !pop.hidden;
+    pop.hidden = open;
+    btn.setAttribute('aria-expanded', String(!open));
+  });
+  document.addEventListener('click', (ev) => {
+    if (pop.hidden) return;
+    if (pop.contains(ev.target) || btn.contains(ev.target)) return;
+    pop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  pop.querySelectorAll('.tool-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      setCurrentTool(opt.dataset.tool);
+      pop.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    });
+  });
+  try {
+    const p = Storage.readPrefs() || {};
+    if (p.spriteTool && ['pencil','fill','line','rect','circle','select'].includes(p.spriteTool)) {
+      setCurrentTool(p.spriteTool);
+    }
+  } catch (_) {}
+}
+
+function spritePixelFromEvent(evt) {
+  const pos = spriteCanvasPixel(evt);
+  if (!pos) return null;
+  return { x: pos.cellC * 8 + pos.localX, y: pos.cellR * 8 + pos.localY };
+}
+
+function readSpritePixel(sp, x, y) {
+  if (x < 0 || y < 0 || x >= sp.width*8 || y >= sp.height*8) return -1;
+  const cell = sp.cells[Math.floor(y/8)][Math.floor(x/8)];
+  if (cell.empty) return 0;
+  const lx = x % 8, ly = y % 8;
+  const srcX = cell.flipH ? 7 - lx : lx;
+  const srcY = cell.flipV ? 7 - ly : ly;
+  return state.sprite_tiles[cell.tile].pixels[srcY][srcX];
+}
+
+function setSpritePixel(sp, x, y, colour) {
+  if (x < 0 || y < 0 || x >= sp.width*8 || y >= sp.height*8) return false;
+  const cellR = Math.floor(y/8), cellC = Math.floor(x/8);
+  let cell = sp.cells[cellR][cellC];
+  if (cell.empty) {
+    if (!autoAssignFreeTileToCell(sp, cellR, cellC)) return false;
+    cell = sp.cells[cellR][cellC];
+  }
+  const lx = x % 8, ly = y % 8;
+  const srcX = cell.flipH ? 7 - lx : lx;
+  const srcY = cell.flipV ? 7 - ly : ly;
+  if (state.sprite_tiles[cell.tile].pixels[srcY][srcX] === colour) return false;
+  state.sprite_tiles[cell.tile].pixels[srcY][srcX] = colour;
+  return true;
+}
+
+function afterToolMutation(changed) {
+  if (!changed) return;
+  markDirty();
+  renderSpriteCanvas();
+  renderTileset();
+  renderTileEditor();
+  renderSpriteList();
+}
+
+function clampShiftedEnd(sx, sy, ex, ey, shiftKey, mode) {
+  if (!shiftKey) return { ex, ey };
+  const dx = ex - sx, dy = ey - sy;
+  if (mode === 'line') {
+    // Snap to the nearest 45° step.
+    const ang = Math.atan2(dy, dx);
+    const steps = Math.round(ang / (Math.PI / 4));
+    const len = Math.hypot(dx, dy);
+    const snap = steps * (Math.PI / 4);
+    return { ex: sx + Math.round(Math.cos(snap) * len),
+             ey: sy + Math.round(Math.sin(snap) * len) };
+  }
+  // Square / circle: make abs(dx) == abs(dy), preserving sign.
+  const side = Math.max(Math.abs(dx), Math.abs(dy));
+  return { ex: sx + (dx < 0 ? -side : side),
+           ey: sy + (dy < 0 ? -side : side) };
+}
+
+function linePixels(sx, sy, ex, ey) {
+  const out = [];
+  let x0 = sx, y0 = sy, x1 = ex, y1 = ey;
+  const dx = Math.abs(x1 - x0), sx0 = x0 < x1 ? 1 : -1;
+  const dy = -Math.abs(y1 - y0), sy0 = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (;;) {
+    out.push([x0, y0]);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx0; }
+    if (e2 <= dx) { err += dx; y0 += sy0; }
+  }
+  return out;
+}
+
+function rectOutlinePixels(sx, sy, ex, ey) {
+  const x0 = Math.min(sx, ex), x1 = Math.max(sx, ex);
+  const y0 = Math.min(sy, ey), y1 = Math.max(sy, ey);
+  const out = [];
+  for (let x = x0; x <= x1; x++) { out.push([x, y0]); out.push([x, y1]); }
+  for (let y = y0 + 1; y < y1; y++) { out.push([x0, y]); out.push([x1, y]); }
+  return out;
+}
+
+function circleOutlinePixels(sx, sy, ex, ey) {
+  // Midpoint ellipse covering the bounding box defined by the drag.
+  const cx = (sx + ex) / 2, cy = (sy + ey) / 2;
+  const rx = Math.max(1, Math.abs(ex - sx) / 2);
+  const ry = Math.max(1, Math.abs(ey - sy) / 2);
+  const out = [];
+  const steps = Math.max(8, Math.ceil(2 * Math.PI * Math.max(rx, ry)));
+  const seen = new Set();
+  for (let i = 0; i < steps; i++) {
+    const t = (i / steps) * 2 * Math.PI;
+    const x = Math.round(cx + Math.cos(t) * rx);
+    const y = Math.round(cy + Math.sin(t) * ry);
+    const key = x + ',' + y;
+    if (!seen.has(key)) { seen.add(key); out.push([x, y]); }
+  }
+  return out;
+}
+
+function floodFill(sp, sx, sy, target, colour) {
+  const W = sp.width * 8, H = sp.height * 8;
+  if (target === colour) return 0;
+  const stack = [[sx, sy]];
+  const visited = new Set();
+  let writes = 0;
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    if (x < 0 || y < 0 || x >= W || y >= H) continue;
+    const key = x + ',' + y;
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (readSpritePixel(sp, x, y) !== target) continue;
+    if (setSpritePixel(sp, x, y, colour)) writes++;
+    stack.push([x+1, y], [x-1, y], [x, y+1], [x, y-1]);
+  }
+  return writes;
+}
+
+// Shape commit — called on mouseup for line/rect/circle.
+function commitShape(pixels) {
+  const sp = currentSprite();
+  if (!sp || !pixels.length) return;
+  pushUndo();
+  let writes = 0;
+  for (const [x, y] of pixels) {
+    if (setSpritePixel(sp, x, y, currentColour)) writes++;
+  }
+  afterToolMutation(writes > 0);
+}
+
+function shapePreviewPixels(sp) {
+  if (!toolDrag) return [];
+  const { startX, startY, endX, endY } = toolDrag;
+  if (currentTool === 'line')   return linePixels(startX, startY, endX, endY);
+  if (currentTool === 'rect')   return rectOutlinePixels(startX, startY, endX, endY);
+  if (currentTool === 'circle') return circleOutlinePixels(startX, startY, endX, endY);
+  return [];
+}
+
+function drawToolPreview(ctx, sp, px) {
+  // In-flight drag: ghost the shape so the pupil can see where it will
+  // land before committing.
+  if (toolDrag && (currentTool === 'line' || currentTool === 'rect' || currentTool === 'circle')) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 216, 102, 0.75)';
+    for (const [x, y] of shapePreviewPixels(sp)) {
+      if (x < 0 || y < 0 || x >= sp.width*8 || y >= sp.height*8) continue;
+      ctx.fillRect(x * px, y * px, px, px);
+    }
+    ctx.restore();
+  }
+  // Select marquee — live drag or settled selection.
+  const marquee = (currentTool === 'select' && toolDrag)
+    ? { x0: Math.min(toolDrag.startX, toolDrag.endX),
+        y0: Math.min(toolDrag.startY, toolDrag.endY),
+        x1: Math.max(toolDrag.startX, toolDrag.endX),
+        y1: Math.max(toolDrag.startY, toolDrag.endY) }
+    : (selectedRegion && selectedRegionSpriteIdx === selectedSpriteIdx
+        ? selectedRegion : null);
+  if (marquee) {
+    ctx.save();
+    ctx.strokeStyle = '#4fc3f7';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(
+      marquee.x0 * px + 1,
+      marquee.y0 * px + 1,
+      (marquee.x1 - marquee.x0 + 1) * px - 2,
+      (marquee.y1 - marquee.y0 + 1) * px - 2
+    );
+    ctx.restore();
+  }
+}
+
+// Non-pencil tool pointer handling — delegated from the sprite-canvas
+// mousedown/mousemove/mouseup handlers.
+function toolPointerDown(evt) {
+  const sp = currentSprite();
+  if (!sp) return;
+  const px = spritePixelFromEvent(evt);
+  if (!px) return;
+
+  if (currentTool === 'fill') {
+    const target = readSpritePixel(sp, px.x, px.y);
+    pushUndo();
+    const writes = floodFill(sp, px.x, px.y, target, currentColour);
+    if (!writes) undo();   // nothing changed — roll back the undo stamp
+    else afterToolMutation(true);
+    return;
+  }
+  if (currentTool === 'line' || currentTool === 'rect' || currentTool === 'circle') {
+    toolDrag = { startX: px.x, startY: px.y, endX: px.x, endY: px.y };
+    renderSpriteCanvas();
+    return;
+  }
+  if (currentTool === 'select') {
+    selectedRegion = null;
+    toolDrag = { startX: px.x, startY: px.y, endX: px.x, endY: px.y };
+    renderSpriteCanvas();
+    return;
+  }
+}
+function toolPointerMove(evt) {
+  if (!toolDrag) return;
+  const px = spritePixelFromEvent(evt);
+  if (!px) return;
+  const snap = clampShiftedEnd(toolDrag.startX, toolDrag.startY, px.x, px.y,
+                               evt.shiftKey,
+                               currentTool === 'line' ? 'line' : 'square');
+  toolDrag.endX = snap.ex;
+  toolDrag.endY = snap.ey;
+  renderSpriteCanvas();
+}
+function toolPointerUp() {
+  if (!toolDrag) return;
+  if (currentTool === 'line')
+    commitShape(linePixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
+  else if (currentTool === 'rect')
+    commitShape(rectOutlinePixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
+  else if (currentTool === 'circle')
+    commitShape(circleOutlinePixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
+  else if (currentTool === 'select') {
+    const d = toolDrag;
+    selectedRegion = {
+      x0: Math.min(d.startX, d.endX), y0: Math.min(d.startY, d.endY),
+      x1: Math.max(d.startX, d.endX), y1: Math.max(d.startY, d.endY),
+    };
+    selectedRegionSpriteIdx = selectedSpriteIdx;
+  }
+  toolDrag = null;
+  renderSpriteCanvas();
+}
+
+function deleteSelectedRegion() {
+  if (!selectedRegion || selectedRegionSpriteIdx !== selectedSpriteIdx) return false;
+  const sp = currentSprite();
+  if (!sp) return false;
+  pushUndo();
+  let writes = 0;
+  for (let y = selectedRegion.y0; y <= selectedRegion.y1; y++) {
+    for (let x = selectedRegion.x0; x <= selectedRegion.x1; x++) {
+      if (setSpritePixel(sp, x, y, 0)) writes++;
+    }
+  }
+  if (writes) afterToolMutation(true);
+  else undo();
+  return writes > 0;
+}
 
 function spApply(evt, initial) {
   const sp = currentSprite();
@@ -6143,14 +6760,23 @@ function init() {
     renderPalettes();
     refreshColourButtons();
     if (editMode === 'paint') {
-      spDragging = true;
-      spApply(e, true);
+      if (currentTool === 'pencil') {
+        spDragging = true;
+        spApply(e, true);
+      } else {
+        toolPointerDown(e);
+      }
     }
   });
   sc.addEventListener('mousemove', e => {
-    if (editMode === 'paint' && spDragging) spApply(e, false);
+    if (editMode !== 'paint') return;
+    if (currentTool === 'pencil') { if (spDragging) spApply(e, false); }
+    else if (toolDrag) toolPointerMove(e);
   });
-  window.addEventListener('mouseup', () => { spDragging = false; spGuardChecked = false; });
+  window.addEventListener('mouseup', () => {
+    spDragging = false; spGuardChecked = false;
+    if (editMode === 'paint' && currentTool !== 'pencil' && toolDrag) toolPointerUp();
+  });
   document.getElementById('sprite-zoom').addEventListener('input', e => {
     spriteZoom = parseInt(e.target.value, 10);
     document.getElementById('sprite-zoom-label').textContent = spriteZoom + '×';
@@ -6483,6 +7109,13 @@ function init() {
     // doesn't trigger "go back" in browsers that still honour that.
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
+      // Select tool: Delete zeroes pixels inside the marquee across tiles.
+      if (currentTool === 'select'
+          && selectedRegion
+          && selectedRegionSpriteIdx === selectedSpriteIdx) {
+        deleteSelectedRegion();
+        return;
+      }
       document.getElementById('btn-clear-tile').click();
       return;
     }
@@ -6580,6 +7213,12 @@ function init() {
   initFloatingTileset();
   initFloatingPalette();
 
+  // Palette-editor kind/overview restore + handlers
+  initPaletteEditor();
+
+  // Drawing-tools popover (pencil / fill / line / rect / circle / select)
+  initSpriteTools();
+
   // Animations panel
   initAnimationHandlers();
 
@@ -6622,9 +7261,9 @@ function init() {
       prefs,
       savePrefs: p => Storage.writePrefs(p),
       steps: [
-        { selector: '#sp-palettes',
+        { selector: '#palette-editor',
           title: 'Your palettes',
-          body: 'Each palette is 3 colours + a shared background. Click a label to use that palette for the selected sprite cell.' },
+          body: 'Pick a sprite palette (SP0\u2013SP3), a slot, then a colour. Or drag a master colour onto any slot. The pills above the canvas assign a palette to the selected cell.' },
         { selector: '#tileset-canvas',
           title: 'Your tiles',
           body: 'This is the full 256-tile set. Coloured dots show which tiles are already in a sprite (teal border = the selected sprite\u2019s tiles).' },
