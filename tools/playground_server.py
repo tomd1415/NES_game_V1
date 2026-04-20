@@ -194,6 +194,20 @@ def build_nam(state):
     return bytes(tiles_out) + bytes(attr_out)
 
 
+def _palette_slots(state, group, i):
+    """Return the 3 colour slots for palette `group[i]`, defaulting to black.
+
+    Tolerates Code-page state that was never touched on the Backgrounds /
+    Sprites pages (missing group, short list, or missing "slots" key).
+    """
+    entries = state.get(group) or []
+    entry = entries[i] if i < len(entries) else None
+    slots = (entry or {}).get("slots") if isinstance(entry, dict) else None
+    if not isinstance(slots, (list, tuple)) or len(slots) < 3:
+        return [0x0F, 0x0F, 0x0F]
+    return [int(slots[0]), int(slots[1]), int(slots[2])]
+
+
 def build_palettes_inc(state):
     ubg = int(state.get("universal_bg", 0x21)) & 0x3F
     lines = [
@@ -206,8 +220,8 @@ def build_palettes_inc(state):
 
     def emit(group):
         for i in range(4):
-            slots = state[group][i]["slots"]
-            row = [ubg, int(slots[0]) & 0x3F, int(slots[1]) & 0x3F, int(slots[2]) & 0x3F]
+            s = _palette_slots(state, group, i)
+            row = [ubg, s[0] & 0x3F, s[1] & 0x3F, s[2] & 0x3F]
             lines.append("    " + ", ".join(f"0x{b:02X}" for b in row) + ",")
 
     emit("bg_palettes")
@@ -232,8 +246,8 @@ def build_palettes_asminc(state):
 
     def emit(group):
         for i in range(4):
-            slots = state[group][i]["slots"]
-            row = [ubg, int(slots[0]) & 0x3F, int(slots[1]) & 0x3F, int(slots[2]) & 0x3F]
+            s = _palette_slots(state, group, i)
+            row = [ubg, s[0] & 0x3F, s[1] & 0x3F, s[2] & 0x3F]
             rows.append(_hex_row(row))
 
     emit("bg_palettes")

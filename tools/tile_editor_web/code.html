@@ -19,6 +19,9 @@
 <!-- jsnes for in-browser play -->
 <script src="jsnes.min.js"></script>
 
+<!-- Shared localStorage layer (v2 projects catalog) -->
+<script src="storage.js"></script>
+
 <style>
 :root {
   --bg:        #14121f;
@@ -478,9 +481,13 @@ li.CodeMirror-hint-active {
 'use strict';
 
 // ================================================================
-// Shared storage (same keys as index.html / sprites.html)
+// Shared storage — uses the v2 projects catalog via storage.js so
+// sprites/backgrounds written by sprites.html / index.html are visible
+// here. Historically this page read the legacy key directly, which the
+// catalog migration wipes on first run of the other pages — meaning
+// state arrived here empty and the build crashed with KeyErrors on
+// missing sprite / palette data.
 // ================================================================
-const STORAGE_KEY = 'nes_tile_editor.current.v1';
 const RUNON_KEY   = 'playground.runon.v1';
 const MODE_KEY    = 'playground.codemode.v1';   // 'guided' | 'advanced'
 const LANG_KEY    = 'playground.codelang.v1';   // 'c' | 'asm'
@@ -495,23 +502,16 @@ const PLAYGROUND_DEFAULTS = PLAYGROUND_ORIGIN + '/default-main-s';
 const PLAYGROUND_LESSONS  = PLAYGROUND_ORIGIN + '/lessons';
 const PLAYGROUND_SNIPPETS = PLAYGROUND_ORIGIN + '/snippets';
 
-// Minimal load: we don't need the full state-validation rig that the other
-// pages ship, because this page only touches state.customMainC and
-// state.name.  Anything malformed is replaced by a blank shell; the
-// authoritative migration happens on the other pages when they save.
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw);
-    if (!s || typeof s !== 'object') return null;
-    return s;
-  } catch { return null; }
-}
-function saveState(s) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); return true; }
-  catch { return false; }
-}
+// Minimal migrate/validate: the authoritative versions live on
+// index.html / sprites.html. Here we just need storage.js to hand us
+// whatever state the other pages wrote, as-is.
+const Storage = createTileEditorStorage({
+  migrateState: (s) => s,
+  validateState: () => null,
+});
+
+function loadState() { return Storage.loadCurrent(); }
+function saveState(s) { return Storage.saveCurrent(s).ok; }
 
 let state = loadState() || { name: 'untitled', customMainC: null };
 if (typeof state.customMainC !== 'string') state.customMainC = null;
