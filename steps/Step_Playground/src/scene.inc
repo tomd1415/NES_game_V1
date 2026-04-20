@@ -4,8 +4,8 @@
 
 #define PLAYER_W 2
 #define PLAYER_H 2
-#define PLAYER_X 10
-#define PLAYER_Y 184
+#define PLAYER_X 0
+#define PLAYER_Y 179
 
 static const unsigned char player_tiles[4] = {
     0x12, 0xA2, 0x22, 0x23
@@ -28,13 +28,13 @@ static const unsigned char walk_attrs[4] = {
 static const unsigned char jump_tiles[1] = { 0 };
 static const unsigned char jump_attrs[1] = { 0 };
 
-#define NUM_STATIC_SPRITES 1
-static const unsigned char ss_x[1] = { 96 };
-static const unsigned char ss_y[1] = { 120 };
-static const unsigned char ss_w[1] = { 2 };
-static const unsigned char ss_h[1] = { 3 };
+#define NUM_STATIC_SPRITES 0
+static const unsigned char ss_x[1]      = { 0 };
+static const unsigned char ss_y[1]      = { 0 };
+static const unsigned char ss_w[1]      = { 0 };
+static const unsigned char ss_h[1]      = { 0 };
 static const unsigned char ss_offset[1] = { 0 };
-static const unsigned char ss_tiles[6] = { 0x7A, 0x7C, 0xA9, 0xAB, 0xC9, 0xCB };
-static const unsigned char ss_attrs[6] = { 0x00, 0x00, 0x00, 0x03, 0x00, 0x00 };
+static const unsigned char ss_tiles[1]  = { 0 };
+static const unsigned char ss_attrs[1]  = { 0 };
 
 #endif
