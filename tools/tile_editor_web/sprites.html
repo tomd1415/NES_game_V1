@@ -1509,6 +1509,11 @@ details.collapsible > summary .sub-count {
         <option value="npc">NPC</option>
         <option value="enemy">Enemy</option>
         <option value="item">Item</option>
+        <option value="tool">Tool</option>
+        <option value="powerup">Power-up</option>
+        <option value="pickup">Pickup</option>
+        <option value="projectile">Projectile</option>
+        <option value="decoration">Decoration</option>
         <option value="other">Other</option>
       </select>
     </label>
@@ -1519,11 +1524,16 @@ details.collapsible > summary .sub-count {
     </label>
     <label style="color:var(--muted);font-size:0.85em;display:flex;align-items:center;gap:4px">
       Role
-      <select id="sprite-role-input" title="Role of this sprite — used only in the editor UI, exported as a comment">
+      <select id="sprite-role-input" title="Role of this sprite — used by snippets (enemy, npc, etc.) and exported in the sprite metadata">
         <option value="player">Player</option>
         <option value="npc">NPC</option>
         <option value="enemy">Enemy</option>
         <option value="item">Item</option>
+        <option value="tool">Tool</option>
+        <option value="powerup">Power-up</option>
+        <option value="pickup">Pickup</option>
+        <option value="projectile">Projectile</option>
+        <option value="decoration">Decoration</option>
         <option value="other">Other</option>
       </select>
     </label>
@@ -2243,17 +2253,35 @@ function createSprite(name, w, h) {
   };
 }
 
-// Colour-blind-safe palette for role chips (ColorBrewer Dark2 subset).
+// Colour-blind-safe palette for role chips (ColorBrewer Dark2 + Paired).
 const ROLE_COLOURS = {
-  player: '#1b9e77',
-  npc:    '#7570b3',
-  enemy:  '#d95f02',
-  item:   '#e7298a',
-  other:  '#666666',
+  player:     '#1b9e77',
+  npc:        '#7570b3',
+  enemy:      '#d95f02',
+  item:       '#e7298a',
+  tool:       '#66a61e',
+  powerup:    '#e6ab02',
+  pickup:     '#a6761d',
+  projectile: '#ff7f00',
+  decoration: '#386cb0',
+  other:      '#666666',
 };
 const ROLE_LABELS = {
-  player: 'Player', npc: 'NPC', enemy: 'Enemy', item: 'Item', other: 'Other',
+  player: 'Player',
+  npc: 'NPC',
+  enemy: 'Enemy',
+  item: 'Item',
+  tool: 'Tool',
+  powerup: 'Power-up',
+  pickup: 'Pickup',
+  projectile: 'Projectile',
+  decoration: 'Decoration',
+  other: 'Other',
 };
+const ROLE_ORDER = [
+  'player', 'npc', 'enemy', 'item', 'tool', 'powerup',
+  'pickup', 'projectile', 'decoration', 'other',
+];
 function resizeSprite(sprite, w, h) {
   w = Math.max(1, Math.min(MAX_SPRITE_W, w));
   h = Math.max(1, Math.min(MAX_SPRITE_H, h));
@@ -2366,8 +2394,7 @@ function migrateState(s) {
     for (const sp of s.sprites) {
       if (!sp || typeof sp !== 'object') continue;
       sp.name ??= 'sprite';
-      if (typeof sp.role !== 'string' ||
-          !['player','npc','enemy','item','other'].includes(sp.role)) {
+      if (typeof sp.role !== 'string' || !ROLE_ORDER.includes(sp.role)) {
         sp.role = 'other';
       }
       sp.width = Math.max(1, Math.min(MAX_SPRITE_W, sp.width|0 || 2));

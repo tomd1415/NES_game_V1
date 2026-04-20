@@ -599,6 +599,17 @@ const HINT_SYMBOLS = [
   { text: 'ss_offset', d: 'Index into ss_tiles/ss_attrs for each static sprite.' },
   { text: 'ss_tiles',  d: 'Flat static-sprite tile table.' },
   { text: 'ss_attrs',  d: 'Flat static-sprite attribute-byte table.' },
+  { text: 'ss_role',   d: 'Role code per static sprite — use ROLE_ENEMY etc. to filter.' },
+  { text: 'ROLE_PLAYER',     d: 'Role code for Player-role sprites.' },
+  { text: 'ROLE_NPC',        d: 'Role code for NPC-role sprites — talk to on overlap.' },
+  { text: 'ROLE_ENEMY',      d: 'Role code for Enemy-role sprites — walk / chase snippets use this.' },
+  { text: 'ROLE_ITEM',       d: 'Role code for Item-role sprites.' },
+  { text: 'ROLE_TOOL',       d: 'Role code for Tool-role sprites (sword, torch, etc.).' },
+  { text: 'ROLE_POWERUP',    d: 'Role code for Power-up-role sprites.' },
+  { text: 'ROLE_PICKUP',     d: 'Role code for Pickup-role sprites (coin, key, etc.).' },
+  { text: 'ROLE_PROJECTILE', d: 'Role code for Projectile-role sprites (arrows, bullets).' },
+  { text: 'ROLE_DECORATION', d: 'Role code for Decoration-role sprites (purely visual).' },
+  { text: 'ROLE_OTHER',      d: 'Fallback role code.' },
   { text: 'palette_bytes', d: 'unsigned char[32] — 16 BG + 16 sprite colours.' },
   // NES MMIO macros the template defines
   { text: 'PPU_CTRL',   d: '$2000 — control bits (NMI enable, sprite table, etc.).' },
@@ -613,6 +624,8 @@ const HINT_SYMBOLS = [
   { text: 'waitvsync',       d: 'cc65 helper: block until the next vblank.' },
   { text: 'load_background', d: 'Copy the auto-generated CHR + nametable into the PPU.' },
   { text: 'read_controller', d: 'Returns a bitmask of held buttons (RIGHT=1, LEFT=2, DOWN=4, UP=8, START=0x10, SELECT=0x20, B=0x40, A=0x80).' },
+  { text: 'draw_text',       d: 'draw_text(row, col, tiles) — write a 0-terminated tile-index string to the nametable. Toggles PPU_MASK internally.' },
+  { text: 'clear_text_row',  d: 'clear_text_row(row, col, width) — erase a strip of the nametable back to tile 0.' },
 ];
 const C_KEYWORDS = [
   'if','else','while','for','do','switch','case','default','break','continue','return',

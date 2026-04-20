@@ -92,6 +92,44 @@ void write_palettes(void) {
     }
 }
 
+// Write a zero-terminated string of tile indices to the nametable at
+// (row, col). Briefly turns rendering off and back on so the PPU write
+// does not corrupt the active frame. Used by the NPC-dialogue snippet.
+void draw_text(unsigned char row, unsigned char col,
+               const unsigned char *text) {
+    unsigned int addr;
+    unsigned char j;
+    waitvsync();
+    PPU_MASK = 0;
+    addr = 0x2000 + ((unsigned int)row * 32) + col;
+    PPU_ADDR = (unsigned char)(addr >> 8);
+    PPU_ADDR = (unsigned char)(addr & 0xFF);
+    j = 0;
+    while (text[j] != 0x00) {
+        PPU_DATA = text[j];
+        j++;
+    }
+    PPU_SCROLL = 0;
+    PPU_SCROLL = 0;
+    PPU_MASK = 0x1E;
+}
+
+void clear_text_row(unsigned char row, unsigned char col, unsigned char width) {
+    unsigned int addr;
+    unsigned char j;
+    waitvsync();
+    PPU_MASK = 0;
+    addr = 0x2000 + ((unsigned int)row * 32) + col;
+    PPU_ADDR = (unsigned char)(addr >> 8);
+    PPU_ADDR = (unsigned char)(addr & 0xFF);
+    for (j = 0; j < width; j++) {
+        PPU_DATA = 0x00;
+    }
+    PPU_SCROLL = 0;
+    PPU_SCROLL = 0;
+    PPU_MASK = 0x1E;
+}
+
 void main(void) {
     waitvsync();
     PPU_MASK = 0;

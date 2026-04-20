@@ -44,10 +44,10 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-13 | Modes              | Distinct modes (paint tile / set palette) on both pages           | [new]     |
 | 2026-04-13 | Emulator           | Offline FCEUX sometimes runs a stale build; browser one is fresh  | [new]     |
 | 2026-04-13 | Help               | Getting-started videos and animations                             | [new]     |
-| 2026-04-20 | Gameplay snippets  | Enemy sprite that moves around as a bad guy                       | [new]     |
-| 2026-04-20 | Gameplay snippets  | NPC dialogue snippet                                              | [new]     |
-| 2026-04-20 | Gameplay snippets  | Follower sprite that tracks the player                            | [new]     |
-| 2026-04-20 | Sprite UX          | More sprite role labels (tools, power-ups) for future snippets    | [new]     |
+| 2026-04-20 | Gameplay snippets  | Enemy sprite that moves around as a bad guy                       | [done]    |
+| 2026-04-20 | Gameplay snippets  | NPC dialogue snippet                                              | [done]    |
+| 2026-04-20 | Gameplay snippets  | Follower sprite that tracks the player                            | [done]    |
+| 2026-04-20 | Sprite UX          | More sprite role labels (tools, power-ups) for future snippets    | [done]    |
 | 2026-04-20 | Sprite UX          | Make the Animation panel easier to find and use                   | [new]     |
 | 2026-04-20 | Drawing tools      | Fill, shape select (rect/circle), resize regions, shape delete    | [new]     |
 | 2026-04-20 | Palette UX         | Pick colours for palettes more easily                             | [new]     |
@@ -542,20 +542,29 @@ shipped 2026-04-20 — see [changelog-implemented.md](changelog-implemented.md#s
 
 Addresses the three 2026-04-20 gameplay asks in one coherent pass.
 
-- **7.1 Extended sprite roles (S).** Add `tool`, `powerup`, `pickup`,
-  `projectile`, `decoration` to `ROLE_LABELS` / `ROLE_COLOURS` on
-  [sprites.html](tools/tile_editor_web/sprites.html). Export the role
-  in the generated `.sprites.json`.
-- **7.2 Enemy walker + chaser snippets (M).** Drop into
-  [snippets/](snippets/) with the standard `/*! SNIPPET {json} */`
-  header; `regions: ["magic_button"]`. Walker keys off
-  `role === 'enemy'`; chaser steers towards `(px, py)`.
-- **7.3 Follower snippet (S).** Records last N player positions,
-  renders a chosen sprite N frames behind.
-- **7.4 NPC dialogue snippet (M).** Needs a small `draw_text(x, y,
-  "...")` helper in [src/](src/). Snippet exposes the dialogue
-  string as a top-of-body knob so pupils can edit without fighting
-  C quoting.
+- **7.1 Extended sprite roles (S).** [done] Five new roles
+  (`tool`, `powerup`, `pickup`, `projectile`, `decoration`) added to
+  both role selectors on the Sprites page. `playground_server.py`
+  emits `#define ROLE_*` plus an `ss_role[]` byte table in
+  `scene.inc` / `scene.asminc`; snippets filter by role via those
+  symbols. See `changelog-implemented.md`.
+- **7.2 Enemy walker + chaser snippets (M).** [done]
+  `snippets/enemy-walker.c` paces every ROLE_ENEMY sprite along the
+  X axis, flipping direction at the screen edge.
+  `snippets/enemy-chaser.c` nudges each ROLE_ENEMY sprite one pixel
+  towards `(px, py)` per frame. `ss_x` / `ss_y` are now emitted as
+  mutable arrays (cc65 DATA segment, ROM→RAM copy at startup) so
+  snippets can write to them directly.
+- **7.3 Follower snippet (S).** [done] `snippets/follower-npc.c`
+  records the last 32 `(px, py)` samples in a ring buffer and places
+  the first ROLE_NPC sprite at the tail entry. `FOLLOW_LAG` macro
+  controls the gap.
+- **7.4 NPC dialogue snippet (M).** [done] `draw_text()` /
+  `clear_text_row()` helpers added to the Step_Playground `main.c`
+  template — each call wraps its PPU writes in a `waitvsync()` +
+  `PPU_MASK = 0` window. `snippets/npc-dialogue.c` shows a
+  pupil-editable tile-index string when the player touches the first
+  ROLE_NPC sprite and presses B (press B again to hide).
 
 ### Sprint 8 — Drawing, palette & animation UX (effort: L)
 

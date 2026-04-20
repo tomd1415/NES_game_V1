@@ -136,6 +136,56 @@ was unnecessary, and what was deferred.
   `rebuild-run` target and proper `.inc`/`.chr`/`.nam`
   prerequisites, so no Makefile changes were needed.
 
+### Sprint 7 — 2026-04-20 snippet library expansion
+
+- **7.1 Extended sprite roles.** Five new role options —
+  `tool`, `powerup`, `pickup`, `projectile`, `decoration` — joined
+  the existing `player` / `npc` / `enemy` / `item` / `other` set in
+  [tools/tile_editor_web/sprites.html](tools/tile_editor_web/sprites.html)
+  (both `ROLE_COLOURS` / `ROLE_LABELS` maps, the filter `<select>`,
+  the per-sprite role `<select>`, and the state migrator). Colour
+  coding now drives ten distinct hues in the scene-sprite list.
+  `playground_server.py` gained a `ROLE_CODES` dict plus
+  `_role_code(sp)` helper, emits `#define ROLE_PLAYER 0` …
+  `ROLE_OTHER 9` into `scene.inc` and `.define ROLE_*` into
+  `scene.asminc`, and appends an `ss_role[]` byte table so snippets
+  can filter by role. The zero-sprite stub and the
+  [code.html](tools/tile_editor_web/code.html) `HINT_SYMBOLS`
+  autocomplete list both pick up the new identifiers.
+- **7.2 Enemy walker + chaser snippets.** New
+  [snippets/enemy-walker.c](snippets/enemy-walker.c) paces every
+  ROLE_ENEMY scene sprite left-right (with per-sprite direction in
+  a static `enemy_dir[16]` ring) and flips at the screen edge.
+  [snippets/enemy-chaser.c](snippets/enemy-chaser.c) nudges each
+  ROLE_ENEMY sprite one pixel towards `(px, py)` per frame. For
+  these to work, `playground_server.build_scene_inc` now emits
+  `ss_x` / `ss_y` as mutable `static unsigned char` arrays (all
+  other `ss_*` tables stay `static const`). The cc65 linker's DATA
+  segment copies the ROM initialisers into RAM at startup, so the
+  snippets can freely write to the arrays and existing read-only
+  snippets like `solid-obstacles` keep working.
+- **7.3 Follower snippet.**
+  [snippets/follower-npc.c](snippets/follower-npc.c) keeps the
+  last 32 `(px, py)` samples in a static ring buffer and snaps the
+  first ROLE_NPC sprite to the tail entry. Pupils tweak
+  `#define FOLLOW_LAG 24` for a closer or more distant trail.
+  `trail_primed` guards the first `FOLLOW_LAG` frames so the
+  follower doesn't teleport through garbage.
+- **7.4 NPC dialogue snippet + `draw_text` helper.**
+  [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+  now defines `draw_text(row, col, text)` and
+  `clear_text_row(row, col, width)`. Each wraps its PPU writes in
+  its own `waitvsync()` + `PPU_MASK = 0` window, so they are safe
+  to call from the `magic_button` region (which runs before the
+  main vblank). The helpers are exposed to autocomplete via
+  `HINT_SYMBOLS`.
+  [snippets/npc-dialogue.c](snippets/npc-dialogue.c) detects when
+  the player overlaps the first ROLE_NPC scene sprite, and on a B
+  edge toggles the dialogue text on or off. The string is a
+  zero-terminated array of CHR tile indices exposed at the top of
+  the snippet body so pupils can edit it without wrestling with
+  string literals.
+
 ---
 
 ## Not done / deferred
