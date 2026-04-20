@@ -877,10 +877,17 @@ kbd {
       <h2>Tileset</h2>
       <span id="tileset-stats"></span>
     </div>
-    <canvas id="tileset-canvas" width="384" height="384"></canvas>
+    <div class="tileset-toolbar" style="display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+      <label title="Drag a tile onto another tile to swap their positions. Every nametable cell that pointed at either tile is updated so the background looks the same.">
+        <input type="checkbox" id="tileset-move-mode"> 🔀 Move tile (drag to swap)
+      </label>
+    </div>
+    <canvas id="tileset-canvas" width="384" height="384"
+      title="Click a tile to edit it. Turn on 🔀 Move tile to drag tiles around and swap their slots."></canvas>
     <div class="tileset-hints">
       Click a tile to edit it. Empty tiles show the hex index. Use
       <kbd>[</kbd> and <kbd>]</kbd> to step through.
+      Tick <b>🔀 Move tile</b> to drag a tile onto another and swap their slots.
     </div>
   </section>
 
@@ -2070,11 +2077,53 @@ let floatingTilesetZoom = 20;
 let tileClipboard = null;
 let showFineTileGrid = localStorage.getItem('nt-fine-grid') === '1';
 
+// Active source tile while dragging in the tileset with "Move tile" on.
+let tileDragSrc = -1;
+
 function clonePixels(p) {
   return p.map(row => row.slice());
 }
-function findNextEmptyTileSlot() {
-  for (let i = 0; i < NUM_TILES; i++) {
+
+// Swap the contents of two background-tile slots and rewrite every
+// nametable cell in every named background that pointed at either tile,
+// so the painted backgrounds stay visually identical — only the slot
+// numbers change. Lets the pupil regroup tiles in the tileset.
+function swapBgTiles(a, b) {
+  if (a === b) return false;
+  if (a < 0 || b < 0 || a >= NUM_TILES || b >= NUM_TILES) return false;
+  pushUndo();
+  const tmp = state.bg_tiles[a];
+  state.bg_tiles[a] = state.bg_tiles[b];
+  state.bg_tiles[b] = tmp;
+  const bgs = Array.isArray(state.backgrounds) ? state.backgrounds : [];
+  for (const bg of bgs) {
+    const nt = bg && bg.nametable;
+    if (!Array.isArray(nt)) continue;
+    for (let y = 0; y < nt.length; y++) {
+      const row = nt[y];
+      if (!Array.isArray(row)) continue;
+      for (let x = 0; x < row.length; x++) {
+        const cell = row[x];
+        if (!cell) continue;
+        if (cell.tile === a) cell.tile = b;
+        else if (cell.tile === b) cell.tile = a;
+      }
+    }
+  }
+  if (selectedTileIdx === a) selectedTileIdx = b;
+  else if (selectedTileIdx === b) selectedTileIdx = a;
+  markDirty();
+  return true;
+}
+function findNextEmptyTileSlot(startIdx) {
+  // Prefer slots after startIdx so duplicates land to the right/below
+  // the source. Wraps back to 0 if nothing is free after startIdx.
+  const start = Math.max(0, startIdx || 0);
+  for (let i = start; i < NUM_TILES; i++) {
+    const t = state.bg_tiles[i];
+    if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
+  }
+  for (let i = 0; i < start; i++) {
     const t = state.bg_tiles[i];
     if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
   }
@@ -2931,13 +2980,54 @@ function init() {
 
   // --- Tileset canvas ---
   const ts = document.getElementById('tileset-canvas');
-  ts.addEventListener('click', e => {
+  function tilesetCoord(e) {
     const rect = ts.getBoundingClientRect();
     const cell = ts.width / 16;
     const x = Math.floor((e.clientX - rect.left) / cell);
     const y = Math.floor((e.clientY - rect.top) / cell);
-    if (x < 0 || y < 0 || x > 15 || y > 15) return;
-    selectedTileIdx = y * 16 + x;
+    if (x < 0 || y < 0 || x > 15 || y > 15) return -1;
+    return y * 16 + x;
+  }
+  const moveModeEl = document.getElementById('tileset-move-mode');
+  function isTileMoveMode() { return !!(moveModeEl && moveModeEl.checked); }
+  ts.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    if (!isTileMoveMode()) return;
+    const idx = tilesetCoord(e);
+    if (idx < 0) return;
+    tileDragSrc = idx;
+    ts.style.cursor = 'grabbing';
+  });
+  window.addEventListener('mouseup', () => {
+    if (tileDragSrc >= 0) ts.style.cursor = '';
+  });
+  ts.addEventListener('mouseup', e => {
+    if (tileDragSrc < 0) return;
+    const src = tileDragSrc;
+    tileDragSrc = -1;
+    ts.style.cursor = '';
+    if (!isTileMoveMode()) return;
+    const dst = tilesetCoord(e);
+    if (dst < 0 || dst === src) return;
+    if (swapBgTiles(src, dst)) {
+      renderTileset();
+      renderTileEditor();
+      renderNametable();
+      refreshColourButtons();
+      if (typeof setStatus === 'function') {
+        const hs = '0x' + src.toString(16).padStart(2, '0').toUpperCase();
+        const hd = '0x' + dst.toString(16).padStart(2, '0').toUpperCase();
+        setStatus('ok', '● Swapped tile ' + hs + ' ↔ ' + hd);
+      }
+    }
+  });
+  ts.addEventListener('click', e => {
+    // While move-mode is on, the swap handler runs on mouseup; a plain
+    // click would otherwise also re-select the drop target as the edit tile.
+    if (isTileMoveMode()) return;
+    const idx = tilesetCoord(e);
+    if (idx < 0) return;
+    selectedTileIdx = idx;
     renderTileset();
     renderTileEditor();
     refreshColourButtons();
@@ -3007,7 +3097,7 @@ function init() {
     renderNametable();
   });
   document.getElementById('btn-duplicate').addEventListener('click', () => {
-    const dstIdx = findNextEmptyTileSlot();
+    const dstIdx = findNextEmptyTileSlot(selectedTileIdx + 1);
     if (dstIdx < 0) {
       alert('No empty tile slots left — all 256 CHR tiles are in use.\n\n' +
             'Clear a tile you no longer need, then try again.');

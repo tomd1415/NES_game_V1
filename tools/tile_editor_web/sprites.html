@@ -1716,10 +1716,17 @@ details.collapsible > summary .sub-count {
   <!-- ============ Right: shared tileset ============ -->
   <section class="panel">
     <h2>Shared tileset</h2>
-    <canvas id="tileset-canvas" width="384" height="384" title="Left-click: put this tile into the selected cell. Right-click: jump to the first sprite that already uses it."></canvas>
+    <div class="tileset-toolbar" style="display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+      <label title="Drag a tile onto another tile to swap their positions. Any sprite cell, animation frame or nametable cell that pointed at either tile is updated to follow.">
+        <input type="checkbox" id="tileset-move-mode"> 🔀 Move tile (drag to swap)
+      </label>
+    </div>
+    <canvas id="tileset-canvas" width="384" height="384" title="Left-click: put this tile into the selected cell. Right-click: jump to the first sprite that already uses it. Shift-click: edit this tile on its own. Turn on 🔀 Move tile to drag tiles around."></canvas>
     <div class="tileset-hints">
       <b>Left-click</b> a tile to put it into the selected cell.
       <b>Right-click</b> to jump to the first sprite that already uses it.
+      <b>Shift-click</b> to edit just this tile, no sprite attached.
+      Tick <b>🔀 Move tile</b> to drag a tile onto another and swap their slots.
       Use <kbd>[</kbd> / <kbd>]</kbd> to step through, <kbd>Enter</kbd> to use.
     </div>
     <div class="tile-state-legend" aria-label="Tile colour-coding legend">
@@ -2491,6 +2498,13 @@ let selectedTileIdx = 0;
 // and flip flags belong to the sprite cell, not the raw CHR tile.
 let tileClipboard = null;
 
+// When non-null, the tile editor edits state.sprite_tiles[standaloneTile]
+// directly — entered by Shift-clicking a tile in the tileset picker.
+let standaloneTile = null;
+
+// While dragging a tile in the tileset with "Move tile" on.
+let tileDragSrc = -1;
+
 // 'browse' (default, safe) or 'paint' (pixels are editable).
 let editMode = localStorage.getItem('sprite-edit-mode') === 'paint' ? 'paint' : 'browse';
 
@@ -2707,7 +2721,7 @@ function duplicateTileForCurrentCell() {
     setStatus('warn', '● Put a tile here before making a copy');
     return false;
   }
-  const dst = findNextEmptyTileSlot();
+  const dst = findNextEmptyTileSlot(cell.tile + 1);
   if (dst < 0) {
     alert('No empty tile slots left — clear one first.');
     return false;
@@ -2783,14 +2797,53 @@ function findFirstSpriteUsingTile(tileIdx) {
   return null;
 }
 
-function findNextEmptyTileSlot() {
-  for (let i = 0; i < NUM_TILES; i++) {
+// Find the first unused tile slot, preferring positions *after* `startIdx`
+// so a duplicate lands to the right/below the source instead of back-filling
+// an earlier empty slot. Wraps to the beginning if nothing free is found
+// after startIdx. Default startIdx of 0 preserves the original behaviour
+// for callers that don't care about placement.
+function findNextEmptyTileSlot(startIdx) {
+  const start = Math.max(0, startIdx || 0);
+  for (let i = start; i < NUM_TILES; i++) {
+    const t = state.sprite_tiles[i];
+    if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
+  }
+  for (let i = 0; i < start; i++) {
     const t = state.sprite_tiles[i];
     if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
   }
   return -1;
 }
 function clonePixels(p) { return p.map(row => row.slice()); }
+
+// Swap the contents of two sprite-tile slots and rewrite every sprite cell
+// that pointed at either tile so the visible art doesn't change — only the
+// slot numbers do. Lets the pupil group related tiles together in the
+// tileset. Returns true if a swap happened.
+function swapSpriteTiles(a, b) {
+  if (a === b) return false;
+  if (a < 0 || b < 0 || a >= NUM_TILES || b >= NUM_TILES) return false;
+  pushUndo();
+  const tmp = state.sprite_tiles[a];
+  state.sprite_tiles[a] = state.sprite_tiles[b];
+  state.sprite_tiles[b] = tmp;
+  for (const sp of state.sprites) {
+    for (let r = 0; r < sp.height; r++) {
+      for (let c = 0; c < sp.width; c++) {
+        const cl = sp.cells[r][c];
+        if (cl.empty) continue;
+        if (cl.tile === a) cl.tile = b;
+        else if (cl.tile === b) cl.tile = a;
+      }
+    }
+  }
+  if (selectedTileIdx === a) selectedTileIdx = b;
+  else if (selectedTileIdx === b) selectedTileIdx = a;
+  if (standaloneTile === a) standaloneTile = b;
+  else if (standaloneTile === b) standaloneTile = a;
+  markDirty();
+  return true;
+}
 
 // ================================================================
 // Renderers
@@ -2891,6 +2944,7 @@ function renderSpriteList() {
 }
 
 function selectSprite(idx) {
+  if (standaloneTile !== null) standaloneTile = null;
   selectedSpriteIdx = idx;
   const sp = currentSprite();
   if (sp) {
@@ -3387,6 +3441,7 @@ function renderSpriteMinimap() {
         }
       }
       cv.addEventListener('click', () => {
+        if (standaloneTile !== null) standaloneTile = null;
         selectedCell = { r, c };
         renderSpriteCanvas();
         renderSpriteMinimap();
@@ -3904,9 +3959,12 @@ function renderTileEditor() {
   const canvas = document.getElementById('tile-canvas');
   const ctx = canvas.getContext('2d');
   const cell = currentCell();
-  const tileIdx = cell ? cell.tile : 0;
+  const standalone = standaloneTile !== null;
+  const tileIdx = standalone
+    ? standaloneTile
+    : (cell ? cell.tile : 0);
   const tile = state.sprite_tiles[tileIdx];
-  const pal = activeCellPalette();
+  const pal = standalone ? spritePaletteFor(selectedPaletteIdx) : activeCellPalette();
   const size = canvas.width;
   const cellPx = size / 8;
 
@@ -3941,16 +3999,27 @@ function renderTileEditor() {
   document.getElementById('editing-tile-idx').textContent =
     '0x' + tileIdx.toString(16).padStart(2, '0').toUpperCase();
 
-  const uses = findTileUsage(tileIdx, selectedSpriteIdx, selectedCell.r, selectedCell.c);
   const warn = document.getElementById('shared-warn-inline');
-  if (!cell) {
-    warn.textContent = 'No cell selected';
-  } else if (uses.length === 0) {
-    warn.textContent = '✓ unique to this cell — safe to edit';
-    warn.style.color = 'var(--good)';
+  if (standalone) {
+    const allUses = findTileUsage(tileIdx);
+    if (allUses.length === 0) {
+      warn.textContent = '✏️ Editing this tile on its own — not yet used by any sprite';
+      warn.style.color = 'var(--muted)';
+    } else {
+      warn.textContent = '✏️ Editing this tile on its own — appears in ' + allUses.length + ' sprite cell' + (allUses.length === 1 ? '' : 's');
+      warn.style.color = 'var(--warn)';
+    }
   } else {
-    warn.textContent = '⚠ shared with ' + uses.length + ' other place' + (uses.length === 1 ? '' : 's') + ' — edits will propagate';
-    warn.style.color = 'var(--warn)';
+    const uses = findTileUsage(tileIdx, selectedSpriteIdx, selectedCell.r, selectedCell.c);
+    if (!cell) {
+      warn.textContent = 'No cell selected';
+    } else if (uses.length === 0) {
+      warn.textContent = '✓ unique to this cell — safe to edit';
+      warn.style.color = 'var(--good)';
+    } else {
+      warn.textContent = '⚠ shared with ' + uses.length + ' other place' + (uses.length === 1 ? '' : 's') + ' — edits will propagate';
+      warn.style.color = 'var(--warn)';
+    }
   }
   refreshColourButtons();
 }
@@ -4238,6 +4307,26 @@ function tileCanvasCell(evt) {
 }
 
 function teApply(evt, initial) {
+  if (standaloneTile !== null) {
+    const { x, y } = tileCanvasCell(evt);
+    if (x < 0 || x > 7 || y < 0 || y > 7) return;
+    const pick = evt.shiftKey || evt.button === 2;
+    if (pick) {
+      currentColour = state.sprite_tiles[standaloneTile].pixels[y][x];
+      refreshColourButtons();
+      return;
+    }
+    if (initial) pushUndo();
+    if (state.sprite_tiles[standaloneTile].pixels[y][x] !== currentColour) {
+      state.sprite_tiles[standaloneTile].pixels[y][x] = currentColour;
+      markDirty();
+      renderTileEditor();
+      renderTileset();
+      renderSpriteCanvas();
+      renderSpriteList();
+    }
+    return;
+  }
   let cell = currentCell();
   if (!cell) return;
   let undoAlreadyPushed = false;
@@ -4329,7 +4418,7 @@ function openSharedTileDialog(tileIdx, uses, cb) {
   const onCancel = () => { cleanup(); cb('cancel'); };
   const onEverywhere = () => { cleanup(); cb('everywhere'); };
   const onDup = () => {
-    const dst = findNextEmptyTileSlot();
+    const dst = findNextEmptyTileSlot(tileIdx + 1);
     if (dst < 0) {
       alert('No empty tile slots left — all 256 CHR tiles are in use.\n\n'
           + 'Free a slot first (on the Backgrounds page or by clearing a tile), then try again.');
@@ -5974,6 +6063,8 @@ function init() {
     if (!currentSprite()) return;
     const pos = spriteCanvasPixel(e);
     if (!pos) return;
+    // Any click on a sprite cell leaves standalone-tile mode.
+    if (standaloneTile !== null) standaloneTile = null;
     // Always move the selection to the clicked cell.
     if (pos.cellR !== selectedCell.r || pos.cellC !== selectedCell.c) {
       selectedCell = { r: pos.cellR, c: pos.cellC };
@@ -6140,15 +6231,62 @@ function init() {
     if (x < 0 || y < 0 || x > 15 || y > 15) return -1;
     return y * 16 + x;
   }
-  ts.addEventListener('click', e => {
+  const moveModeEl = document.getElementById('tileset-move-mode');
+  function isTileMoveMode() { return !!(moveModeEl && moveModeEl.checked); }
+  ts.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    if (!isTileMoveMode()) return;
     const idx = tilesetCoord(e);
     if (idx < 0) return;
+    tileDragSrc = idx;
+    ts.style.cursor = 'grabbing';
+  });
+  window.addEventListener('mouseup', () => {
+    if (tileDragSrc >= 0) ts.style.cursor = '';
+  });
+  ts.addEventListener('mouseup', e => {
+    if (tileDragSrc < 0) return;
+    const src = tileDragSrc;
+    tileDragSrc = -1;
+    ts.style.cursor = '';
+    if (!isTileMoveMode()) return;
+    const dst = tilesetCoord(e);
+    if (dst < 0 || dst === src) return;
+    if (swapSpriteTiles(src, dst)) {
+      renderAll();
+      const hs = '0x' + src.toString(16).padStart(2, '0').toUpperCase();
+      const hd = '0x' + dst.toString(16).padStart(2, '0').toUpperCase();
+      setStatus('ok', '● Swapped tile ' + hs + ' ↔ ' + hd);
+    }
+  });
+  ts.addEventListener('click', e => {
+    // Move-mode handles everything via mousedown/mouseup — a plain click
+    // would otherwise assign-to-cell the instant the drag ends.
+    if (isTileMoveMode()) return;
+    const idx = tilesetCoord(e);
+    if (idx < 0) return;
+    if (e.shiftKey) {
+      standaloneTile = idx;
+      selectedTileIdx = idx;
+      renderSpriteCanvas();
+      renderCellInspector();
+      renderTileset();
+      renderTileEditor();
+      renderPalettes();
+      renderSpriteList();
+      refreshColourButtons();
+      const hex = '0x' + idx.toString(16).padStart(2, '0').toUpperCase();
+      setStatus('ok', '● Editing tile ' + hex + ' on its own — click a sprite cell to stop');
+      return;
+    }
+    if (standaloneTile !== null) standaloneTile = null;
     selectTilesetTile(idx, { assign: true });
   });
   ts.addEventListener('contextmenu', e => {
     e.preventDefault();
     const idx = tilesetCoord(e);
     if (idx < 0) return;
+    if (standaloneTile !== null) standaloneTile = null;
     selectTilesetTile(idx, { jumpToUser: true });
   });
   const tilesetBaseTitle = ts.getAttribute('title') || '';
