@@ -2628,13 +2628,41 @@ function getTileUsage() {
   return map;
 }
 
+// Fill a freshly-created sprite's empty cells with a contiguous run of
+// unused tile indices. Returns the starting index (> 0) on success, or
+// -1 if no run fits — in which case the cells stay empty and the caller
+// can warn the pupil. Used by both "New sprite" and the starter hero
+// seeded with each new project, so a first-time pupil can paint straight
+// away without first picking a tile from the shared tileset.
+// `s` lets callers target a state other than the global `state` (e.g. a
+// freshly-built `fresh` that has not been swapped in yet).
+function assignFreshTiles(sp, s) {
+  const target = s || state;
+  const w = sp.width, h = sp.height;
+  const start = findFreeTileRun(w * h, target);
+  if (start <= 0) return -1;
+  let t = start;
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (!sp.cells[r][c].empty) continue;
+      sp.cells[r][c].tile = t;
+      sp.cells[r][c].empty = false;
+      sp.cells[r][c].palette = 0;
+      t++;
+    }
+  }
+  return start;
+}
+
 // First run of `count` consecutive tile indices with no pixels, starting at 1.
-// Returns the starting index, or -1 if no run fits.
-function findFreeTileRun(count) {
+// Returns the starting index, or -1 if no run fits. `s` lets callers
+// target a state other than the global `state`.
+function findFreeTileRun(count, s) {
+  const src = s || state;
   if (count <= 0) return 1;
   let run = 0, runStart = -1;
   for (let i = 1; i < NUM_TILES; i++) {
-    const t = state.sprite_tiles[i];
+    const t = src.sprite_tiles[i];
     const empty = !t.pixels.some(r => r.some(v => v !== 0));
     if (empty) {
       if (run === 0) runStart = i;
@@ -5676,8 +5704,12 @@ function init() {
     fresh.name = name;
     fresh.template = template;
     // Seed a starter hero so the pupil has something to paint on day one.
+    // Auto-allocate tiles into its cells so the sprite's squares are already
+    // "selected" and paintable — the pupil does not have to hunt a tile out
+    // of the shared tileset before making their first mark.
     fresh.sprites = [createSprite('hero', 2, 2)];
     fresh.sprites[0].role = 'player';
+    assignFreshTiles(fresh.sprites[0], fresh);
     if (template === 'topdown') {
       // Mark as top-down so the Code page / playground can later pick a
       // 4-way control scheme instead of gravity+jump.
@@ -5773,15 +5805,8 @@ function init() {
     const name = 'sprite_' + (state.sprites.length + 1);
     const w = 2, h = 2;
     const sp = createSprite(name, w, h);
-    const start = findFreeTileRun(w * h);
+    const start = assignFreshTiles(sp);
     if (start > 0) {
-      let t = start;
-      for (let r = 0; r < h; r++) {
-        for (let c = 0; c < w; c++) {
-          sp.cells[r][c].tile = t++;
-          sp.cells[r][c].empty = false;
-        }
-      }
       setStatus('ok', '● Auto-picked tiles 0x' +
         start.toString(16).padStart(2,'0').toUpperCase() + '–0x' +
         (start + w*h - 1).toString(16).padStart(2,'0').toUpperCase() +
@@ -6381,9 +6406,12 @@ function init() {
   lastSaveTs = Date.now();
 
   // If the project has no sprites yet, create a starter so the pupil
-  // has something to look at.
+  // has something to look at. Auto-allocate its cells' tile indices too
+  // so the squares are immediately paintable (no "pick a tile first" step).
   if (state.sprites.length === 0) {
-    state.sprites.push(createSprite('hero', 2, 2));
+    const hero = createSprite('hero', 2, 2);
+    assignFreshTiles(hero);
+    state.sprites.push(hero);
     selectedSpriteIdx = 0;
     markDirty();
     renderAll();
