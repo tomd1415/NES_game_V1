@@ -131,9 +131,15 @@ def build_chr(state):
     if "sprite_tiles" in state and "bg_tiles" in state:
         return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
              + _encode_pool(state["bg_tiles"], "bg_tiles")
-    # Legacy single pool: shared across both tables.
-    legacy = _encode_pool(state["tiles"], "tiles")
-    return legacy * 2
+    if "tiles" in state:
+        # Legacy single pool: shared across both tables.
+        legacy = _encode_pool(state["tiles"], "tiles")
+        return legacy * 2
+    # No tile data yet (e.g. pupil opened the Code page before visiting
+    # Sprites/Backgrounds). Fall back to blank CHR so the build can still
+    # proceed; they'll hit the friendlier "No sprites defined yet" message
+    # from build_scene_inc if their code path needs sprite data.
+    return bytes(8192)
 
 
 def _active_nametable(state):
