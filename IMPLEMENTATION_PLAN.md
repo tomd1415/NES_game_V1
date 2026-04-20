@@ -1,5 +1,13 @@
 # Implementation Plan — Pupil Feedback Response
 
+> **Status (2026-04-20):** Sprints 1, 3, and most of Sprint 4 have
+> shipped — see [changelog-implemented.md](changelog-implemented.md).
+> Remaining work from this plan *plus* the second pupil-testing round
+> has been re-scoped into Sprints 6–9 at the bottom of
+> [PUPIL_FEEDBACK.md](PUPIL_FEEDBACK.md#proposed-roadmap--next-sprints).
+> Treat the Sprint 1–5 text below as the historical record; consult the
+> roadmap in PUPIL_FEEDBACK.md for what's next.
+
 Companion to [PUPIL_FEEDBACK.md](PUPIL_FEEDBACK.md). Five sprints, ordered
 by "what hurts pupils most, right now". Each sprint is independently
 shippable: land it, watch the next pupil session, adjust.

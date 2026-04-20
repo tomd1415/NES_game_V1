@@ -30,20 +30,31 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-13 | Tileset management | Would like a "start fresh" tileset                                | [new]     |
 | 2026-04-13 | Tileset management | Want to save and revisit different tilesets                       | [new]     |
 | 2026-04-13 | Tileset management | Project folders for different games                               | [new]     |
-| 2026-04-13 | Tileset management | Mark tiles in use on the tileset; per-sprite outline colour       | [new]     |
-| 2026-04-13 | Tileset management | See which tiles a selected sprite uses; flag shared tiles         | [new]     |
+| 2026-04-13 | Tileset management | Mark tiles in use on the tileset; per-sprite outline colour       | [done]    |
+| 2026-04-13 | Tileset management | See which tiles a selected sprite uses; flag shared tiles         | [done]    |
 | 2026-04-13 | Project templates  | Choice of starter demo: platformer vs Pac-man/Pokémon top-down    | [new]     |
-| 2026-04-13 | Sprite UX          | Easier way to tag sprites by role (player, npc, enemy, etc.)      | [new]     |
-| 2026-04-13 | Sprite UX          | Active palette swatches at top of sprite editor, click to pick    | [new]     |
-| 2026-04-13 | Sprite UX          | Per-tile palette selector (compact, not in the way)               | [new]     |
+| 2026-04-13 | Sprite UX          | Easier way to tag sprites by role (player, npc, enemy, etc.)      | [done]    |
+| 2026-04-13 | Sprite UX          | Active palette swatches at top of sprite editor, click to pick    | [done]    |
+| 2026-04-13 | Sprite UX          | Per-tile palette selector (compact, not in the way)               | [done]    |
 | 2026-04-13 | Background UX      | Changing palette often changes the tile too — needs to be clear   | [new]     |
 | 2026-04-13 | Background UX      | Warn that tile 0 is the background; allow changing BG colour      | [new]     |
 | 2026-04-13 | Background UX      | Easier per-section palette change                                 | [new]     |
 | 2026-04-13 | Grid               | Thicker/darker grid lines, with coarser and finer grid options    | [new]     |
-| 2026-04-13 | Sprite UX          | New sprite should auto-pick next empty tiles; easier replace flow | [new]     |
+| 2026-04-13 | Sprite UX          | New sprite should auto-pick next empty tiles; easier replace flow | [done]    |
 | 2026-04-13 | Modes              | Distinct modes (paint tile / set palette) on both pages           | [new]     |
 | 2026-04-13 | Emulator           | Offline FCEUX sometimes runs a stale build; browser one is fresh  | [new]     |
 | 2026-04-13 | Help               | Getting-started videos and animations                             | [new]     |
+| 2026-04-20 | Gameplay snippets  | Enemy sprite that moves around as a bad guy                       | [new]     |
+| 2026-04-20 | Gameplay snippets  | NPC dialogue snippet                                              | [new]     |
+| 2026-04-20 | Gameplay snippets  | Follower sprite that tracks the player                            | [new]     |
+| 2026-04-20 | Sprite UX          | More sprite role labels (tools, power-ups) for future snippets    | [new]     |
+| 2026-04-20 | Sprite UX          | Make the Animation panel easier to find and use                   | [new]     |
+| 2026-04-20 | Drawing tools      | Fill, shape select (rect/circle), resize regions, shape delete    | [new]     |
+| 2026-04-20 | Palette UX         | Pick colours for palettes more easily                             | [new]     |
+| 2026-04-20 | Scenes             | Trigger next-scene load (uses existing multi-background support)  | [new]     |
+| 2026-04-20 | Audio              | Import FamiStudio music/SFX files                                 | [new]     |
+| 2026-04-20 | Sharing            | Gallery to upload screenshots / ROMs for others to play           | [new]     |
+| 2026-04-20 | Accessibility      | Make text size configurable / bigger                              | [new]     |
 
 ---
 
@@ -121,7 +132,9 @@ Use pupil initials (not full names) for anonymity.
   Hovering a cell lists the sprites that use it. Selecting a sprite adds a
   coloured border to its tiles; shared tiles get a striped border so
   they're visible in any selection.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-13 — see `changelog-implemented.md`
+  (teal outline for "in this sprite", orange dashed for "shared"; hover
+  tooltip lists sprites using the tile).
 
 #### See which tiles the selected sprite uses
 
@@ -130,7 +143,8 @@ Use pupil initials (not full names) for anonymity.
 - **Mitigation:** same mechanism as above — selection highlights that
   sprite's tiles; a shared-tile badge (small number) on any tile also used
   by at least one other sprite.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-13 — see `changelog-implemented.md`
+  (B4 colour-coded tileset + right-click-on-tileset "jump to sprite").
 
 ---
 
@@ -144,7 +158,8 @@ Use pupil initials (not full names) for anonymity.
 - **Mitigation:** pin the active palette's four swatches (BG + 3) at the
   top of the tile editor canvas. Click a swatch to pick that paint colour.
   Mirror the existing palette panel — don't replace it.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-13 — see `changelog-implemented.md`
+  (A1 pinned swatches in `#sprite-side-swatches`).
 
 #### Per-tile palette selector
 
@@ -154,7 +169,9 @@ Use pupil initials (not full names) for anonymity.
 - **Mitigation:** a small coloured palette chip on the top-right of each
   tile in the sprite grid. Clicking opens a four-palette popover. Collapse
   to a dot when the sprite is small.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-13 — per-cell `palette` field landed
+  in `state.sprites[].cells[r][c]`; minimap exposes SP0–SP3 buttons per
+  cell; cell inspector has a palette dropdown.
 
 #### Tag sprites by role
 
@@ -163,7 +180,10 @@ Use pupil initials (not full names) for anonymity.
 - **Mitigation:** add a `role` field to sprite metadata (`player | npc |
   enemy | item | other`) rendered as a colour-coded chip next to the
   sprite name. Filter the sprite list by role.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-13 — `ROLE_LABELS` / `ROLE_COLOURS`
+  drive a chip on each sprite list entry. Filter dropdown above the
+  list. See the 2026-04-20 "More sprite role labels" item below for the
+  pupil's follow-up asking for extra roles (tool / power-up).
 
 #### Auto-pick next empty tiles for a new sprite
 
@@ -177,7 +197,38 @@ Use pupil initials (not full names) for anonymity.
   **Change tiles…** as a secondary button. In the replace flow, clicking a
   sprite cell opens a tile picker overlay instead of requiring two
   independent selections.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-13 — `findFreeTileRun()` +
+  `assignFreshTiles()` auto-claim a contiguous run of empty tiles for
+  every new sprite, including the starter hero on a fresh project.
+  Empty cells also auto-claim a tile on the very first paint stroke
+  (`autoAssignFreeTileToCell` in `spApply`/`teApply`) so the pupil
+  never needs to pick a tile before drawing.
+
+#### More sprite role labels (tools, power-ups)
+
+- **Said:** "Make sprites into 'tools' and 'power ups'. Increase the
+  possible labeling for sprites so that they can be used with future
+  code snippets." *(MH, 2026-04-20)*
+- **Mitigation:** extend `ROLE_LABELS` / `ROLE_COLOURS` in
+  [tools/tile_editor_web/sprites.html](tools/tile_editor_web/sprites.html)
+  with `tool`, `powerup`, `pickup`, `projectile`, `decoration`. Emit the
+  role in the generated `.sprites.json` so snippets can key off it
+  (e.g. a `pickup-gives-double-jump` snippet looks up sprites whose
+  role is `powerup`). Keep the existing filter dropdown; it already
+  scales.
+- **Status / date:** [new] 2026-04-20
+
+#### Animation panel easier to find and use
+
+- **Said:** "Make the animation section easier to find and use." *(MH,
+  2026-04-20)*
+- **Mitigation:** promote **Animations** out of a collapsed `<details>`
+  on the Sprites page: show the current frame strip inline above the
+  composition canvas with a **+ Add frame** button right there. Keep the
+  collapsible master list for power users, but land pupils on the
+  strip. Add a one-line "What's an animation?" tooltip that links to
+  the matching lesson.
+- **Status / date:** [new] 2026-04-20
 
 ---
 
@@ -274,6 +325,158 @@ Use pupil initials (not full names) for anonymity.
 
 ---
 
+### Gameplay snippets
+
+The Code page already ships a snippet library (see
+[snippets/](snippets/)); pupils want it wider so they can build more
+of a game without writing new C themselves.
+
+#### Enemy sprite that moves around
+
+- **Said:** "Have the option to include a sprite as a bad guy and it
+  will move around." *(MH, 2026-04-20)*
+- **Mitigation:** ship an `enemy-walker` snippet that spawns an OAM
+  sprite keyed on `role === 'enemy'`, walks it left/right, flips at
+  screen edges, and collides with the player. Uses the existing
+  `ss_x[] / ss_y[]` static-sprite table so the snippet stays
+  contained. Pair with a companion `enemy-chaser` that steers towards
+  `(px, py)` each frame.
+- **Status / date:** [new] 2026-04-20
+
+#### NPC dialogue snippet
+
+- **Said:** "Snippets to add dialogue to NPC Sprites." *(MH,
+  2026-04-20)*
+- **Mitigation:** ship a `talk-to-npc` snippet that, when the player
+  overlaps a sprite with `role === 'npc'` and presses **A**, pauses the
+  main loop and renders a 2-line text box at the bottom of the screen.
+  Requires a small text-draw helper (`draw_text(x, y, "...")`) added to
+  [src/](src/). The snippet takes the dialogue string as a commented
+  knob the pupil can edit.
+- **Status / date:** [new] 2026-04-20
+
+#### Follower sprite that tracks the player
+
+- **Said:** "Adding the ability to include a sprite that follows the
+  player around." *(MH, 2026-04-20)*
+- **Mitigation:** ship a `follower` snippet that records the last N
+  positions of the player and draws a chosen sprite at position
+  `N` frames ago (classic Mario-coin-trail trick). Pupil chooses which
+  sprite follows via its `role` or name. No physics — just trail
+  rendering — so the snippet stays small.
+- **Status / date:** [new] 2026-04-20
+
+---
+
+### Drawing tools
+
+#### Fill, shape select, resize, shape delete
+
+- **Said:** "Add tools for changing the size of parts of the sprite as
+  well as fill and select to delete, squares, circles etc." *(MH,
+  2026-04-20)*
+- **Mitigation:** add a toolbar above the 8×8 tile editor on the
+  Sprites page with: **Pencil** (current), **Fill** (flood-fill 4-way
+  by colour), **Line**, **Rect**, **Circle**, **Select** (rectangular
+  marquee with delete / move). The tools all write to
+  `state.sprite_tiles[idx].pixels` so they piggyback on the existing
+  paint + undo path. "Change the size of parts" maps to the **Select →
+  resize** flow: marquee a region, drag a handle to scale — one stroke,
+  no menus. Shift-constrains to the same palette.
+- **Status / date:** [new] 2026-04-20
+
+---
+
+### Palette UX
+
+#### Pick colours for palettes more easily
+
+- **Said:** "Select colours for palets easier." *(MH, 2026-04-20)*
+- **Mitigation:** the NES master-grid picker works but takes two
+  clicks (select slot, then click a colour). Shortcut: click a palette
+  slot, then the grid follows your mouse — first click on any colour
+  assigns and closes. Also, drag a colour from the master grid onto a
+  palette slot (native HTML5 drag). Add a **Recent colours** strip of
+  the last 8 picks above the master grid so common edits are one
+  click.
+- **Status / date:** [new] 2026-04-20
+
+---
+
+### Scenes
+
+#### Trigger next-scene load
+
+- **Said:** "Allow the next scene to load on a trigger of some sort
+  (there is already the ability to add more backgrounds)." *(MH,
+  2026-04-20)*
+- **Mitigation:** the editor already stores multiple named
+  backgrounds in `state.backgrounds[]`. Add a **Scene transitions**
+  lightweight editor: for the active background, mark one or more
+  edge bands (top/bottom/left/right) as "→ scene name". The `/play`
+  pipeline exports a per-background `scene_exits[]` structure and the
+  `main.c` template grows a small state machine that loads the next
+  scene's nametable + sprite list when the player crosses an exit.
+  First pass supports only horizontal exits (right/left), since that
+  matches the pupil's Zelda-2-ish target.
+- **Status / date:** [new] 2026-04-20
+
+---
+
+### Audio
+
+#### Import FamiStudio music and SFX
+
+- **Said:** "Add sound (big project) add sound by importing files
+  form famistudio." *(MH, 2026-04-20)*
+- **Mitigation:** flagged by the pupil as a big piece of work. Scope:
+  add an **Audio** page to the editor that accepts FamiStudio `.ftm`
+  exports as `.s` (ca65 assembly) via the stock FamiStudio sound
+  engine (LGPL, already built for cc65/ca65 projects). The editor
+  stores the uploaded `.s` next to `src/`; the Makefile assembles
+  and links it. The Code page grows a `play_music(n)` helper and two
+  snippets (`music-on-start`, `jump-sfx`). Deferred decision: whether
+  to ship the FamiStudio engine vendored in-tree or to pull it from
+  an npm-ish cache on build. See also `tools/audio/` placeholder.
+- **Status / date:** [new] 2026-04-20 — big project, queue behind
+  scene transitions + drawing tools.
+
+---
+
+### Sharing & showcase
+
+#### Gallery for screenshots and ROMs
+
+- **Said:** "Have a gallery section where you can upload your
+  screenshots and games for others to play." *(MH, 2026-04-20)*
+- **Mitigation:** an in-browser gallery index served by
+  `tools/playground_server.py`: each pupil project can **Publish to
+  gallery** which copies the current `game.nes`, a thumbnail PNG
+  (grabbed from the preview canvas) and the project metadata to
+  `tools/gallery/<slug>/`. The gallery page lists them; clicking a
+  card loads the ROM into the in-browser emulator read-only. No
+  account system — gallery entries are per-machine, teacher curates.
+  Stretch: **Export gallery bundle** zips the folder for sharing
+  across machines.
+- **Status / date:** [new] 2026-04-20
+
+---
+
+### Accessibility
+
+#### Bigger / configurable text size
+
+- **Said:** "Ability to set the text size bigger." *(MH, 2026-04-20)*
+- **Mitigation:** add a `--ui-scale` CSS custom property set via a
+  header dropdown (`100% / 125% / 150% / 175%`). Apply it to `body`
+  font-size + canvas scaling so both text *and* the 8×8 tile-editor
+  zoom enlarge together. Persist in `prefs.uiScale`. Pair with a
+  high-contrast theme toggle later. Note: the existing `bgTheme`
+  (dark/mid/light) already helps low-contrast vision.
+- **Status / date:** [new] 2026-04-20
+
+---
+
 ## Additional ideas (teacher / Claude)
 
 Things no pupil has raised yet, but worth having on the list:
@@ -299,7 +502,128 @@ Things no pupil has raised yet, but worth having on the list:
 
 ---
 
+## Proposed roadmap — next sprints
+
+The original [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) worked
+through Sprints 1–5 aimed at the 2026-04-13 feedback; large parts of
+Sprints 1, 3 and 4 have shipped (see
+[changelog-implemented.md](changelog-implemented.md)). The plan below
+folds the remaining 2026-04-13 items together with the fresh
+2026-04-20 ideas into four focused sprints. Each sprint is
+independently shippable and ends with a manual pupil walkthrough
+before it's declared done.
+
+Effort key: **S** ≈ under a day, **M** ≈ 1–3 days, **L** ≈ a week.
+
+### Sprint 6 — Close the 2026-04-13 gaps (effort: M)
+
+Finishes the Sprints 1 / 4 / 5 items that never landed.
+
+- **6.1 Tile 0 lock + BG-colour swatch (S).** Padlock the first
+  background tile on the Sprites page; add the explicit
+  **Background colour** swatch (`state.universal_bg`) on the
+  Backgrounds page with a two-sentence explainer.
+- **6.2 Explicit modes on the background canvas (M).** Paint tile /
+  Paint palette / Erase, persisted in `prefs.bgMode`. Fixes "changing
+  palette often changes the tile too" and "easier per-section palette
+  change" in one refactor.
+- **6.3 Grid control (S).** View menu — line-width, colour, chunk
+  lines every 8 / 16 px. Per-project `prefs`.
+- **6.4 Keyboard shortcut overlay (S).** `?` toggles a
+  `<dialog>`-based cheat sheet; content in `docs/shortcuts.md`.
+- **6.5 Offline FCEUX stale-build hunt (S).** Add missing `.inc`
+  prerequisites to `steps/*/Makefile`; add a `rebuild-run` safety-net
+  target wired to a VS Code task; embed the build timestamp in the
+  HUD so pupils can see if they're running old code.
+
+### Sprint 7 — Snippet library expansion (effort: M)
+
+Addresses the three 2026-04-20 gameplay asks in one coherent pass.
+
+- **7.1 Extended sprite roles (S).** Add `tool`, `powerup`, `pickup`,
+  `projectile`, `decoration` to `ROLE_LABELS` / `ROLE_COLOURS` on
+  [sprites.html](tools/tile_editor_web/sprites.html). Export the role
+  in the generated `.sprites.json`.
+- **7.2 Enemy walker + chaser snippets (M).** Drop into
+  [snippets/](snippets/) with the standard `/*! SNIPPET {json} */`
+  header; `regions: ["magic_button"]`. Walker keys off
+  `role === 'enemy'`; chaser steers towards `(px, py)`.
+- **7.3 Follower snippet (S).** Records last N player positions,
+  renders a chosen sprite N frames behind.
+- **7.4 NPC dialogue snippet (M).** Needs a small `draw_text(x, y,
+  "...")` helper in [src/](src/). Snippet exposes the dialogue
+  string as a top-of-body knob so pupils can edit without fighting
+  C quoting.
+
+### Sprint 8 — Drawing, palette & animation UX (effort: L)
+
+The 2026-04-20 "make editing easier" bucket.
+
+- **8.1 Drawing tool palette (L).** Pencil (current), Fill (flood),
+  Line, Rect, Circle, Select (marquee + delete / move). Tools write
+  through the existing pixel + undo path. Select → drag handle
+  implements "change the size of parts" without a separate resize
+  tool. Shift-constrains to one colour.
+- **8.2 Palette picker QoL (S).** One-click "pick and assign" by
+  letting the master grid follow the mouse after a slot click;
+  drag-and-drop colour onto a slot; `Recent colours` strip above
+  the master grid.
+- **8.3 Inline animation strip (M).** Promote Animations from a
+  collapsed `<details>` to a strip above the composition canvas —
+  keep the full editor inside the collapsible for power users.
+
+### Sprint 9 — Scenes, audio groundwork, gallery, accessibility (effort: L)
+
+The bigger, more speculative items. Land behind a feature flag per
+sub-item so a half-baked piece never blocks a pupil session.
+
+- **9.1 Scene exits + transition state machine (M).** Per-background
+  edge bands in the editor; `scene_exits[]` exported from the
+  playground; `main.c` template grows a scene-switch state machine.
+  Horizontal exits first.
+- **9.2 Audio spike (L, split over Sprints 9 and 10).** Vendor the
+  FamiStudio sound engine in `tools/audio/`, teach the Makefile to
+  assemble it, add a minimal Audio page that accepts `.ftm → .s`
+  output and stores it next to `src/`. Ship `play_music(n)` plus two
+  snippets (`music-on-start`, `jump-sfx`).
+- **9.3 Gallery publish (M).** **Publish to gallery** action copies
+  the current `game.nes`, a thumbnail PNG, and project metadata into
+  `tools/gallery/<slug>/`. `playground_server.py` serves an
+  `/gallery` index that loads each entry into the in-browser
+  emulator.
+- **9.4 UI scale + high contrast (S).** `--ui-scale` CSS variable
+  wired to a header dropdown; persisted in `prefs.uiScale`. Pair
+  with the existing `bgTheme` system.
+
+### Ordering rationale
+
+- **Sprint 6 first** because leftover 2026-04-13 items block existing
+  pupils; they're small and land quickly.
+- **Sprint 7 next** because it directly responds to MH's gameplay
+  asks (enemy / NPC / follower) which are the most motivating pieces
+  for a pupil building their first game.
+- **Sprint 8 before Sprint 9** because it makes the editor more fun
+  every day; Sprint 9 ships *new* capability but adds less delight
+  per hour invested.
+- Defer the "Getting-started GIFs/videos" content work outside this
+  code roadmap (content production, not engineering).
+
+### Out of scope for this roadmap
+
+- Per-pupil accounts, networked sharing — gallery stays on-machine.
+- Save-to-Git from the editor — pupils use the git CLI with teacher
+  supervision.
+- Audio-engine rewrite — piggyback on FamiStudio's tooling.
+
+---
+
 ## Changelog
 
-- 2026-04-13 — initial version; seeded with first pupil-testing session
-  feedback and teacher / Claude suggestions.
+- 2026-04-13 — initial version; seeded with first pupil-testing
+  session feedback and teacher / Claude suggestions.
+- 2026-04-20 — added 11 ideas from the second pupil-testing session
+  (enemy, gallery, palette picker, sprite roles, animations
+  findability, scene transitions, NPC dialogue, audio, drawing
+  tools, follower sprite, text size). Marked six 2026-04-13 items
+  as `[done]` per `changelog-implemented.md`. Added the "Proposed
+  roadmap" section with Sprints 6–9.

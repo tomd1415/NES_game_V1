@@ -73,6 +73,21 @@ frame doesn't match, and the server silently skips the mismatched ones.
 highlight the tile, press **C**, click an empty slot, press **V**, then
 tweak a few pixels. Beats drawing from scratch every time.
 
+### Handy clicks on the tileset
+
+- **Left-click** a tile — put it into the selected sprite cell.
+- **Right-click** a tile — jump to the first sprite that already uses
+  it, so you can find where a tile lives.
+- **Shift-click** a tile — edit that tile on its own, with no sprite
+  attached. Useful for tidying up a shared tile without affecting the
+  rest of the sprite. Click a sprite cell to go back to normal.
+- **🔀 Move tile (drag to swap)** checkbox above the tileset — while
+  it's on, drag a tile onto another tile and they swap slots. Every
+  sprite cell or background cell that pointed at either tile is
+  updated automatically, so the art looks the same, just reorganised.
+  The **Duplicate** button also drops the copy in the first free slot
+  *after* the tile you're duplicating, so related tiles stay grouped.
+
 ### Saving and recovering
 
 - Auto-saves to the browser on every change.
