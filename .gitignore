@@ -1,3 +1,6 @@
 # Build artifacts
 build/
 *.nes
+level.nam
+game.chr
+scene.inc
