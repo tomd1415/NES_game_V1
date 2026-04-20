@@ -74,6 +74,30 @@
             "group": "build"
         },
         {
+            "label": "Safe Rebuild & Run (make rebuild-run)",
+            "detail": "Force a clean rebuild then launch FCEUX. Use this if the ROM looks stale (FCEUX is showing old art after you've changed tiles or code).",
+            "type": "shell",
+            "command": "make",
+            "args": ["-C", "${fileWorkspaceFolder}", "rebuild-run"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "cc65",
+                "fileLocation": ["relative", "${fileWorkspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.*?):(\\d+):\\s+(Error|Warning):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "severity": 3,
+                    "message": 4
+                }
+            }
+        },
+        {
             "label": "Regenerate All Graphics (Teacher)",
             "detail": "Regenerate CHR, nametable and palette files for all steps. Teacher use only.",
             "type": "shell",

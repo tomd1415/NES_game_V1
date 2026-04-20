@@ -664,6 +664,42 @@ body.nt-resizing { cursor: ns-resize; -webkit-user-select: none; user-select: no
   font-size: 0.78em;
 }
 .nt-advanced-tool select { font-size: 0.95em; }
+.nt-grid-panel {
+  font-size: 0.82em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  position: relative;
+}
+.nt-grid-panel > summary {
+  cursor: pointer;
+  list-style: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.nt-grid-panel > summary::-webkit-details-marker { display: none; }
+.nt-grid-panel[open] {
+  background: var(--bg);
+}
+.nt-grid-body {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--panel-bg, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 60;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+}
+.nt-grid-body label { display: flex; align-items: center; gap: 6px; }
+.nt-grid-body select { font-size: 0.95em; }
 .nt-info {
   margin-top: 6px;
   color: var(--muted);
@@ -969,7 +1005,8 @@ kbd {
     <div class="bg-colour-control" title="Background colour: the NES shows this colour wherever no pixel is drawn. It's shared across every background palette (slot 0).">
       <div class="bg-colour-label">
         <b>Background colour</b>
-        <span>behind everything</span>
+        <span>Fills every empty spot and shows through tile&nbsp;0.</span>
+        <span>Shared by all four BG palettes — change it here once.</span>
       </div>
       <div id="bg-colour-swatch" class="bg-colour-swatch" role="button"
            tabindex="0" aria-label="Change background colour"></div>
@@ -1023,9 +1060,31 @@ kbd {
       <select id="nt-palette"></select>
     </label>
     <button type="button" id="btn-nt-clear" title="Erase every cell back to tile 0 / palette BG0 (undoable)">Clear whole background</button>
-    <label title="Show a faint dotted grid marking each individual 8×8 tile within the 2×2 attribute blocks. Toggle with the G key.">
-      <input type="checkbox" id="nt-fine-grid"> fine grid
-    </label>
+    <details class="nt-grid-panel" id="nt-grid-panel" title="Show or hide grid lines, tweak their thickness and colour">
+      <summary>⊞ Grid ▾</summary>
+      <div class="nt-grid-body">
+        <label title="Show a faint dotted grid marking each individual 8×8 tile within the 2×2 attribute blocks. Toggle with the G key.">
+          <input type="checkbox" id="nt-fine-grid"> fine 8×8 grid
+        </label>
+        <label title="Show the thicker lines that mark each 2×2 attribute block (one palette per chunk).">
+          <input type="checkbox" id="nt-chunk-lines" checked> chunk lines (2×2 blocks)
+        </label>
+        <label>line width
+          <select id="nt-grid-width">
+            <option value="1">1 px</option>
+            <option value="2">2 px</option>
+          </select>
+        </label>
+        <label>colour
+          <select id="nt-grid-colour">
+            <option value="yellow">yellow (default)</option>
+            <option value="cyan">cyan</option>
+            <option value="white">white</option>
+            <option value="dark">dark</option>
+          </select>
+        </label>
+      </div>
+    </details>
     <button type="button" id="btn-popout-tileset" title="Show a floating tileset window so you can pick tiles while painting the background">📌 Pop-out tileset</button>
     <button type="button" id="btn-popout-palettes" title="Show a floating palette picker. Click a BG palette then click in the background to assign it to that block.">🎨 Pop-out palettes</button>
     <button type="button" id="btn-fullscreen-preview" title="Preview the background in full screen at the correct NES aspect ratio — press F to toggle, Esc to close.">🖥 Full preview</button>
@@ -2077,6 +2136,18 @@ let floatingTilesetZoom = 20;
 let tileClipboard = null;
 let showFineTileGrid = localStorage.getItem('nt-fine-grid') === '1';
 
+// Grid settings (line width / colour / chunk lines) — persisted to prefs.grid.
+const GRID_DEFAULTS = { chunkLines: true, lineWidth: 1, colour: 'yellow' };
+const GRID_COLOURS = {
+  yellow: { attr: 'rgba(255, 216, 102, 0.40)', fine: 'rgba(220, 220, 240, 0.26)' },
+  cyan:   { attr: 'rgba(120, 220, 232, 0.55)', fine: 'rgba(200, 230, 240, 0.30)' },
+  white:  { attr: 'rgba(255, 255, 255, 0.50)', fine: 'rgba(255, 255, 255, 0.30)' },
+  dark:   { attr: 'rgba(0, 0, 0, 0.55)',        fine: 'rgba(0, 0, 0, 0.35)' },
+};
+function currentGridSettings() {
+  return Object.assign({}, GRID_DEFAULTS, (prefs && prefs.grid) || {});
+}
+
 // Active source tile while dragging in the tileset with "Move tile" on.
 let tileDragSrc = -1;
 
@@ -2447,11 +2518,15 @@ function renderNametable() {
     }
   }
 
+  const gridS = currentGridSettings();
+  const gridPalette = GRID_COLOURS[gridS.colour] || GRID_COLOURS.yellow;
+  const gridLW = gridS.lineWidth === 2 ? 2 : 1;
+
   // fine per-tile grid (8×8) — dotted, lighter
   if (showFineTileGrid) {
     ctx.save();
-    ctx.strokeStyle = 'rgba(220, 220, 240, 0.22)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = gridPalette.fine;
+    ctx.lineWidth = gridLW;
     ctx.setLineDash([2, 3]);
     for (let ax = 1; ax < cols; ax++) {
       if (ax % 2 === 0) continue;         // attribute lines drawn separately
@@ -2471,19 +2546,21 @@ function renderNametable() {
   }
 
   // attribute-block grid (2×2 tiles)
-  ctx.strokeStyle = 'rgba(255, 216, 102, 0.25)';
-  ctx.lineWidth = 1;
-  for (let ax = 0; ax <= cols; ax += 2) {
-    ctx.beginPath();
-    ctx.moveTo(ax*cellPx + 0.5, 0);
-    ctx.lineTo(ax*cellPx + 0.5, canvas.height);
-    ctx.stroke();
-  }
-  for (let ay = 0; ay <= rows; ay += 2) {
-    ctx.beginPath();
-    ctx.moveTo(0, ay*cellPx + 0.5);
-    ctx.lineTo(canvas.width, ay*cellPx + 0.5);
-    ctx.stroke();
+  if (gridS.chunkLines) {
+    ctx.strokeStyle = gridPalette.attr;
+    ctx.lineWidth = gridLW;
+    for (let ax = 0; ax <= cols; ax += 2) {
+      ctx.beginPath();
+      ctx.moveTo(ax*cellPx + 0.5, 0);
+      ctx.lineTo(ax*cellPx + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let ay = 0; ay <= rows; ay += 2) {
+      ctx.beginPath();
+      ctx.moveTo(0, ay*cellPx + 0.5);
+      ctx.lineTo(canvas.width, ay*cellPx + 0.5);
+      ctx.stroke();
+    }
   }
   // screen boundaries (thick)
   ctx.strokeStyle = 'rgba(120,220,232,0.75)';
@@ -3323,6 +3400,42 @@ function init() {
     showFineTileGrid = fineGridChk.checked;
     localStorage.setItem('nt-fine-grid', showFineTileGrid ? '1' : '0');
     renderNametable();
+  });
+
+  // --- Grid settings popover (chunk lines / width / colour) ---
+  const chunkChk = document.getElementById('nt-chunk-lines');
+  const gridWidthSel = document.getElementById('nt-grid-width');
+  const gridColourSel = document.getElementById('nt-grid-colour');
+  function ensureGridPrefs() {
+    if (!prefs.grid) prefs.grid = Object.assign({}, GRID_DEFAULTS);
+    return prefs.grid;
+  }
+  const g = ensureGridPrefs();
+  chunkChk.checked = g.chunkLines !== false;
+  gridWidthSel.value = String(g.lineWidth === 2 ? 2 : 1);
+  gridColourSel.value = GRID_COLOURS[g.colour] ? g.colour : 'yellow';
+  chunkChk.addEventListener('change', () => {
+    ensureGridPrefs().chunkLines = !!chunkChk.checked;
+    Storage.writePrefs(prefs);
+    renderNametable();
+  });
+  gridWidthSel.addEventListener('change', () => {
+    const v = parseInt(gridWidthSel.value, 10);
+    ensureGridPrefs().lineWidth = v === 2 ? 2 : 1;
+    Storage.writePrefs(prefs);
+    renderNametable();
+  });
+  gridColourSel.addEventListener('change', () => {
+    const v = gridColourSel.value;
+    ensureGridPrefs().colour = GRID_COLOURS[v] ? v : 'yellow';
+    Storage.writePrefs(prefs);
+    renderNametable();
+  });
+  // Close the popover when clicking outside it.
+  const gridPanel = document.getElementById('nt-grid-panel');
+  document.addEventListener('click', (e) => {
+    if (!gridPanel.open) return;
+    if (!gridPanel.contains(e.target)) gridPanel.open = false;
   });
 
   // --- Full-screen preview ---

@@ -353,6 +353,7 @@ li.CodeMirror-hint-active {
       </select>
     </label>
     <button type="button" id="btn-play" class="primary play-btn" title="Compile this C file and launch it">▶ Play in NES</button>
+    <button type="button" id="btn-help" title="Show help and keyboard shortcuts (?)">?</button>
   </div>
 </header>
 
@@ -447,6 +448,38 @@ li.CodeMirror-hint-active {
     <button type="button" id="btn-lesson-clear" title="Stop following any lesson (keeps your current code)">Clear lesson</button>
     <button type="button" id="btn-lesson-cancel">Cancel</button>
     <button type="button" class="primary" id="btn-lesson-load" disabled>Load selected</button>
+  </div>
+</dialog>
+
+<!-- Help and keyboard shortcuts -->
+<dialog id="help-dialog">
+  <h2 style="color: var(--accent); margin-bottom: 8px;">📝 Code page — help &amp; shortcuts</h2>
+  <p style="color: var(--muted); line-height: 1.55; margin-top: 0;">
+    Edit <code>main.c</code> (or <code>main.s</code> in Asm mode) and press
+    <kbd>▶ Play in NES</kbd> to compile + run. In <b>Guided</b> mode only the
+    highlighted lines are editable; switch to <b>Advanced</b> to edit freely.
+  </p>
+  <h3 style="color: var(--accent); margin-top: 12px;">Keyboard shortcuts</h3>
+  <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.92em; line-height: 1.5;">
+    <kbd>?</kbd><span>Open this help dialog</span>
+    <kbd>Ctrl</kbd>+<kbd>Space</kbd><span>Autocomplete symbols (player_tiles, walk_tiles, etc.)</span>
+    <kbd>Ctrl</kbd>+<kbd>S</kbd><span>Snapshot your code (auto-save also runs every few seconds)</span>
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd><span>Undo / redo (inside the editor)</span>
+    <kbd>F</kbd><span>Full-screen the in-browser emulator while it's open</span>
+    <kbd>P</kbd><span>Pause / resume the in-browser emulator</span>
+    <kbd>R</kbd><span>Reset the in-browser emulator</span>
+  </div>
+  <h3 style="color: var(--accent); margin-top: 12px;">Buttons</h3>
+  <ul style="color: var(--muted); line-height: 1.6;">
+    <li><b>🎓 Guided / ⚙️ Advanced</b> — lock or unlock the rest of the file.</li>
+    <li><b>C / Asm</b> — swap between <code>main.c</code> and <code>main.s</code> (each has its own autosave).</li>
+    <li><b>📚 Lesson</b> — load a starter program for a specific lesson; keeps your current work as a snapshot.</li>
+    <li><b>🧩 Snippets…</b> — paste a pre-written block at the cursor. Guided mode only allows snippets that fit the current region.</li>
+    <li><b>⌨ Symbols…</b> — see every auto-generated name your code can use (tiles, palettes, NPC helpers, etc.).</li>
+    <li><b>↻ Restore default</b> — swap in the stock platformer starter. Your current code is snapshotted first.</li>
+  </ul>
+  <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
+    <button type="button" class="primary" id="btn-help-close">Got it</button>
   </div>
 </dialog>
 
@@ -1399,8 +1432,18 @@ async function play() {
     const { errs, warns } = parseErrorCounts(body.log || '');
     if (body.ok) {
       setBuildPill('ok', 'built');
+      const stampBits = [];
+      if (body.built_iso) {
+        const t = body.built_iso.split('T')[1] || body.built_iso;
+        stampBits.push('built ' + t);
+      }
+      if (typeof body.build_time_ms === 'number') {
+        stampBits.push(body.build_time_ms + ' ms');
+      }
+      const stamp = stampBits.length ? ' · ' + stampBits.join(' · ') : '';
       setBuildSummary((warns ? warns + ' warning' + (warns===1?'':'s') : 'clean')
-        + (body.warning ? ' — ' + body.warning : ''));
+        + (body.warning ? ' — ' + body.warning : '')
+        + stamp);
       if (body.rom_b64) openEmulator(decodeRomBase64(body.rom_b64));
     } else {
       setBuildPill('err', body.stage || 'failed');
@@ -1524,6 +1567,17 @@ document.getElementById('project-name').value = state.name || 'untitled';
 document.getElementById('project-name').addEventListener('input', scheduleSave);
 document.getElementById('btn-restore').addEventListener('click', restoreDefault);
 document.getElementById('btn-symbols').addEventListener('click', () => document.getElementById('symbols-dialog').showModal());
+document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-dialog').showModal());
+document.getElementById('btn-help-close').addEventListener('click', () => document.getElementById('help-dialog').close());
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '?' || e.repeat) return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t.isContentEditable))) return;
+  // CodeMirror's textarea is hidden — check for the CodeMirror wrapper.
+  if (t && t.closest && t.closest('.CodeMirror')) return;
+  e.preventDefault();
+  document.getElementById('help-dialog').showModal();
+});
 document.getElementById('btn-play').addEventListener('click', play);
 document.getElementById('build-log').addEventListener('click', onLogClick);
 document.getElementById('btn-clear-log').addEventListener('click', () => {

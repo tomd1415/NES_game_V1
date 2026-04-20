@@ -89,6 +89,53 @@ was unnecessary, and what was deferred.
   by the `D` shortcut, the cell-state banner button, and any future
   "fork" entry points.
 
+### Sprint 6 — 2026-04-20 gap-fillers
+
+- **6.1 Tile 0 padlock on Sprites page + BG-colour explainer.**
+  The read-only BG palettes under the pixel editor now mark slot 0
+  with a 🔒 glyph, a yellow dashed outline, and a tooltip pointing
+  pupils back to the Backgrounds page to change the universal BG.
+  A short explainer paragraph sits above the four BG palette rows.
+  On the Backgrounds page the `Background colour` swatch label gained
+  two sentences ("Fills every empty spot and shows through tile 0." /
+  "Shared by all four BG palettes — change it here once.") so the
+  meaning is visible without opening the tooltip.
+
+- **6.2 Explicit BG painting modes.** Already shipped in the
+  2026-04-13 round (`nt-mode` radio buttons for 🖌 Paint tile / 🎨
+  Paint palette / 🧽 Erase, persisted in `prefs.ntMode`, with
+  mode-specific canvas cursors). Verified during this sprint.
+
+- **6.3 Grid control (line width / colour / chunk lines).** Replaced
+  the single "fine grid" checkbox with a `⊞ Grid ▾` popover that
+  holds four controls: fine 8×8 grid on/off, chunk lines (2×2 attr
+  blocks) on/off, line-width (1 or 2 px) and colour preset
+  (yellow / cyan / white / dark). Settings persist to `prefs.grid`
+  via `Storage.writePrefs`, so each pupil keeps their preferred grid
+  across sessions and projects.
+
+- **6.4 Keyboard shortcut overlay on Code page.** The Backgrounds
+  and Sprites pages already bound `?` to a `<dialog>`-based cheat
+  sheet. The Code page now matches: a `?` button in the toolbar and
+  a global `?`-key handler (scoped to skip CodeMirror + form fields)
+  open a help dialog listing the Guided/Advanced toggle, lesson /
+  snippet / symbols buttons, and the in-browser emulator's F / P / R
+  / Ctrl-Space / Ctrl-S shortcuts.
+
+- **6.5 Build timestamp + safe rebuild task.** `run_play` in
+  [tools/playground_server.py](tools/playground_server.py) now
+  returns `built_iso`, `built_epoch` and `build_time_ms` with every
+  ROM. The Sprites-page status banner and the Code-page build
+  summary display the build time (e.g. "built 14:02:37 · 1120 ms"),
+  so a pupil who sees stale art in FCEUX can confirm whether the
+  latest build actually ran. `.vscode/tasks.json` gained a `Safe
+  Rebuild & Run (make rebuild-run)` task that runs the Makefile
+  `rebuild-run` target directly — one make invocation, clean build
+  guaranteed — as the official "try this if FCEUX looks stale"
+  escape hatch. All six step Makefiles already declare the
+  `rebuild-run` target and proper `.inc`/`.chr`/`.nam`
+  prerequisites, so no Makefile changes were needed.
+
 ---
 
 ## Not done / deferred

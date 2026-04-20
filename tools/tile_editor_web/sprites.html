@@ -847,6 +847,18 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   cursor: default;
   opacity: 0.8;
 }
+.palette-slot .pal-lock {
+  position: absolute;
+  top: 2px; left: 3px;
+  font-size: 0.72em;
+  line-height: 1;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+  pointer-events: none;
+}
+.palette-slot.bg-universal-locked {
+  outline: 1px dashed rgba(255, 216, 102, 0.7);
+  outline-offset: -2px;
+}
 .master-palette { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 .master-grid {
   display: grid;
@@ -1708,6 +1720,11 @@ details.collapsible > summary .sub-count {
       </div>
       <div class="palettes-sub">
         <h3>Background palettes (reference only)</h3>
+        <p class="faint" style="margin:2px 0 6px; font-size:0.82em;">
+          Slot&nbsp;0 (🔒) is the <b>universal background colour</b> — the same
+          colour in every BG palette, and the colour behind every "empty" spot
+          on your scene. Change it on the <b>Backgrounds</b> page.
+        </p>
         <div id="bg-palettes-ro" class="faint"></div>
       </div>
     </div>
@@ -4105,7 +4122,17 @@ function makePaletteSlot(kind, palIdx, slot, colourIdx, readonly) {
       renderMasterGrid();
     });
   } else {
-    el.title = 'Read-only (background palette — edit on Backgrounds page)';
+    if (kind === 'bg-ro' && slot === 0) {
+      el.classList.add('bg-universal-locked');
+      el.title = '🔒 Universal background colour — shared by every BG palette. '
+              + 'Edit it on the Backgrounds page (Background colour swatch).';
+      const lock = document.createElement('span');
+      lock.className = 'pal-lock';
+      lock.textContent = '🔒';
+      el.appendChild(lock);
+    } else {
+      el.title = 'Read-only (background palette — edit on Backgrounds page)';
+    }
   }
   return el;
 }
@@ -5658,13 +5685,17 @@ async function sendPlayToServer() {
     try { body = await res.json(); } catch { body = { ok: false, log: 'server returned non-JSON' }; }
     if (body.ok) {
       const tail = (body.log || '').split('\n').slice(-6).join('\n');
+      const stampBits = [];
+      if (body.built_iso) stampBits.push('built ' + (body.built_iso.split('T')[1] || body.built_iso));
+      if (typeof body.build_time_ms === 'number') stampBits.push(body.build_time_ms + ' ms');
+      const stamp = stampBits.length ? '  (' + stampBits.join(' · ') + ')' : '';
       if (body.rom_b64) {
         const rom = decodeRomBase64(body.rom_b64);
         const note = body.warning ? '\n\n⚠ ' + body.warning : '';
-        pgSetStatus('✓ Scene compiled — launching in-browser emulator…' + note + '\n\n' + tail, 'ok');
+        pgSetStatus('✓ Scene compiled' + stamp + ' — launching in-browser emulator…' + note + '\n\n' + tail, 'ok');
         openEmulator(rom);
       } else {
-        pgSetStatus('✓ Scene compiled — FCEUX window should appear. Use the D-pad to move!\n\n' + tail, 'ok');
+        pgSetStatus('✓ Scene compiled' + stamp + ' — FCEUX window should appear. Use the D-pad to move!\n\n' + tail, 'ok');
       }
     } else {
       const stage = body.stage ? `[${body.stage}] ` : '';

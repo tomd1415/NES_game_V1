@@ -38,6 +38,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
 import urllib.error
 import urllib.request
@@ -909,15 +910,22 @@ def run_play(body):
     # browser behaviour with a warning if fceux isn't on PATH.
     mode = (body.get("mode") or "browser").lower()
 
+    started = time.time()
     try:
         rom_bytes, build_log = _build_rom(body)
     except BuildError as e:
-        return {"ok": False, "stage": "build", "log": str(e)}
+        return {"ok": False, "stage": "build", "log": str(e),
+                "build_time_ms": int((time.time() - started) * 1000)}
     except Exception as e:
         return {"ok": False, "stage": "generate",
-                "log": f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"}
+                "log": f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}",
+                "build_time_ms": int((time.time() - started) * 1000)}
 
-    result = {"ok": True, "log": build_log, "size": len(rom_bytes)}
+    built_epoch = time.time()
+    result = {"ok": True, "log": build_log, "size": len(rom_bytes),
+              "built_epoch": built_epoch,
+              "built_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(built_epoch)),
+              "build_time_ms": int((built_epoch - started) * 1000)}
 
     if mode == "native":
         if not FCEUX_PATH:

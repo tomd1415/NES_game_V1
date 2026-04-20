@@ -517,24 +517,26 @@ Effort key: **S** ≈ under a day, **M** ≈ 1–3 days, **L** ≈ a week.
 
 ### Sprint 6 — Close the 2026-04-13 gaps (effort: M)
 
-Finishes the Sprints 1 / 4 / 5 items that never landed.
+Finishes the Sprints 1 / 4 / 5 items that never landed. **Status:
+shipped 2026-04-20 — see [changelog-implemented.md](changelog-implemented.md#sprint-6--2026-04-20-gap-fillers).**
 
-- **6.1 Tile 0 lock + BG-colour swatch (S).** Padlock the first
-  background tile on the Sprites page; add the explicit
-  **Background colour** swatch (`state.universal_bg`) on the
-  Backgrounds page with a two-sentence explainer.
-- **6.2 Explicit modes on the background canvas (M).** Paint tile /
-  Paint palette / Erase, persisted in `prefs.bgMode`. Fixes "changing
-  palette often changes the tile too" and "easier per-section palette
-  change" in one refactor.
-- **6.3 Grid control (S).** View menu — line-width, colour, chunk
-  lines every 8 / 16 px. Per-project `prefs`.
-- **6.4 Keyboard shortcut overlay (S).** `?` toggles a
-  `<dialog>`-based cheat sheet; content in `docs/shortcuts.md`.
-- **6.5 Offline FCEUX stale-build hunt (S).** Add missing `.inc`
-  prerequisites to `steps/*/Makefile`; add a `rebuild-run` safety-net
-  target wired to a VS Code task; embed the build timestamp in the
-  HUD so pupils can see if they're running old code.
+- **6.1 Tile 0 lock + BG-colour swatch (S).** [done] Padlock +
+  explainer on the Sprites page's read-only BG palettes; BG-colour
+  label on the Backgrounds page expanded to two sentences.
+- **6.2 Explicit modes on the background canvas (M).** [done,
+  2026-04-13] Paint tile / Paint palette / Erase radio buttons,
+  persisted in `prefs.ntMode`.
+- **6.3 Grid control (S).** [done] `⊞ Grid ▾` popover with fine
+  grid, chunk lines, line-width and colour preset, persisted to
+  `prefs.grid`.
+- **6.4 Keyboard shortcut overlay (S).** [done] `?` opens a
+  `<dialog>` cheat sheet on all three pages (Backgrounds / Sprites
+  already had one; Code page added this sprint).
+- **6.5 Offline FCEUX stale-build hunt (S).** [done] Server now
+  returns `built_iso` + `build_time_ms`; both web pages show the
+  stamp; VS Code gained a `Safe Rebuild & Run (make rebuild-run)`
+  task. Existing Makefile dependency chains were already correct,
+  so no `.inc` prerequisites needed adding.
 
 ### Sprint 7 — Snippet library expansion (effort: M)
 
