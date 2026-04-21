@@ -396,6 +396,50 @@ was unnecessary, and what was deferred.
   scroll.  Multi-screen projects compile today but still play as
   a single screen until those slices land.
 
+### Sprint 11 S-1 slice 2 — 2026-04-21 scroll core API
+
+- **New engine files** at
+  [steps/Step_Playground/src/scroll.h](steps/Step_Playground/src/scroll.h)
+  and [scroll.c](steps/Step_Playground/src/scroll.c).  Committed as
+  hand-written engine sources (copied into builds via the existing
+  `shutil.copytree(STEP_DIR, ...)` path, same as `graphics.s`), so
+  no server-side emitter is needed.
+- **Camera state:** `extern unsigned int cam_x, cam_y;` in world
+  pixels.  `scroll_init()` zeroes them; `scroll_apply_ppu()` writes
+  the low byte of each to `$2005` (PPU_SCROLL) after vblank.  The
+  full beyond-256-px path (high-bit via `PPU_CTRL` nametable
+  select) is wired in slice 3 together with column streaming.
+- **Deadzone-follow math:** `scroll_follow(target_world_x,
+  target_world_y)` pulls the camera toward the target, keeping it
+  inside a rectangle of `DEADZONE_LEFT..DEADZONE_RIGHT` ×
+  `DEADZONE_TOP..DEADZONE_BOTTOM` (all four overridable via
+  `#ifndef` so a `//>> camera_deadzone` guided region in main.c
+  can retune them).  Clamped at world edges using
+  `WORLD_W_PX - SCREEN_W_PX` / `WORLD_H_PX - SCREEN_H_PX`, with
+  the axis disabled entirely when the world equals the screen
+  (1×1 projects, or the non-scrolling axis of a single-axis
+  project).
+- **Coord helpers:** `world_to_screen_x()` / `world_to_screen_y()`
+  return `0xFF` for world coordinates outside the current visible
+  window.  Sprite code in slice 3 uses the sentinel to mask OAM
+  slots for off-screen entities without a per-frame branch chain.
+- **Makefile:** `scroll.c` added to `C_SRC` with a rule that
+  depends on `scroll.h` and `bg_world.h` so a Backgrounds-page
+  edit that changes the world dimensions also rebuilds the scroll
+  core.  Same unconditional-compile pattern as `bg_world.c`.
+- **Benign 1×1 warnings.**  cc65 emits
+  `"Result of comparison is constant"` / `"Unreachable code"` on
+  the `WORLD_W_PX > SCREEN_W_PX` / `WORLD_H_PX > SCREEN_H_PX`
+  guards when the stub world matches the screen exactly.  Expected
+  on a 1×1 project (the axis is literally a no-op there) and
+  disappears as soon as the pupil expands the world.  Build still
+  succeeds; ROM size unchanged at 49168 bytes.
+- **Scope note:** nothing in `main.c` calls these functions yet,
+  so runtime behaviour is unchanged.  Slice 3 wires the main loop
+  to `scroll_follow()` + `scroll_apply_ppu()`, converts sprite
+  positions to world-space `unsigned int`, and adds the column /
+  row streaming during vblank.
+
 ---
 
 ## Not done / deferred

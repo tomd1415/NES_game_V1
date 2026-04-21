@@ -18,7 +18,7 @@ EMULATOR = fceux
 ROM     = game.nes
 BUILD   = build
 
-C_SRC   = src/main.c src/behaviour.c src/bg_world.c
+C_SRC   = src/main.c src/behaviour.c src/bg_world.c src/scroll.c
 ASM_SRC = src/graphics.s
 
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
@@ -58,6 +58,14 @@ $(BUILD)/bg_world.o: src/bg_world.c src/bg_world.h | $(BUILD)
 	$(CC) -t $(TARGET) -o $(BUILD)/bg_world.s $<
 	$(AS) -t $(TARGET) -o $@ $(BUILD)/bg_world.s
 	rm -f $(BUILD)/bg_world.s
+
+# scroll.c is the shared camera / PPU-scroll core (Sprint 11 S-1).  Like
+# bg_world.c, slice 2 builds it in but main.c does not call it yet;
+# slice 3 rewires main.c to follow the camera + stream columns.
+$(BUILD)/scroll.o: src/scroll.c src/scroll.h src/bg_world.h | $(BUILD)
+	$(CC) -t $(TARGET) -o $(BUILD)/scroll.s $<
+	$(AS) -t $(TARGET) -o $@ $(BUILD)/scroll.s
+	rm -f $(BUILD)/scroll.s
 
 $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $<
