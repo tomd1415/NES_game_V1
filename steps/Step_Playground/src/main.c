@@ -22,6 +22,7 @@
 #include <nes.h>
 #include "palettes.inc"
 #include "scene.inc"
+#include "collision.h"   // BEHAVIOUR_* ids + behaviour_at() — from the Behaviour page.
 
 #define PPU_CTRL      *((unsigned char*)0x2000)
 #define PPU_MASK      *((unsigned char*)0x2001)
@@ -237,6 +238,20 @@ void main(void) {
             }
         }
         anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
+
+//>> gravity: Scene sprites fall until they land on solid_ground or platform. Tick 🕊 Flying on the Sprites page to make a sprite hover instead.
+        for (i = 0; i < NUM_STATIC_SPRITES; i++) {
+            unsigned char foot_b;
+            if (ss_flying[i]) continue;
+            foot_b = behaviour_at(
+                (unsigned int)(ss_x[i] >> 3),
+                (unsigned int)((ss_y[i] + (ss_h[i] << 3)) >> 3));
+            if (foot_b == BEHAVIOUR_SOLID_GROUND || foot_b == BEHAVIOUR_PLATFORM) {
+                continue;  // resting on a surface — don't fall further
+            }
+            if (ss_y[i] < 232) ss_y[i]++;  // fall 1 px/frame, clamp near screen bottom
+        }
+//<<
 
         waitvsync();
         PPU_SCROLL = 0;

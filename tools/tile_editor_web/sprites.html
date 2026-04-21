@@ -1709,6 +1709,10 @@ details.collapsible > summary .sub-count {
         <option value="other">Other</option>
       </select>
     </label>
+    <label style="color:var(--muted);font-size:0.85em;display:flex;align-items:center;gap:6px" title="Tick to skip the default gravity loop — the sprite will stay at its authored Y instead of falling until it lands on solid_ground / platform.">
+      <input type="checkbox" id="sprite-flying-input">
+      🕊 Flying (ignore gravity)
+    </label>
     <h3>Dimensions (tiles)</h3>
     <div class="dim-row">
       <label>W <input type="number" id="sprite-w" min="1" max="8" value="2" title="Width in 8×8 tiles (1–8)"></label>
@@ -2615,6 +2619,10 @@ function migrateState(s) {
       if (typeof sp.role !== 'string' || !ROLE_ORDER.includes(sp.role)) {
         sp.role = 'other';
       }
+      // Default: every scene sprite is pulled to the ground each frame by
+      // the baked gravity block in main.c. `flying: true` opts out so the
+      // sprite stays at its authored Y.
+      if (typeof sp.flying !== 'boolean') sp.flying = false;
       sp.width = Math.max(1, Math.min(MAX_SPRITE_W, sp.width|0 || 2));
       sp.height = Math.max(1, Math.min(MAX_SPRITE_H, sp.height|0 || 2));
       if (!Array.isArray(sp.cells)) sp.cells = [];
@@ -3205,6 +3213,7 @@ function renderSpriteList() {
     document.getElementById('btn-sprite-del').disabled = true;
     document.getElementById('sprite-name-input').disabled = true;
     document.getElementById('sprite-role-input').disabled = true;
+    document.getElementById('sprite-flying-input').disabled = true;
     document.getElementById('sprite-w').disabled = true;
     document.getElementById('sprite-h').disabled = true;
     return;
@@ -3213,6 +3222,7 @@ function renderSpriteList() {
   document.getElementById('btn-sprite-del').disabled = false;
   document.getElementById('sprite-name-input').disabled = false;
   document.getElementById('sprite-role-input').disabled = false;
+  document.getElementById('sprite-flying-input').disabled = false;
   document.getElementById('sprite-w').disabled = false;
   document.getElementById('sprite-h').disabled = false;
 
@@ -3262,6 +3272,8 @@ function renderSpriteList() {
   const sp = currentSprite();
   document.getElementById('sprite-name-input').value = sp ? (sp.name || '') : '';
   document.getElementById('sprite-role-input').value = sp ? (sp.role || 'other') : 'other';
+  document.getElementById('sprite-flying-input').checked = !!(sp && sp.flying);
+  document.getElementById('sprite-flying-input').disabled = !sp;
   document.getElementById('sprite-w').value = sp ? sp.width : 2;
   document.getElementById('sprite-h').value = sp ? sp.height : 2;
 }
@@ -7199,6 +7211,13 @@ function init() {
     sp.role = e.target.value || 'other';
     markDirty();
     renderSpriteList();
+  });
+  document.getElementById('sprite-flying-input').addEventListener('change', e => {
+    const sp = currentSprite();
+    if (!sp) return;
+    pushUndo();
+    sp.flying = !!e.target.checked;
+    markDirty();
   });
   document.getElementById('sprite-role-filter').addEventListener('change', e => {
     spriteRoleFilter = e.target.value || '';

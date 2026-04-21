@@ -317,6 +317,19 @@ was unnecessary, and what was deferred.
   snippet: reads `behaviour_at()` in front of the player and uses
   `reaction_for(0, id)` to push them back when the tile is marked
   `BLOCK`. Seed code for the future hook-dispatch lesson.
+- **Default gravity for scene sprites + 🕊 Flying toggle.** Every
+  scene sprite now falls 1 px/frame until `behaviour_at()` under its
+  bottom edge returns `BEHAVIOUR_SOLID_GROUND` or
+  `BEHAVIOUR_PLATFORM`. A new `flying` boolean on each sprite (tick
+  `🕊 Flying (ignore gravity)` on the Sprites page) exports as
+  `ss_flying[]` alongside `ss_role[]` in both `scene.inc` and
+  `scene.asminc`. The gravity loop lives inside a `//>> gravity`
+  guided region in the default `main.c` so Advanced-mode pupils
+  can tweak or remove it. Migration fills `sp.flying = false` for
+  any pre-existing sprite. RPG-style grid-step behaviour (Pokémon
+  overhead movement) is deferred — tracked in
+  `project_rpg_starting_option.md` — the user asked for "default
+  gravity for all for now".
 
 ---
 
