@@ -631,6 +631,250 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y):
 
 
 # ---------------------------------------------------------------------------
+# Behaviour / collision data (Sprint 10 Phase B)
+#
+# The Behaviour page paints a tile-id map (0..7) on top of the background and
+# records per-sprite reactions to each behaviour id.  The playground server
+# ships that out as two C files the pupil's main.c can #include:
+#
+#   src/collision.h  - enums for BEHAVIOUR_* ids and REACT_* verbs, plus
+#                      prototypes for behaviour_at() and reaction_for().
+#   src/behaviour.c  - the flat world map (scroll-ready: full screens_x x
+#                      screens_y tiles) and the sprite x behaviour reaction
+#                      table, plus the tiny query functions themselves.
+#
+# Phase B is data-only: main.c is untouched.  The pupil calls behaviour_at()
+# + reaction_for() themselves from their own code.  Phase C will emit the
+# hook-dispatch calls for them.
+# ---------------------------------------------------------------------------
+
+REACTION_VERB_IDS = {
+    "ignore":       0,
+    "block":        1,
+    "land":         2,
+    "land_top":     3,
+    "bounce":       4,
+    "exit":         5,
+    "call_handler": 6,
+}
+
+BUILTIN_BEHAVIOUR_NAMES = {
+    0: "NONE",
+    1: "SOLID_GROUND",
+    2: "WALL",
+    3: "PLATFORM",
+    4: "DOOR",
+    5: "TRIGGER",
+}
+
+
+def _sanitise_behaviour_name(name, slot_id):
+    """Return an uppercase C identifier for the pupil's custom behaviour name.
+
+    Strips non-[A-Z0-9_] characters, collapses runs of underscores, and
+    falls back to ``CUSTOM6`` / ``CUSTOM7`` when the cleaned name is empty
+    or starts with a digit.  Slot ids 1..5 always use the built-in name.
+    """
+    if slot_id in BUILTIN_BEHAVIOUR_NAMES:
+        return BUILTIN_BEHAVIOUR_NAMES[slot_id]
+    raw = (name or "").upper()
+    cleaned = re.sub(r"[^A-Z0-9_]+", "_", raw).strip("_")
+    cleaned = re.sub(r"_+", "_", cleaned)
+    if not cleaned or cleaned[0].isdigit():
+        return f"CUSTOM{slot_id}"
+    return cleaned
+
+
+def _collect_behaviour_names(state):
+    """Map slot id 0..7 -> uppercase C identifier, with uniqueness."""
+    names = {}
+    seen = set()
+    types = state.get("behaviour_types") or []
+    by_id = {}
+    for t in types:
+        if isinstance(t, dict) and "id" in t:
+            try:
+                by_id[int(t["id"])] = t
+            except (TypeError, ValueError):
+                continue
+    for slot_id in range(8):
+        t = by_id.get(slot_id) or {}
+        base = _sanitise_behaviour_name(t.get("name"), slot_id)
+        name = base
+        n = 2
+        while name in seen:
+            name = f"{base}_{n}"
+            n += 1
+        seen.add(name)
+        names[slot_id] = name
+    return names
+
+
+def _behaviour_world_dims(state):
+    """Return (world_cols, world_rows) from the active background."""
+    bgs = state.get("backgrounds")
+    bg = None
+    if isinstance(bgs, list) and bgs:
+        idx = state.get("selectedBgIdx", 0) or 0
+        if not isinstance(idx, int) or idx < 0 or idx >= len(bgs):
+            idx = 0
+        bg = bgs[idx] or {}
+    dims = (bg or {}).get("dimensions") or {}
+    sx = max(1, int(dims.get("screens_x") or 1))
+    sy = max(1, int(dims.get("screens_y") or 1))
+    return SCREEN_COLS * sx, SCREEN_ROWS * sy
+
+
+def _behaviour_world_map(state):
+    """Build the flat world behaviour map as a bytes() of length cols*rows."""
+    cols, rows = _behaviour_world_dims(state)
+    out = bytearray(cols * rows)
+    bgs = state.get("backgrounds")
+    bg = None
+    if isinstance(bgs, list) and bgs:
+        idx = state.get("selectedBgIdx", 0) or 0
+        if not isinstance(idx, int) or idx < 0 or idx >= len(bgs):
+            idx = 0
+        bg = bgs[idx] or {}
+    grid = (bg or {}).get("behaviour") or []
+    for r in range(rows):
+        row = grid[r] if r < len(grid) else []
+        base = r * cols
+        for c in range(cols):
+            try:
+                v = int(row[c]) if c < len(row) else 0
+            except (TypeError, ValueError):
+                v = 0
+            out[base + c] = v & 0x07  # only ids 0..7 are valid
+    return bytes(out), cols, rows
+
+
+def _sprite_reaction_table(state):
+    """Return (flat_table_bytes, num_sprites).
+
+    Flat layout: sprite_idx * 8 + behaviour_id -> reaction verb id.
+    Missing entries default to REACT_IGNORE so an incomplete project still
+    builds cleanly.
+    """
+    sprites = state.get("sprites") or []
+    reactions = state.get("behaviour_reactions") or []
+    n = len(sprites)
+    out = bytearray(n * 8)
+    for i in range(n):
+        rmap = reactions[i] if i < len(reactions) else {}
+        if not isinstance(rmap, dict):
+            rmap = {}
+        for slot_id in range(8):
+            verb = rmap.get(str(slot_id)) or rmap.get(slot_id) or "ignore"
+            out[i * 8 + slot_id] = REACTION_VERB_IDS.get(str(verb), 0)
+    return bytes(out), n
+
+
+def build_collision_h(state):
+    """Emit src/collision.h — BEHAVIOUR_* / REACT_* enums + prototypes."""
+    names = _collect_behaviour_names(state)
+    cols, rows = _behaviour_world_dims(state)
+    num_sprites = len(state.get("sprites") or [])
+    lines = [
+        "/* Auto-generated by playground_server.py — do not edit by hand. */",
+        "/* Source: the Behaviour page of the tile editor.                */",
+        "#ifndef COLLISION_H",
+        "#define COLLISION_H",
+        "",
+        "/* Behaviour type ids (0..7). Slots 6 and 7 are custom — if the",
+        "   pupil renamed them, their chosen names appear here. */",
+    ]
+    for slot_id in range(8):
+        lines.append(f"#define BEHAVIOUR_{names[slot_id]:<16} {slot_id}")
+    lines += [
+        "",
+        "/* Reaction verbs a sprite can have towards a behaviour id. */",
+        "#define REACT_IGNORE       0",
+        "#define REACT_BLOCK        1",
+        "#define REACT_LAND         2",
+        "#define REACT_LAND_TOP     3",
+        "#define REACT_BOUNCE       4",
+        "#define REACT_EXIT         5",
+        "#define REACT_CALL_HANDLER 6",
+        "",
+        "/* World size in 8x8 tiles. Covers the full screens_x × screens_y",
+        "   grid so the same data works when scrolling is added later. */",
+        f"#define WORLD_COLS   {cols}",
+        f"#define WORLD_ROWS   {rows}",
+        f"#define NUM_BEHAVIOUR_SPRITES {num_sprites}",
+        "",
+        "/* Look up the behaviour id at a given world tile (8x8 grid).",
+        "   Returns BEHAVIOUR_NONE (0) for out-of-range coordinates. */",
+        "unsigned char behaviour_at(unsigned int world_col, unsigned int world_row);",
+        "",
+        "/* Look up the reaction verb a sprite has for a behaviour id.",
+        "   Returns REACT_IGNORE (0) for out-of-range sprite or id. */",
+        "unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id);",
+        "",
+        "#endif",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def build_behaviour_c(state):
+    """Emit src/behaviour.c — world map + reaction table + query functions."""
+    map_bytes, cols, rows = _behaviour_world_map(state)
+    react_bytes, num_sprites = _sprite_reaction_table(state)
+
+    def _hex_table(name, data, cols_per_line=16):
+        if not data:
+            return [f"const unsigned char {name}[1] = {{ 0 }}; /* empty */"]
+        out = [f"const unsigned char {name}[{len(data)}] = {{"]
+        for i in range(0, len(data), cols_per_line):
+            chunk = data[i:i + cols_per_line]
+            out.append("  " + ", ".join(f"0x{b:02X}" for b in chunk) + ",")
+        out.append("};")
+        return out
+
+    lines = [
+        "/* Auto-generated by playground_server.py — do not edit by hand. */",
+        "/* Source: the Behaviour page of the tile editor.                */",
+        '#include "collision.h"',
+        "",
+        f"/* World behaviour map: {cols} cols x {rows} rows, row-major. */",
+    ]
+    lines += _hex_table("behaviour_map", map_bytes)
+    lines += [
+        "",
+        "/* Sprite x behaviour reaction table.",
+        "   Row i (8 bytes) = sprite i's verb for behaviour ids 0..7. */",
+    ]
+    if num_sprites == 0:
+        lines += [
+            "/* No sprites defined yet — stub table so the build still links. */",
+            "const unsigned char sprite_reactions[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };",
+        ]
+    else:
+        lines += _hex_table("sprite_reactions", react_bytes, cols_per_line=8)
+    lines += [
+        "",
+        "unsigned char behaviour_at(unsigned int world_col, unsigned int world_row) {",
+        "  if (world_col >= WORLD_COLS) return BEHAVIOUR_NONE;",
+        "  if (world_row >= WORLD_ROWS) return BEHAVIOUR_NONE;",
+        "  return behaviour_map[world_row * WORLD_COLS + world_col];",
+        "}",
+        "",
+        "unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id) {",
+        "  if (behaviour_id >= 8) return REACT_IGNORE;",
+        f"  if (sprite_idx >= {max(num_sprites, 1)}) return REACT_IGNORE;",
+        "  return sprite_reactions[((unsigned int)sprite_idx << 3) | behaviour_id];",
+        "}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+COLLISION_H_PATH = STEP_DIR / "src" / "collision.h"
+BEHAVIOUR_C_PATH = STEP_DIR / "src" / "behaviour.c"
+
+
+# ---------------------------------------------------------------------------
 # Build + launch pipeline
 # ---------------------------------------------------------------------------
 
@@ -685,12 +929,17 @@ def _build_rom(body):
 
     pal_src = build_palettes_inc(state)
     scene_src = build_scene_inc(state, player_idx, scene_sprites, start_x, start_y)
+    collision_h = build_collision_h(state)
+    behaviour_c = build_behaviour_c(state)
 
     if custom_main_c is not None:
         return _build_in_tempdir(
             custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
+            collision_h, behaviour_c,
         )
-    return _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src)
+    return _build_in_shared_dir(
+        chr_bytes, nam_bytes, pal_src, scene_src, collision_h, behaviour_c,
+    )
 
 
 # Minimal Makefile for the asm-only build path.  No cc65 step; main.s and
@@ -767,7 +1016,8 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
     return rom_bytes, build_log
 
 
-def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src):
+def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
+                         collision_h, behaviour_c):
     # Serialise the shared-directory writes + make.  Multiple pupils pressing
     # Play at once queue here instead of corrupting each other's scene.inc.
     with BUILD_LOCK:
@@ -779,6 +1029,8 @@ def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src):
         NAM_PATH.write_bytes(nam_bytes)
         SCENE_INC.write_text(scene_src)
         PAL_INC.write_text(pal_src)
+        COLLISION_H_PATH.write_text(collision_h)
+        BEHAVIOUR_C_PATH.write_text(behaviour_c)
 
         build = subprocess.run(
             ["make", "-C", str(STEP_DIR)],
@@ -796,7 +1048,8 @@ def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src):
     return rom_bytes, build_log
 
 
-def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src):
+def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
+                      collision_h, behaviour_c):
     # Clone STEP_DIR into a throwaway directory so the pupil's main.c and
     # generated asset files don't touch the shared tree.  Concurrent custom
     # builds can therefore proceed in parallel without the BUILD_LOCK.
@@ -814,6 +1067,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src):
         (tmp_root / "assets" / "backgrounds" / "level.nam").write_bytes(nam_bytes)
         (tmp_root / "src" / "scene.inc").write_text(scene_src)
         (tmp_root / "src" / "palettes.inc").write_text(pal_src)
+        (tmp_root / "src" / "collision.h").write_text(collision_h)
+        (tmp_root / "src" / "behaviour.c").write_text(behaviour_c)
 
         build = subprocess.run(
             ["make", "-C", str(tmp_root)],

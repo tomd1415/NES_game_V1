@@ -346,6 +346,9 @@ li.CodeMirror-hint-active {
     <button type="button" id="btn-snippets" title="Insert a pre-written block of code at your cursor">🧩 Snippets…</button>
     <button type="button" id="btn-restore" title="Replace your code with the stock platformer starter. Your current version is saved to a snapshot first.">↻ Restore default</button>
     <button type="button" id="btn-symbols" title="See the auto-generated symbols (player_tiles, walk_tiles…) your code can use">⌨ Symbols…</button>
+    <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+    <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+    <input id="file-input-all" type="file" accept=".json" style="display:none">
     <label class="pg-runon" title="Where the compiled ROM gets played">
       <span>Run on:</span>
       <select id="pg-runon">
@@ -1581,6 +1584,67 @@ document.getElementById('project-name').value = state.name || 'untitled';
 document.getElementById('project-name').addEventListener('input', scheduleSave);
 document.getElementById('btn-restore').addEventListener('click', restoreDefault);
 document.getElementById('btn-symbols').addEventListener('click', () => document.getElementById('symbols-dialog').showModal());
+
+// 'Save all my work' / 'Open saved work' — full-state bundle. One file
+// the pupil can email or copy to a USB stick; 'Open saved work' replaces
+// everything (tiles, palettes, background, sprites, behaviour, code).
+document.getElementById('btn-save-all').addEventListener('click', () => {
+  // Flush in-flight editor edits into the state blob first so whatever's
+  // on screen is exactly what gets saved (scheduleSave is debounced).
+  if (cm) {
+    if (codeLang === 'asm') state.customMainAsm = cm.getValue();
+    else                    state.customMainC   = cm.getValue();
+  }
+  state.name = document.getElementById('project-name').value || 'untitled';
+  saveState(state);
+  const text = JSON.stringify(state, null, 2);
+  const safe = (state.name || 'untitled').replace(/[^a-z0-9_\-]+/gi, '_') || 'untitled';
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = safe + '.nesgame.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+});
+document.getElementById('btn-load-all').addEventListener('click', () => {
+  document.getElementById('file-input-all').click();
+});
+document.getElementById('file-input-all').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!parsed || typeof parsed !== 'object' || typeof parsed.name !== 'string') {
+        alert('That file does not look like a NES Tile Editor save.');
+        return;
+      }
+      if (!confirm('Replace the current project with the contents of "' + f.name + '"?\n\nYour current work will be snapshotted first so you can recover it.')) return;
+      Storage.saveSnapshot(state, 'before_load_all');
+      state = parsed;
+      if (typeof state.customMainC   !== 'string') state.customMainC   = null;
+      if (typeof state.customMainAsm !== 'string') state.customMainAsm = null;
+      if (typeof state.currentLesson !== 'string') state.currentLesson = null;
+      saveState(state);
+      // Refresh the UI: project-name field, CodeMirror contents for the
+      // currently-selected language.
+      document.getElementById('project-name').value = state.name || 'untitled';
+      if (cm) {
+        const src = (codeLang === 'asm') ? state.customMainAsm : state.customMainC;
+        clearGuidedMarks();
+        cm.setValue(src || '');
+        reapplyGuidedIfActive();
+        setSaveStatus('saved', '● Loaded ' + f.name);
+      }
+    } catch (ex) {
+      alert('Could not load: ' + ex.message);
+    }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+});
+
 document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-dialog').showModal());
 document.getElementById('btn-help-close').addEventListener('click', () => document.getElementById('help-dialog').close());
 document.addEventListener('keydown', (e) => {

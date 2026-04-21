@@ -484,41 +484,81 @@ thing is one L sprint — roughly 1500–2000 lines total.
 
 ---
 
-## Open questions
+## Open questions — **decisions (2026-04-21)**
 
-1. **Granularity.** Tile-level (8×8 per cell) vs. metatile-level
-   (16×16, i.e. one behaviour byte per 2×2 tile block). Metatile
-   cuts the map byte count 4× and is common in NES games but loses
-   precision on thin walls. Tile-level is the plan; revisit if
-   ROM-space pressure comes up.
+1. **Granularity.** Default tile-level (8×8) plus a **UI toggle to
+   snap painting to 16×16 metatile blocks**. Data stays per-tile
+   so the toggle is purely an authoring aid; turning it on makes
+   pencil / eraser / rect apply to 2×2 tile blocks at a time. Good
+   for roughing out levels; flip off for thin walls.
 
-2. **Per-screen vs. per-background.** Current plan has one flat
-   grid per background (matches how `nametable` works). If pupils
-   start making large scrolling levels we may want per-screen
-   authoring (edit one screen at a time) even though the data is
-   still flat. That's UX only, not a data-model change.
+2. **Per-screen vs. per-background (scrolling).** Pupils have been
+   asking for scrolling games, so Phase B emits a **world-space
+   behaviour map** covering the full background (screens\_x × 32
+   cols × screens\_y × 30 rows). `behaviour_at(world_x, world_y)`
+   does the tile-lookup against the full map, so a scrolling engine
+   can call it from anywhere. The current Step\_Playground runtime
+   doesn't scroll yet — that's a follow-up — but the data + helper
+   are scroll-ready on day one.
 
-3. **Reaction composition.** `block` + `land_top` on the same tile
-   is possible today (just a verb per type); if pupils want two
-   reactions on one type, we need verb *combinations* and a
-   bitmask format. Not for v1.
+3. **Reaction composition.** Deferred. Keep verb-per-type for now;
+   if pupils hit the limit (e.g. "this wall should block *and*
+   bounce"), revisit with a bitmask format. Logged in
+   [changelog-planned.md](changelog-planned.md).
 
-4. **Triggers with data.** `trigger` fires `on_trigger(sprite_id,
-   tx, ty, behaviour)` — no extra payload. Zelda-style doors that
-   pick the next screen by tile coordinate work; anything richer
-   (e.g. "this trigger spawns an enemy of kind X") needs a
-   per-tile data slot, which is a bigger state-model change.
+4. **Triggers with data.** Stick with the current suggestion: no
+   extra payload on `on_trigger`. Revisit if pupils start asking
+   for richer triggers (e.g. spawn-enemy-X).
 
-5. **Authoring vs. runtime naming.** We expose the pupil's custom
-   type name (e.g. `ladder`) as an enum `BEHAVIOUR_LADDER`. Sanitise
-   the name (uppercase, strip non-alphanum, prefix `BEHAVIOUR_`) —
-   pupils will inevitably try spaces and emoji. Fall back to
-   `BEHAVIOUR_CUSTOM1` etc. if the sanitised name is empty.
+5. **Authoring vs. runtime naming.** As suggested — sanitise to
+   `BEHAVIOUR_UPPERCASE` (letters/digits/underscore), fall back to
+   `BEHAVIOUR_CUSTOM6` / `BEHAVIOUR_CUSTOM7` if the pupil leaves
+   a custom slot unnamed.
 
-6. **Reset paths.** "Reset reactions to defaults" per-sprite is in.
-   "Reset the whole behaviour map" is not; too destructive, pupil
-   would undo a week of work by accident. If they really want that
-   they can export JSON, edit, re-import.
+6. **Reset paths.** Per-sprite reset only. No global "clear the
+   whole map" — too destructive. The `🗑 Clear map` button on the
+   Behaviour page only clears the *current* background's grid and
+   is fully undoable.
+
+## Phase B — revised scope
+
+Driven by the decisions above, plus the new **bundle save** ask:
+
+- **Code-gen (server-side, in `playground_server.py`).** Emit
+  three files on every `▶ Play in NES`:
+  - `src/collision.h` — C header with `behaviour_at()` /
+    `reaction_for()` prototypes, the `BEHAVIOUR_*` enum (both
+    built-ins and sanitised customs), and the `REACT_*` enum.
+  - `src/behaviour.c` — C source with the full world-space map as
+    a `const uint8_t[]`, the reaction table, and
+    `behaviour_at() / reaction_for()` implementations. No hooks in
+    this file — pupils call the helpers from their own code.
+  - Hook-dispatch in `main.c` is **deferred to Phase C**. Phase B
+    ships the data + query API only; the "pupil calls
+    `behaviour_at` themselves" path is the MVP. Keeps Phase B
+    surgical and avoids the main.c marker rewrite problem.
+- **Makefile.** Update the shared `steps/Step_Playground/Makefile`
+  to compile `behaviour.c` alongside `main.c`. Tempdir builds
+  inherit the Makefile unchanged (because we `shutil.copytree`).
+- **16×16 metatile toggle.** Add a checkbox on behaviour.html
+  toolbar — when on, paint ops snap coords with `& ~1`. No data-
+  model change.
+- **Single-file project bundle.** New header buttons on all four
+  editor pages:
+  - `💾 Save all my work` → JSON export of the full `state`
+    (same as the existing `Export ▾ → JSON save (round-trip)` but
+    top-level and prominent — pupils kept asking "how do I save
+    this to a USB stick?").
+  - `📂 Open saved work` → JSON import (same handler as the
+    existing `Import` button).
+  Both are thin wrappers around code that already exists; the win
+  is discoverability for pupils.
+- **Snippet category.** A `"Behaviour hooks"` snippet group for
+  the Code page — example `behaviour_at` / `reaction_for` calls.
+- **No main.c rewrite.** Deferred to Phase C along with
+  hook-dispatch. The marker-parsing-without-stomping-pupil-edits
+  problem is the risky piece; splitting it out keeps Phase B
+  landable in one pass.
 
 ---
 

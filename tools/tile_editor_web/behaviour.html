@@ -357,6 +357,9 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
     <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
     <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
     <button type="button" id="btn-clear-all" title="Clear the behaviour map for the current background (undoable)">🗑 Clear map</button>
+    <button type="button" id="btn-save-all"  class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+    <button type="button" id="btn-load-all"             title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+    <input id="file-input-all" type="file" accept=".json" style="display:none">
     <button type="button" id="btn-help" title="Show help (?)">?</button>
   </div>
 </header>
@@ -408,6 +411,10 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
         </label>
         <label style="color:var(--muted);font-size:0.85em;display:flex;align-items:center;gap:4px">
           <input type="checkbox" id="show-grid" checked> Grid
+        </label>
+        <label style="color:var(--muted);font-size:0.85em;display:flex;align-items:center;gap:4px"
+               title="Snap painting to 2×2 tile blocks (16×16 pixels). Data stays per-tile.">
+          <input type="checkbox" id="snap-meta"> 16×16 snap
         </label>
       </div>
       <div class="zoom-control">
@@ -788,6 +795,7 @@ let rectEnd         = null;              // {x, y}
 let highlightType   = null;              // find-same: type id whose cells get a halo
 let showTileLayer   = true;
 let showGrid        = true;
+let snapMeta        = false;             // 16×16 metatile snapping
 
 function bgDims() {
   const bg = activeBg();
@@ -945,10 +953,11 @@ function renderBehaviourCanvas() {
 
   // 6) Rectangle-tool preview.
   if (currentTool === 'rect' && isPainting && rectStart && rectEnd) {
-    const x0 = Math.min(rectStart.x, rectEnd.x);
-    const y0 = Math.min(rectStart.y, rectEnd.y);
-    const x1 = Math.max(rectStart.x, rectEnd.x);
-    const y1 = Math.max(rectStart.y, rectEnd.y);
+    let x0 = Math.min(rectStart.x, rectEnd.x);
+    let y0 = Math.min(rectStart.y, rectEnd.y);
+    let x1 = Math.max(rectStart.x, rectEnd.x);
+    let y1 = Math.max(rectStart.y, rectEnd.y);
+    if (snapMeta) { x0 &= ~1; y0 &= ~1; x1 = x1 | 1; y1 = y1 | 1; }
     const t = typeById(selectedTypeId);
     ctx.fillStyle = (t && t.colour && t.id !== 0) ? t.colour : 'rgba(255,255,255,0.3)';
     ctx.globalAlpha = 0.35;
@@ -977,18 +986,46 @@ function inBounds(x, y) {
 }
 function paintCell(x, y, id) {
   if (!inBounds(x, y)) return false;
+  if (snapMeta) {
+    // Snap to the 2×2 block containing (x, y) and paint all four tiles.
+    const bx = x & ~1, by = y & ~1;
+    let any = false;
+    const bg = activeBg();
+    for (let dy = 0; dy < 2; dy++) {
+      for (let dx = 0; dx < 2; dx++) {
+        const xx = bx + dx, yy = by + dy;
+        if (!inBounds(xx, yy)) continue;
+        if ((bg.behaviour[yy][xx] | 0) !== id) {
+          bg.behaviour[yy][xx] = id;
+          any = true;
+        }
+      }
+    }
+    return any;
+  }
   const bg = activeBg();
   if ((bg.behaviour[y][x] | 0) === id) return false;
   bg.behaviour[y][x] = id;
   return true;
 }
 function paintRect(x0, y0, x1, y1, id) {
-  const xa = Math.min(x0, x1), xb = Math.max(x0, x1);
-  const ya = Math.min(y0, y1), yb = Math.max(y0, y1);
+  let xa = Math.min(x0, x1), xb = Math.max(x0, x1);
+  let ya = Math.min(y0, y1), yb = Math.max(y0, y1);
+  if (snapMeta) {
+    // Expand rect outward to 2×2 block boundaries so the whole metatile
+    // region gets painted, not just the tiles under the cursor.
+    xa &= ~1; ya &= ~1;
+    xb = xb | 1; yb = yb | 1;
+  }
+  const bg = activeBg();
   let any = false;
   for (let y = ya; y <= yb; y++) {
     for (let x = xa; x <= xb; x++) {
-      if (paintCell(x, y, id)) any = true;
+      if (!inBounds(x, y)) continue;
+      if ((bg.behaviour[y][x] | 0) !== id) {
+        bg.behaviour[y][x] = id;
+        any = true;
+      }
     }
   }
   return any;
@@ -1386,6 +1423,48 @@ function init() {
   document.getElementById('btn-help-close').addEventListener('click', () => {
     document.getElementById('help-dialog').close();
   });
+
+  // --- Save / Load everything (single-file bundle = full state JSON) ---
+  document.getElementById('btn-save-all').addEventListener('click', () => {
+    const text = JSON.stringify(state, null, 2);
+    const fname = (state.name || 'untitled').replace(/[^A-Za-z0-9_-]/g, '_') + '.nesgame.json';
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+    showAutoToast('💾 Saved "' + fname + '"');
+  });
+  document.getElementById('btn-load-all').addEventListener('click', () => {
+    document.getElementById('file-input-all').click();
+  });
+  document.getElementById('file-input-all').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        const migrated = migrateState(parsed);
+        const err = validateState(migrated);
+        if (err) {
+          alert('That file does not look like a NES Tile Editor save: ' + err);
+          return;
+        }
+        if (!confirm('Replace the current project with the contents of "' + file.name + '"?\n\nYour current work will be snapshotted first so you can recover it.')) return;
+        try { Storage.saveSnapshot(state, 'before_load_all'); } catch (_) {}
+        pushUndo();
+        state = migrated;
+        afterStateReplaced();
+        showAutoToast('📂 Loaded "' + file.name + '"');
+      } catch (ex) {
+        alert('Could not read that file:\n' + ex.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
   document.getElementById('projects-menu').addEventListener('toggle', e => {
     if (e.target.open) renderProjectsMenu();
   });
@@ -1420,6 +1499,10 @@ function init() {
   document.getElementById('show-grid').addEventListener('change', e => {
     showGrid = !!e.target.checked;
     renderBehaviourCanvas();
+  });
+  document.getElementById('snap-meta').addEventListener('change', e => {
+    snapMeta = !!e.target.checked;
+    showAutoToast(snapMeta ? '🔲 Snapping to 16×16 blocks' : '🔳 Per-tile painting');
   });
   document.getElementById('nt-zoom').addEventListener('input', renderBehaviourCanvas);
 

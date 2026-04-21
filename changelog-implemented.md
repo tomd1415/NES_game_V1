@@ -264,6 +264,60 @@ was unnecessary, and what was deferred.
   at the start of the shape so a single `Ctrl-Z` reverts the whole
   thing. Active tool persists in `prefs.spriteTool`.
 
+### Sprint 10 — 2026-04-21 behaviour page + shareable bundle
+
+- **Phase A — Behaviour page (`tools/tile_editor_web/behaviour.html`).**
+  Fourth editor page sitting next to Backgrounds / Sprites / Code. It
+  shows the active background's 32×30 nametable with a coloured overlay
+  of the pupil's current behaviour painting: each cell carries an id
+  0..7 where `0 = none`, 1..5 are built-ins (`solid_ground`, `wall`,
+  `platform`, `door`, `trigger`) and 6..7 are rename-able custom slots.
+  Shared draw tools (pencil / fill / rect) write into
+  `state.backgrounds[i].behaviour` and respect `pushUndo()`, so a
+  misclick is one `Ctrl-Z`. A per-sprite reactions panel binds every
+  sprite × behaviour pair to one verb (`ignore`, `block`, `land`,
+  `land_top`, `bounce`, `exit`, `call_handler`). Reactions live in
+  `state.behaviour_reactions` keyed by sprite index. Migration fills
+  both fields in any older project on load so pre-Sprint-10 saves
+  open cleanly on all four pages. The two custom slots carry colour
+  pickers and name fields so a pupil's *Spikes* tile paints pink and
+  exports as `BEHAVIOUR_SPIKES` without needing to touch code.
+- **16×16 metatile toggle.** A `🔲 Snap to 16×16 blocks` checkbox in
+  the Behaviour page toolbar expands every paint to cover the 2×2 block
+  containing the clicked cell. Per-tile is the default (levels are
+  small early on); toggling persists on the page.
+- **Phase B — C codegen for the behaviour map.** The playground
+  server writes two new files alongside `scene.inc` / `palettes.inc`:
+  `src/collision.h` (enum-style `#define`s for the eight
+  `BEHAVIOUR_*` ids and the seven `REACT_*` verbs, plus
+  `WORLD_COLS` / `WORLD_ROWS` covering the full
+  `screens_x × screens_y` world so the data is scroll-ready when
+  scrolling lands in a later sprint) and `src/behaviour.c` (a flat
+  `const unsigned char behaviour_map[]` and `sprite_reactions[]`
+  lookup table plus the two query functions `behaviour_at()` and
+  `reaction_for()`). Both ship from the shared-dir *and* tempdir
+  build paths in `_build_rom`. Custom-slot names are uppercased and
+  stripped to `[A-Z0-9_]`; empty or digit-leading names fall back to
+  `CUSTOM6` / `CUSTOM7`. `steps/Step_Playground/Makefile` gains a
+  `behaviour.c` object and a `collision.h` dependency on `main.o`
+  so a fresh paint triggers a full rebuild. Stub `collision.h` and
+  `behaviour.c` are committed so `make -C steps/Step_Playground`
+  works from a fresh checkout with the server not running.
+  Hook-dispatch from `main.c` is deferred to Phase C; pupils call
+  the two functions themselves for now.
+- **`💾 Save all my work` / `📂 Open saved work` bundle.** A pair of
+  header buttons on all four pages (Backgrounds / Sprites / Behaviour
+  / Code) exports the full `state` blob as a single
+  `<project>.nesgame.json` file and re-imports it with a confirm +
+  auto-snapshot guard. Complements the page-scoped import/export
+  buttons (which only bring in the slice relevant to the current
+  page) — pupils now have one "save all my work" action for USB
+  sticks and email attachments.
+- **Snippet: `behaviour-walls-from-map`.** First Behaviour-aware
+  snippet: reads `behaviour_at()` in front of the player and uses
+  `reaction_for(0, id)` to push them back when the tile is marked
+  `BLOCK`. Seed code for the future hook-dispatch lesson.
+
 ---
 
 ## Not done / deferred

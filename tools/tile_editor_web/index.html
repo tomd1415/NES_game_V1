@@ -939,6 +939,8 @@ kbd {
     </details>
     <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
     <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+    <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+    <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
     <button type="button" id="btn-new" title="Clear this project back to defaults (use Projects ▾ to create a new project)">Clear</button>
     <button id="btn-recover" type="button" title="Recover from a snapshot or backup">Recover…</button>
     <label class="pref-toggle" title="When on, a JSON backup file is also downloaded every 5 minutes. Backups in browser storage are always kept regardless of this setting.">
@@ -957,6 +959,7 @@ kbd {
     </details>
     <button type="button" id="btn-import" title="Load background + tileset from a JSON file. Your sprites stay untouched.">Import background…</button>
     <input id="file-input" type="file" accept=".json" style="display:none">
+    <input id="file-input-all" type="file" accept=".json" style="display:none">
     <button type="button" id="btn-help">?</button>
   </div>
 </header>
@@ -3274,6 +3277,38 @@ function init() {
   });
   document.getElementById('btn-import').addEventListener('click', () => {
     document.getElementById('file-input').click();
+  });
+  // 'Save all my work' / 'Open saved work' — full-state bundle.
+  // Differs from the page-scoped 'Import background' above (which keeps
+  // sprites untouched); this replaces the whole project.
+  document.getElementById('btn-save-all').addEventListener('click', () => {
+    const text = JSON.stringify(state, null, 2);
+    const fname = safeFilename(state.name) + '.nesgame.json';
+    triggerDownload(fname, text, 'application/json');
+  });
+  document.getElementById('btn-load-all').addEventListener('click', () => {
+    document.getElementById('file-input-all').click();
+  });
+  document.getElementById('file-input-all').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = migrateState(JSON.parse(reader.result));
+        const err = validateState(parsed);
+        if (err) { alert('That file does not look like a NES Tile Editor save: ' + err); return; }
+        if (!confirm('Replace the current project with the contents of "' + f.name + '"?\n\nYour current work will be snapshotted first so you can recover it.')) return;
+        Storage.saveSnapshot(state, 'before_load_all');
+        pushUndo();
+        state = parsed;
+        afterStateReplaced();
+      } catch (ex) {
+        alert('Could not load: ' + ex.message);
+      }
+    };
+    reader.readAsText(f);
+    e.target.value = '';
   });
   document.getElementById('file-input').addEventListener('change', e => {
     const f = e.target.files[0];
