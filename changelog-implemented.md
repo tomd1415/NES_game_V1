@@ -330,6 +330,20 @@ was unnecessary, and what was deferred.
   overhead movement) is deferred — tracked in
   `project_rpg_starting_option.md` — the user asked for "default
   gravity for all for now".
+- **Player drops to painted ground + 4-way solidity.** The default
+  `main.c` no longer pins the player to a hard-coded `ground_y`
+  line. Gravity now consults `behaviour_at()` under both feet every
+  frame, so the player falls from the editor's start Y until the
+  tiles under them are painted `SOLID_GROUND`, `WALL`, or
+  `PLATFORM`. Walking off a ledge drops them naturally. Follow-up
+  the same day: `SOLID_GROUND` and `WALL` are now 4-way solid.
+  Horizontal `LEFT`/`RIGHT` steps probe the column one step ahead
+  at every body row and cancel the move if the column contains a
+  solid tile; the jump ascent checks the row above the head at
+  both player columns and sets `jmp_up = 0` to convert a ceiling
+  bonk into a fall. `PLATFORM` stays one-way (land on top, pass
+  through from below and sideways) so ledge-up-jumps still work.
+  Scene-sprite gravity also treats `WALL` as a landing surface.
 
 ---
 

@@ -158,13 +158,47 @@ void main(void) {
     while (1) {
         pad = read_controller();
 
-        // Horizontal walk with screen-bounds clamp.
+        // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
+        // tiles painted on the Behaviour page block the player from walking
+        // through them — the column just ahead of the player's leading edge
+        // is probed at every body row, and the step is cancelled if any row
+        // meets a solid tile.  PLATFORM stays one-way (floor only).
         if (pad & 0x01) {                     // RIGHT
-            if (px < (256 - PLAYER_W * 8)) px += walk_speed;
+            if (px < (256 - PLAYER_W * 8)) {
+                unsigned char ahead_col = (px + (PLAYER_W << 3) + walk_speed - 1) >> 3;
+                unsigned char top_row   = py >> 3;
+                unsigned char bot_row   = (py + (PLAYER_H << 3) - 1) >> 3;
+                unsigned char blocked   = 0;
+                unsigned char rr;
+                unsigned char bb;
+                for (rr = top_row; rr <= bot_row; rr++) {
+                    bb = behaviour_at((unsigned int)ahead_col, (unsigned int)rr);
+                    if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) {
+                        blocked = 1;
+                        break;
+                    }
+                }
+                if (!blocked) px += walk_speed;
+            }
             plrdir = 0x00;
         }
         if (pad & 0x02) {                     // LEFT
-            if (px >= walk_speed) px -= walk_speed;
+            if (px >= walk_speed) {
+                unsigned char ahead_col = (px - walk_speed) >> 3;
+                unsigned char top_row   = py >> 3;
+                unsigned char bot_row   = (py + (PLAYER_H << 3) - 1) >> 3;
+                unsigned char blocked   = 0;
+                unsigned char rr;
+                unsigned char bb;
+                for (rr = top_row; rr <= bot_row; rr++) {
+                    bb = behaviour_at((unsigned int)ahead_col, (unsigned int)rr);
+                    if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) {
+                        blocked = 1;
+                        break;
+                    }
+                }
+                if (!blocked) px -= walk_speed;
+            }
             plrdir = 0x40;
         }
 
@@ -183,17 +217,33 @@ void main(void) {
         // falls until both feet sit on a SOLID_GROUND / PLATFORM tile
         // painted on the Behaviour page. This runs every frame (even when
         // jumping == 0) so walking off a ledge drops the player naturally.
+        // If the tile above the player's head is SOLID_GROUND or WALL we
+        // cancel the remaining ascent budget so the jump "bonks" off the
+        // ceiling and gravity takes over on the next frame.
         if (jumping && jmp_up > 0) {
-            if (py >= 18) py -= 2; else py = 16;
-            jmp_up--;
+            unsigned char head_row = (py >= 2) ? ((py - 2) >> 3) : 0;
+            unsigned char head_l = behaviour_at((unsigned int)(px >> 3),
+                                                (unsigned int)head_row);
+            unsigned char head_r = behaviour_at(
+                (unsigned int)((px + (PLAYER_W << 3) - 1) >> 3),
+                (unsigned int)head_row);
+            if (head_l == BEHAVIOUR_SOLID_GROUND || head_l == BEHAVIOUR_WALL
+             || head_r == BEHAVIOUR_SOLID_GROUND || head_r == BEHAVIOUR_WALL) {
+                jmp_up = 0;   // bonk — start falling next frame
+            } else {
+                if (py >= 18) py -= 2; else py = 16;
+                jmp_up--;
+            }
         } else {
             unsigned char foot_row = (py + (PLAYER_H << 3)) >> 3;
             unsigned char foot_l = behaviour_at((unsigned int)(px >> 3), (unsigned int)foot_row);
             unsigned char foot_r = behaviour_at(
                 (unsigned int)((px + (PLAYER_W << 3) - 1) >> 3),
                 (unsigned int)foot_row);
-            if (foot_l == BEHAVIOUR_SOLID_GROUND || foot_l == BEHAVIOUR_PLATFORM
-             || foot_r == BEHAVIOUR_SOLID_GROUND || foot_r == BEHAVIOUR_PLATFORM) {
+            if (foot_l == BEHAVIOUR_SOLID_GROUND || foot_l == BEHAVIOUR_WALL
+             || foot_l == BEHAVIOUR_PLATFORM
+             || foot_r == BEHAVIOUR_SOLID_GROUND || foot_r == BEHAVIOUR_WALL
+             || foot_r == BEHAVIOUR_PLATFORM) {
                 jumping = 0;   // feet on a surface — stop falling
             } else {
                 if (py < 232) py += 2;
@@ -252,7 +302,8 @@ void main(void) {
             foot_b = behaviour_at(
                 (unsigned int)(ss_x[i] >> 3),
                 (unsigned int)((ss_y[i] + (ss_h[i] << 3)) >> 3));
-            if (foot_b == BEHAVIOUR_SOLID_GROUND || foot_b == BEHAVIOUR_PLATFORM) {
+            if (foot_b == BEHAVIOUR_SOLID_GROUND || foot_b == BEHAVIOUR_WALL
+             || foot_b == BEHAVIOUR_PLATFORM) {
                 continue;  // resting on a surface — don't fall further
             }
             if (ss_y[i] < 232) ss_y[i]++;  // fall 1 px/frame, clamp near screen bottom
