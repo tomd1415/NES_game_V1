@@ -186,6 +186,35 @@ was unnecessary, and what was deferred.
   the snippet body so pupils can edit it without wrestling with
   string literals.
 
+### Sprint 9 — 2026-04-21 selection-tool actions
+
+- **Selection actions (Sprites page).** Sprint 8's `Select` marquee
+  grew the actions pupils actually want: **Copy / Paste**, **Rotate
+  90° CW / CCW**, **Flip H / V**, **Grab-to-move**, plus **Clear**
+  (same as `Delete`). All routes push one `pushUndo()` at the start
+  so a single `Ctrl-Z` reverts the whole operation. Paste anchors at
+  the current marquee's top-left (falling back to the selected cell's
+  top-left when no marquee exists); clipboard pixels that would fall
+  off the right/bottom edge are silently discarded. Rotate swaps the
+  marquee's dimensions; if the rotated rect would extend past the
+  sprite edge the pixels off the edge are dropped and a toast warns
+  `↻ Rotation clipped at sprite edge`. Grab-to-move lifts the region
+  into a `floatingSelection` (source pixels zeroed, ghost overlay
+  follows the cursor, clamped inside sprite bounds) and commits on
+  mouseup; `Escape` or clicking outside the marquee while floating
+  cancels and restores the source. The selection clipboard is
+  session-only and cross-sprite, so pupils can copy in sprite A and
+  paste in sprite B. A new **selection-actions strip** below the
+  sprite canvas surfaces every action with size readout
+  (`Selection W×H`) and disables buttons when they don't apply.
+  Keyboard, scoped to the Select tool only: `Ctrl-C` copy, `Ctrl-V`
+  paste, `R` rotate CW, `Shift+R` rotate CCW, `H` flip horizontal,
+  `Escape` cancel float / clear selection. Flip V is toolbar-only by
+  design (lowercase `v` is already paste).
+  All changes in
+  [sprites.html](tools/tile_editor_web/sprites.html); Backgrounds page
+  untouched. Session-only state — no schema changes.
+
 ### Sprint 8 — 2026-04-20 palette UX + drawing tools
 
 - **8.2 Palette editor refactor.** Both pages now share one palette
@@ -257,11 +286,6 @@ was unnecessary, and what was deferred.
 - **8.3 Inline animation strip.** Deferred to a later sprint as flagged
   in [sprint8-plan.md](sprint8-plan.md) — the animation panel
   restructure is independent of palette/tool UX.
-
-- **Select-tool move.** Marquee + Delete shipped; *drag to move the
-  selected region* was not. Comes with its own state machine
-  (start pos, floating copy, drop) that's worth its own sprint once
-  pupils tell us they want it.
 
 - **Mobile / touch drag-and-drop for palettes.** The HTML5 DnD API
   is mouse-first; touch fallback (a pointer-events polyfill) is

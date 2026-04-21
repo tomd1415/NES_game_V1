@@ -1017,6 +1017,40 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   font-weight: 600;
 }
 
+/* --- Selection-actions strip (shows when Select tool has a marquee) --- */
+.selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-top: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+.selection-actions[hidden] { display: none; }
+.selection-actions .sa-size {
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: 4px;
+}
+.selection-actions .sa-btn {
+  background: var(--panel2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+.selection-actions .sa-btn:hover:not([disabled]) { background: var(--panel); }
+.selection-actions .sa-btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* --- Full-screen preview ---------------------------------- */
 .preview-dialog {
   margin: 0;
@@ -1800,6 +1834,17 @@ details.collapsible > summary .sub-count {
     <div class="sprite-canvas-wrap">
       <canvas id="sprite-canvas" width="128" height="128"
               title="Left-click: select / paint a cell. Right-click: open the tile picker to assign a tile to this cell. Shift-click: eyedrop."></canvas>
+    </div>
+    <div id="selection-actions" class="selection-actions" hidden
+         title="Actions for the marquee selection. Only active when the Select tool is chosen and a region is selected on this sprite.">
+      <span class="sa-size" id="sa-size">Selection —</span>
+      <button type="button" class="sa-btn" data-sa="copy"   title="Copy selection (Ctrl+C)">📋 Copy</button>
+      <button type="button" class="sa-btn" data-sa="paste"  title="Paste selection at this marquee (Ctrl+V)">📥 Paste</button>
+      <button type="button" class="sa-btn" data-sa="rot-l"  title="Rotate 90° counter-clockwise (Shift+R)">↺ Rot-L</button>
+      <button type="button" class="sa-btn" data-sa="rot-r"  title="Rotate 90° clockwise (R)">↻ Rot-R</button>
+      <button type="button" class="sa-btn" data-sa="flip-h" title="Flip horizontally (H)">⇔ Flip H</button>
+      <button type="button" class="sa-btn" data-sa="flip-v" title="Flip vertically">⇕ Flip V</button>
+      <button type="button" class="sa-btn" data-sa="clear"  title="Zero all pixels inside the marquee (Delete)">✕ Clear</button>
     </div>
     <div class="sprite-minimap-wrap" id="sprite-minimap-wrap">
       <span class="mm-title">Cell palettes — click a P0–P3 button to recolour that cell. Click the thumbnail to select it.</span>
@@ -3156,6 +3201,7 @@ function renderSpriteList() {
 
 function selectSprite(idx) {
   if (standaloneTile !== null) standaloneTile = null;
+  if (floatingSelection && floatingSelection.spriteIdx !== idx) cancelFloatingMove();
   selectedSpriteIdx = idx;
   const sp = currentSprite();
   if (sp) {
@@ -3608,6 +3654,7 @@ function renderSpriteCanvas() {
   // extra bookkeeping at every call site.
   renderSpriteMinimap();
   renderSpriteSideControls();
+  renderSelectionActions();
 }
 
 // --- Sprite mini-map (per-cell palette picker) ------------
@@ -4582,6 +4629,20 @@ let toolDrag = null;      // { startX, startY, endX, endY } in sprite-pixel coor
 let selectedRegion = null; // marquee in sprite-pixel coords
 let selectedRegionSpriteIdx = -1;
 
+// Sprint 9 selection-action buffers. Session-only — no persistence.
+// selectionClipboard: raw pixel colours copied from a marquee, indexed
+// [y][x]. Holds rgb[y][x] alongside so cross-sprite paste can show a
+// faithful preview/ghost even when the destination uses different
+// palettes (we still commit through setSpritePixel using the colour
+// index 0..3 — RGB is visualisation only).
+let selectionClipboard = null;  // { w, h, pixels, rgb }
+// floatingSelection: the region lifted by a drag-move. Source pixels
+// are already zeroed; the overlay renders at (offsetX, offsetY) until
+// mouseup commits. Escape / outside-click calls undo() to restore.
+let floatingSelection = null;   // { w, h, pixels, rgb, offsetX, offsetY,
+                                //   grabDX, grabDY, origX, origY,
+                                //   spriteIdx }
+
 function setCurrentTool(tool) {
   currentTool = tool;
   document.querySelectorAll('#tools-popover .tool-opt').forEach(b => {
@@ -4594,7 +4655,11 @@ function setCurrentTool(tool) {
     p.spriteTool = tool;
     Storage.writePrefs(p);
   } catch (_) {}
-  if (tool !== 'select') selectedRegion = null;
+  if (tool !== 'select') {
+    if (floatingSelection) cancelFloatingMove();
+    selectedRegion = null;
+  }
+  renderSelectionActions();
   renderSpriteCanvas();
 }
 
@@ -4804,6 +4869,30 @@ function drawToolPreview(ctx, sp, px) {
     );
     ctx.restore();
   }
+
+  // Floating selection (drag-move): draw the lifted pixels as a ghost
+  // overlay at the current offset, then a dashed outline around the
+  // drop target so the pupil can see where pixels will land.
+  if (floatingSelection && floatingSelection.spriteIdx === selectedSpriteIdx) {
+    const fs = floatingSelection;
+    ctx.save();
+    for (let y = 0; y < fs.h; y++) {
+      for (let x = 0; x < fs.w; x++) {
+        const rgb = fs.rgb[y][x];
+        if (!rgb) continue;
+        ctx.fillStyle = rgb;
+        ctx.fillRect((fs.offsetX + x) * px, (fs.offsetY + y) * px, px, px);
+      }
+    }
+    ctx.strokeStyle = '#ffd866';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 2]);
+    ctx.strokeRect(
+      fs.offsetX * px + 1, fs.offsetY * px + 1,
+      fs.w * px - 2, fs.h * px - 2
+    );
+    ctx.restore();
+  }
 }
 
 // Non-pencil tool pointer handling — delegated from the sprite-canvas
@@ -4828,13 +4917,28 @@ function toolPointerDown(evt) {
     return;
   }
   if (currentTool === 'select') {
+    // Grab-to-move: pointer inside the existing marquee starts a drag
+    // of the lifted region rather than a new marquee.
+    if (pointInSelectedRegion(px.x, px.y)) {
+      beginFloatingMove(sp, px.x, px.y);
+      return;
+    }
+    // Click outside an existing marquee while a region is floating?
+    // Cancel the move (restores source) instead of starting a new rect.
+    if (floatingSelection) { cancelFloatingMove(); return; }
     selectedRegion = null;
+    renderSelectionActions();
     toolDrag = { startX: px.x, startY: px.y, endX: px.x, endY: px.y };
     renderSpriteCanvas();
     return;
   }
 }
 function toolPointerMove(evt) {
+  if (floatingSelection) {
+    const px = spritePixelFromEvent(evt);
+    if (px) updateFloatingMove(px.x, px.y);
+    return;
+  }
   if (!toolDrag) return;
   const px = spritePixelFromEvent(evt);
   if (!px) return;
@@ -4846,6 +4950,7 @@ function toolPointerMove(evt) {
   renderSpriteCanvas();
 }
 function toolPointerUp() {
+  if (floatingSelection) { commitFloatingMove(); return; }
   if (!toolDrag) return;
   if (currentTool === 'line')
     commitShape(linePixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
@@ -4860,6 +4965,7 @@ function toolPointerUp() {
       x1: Math.max(d.startX, d.endX), y1: Math.max(d.startY, d.endY),
     };
     selectedRegionSpriteIdx = selectedSpriteIdx;
+    renderSelectionActions();
   }
   toolDrag = null;
   renderSpriteCanvas();
@@ -4879,6 +4985,318 @@ function deleteSelectedRegion() {
   if (writes) afterToolMutation(true);
   else undo();
   return writes > 0;
+}
+
+// --- Sprint 9: selection copy/paste/flip/rotate/move -------------------
+
+// Write a zero directly into an existing tile without triggering the
+// auto-assign path that setSpritePixel uses. Returns true if a pixel
+// actually changed. Used by the "lift" step of a drag-move so we don't
+// accidentally claim free tiles for empty cells we were only reading.
+function zeroSpritePixel(sp, x, y) {
+  if (x < 0 || y < 0 || x >= sp.width*8 || y >= sp.height*8) return false;
+  const cell = sp.cells[Math.floor(y/8)][Math.floor(x/8)];
+  if (cell.empty) return false;
+  const lx = x % 8, ly = y % 8;
+  const srcX = cell.flipH ? 7 - lx : lx;
+  const srcY = cell.flipV ? 7 - ly : ly;
+  if (state.sprite_tiles[cell.tile].pixels[srcY][srcX] === 0) return false;
+  state.sprite_tiles[cell.tile].pixels[srcY][srcX] = 0;
+  return true;
+}
+
+// Resolve the display RGB for a sprite pixel using the owning cell's
+// palette. Returns null for transparent pixels (so the ghost overlay
+// can skip drawing them and let the canvas below show through).
+function sampleSpritePixelRgb(sp, x, y) {
+  if (x < 0 || y < 0 || x >= sp.width*8 || y >= sp.height*8) return null;
+  const cell = sp.cells[Math.floor(y/8)][Math.floor(x/8)];
+  if (cell.empty) return null;
+  const v = readSpritePixel(sp, x, y);
+  if (v === 0) return null;
+  return pixelRgb(v, spritePaletteFor(cell.palette));
+}
+
+// Read the region into { w, h, pixels, rgb }. Pixels are 0..3; rgb is
+// the resolved colour string (or null for transparent) captured at
+// read-time for ghost preview.
+function readRegionBuffer(sp, region) {
+  const w = region.x1 - region.x0 + 1;
+  const h = region.y1 - region.y0 + 1;
+  const pixels = [];
+  const rgb = [];
+  for (let y = 0; y < h; y++) {
+    const rowP = new Array(w);
+    const rowR = new Array(w);
+    for (let x = 0; x < w; x++) {
+      const sx = region.x0 + x, sy = region.y0 + y;
+      rowP[x] = Math.max(0, readSpritePixel(sp, sx, sy));
+      rowR[x] = sampleSpritePixelRgb(sp, sx, sy);
+    }
+    pixels.push(rowP);
+    rgb.push(rowR);
+  }
+  return { w, h, pixels, rgb };
+}
+
+// Clip a would-be region to the sprite bounds. Returns null if the
+// clipped rect is empty.
+function clampRegionToSprite(sp, x0, y0, x1, y1) {
+  const W = sp.width*8 - 1, H = sp.height*8 - 1;
+  const cx0 = Math.max(0, x0), cy0 = Math.max(0, y0);
+  const cx1 = Math.min(W, x1), cy1 = Math.min(H, y1);
+  if (cx0 > cx1 || cy0 > cy1) return null;
+  return { x0: cx0, y0: cy0, x1: cx1, y1: cy1 };
+}
+
+function copySelection() {
+  const sp = currentSprite();
+  if (!sp || !selectedRegion
+      || selectedRegionSpriteIdx !== selectedSpriteIdx) {
+    showAutoToast('📋 Nothing selected — drag a marquee first');
+    return;
+  }
+  const buf = readRegionBuffer(sp, selectedRegion);
+  selectionClipboard = buf;
+  showAutoToast('📋 Copied ' + buf.w + '×' + buf.h + ' pixels');
+  renderSelectionActions();
+}
+
+// Write the clipboard starting at (anchorX, anchorY). Pixels that fall
+// off the right/bottom are silently discarded. Updates selectedRegion
+// to the pasted rect so it's immediately available for another action.
+function pasteSelection(anchorX, anchorY) {
+  if (!selectionClipboard) {
+    showAutoToast('📥 Nothing to paste — copy a selection first');
+    return;
+  }
+  const sp = currentSprite();
+  if (!sp) return;
+  pushUndo();
+  const { w, h, pixels } = selectionClipboard;
+  let writes = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (setSpritePixel(sp, anchorX + x, anchorY + y, pixels[y][x])) writes++;
+    }
+  }
+  const clipped = clampRegionToSprite(sp, anchorX, anchorY,
+                                      anchorX + w - 1, anchorY + h - 1);
+  if (clipped) {
+    selectedRegion = clipped;
+    selectedRegionSpriteIdx = selectedSpriteIdx;
+  }
+  if (writes) afterToolMutation(true);
+  else undo();
+  renderSelectionActions();
+}
+
+function flipSelection(axis) {
+  if (!selectedRegion || selectedRegionSpriteIdx !== selectedSpriteIdx) return;
+  const sp = currentSprite();
+  if (!sp) return;
+  const buf = readRegionBuffer(sp, selectedRegion);
+  pushUndo();
+  const { w, h, pixels } = buf;
+  let writes = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const sx = axis === 'h' ? (w - 1 - x) : x;
+      const sy = axis === 'v' ? (h - 1 - y) : y;
+      if (setSpritePixel(sp, selectedRegion.x0 + x,
+                             selectedRegion.y0 + y,
+                             pixels[sy][sx])) writes++;
+    }
+  }
+  if (writes) afterToolMutation(true);
+  else undo();
+  renderSelectionActions();
+}
+
+function rotateSelection(dir) {
+  if (!selectedRegion || selectedRegionSpriteIdx !== selectedSpriteIdx) return;
+  const sp = currentSprite();
+  if (!sp) return;
+  const buf = readRegionBuffer(sp, selectedRegion);
+  const { w, h, pixels } = buf;
+  // Output is h × w (dimensions swap).
+  const outW = h, outH = w;
+  const out = [];
+  for (let y = 0; y < outH; y++) {
+    const row = new Array(outW);
+    for (let x = 0; x < outW; x++) {
+      if (dir === 'cw') row[x] = pixels[h - 1 - x][y];
+      else              row[x] = pixels[x][w - 1 - y];
+    }
+    out.push(row);
+  }
+  pushUndo();
+  // Zero the original region first so pixels that don't get overwritten
+  // by the rotated output still vanish (otherwise a non-square rotate
+  // leaves ghost pixels in the corners).
+  for (let y = selectedRegion.y0; y <= selectedRegion.y1; y++) {
+    for (let x = selectedRegion.x0; x <= selectedRegion.x1; x++) {
+      setSpritePixel(sp, x, y, 0);
+    }
+  }
+  const targetX1 = selectedRegion.x0 + outW - 1;
+  const targetY1 = selectedRegion.y0 + outH - 1;
+  const clipped = clampRegionToSprite(sp, selectedRegion.x0, selectedRegion.y0,
+                                          targetX1, targetY1);
+  let offEdge = false;
+  for (let y = 0; y < outH; y++) {
+    for (let x = 0; x < outW; x++) {
+      const dx = selectedRegion.x0 + x, dy = selectedRegion.y0 + y;
+      if (dx > (sp.width*8 - 1) || dy > (sp.height*8 - 1)) { offEdge = true; continue; }
+      setSpritePixel(sp, dx, dy, out[y][x]);
+    }
+  }
+  if (clipped) {
+    selectedRegion = clipped;
+    selectedRegionSpriteIdx = selectedSpriteIdx;
+  }
+  afterToolMutation(true);
+  if (offEdge) showAutoToast('↻ Rotation clipped at sprite edge');
+  renderSelectionActions();
+}
+
+// --- Floating selection (drag-move) ------------------------------------
+
+// True when (x, y) in sprite-pixel coords is inside a settled marquee
+// on the currently-selected sprite.
+function pointInSelectedRegion(x, y) {
+  if (!selectedRegion || selectedRegionSpriteIdx !== selectedSpriteIdx) return false;
+  return x >= selectedRegion.x0 && x <= selectedRegion.x1
+      && y >= selectedRegion.y0 && y <= selectedRegion.y1;
+}
+
+// Lift the current marquee into floatingSelection. pushUndo first so
+// lift + drop collapse into a single undo step.
+function beginFloatingMove(sp, pointerX, pointerY) {
+  const buf = readRegionBuffer(sp, selectedRegion);
+  pushUndo();
+  let wrote = false;
+  for (let y = selectedRegion.y0; y <= selectedRegion.y1; y++) {
+    for (let x = selectedRegion.x0; x <= selectedRegion.x1; x++) {
+      if (zeroSpritePixel(sp, x, y)) wrote = true;
+    }
+  }
+  floatingSelection = {
+    w: buf.w, h: buf.h,
+    pixels: buf.pixels, rgb: buf.rgb,
+    offsetX: selectedRegion.x0, offsetY: selectedRegion.y0,
+    grabDX: pointerX - selectedRegion.x0,
+    grabDY: pointerY - selectedRegion.y0,
+    origX: selectedRegion.x0, origY: selectedRegion.y0,
+    spriteIdx: selectedSpriteIdx,
+  };
+  if (wrote) { markDirty(); renderTileset(); renderTileEditor(); renderSpriteList(); }
+  renderSpriteCanvas();
+  renderSelectionActions();
+}
+
+function updateFloatingMove(pointerX, pointerY) {
+  if (!floatingSelection) return;
+  const sp = currentSprite();
+  if (!sp) return;
+  const W = sp.width*8, H = sp.height*8;
+  const maxX = W - floatingSelection.w;
+  const maxY = H - floatingSelection.h;
+  let nx = pointerX - floatingSelection.grabDX;
+  let ny = pointerY - floatingSelection.grabDY;
+  nx = Math.max(0, Math.min(maxX, nx));
+  ny = Math.max(0, Math.min(maxY, ny));
+  if (nx === floatingSelection.offsetX && ny === floatingSelection.offsetY) return;
+  floatingSelection.offsetX = nx;
+  floatingSelection.offsetY = ny;
+  renderSpriteCanvas();
+}
+
+function commitFloatingMove() {
+  if (!floatingSelection) return;
+  const sp = currentSprite();
+  if (!sp) { floatingSelection = null; return; }
+  const { w, h, pixels, offsetX, offsetY } = floatingSelection;
+  let writes = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (setSpritePixel(sp, offsetX + x, offsetY + y, pixels[y][x])) writes++;
+    }
+  }
+  selectedRegion = { x0: offsetX, y0: offsetY,
+                     x1: offsetX + w - 1, y1: offsetY + h - 1 };
+  selectedRegionSpriteIdx = floatingSelection.spriteIdx;
+  floatingSelection = null;
+  if (writes) afterToolMutation(true);
+  else { markDirty(); renderSpriteCanvas(); }
+  renderSelectionActions();
+}
+
+function cancelFloatingMove() {
+  if (!floatingSelection) return;
+  floatingSelection = null;
+  // undo() restores the zeroed source pixels (the pushUndo was stamped
+  // when the lift started).
+  undo();
+  renderSelectionActions();
+}
+
+// Paste anchor when the user presses the Paste button/shortcut. Use the
+// existing marquee's top-left; fall back to the selected cell's top-left
+// so pupils can paste without first re-selecting.
+function pasteAnchor() {
+  if (selectedRegion && selectedRegionSpriteIdx === selectedSpriteIdx)
+    return { x: selectedRegion.x0, y: selectedRegion.y0 };
+  return { x: selectedCell.c * 8, y: selectedCell.r * 8 };
+}
+
+// Refresh the selection-actions strip visibility + button enablement.
+// Called after every mutation that could change the selection state.
+function renderSelectionActions() {
+  const host = document.getElementById('selection-actions');
+  if (!host) return;
+  const onThisSprite = selectedRegion
+      && selectedRegionSpriteIdx === selectedSpriteIdx;
+  const show = currentTool === 'select'
+      && (onThisSprite || !!floatingSelection);
+  host.hidden = !show;
+  if (!show) return;
+  const sizeEl = document.getElementById('sa-size');
+  if (floatingSelection) {
+    sizeEl.textContent = 'Selection ' + floatingSelection.w + '×'
+                       + floatingSelection.h + ' · (dragging)';
+  } else {
+    const w = selectedRegion.x1 - selectedRegion.x0 + 1;
+    const h = selectedRegion.y1 - selectedRegion.y0 + 1;
+    sizeEl.textContent = 'Selection ' + w + '×' + h;
+  }
+  const hasSel = !!onThisSprite && !floatingSelection;
+  const hasClip = !!selectionClipboard;
+  host.querySelector('[data-sa="copy"]').disabled   = !hasSel;
+  host.querySelector('[data-sa="paste"]').disabled  = !hasClip || !!floatingSelection;
+  host.querySelector('[data-sa="rot-l"]').disabled  = !hasSel;
+  host.querySelector('[data-sa="rot-r"]').disabled  = !hasSel;
+  host.querySelector('[data-sa="flip-h"]').disabled = !hasSel;
+  host.querySelector('[data-sa="flip-v"]').disabled = !hasSel;
+  host.querySelector('[data-sa="clear"]').disabled  = !hasSel;
+}
+
+function initSelectionActions() {
+  const host = document.getElementById('selection-actions');
+  if (!host) return;
+  host.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.sa-btn');
+    if (!btn || btn.disabled) return;
+    const op = btn.dataset.sa;
+    if (op === 'copy')        copySelection();
+    else if (op === 'paste')  { const a = pasteAnchor(); pasteSelection(a.x, a.y); }
+    else if (op === 'rot-l')  rotateSelection('ccw');
+    else if (op === 'rot-r')  rotateSelection('cw');
+    else if (op === 'flip-h') flipSelection('h');
+    else if (op === 'flip-v') flipSelection('v');
+    else if (op === 'clear')  deleteSelectedRegion();
+  });
+  renderSelectionActions();
 }
 
 function spApply(evt, initial) {
@@ -6771,11 +7189,12 @@ function init() {
   sc.addEventListener('mousemove', e => {
     if (editMode !== 'paint') return;
     if (currentTool === 'pencil') { if (spDragging) spApply(e, false); }
-    else if (toolDrag) toolPointerMove(e);
+    else if (toolDrag || floatingSelection) toolPointerMove(e);
   });
   window.addEventListener('mouseup', () => {
     spDragging = false; spGuardChecked = false;
-    if (editMode === 'paint' && currentTool !== 'pencil' && toolDrag) toolPointerUp();
+    if (editMode === 'paint' && currentTool !== 'pencil'
+        && (toolDrag || floatingSelection)) toolPointerUp();
   });
   document.getElementById('sprite-zoom').addEventListener('input', e => {
     spriteZoom = parseInt(e.target.value, 10);
@@ -7039,6 +7458,24 @@ function init() {
       setStatus('saved', '● Saved + snapshot');
       return;
     }
+    // Selection-tool clipboard takes priority over the tile-level
+    // clipboard when the Select tool has an active marquee on this
+    // sprite. Otherwise falls through to the existing 8×8-tile flow.
+    const selActive = currentTool === 'select'
+        && ((selectedRegion && selectedRegionSpriteIdx === selectedSpriteIdx)
+            || floatingSelection);
+    if (e.ctrlKey && e.key.toLowerCase() === 'c' && selActive) {
+      e.preventDefault();
+      copySelection();
+      return;
+    }
+    if (e.ctrlKey && e.key.toLowerCase() === 'v'
+        && currentTool === 'select' && selectionClipboard) {
+      e.preventDefault();
+      const a = pasteAnchor();
+      pasteSelection(a.x, a.y);
+      return;
+    }
     // Copy / paste an 8×8 tile's pixels.
     if (e.ctrlKey && e.key.toLowerCase() === 'c') {
       const c = currentCell();
@@ -7060,6 +7497,33 @@ function init() {
       setStatus('ok', '● Pasted into tile 0x' + c.tile.toString(16).padStart(2,'0').toUpperCase());
       e.preventDefault();
       return;
+    }
+    // Select-tool keyboard shortcuts. Scoped behind currentTool check
+    // so they don't collide with the cell-level `h`/`H` flip bindings.
+    if (currentTool === 'select' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === 'Escape') {
+        if (floatingSelection) { e.preventDefault(); cancelFloatingMove(); return; }
+        if (selectedRegion && selectedRegionSpriteIdx === selectedSpriteIdx) {
+          e.preventDefault();
+          selectedRegion = null;
+          renderSelectionActions();
+          renderSpriteCanvas();
+          return;
+        }
+      }
+      const haveRegion = selectedRegion
+          && selectedRegionSpriteIdx === selectedSpriteIdx
+          && !floatingSelection;
+      if (haveRegion && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        rotateSelection(e.shiftKey ? 'ccw' : 'cw');
+        return;
+      }
+      if (haveRegion && (e.key === 'h' || e.key === 'H')) {
+        e.preventDefault();
+        flipSelection('h');
+        return;
+      }
     }
     if (!e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.key === 'z') { e.preventDefault(); undo(); return; }
@@ -7218,6 +7682,9 @@ function init() {
 
   // Drawing-tools popover (pencil / fill / line / rect / circle / select)
   initSpriteTools();
+
+  // Selection-actions strip (Sprint 9)
+  initSelectionActions();
 
   // Animations panel
   initAnimationHandlers();
