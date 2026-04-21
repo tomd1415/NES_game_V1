@@ -23,6 +23,21 @@
 #include "palettes.inc"
 #include "scene.inc"
 #include "collision.h"   // BEHAVIOUR_* ids + behaviour_at() — from the Behaviour page.
+#include "bg_world.h"    // BG_WORLD_COLS / BG_WORLD_ROWS — from the Backgrounds page.
+
+// The scroll core is only pulled in when the pupil has painted a world
+// larger than one screen.  1x1 projects compile exactly as before — the
+// scroll path is removed by the preprocessor, so the ROM is byte-identical.
+#if (BG_WORLD_COLS > 32) || (BG_WORLD_ROWS > 30)
+#define SCROLL_BUILD 1
+//>> camera_deadzone: Pixel distances from the camera origin to each edge of the deadzone rectangle. Inside the rectangle the camera does not move. Bigger values = camera lags further behind the player; smaller = tighter follow. Try 64/192 for snappy, 96/144 for Mario-style lead.
+#define DEADZONE_LEFT     96
+#define DEADZONE_RIGHT    144
+#define DEADZONE_TOP      96
+#define DEADZONE_BOTTOM   144
+//<<
+#include "scroll.h"
+#endif
 
 #define PPU_CTRL      *((unsigned char*)0x2000)
 #define PPU_MASK      *((unsigned char*)0x2001)
@@ -37,8 +52,17 @@
 
 extern void load_background(void);
 
-unsigned char px;
-unsigned char py;
+/* Player position is u16 world-space under SCROLL_BUILD so the pupil can
+   walk across every painted screen.  1x1 projects keep the u8 type so
+   cc65 generates the same single-byte compares / loads as before. */
+#ifdef SCROLL_BUILD
+typedef unsigned int pxcoord_t;
+#else
+typedef unsigned char pxcoord_t;
+#endif
+
+pxcoord_t px;
+pxcoord_t py;
 unsigned char pad;
 unsigned char prev_pad;      // for edge-triggering the jump
 unsigned char jumping;       // 1 while airborne (rising or falling)
@@ -139,11 +163,20 @@ void main(void) {
     PPU_MASK = 0;
 
     write_palettes();
+#ifdef SCROLL_BUILD
+    // Multi-screen projects load the whole painted world (up to the
+    // first two screens per scrolling axis) from bg_world_tiles[]
+    // rather than the cropped one-screen level.nam in graphics.s.
+    scroll_init();
+    load_world_bg();
+    PPU_CTRL = 0x10;          // BG uses pattern table 1; sprites use table 0
+    scroll_apply_ppu();
+#else
     load_background();
-
     PPU_CTRL = 0x10;          // BG uses pattern table 1; sprites use table 0
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
+#endif
     PPU_MASK = 0x1E;
 
 //>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200). Paint SOLID_GROUND or PLATFORM tiles on the Behaviour page under this spot or the player will drop to the ground.
@@ -168,7 +201,7 @@ void main(void) {
         // is probed at every body row, and the step is cancelled if any row
         // meets a solid tile.  PLATFORM stays one-way (floor only).
         if (pad & 0x01) {                     // RIGHT
-            if (px < (256 - PLAYER_W * 8)) {
+            if (px < (WORLD_W_PX - PLAYER_W * 8)) {
                 unsigned char ahead_col = (px + (PLAYER_W << 3) + walk_speed - 1) >> 3;
                 unsigned char top_row   = py >> 3;
                 unsigned char bot_row   = (py + (PLAYER_H << 3) - 1) >> 3;
@@ -232,7 +265,7 @@ void main(void) {
                 if (py >= climb_speed) py -= climb_speed; else py = 0;
             }
             if (pad & 0x04) {                 // DOWN
-                if (py < 232) py += climb_speed;
+                if (py < (WORLD_H_PX - 8)) py += climb_speed;
             }
             jumping = 0;
             jmp_up = 0;
@@ -289,7 +322,7 @@ void main(void) {
                 py = (unsigned char)((foot_row << 3) - (PLAYER_H << 3));
                 jumping = 0;   // feet on a surface — stop falling
             } else {
-                if (py < 232) py += 2;
+                if (py < (WORLD_H_PX - 8)) py += 2;
                 jumping = 1;   // airborne (jump descent or walked off a ledge)
             }
         }
@@ -353,9 +386,26 @@ void main(void) {
         }
 //<<
 
+#ifdef SCROLL_BUILD
+        // Pull the camera toward the player's centre.  Clamped at world
+        // edges and held steady inside the deadzone by scroll_follow()
+        // itself, so the camera eases rather than teleports.
+        scroll_follow((unsigned int)px + ((PLAYER_W << 3) >> 1),
+                      (unsigned int)py + ((PLAYER_H << 3) >> 1));
+#endif
+
         waitvsync();
+#ifdef SCROLL_BUILD
+        // Stream off-screen tile columns / rows for any 8-px boundary
+        // the camera has crossed since last frame — has to happen while
+        // rendering is still disabled.  scroll_apply_ppu() is called
+        // LAST so the final PPU_CTRL/PPU_SCROLL values hold when
+        // rendering resumes.
+        scroll_stream();
+#else
         PPU_SCROLL = 0;
         PPU_SCROLL = 0;
+#endif
         OAM_ADDR = 0x00;
 
         // --- Player -------------------------------------------------------
@@ -364,12 +414,22 @@ void main(void) {
         // correctly as a whole.
         for (r = 0; r < PLAYER_H; r++) {
             for (c = 0; c < PLAYER_W; c++) {
+#ifdef SCROLL_BUILD
+                sy = world_to_screen_y((unsigned int)py + (r << 3));
+                if (plrdir == 0x40) {
+                    sx = world_to_screen_x((unsigned int)px +
+                         ((PLAYER_W - 1 - c) << 3));
+                } else {
+                    sx = world_to_screen_x((unsigned int)px + (c << 3));
+                }
+#else
                 sy = py + (r << 3);
                 if (plrdir == 0x40) {
                     sx = px + (unsigned char)((PLAYER_W - 1 - c) << 3);
                 } else {
                     sx = px + (c << 3);
                 }
+#endif
                 tile = anim_tiles[anim_base + r * PLAYER_W + c];
                 attr = anim_attrs[anim_base + r * PLAYER_W + c] ^ plrdir;
                 OAM_DATA = sy;
@@ -380,19 +440,41 @@ void main(void) {
         }
 
         // --- Static scene sprites ---------------------------------------
+        // Scene sprites stay u8 world-space (inside screen 1) — as the
+        // camera scrolls away from screen 1 the world_to_screen helpers
+        // return 0xFF, which hides the sprite by writing y = 0xFF (the
+        // NES OAM "off-screen" sentinel) and the sprite simply scrolls
+        // out of view.  Matches pupil mental model: sprites live in the
+        // world, not glued to the camera.
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             off = ss_offset[i];
             sw = ss_w[i];
             sh = ss_h[i];
             for (r = 0; r < sh; r++) {
                 for (c = 0; c < sw; c++) {
+#ifdef SCROLL_BUILD
+                    OAM_DATA = world_to_screen_y(
+                        (unsigned int)ss_y[i] + (r << 3));
+                    OAM_DATA = ss_tiles[off + r * sw + c];
+                    OAM_DATA = ss_attrs[off + r * sw + c];
+                    OAM_DATA = world_to_screen_x(
+                        (unsigned int)ss_x[i] + (c << 3));
+#else
                     OAM_DATA = ss_y[i] + (r << 3);
                     OAM_DATA = ss_tiles[off + r * sw + c];
                     OAM_DATA = ss_attrs[off + r * sw + c];
                     OAM_DATA = ss_x[i] + (c << 3);
+#endif
                 }
             }
         }
+
+#ifdef SCROLL_BUILD
+        // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR
+        // writes in scroll_stream() have settled.  Must be the last
+        // PPU register write of the VBlank window or the camera jitters.
+        scroll_apply_ppu();
+#endif
     }
 }
 

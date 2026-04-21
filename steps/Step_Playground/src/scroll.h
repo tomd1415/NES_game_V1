@@ -15,9 +15,8 @@
 #define SCREEN_W_PX        256
 #define SCREEN_H_PX        240
 
-/* Full world, in pixels.  For 1x1 projects these equal the screen. */
-#define WORLD_W_PX         (BG_WORLD_COLS * 8)
-#define WORLD_H_PX         (BG_WORLD_ROWS * 8)
+/* Full-world pixel dimensions are defined in bg_world.h so main.c can
+   reference them on the 1x1 fast path (where scroll.h is not included). */
 
 /* Camera deadzone: a rectangle centred on the visible window.  When the
    follow target sits inside it the camera does not move.  Defaults are
@@ -48,11 +47,29 @@ void scroll_init(void);
    scrolling projects along the non-scrolling axis). */
 void scroll_follow(unsigned int target_world_x, unsigned int target_world_y);
 
-/* Write the current camera to the PPU_SCROLL register pair.  Must be
-   called after waitvsync() and before the OAM DMA.  Slice 3 extends
-   this to toggle the PPU_CTRL nametable-select bits for beyond-256-px
-   scrolling; for now it writes only the low bytes. */
+/* Write the current camera to the PPU_CTRL + PPU_SCROLL registers.
+   Must be called last (after OAM + any nametable streaming) so the
+   registers hold the correct values when VBlank ends.  Toggles the
+   PPU_CTRL nametable-select bits based on cam_x / cam_y bit 8 for
+   beyond-256-px scrolling. */
 void scroll_apply_ppu(void);
+
+/* Stream one off-screen column (H-scroll) or row (V-scroll) per 8 px
+   of camera travel since the last call.  Must be called during
+   VBlank, before scroll_apply_ppu() so the final scroll registers
+   stick.  No-op on frames where the camera hasn't crossed a tile
+   boundary. */
+void scroll_stream(void);
+
+/* One-shot: copy the first 1..2 screens of painted world into the
+   PPU nametables + attribute tables at boot.  Rendering must be OFF
+   (PPU_MASK = 0).  Replaces the graphics.s `load_background()` path
+   used by 1x1 projects.  For a 2x1 world both screens are loaded
+   up front, so no streaming happens until the pupil paints a third
+   screen.  Skips the vertical-mirror path if the cfg hasn't been
+   updated to H-mirror — V-scroll projects render correctly only on
+   a build whose cfg has NES_MIRRORING=0. */
+void load_world_bg(void);
 
 /* World pixel -> screen pixel.  Returns 0xFF (off-screen) for anything
    outside the current visible window. */

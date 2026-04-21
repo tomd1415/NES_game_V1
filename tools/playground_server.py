@@ -973,6 +973,12 @@ def build_bg_world_h(state):
         f"#define BG_WORLD_ATTR_COLS  {acols}",
         f"#define BG_WORLD_ATTR_ROWS  {arows}",
         "",
+        "/* Full-world pixel dimensions.  Exposed here (rather than in",
+        "   scroll.h) because main.c bounds-checks the player against them",
+        "   even on the 1x1 fast path, where scroll.h is not included. */",
+        "#define WORLD_W_PX          (BG_WORLD_COLS * 8)",
+        "#define WORLD_H_PX          (BG_WORLD_ROWS * 8)",
+        "",
         "extern const unsigned char bg_world_tiles[BG_WORLD_COLS * BG_WORLD_ROWS];",
         "extern const unsigned char bg_world_attrs[BG_WORLD_ATTR_COLS * BG_WORLD_ATTR_ROWS];",
         "",
@@ -1002,6 +1008,13 @@ def build_bg_world_c(state):
         "/* Source: the Backgrounds page of the tile editor.              */",
         '#include "bg_world.h"',
         "",
+        "/* Gate the arrays on world size so 1x1 builds emit no symbols,",
+        "   keeping their ROM byte-identical to the pre-Sprint-11 baseline.",
+        "   The scroll core only references these arrays under the same",
+        "   guard — dangling externs are harmless as long as no caller",
+        "   actually links against them. */",
+        "#if (BG_WORLD_COLS > 32) || (BG_WORLD_ROWS > 30)",
+        "",
         f"/* {cols} cols x {rows} rows of 8x8 tiles ({cols * rows} bytes). */",
     ]
     lines += _hex_table("bg_world_tiles", "BG_WORLD_COLS * BG_WORLD_ROWS", tiles)
@@ -1010,7 +1023,11 @@ def build_bg_world_c(state):
         f"/* {acols} x {arows} attribute bytes ({acols * arows} bytes). */",
     ]
     lines += _hex_table("bg_world_attrs", "BG_WORLD_ATTR_COLS * BG_WORLD_ATTR_ROWS", attrs)
-    lines.append("")
+    lines += [
+        "",
+        "#endif",
+        "",
+    ]
     return "\n".join(lines)
 
 

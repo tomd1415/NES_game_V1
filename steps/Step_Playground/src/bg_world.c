@@ -2,8 +2,11 @@
 /* Source: the Backgrounds page of the tile editor.              */
 #include "bg_world.h"
 
-/* Stub body: the committed copy is an empty 32x30 world so a fresh
-   make succeeds before the server has ever written real data.  The
-   server overwrites this file on every build. */
+/* Gate the stub arrays on world size so 1x1 builds emit no symbols —
+   keeps the 1x1 ROM byte-identical to the pre-Sprint-11 baseline.
+   The scroll core (scroll.c) is gated on the same condition and only
+   references these arrays under the same guard. */
+#if (BG_WORLD_COLS > 32) || (BG_WORLD_ROWS > 30)
 const unsigned char bg_world_tiles[BG_WORLD_COLS * BG_WORLD_ROWS] = { 0 };
 const unsigned char bg_world_attrs[BG_WORLD_ATTR_COLS * BG_WORLD_ATTR_ROWS] = { 0 };
+#endif

@@ -440,6 +440,112 @@ was unnecessary, and what was deferred.
   positions to world-space `unsigned int`, and adds the column /
   row streaming during vblank.
 
+### Sprint 11 S-1 slice 3 — 2026-04-21 main.c scroll wire-up
+
+Split into three landing steps so the 1x1 fast path stayed
+buildable after each.
+
+**3a — scaffolding.**
+
+- `main.c` now always `#include "bg_world.h"`.  A new
+  `#if (BG_WORLD_COLS > 32) || (BG_WORLD_ROWS > 30)` guard defines
+  `SCROLL_BUILD` and pulls in `scroll.h`.  For 1x1 worlds the guard
+  is false, so every later `#ifdef SCROLL_BUILD` block is excluded
+  by the preprocessor and the pupil's existing 1x1 ROM compiles to
+  the same bytes as before.
+- Added `//>> camera_deadzone` guided region defining
+  `DEADZONE_LEFT/RIGHT/TOP/BOTTOM` before `#include "scroll.h"` so
+  the pupil can retune camera follow without editing the engine.
+- `scroll_init()` + `scroll_apply_ppu()` are wired into the boot
+  sequence under `SCROLL_BUILD`; the 1x1 branch keeps the literal
+  `PPU_SCROLL = 0` writes.
+
+**3b — world coordinates.**
+
+- Player position is now `pxcoord_t` — `unsigned int` under
+  `SCROLL_BUILD`, `unsigned char` on the 1x1 fast path.  cc65
+  generates the same single-byte compares / loads as before for
+  1x1, so no regressions there.
+- Replaced hard-coded `256` / `232` right / bottom bounds with
+  `WORLD_W_PX - PLAYER_W*8` / `WORLD_H_PX - 8`.  These resolve to
+  the same literals for 1x1 (256/240 → 240/232) and extend to the
+  full painted world for scroll builds.
+- `scroll_follow((unsigned int)px + PLAYER_W*4, (unsigned int)py +
+  PLAYER_H*4)` runs every frame under `SCROLL_BUILD`, pulling the
+  camera toward the player's centre.
+- OAM writes for the player and static scene sprites are split:
+  the scroll branch computes screen coords via
+  `world_to_screen_x/y()`, which conveniently returns `0xFF`
+  (off-screen sentinel) for sprites outside the visible window.
+  Scene sprites stay u8 world-space (inside screen 1) for slice 3;
+  they scroll out of view cleanly as the camera moves.
+
+**3c — nametable load + column streaming.**
+
+- `scroll.c` body is now gated on
+  `(BG_WORLD_COLS > 32) || (BG_WORLD_ROWS > 30)`.  1x1 builds
+  compile scroll.c to an empty object (13-line cc65 header only) —
+  the `extern` declarations in `scroll.h` dangle but are never
+  referenced on the 1x1 path, so the linker is happy.
+- Matching gate in `bg_world.c` (the committed stub and the
+  server's emitter) so 1x1 builds emit no `bg_world_tiles[]` /
+  `bg_world_attrs[]` symbols either.  ROM size is still the fixed
+  49168 byte NROM image; the 1x1 ROM contents are functionally
+  identical to pre-Sprint-11 (same main.c compile path, no scroll
+  code linked), with a byte shuffle in the RODATA fill area from
+  the new objects.  Plan explicitly allows this.
+- **One-shot nametable load.**  New
+  [load_world_bg()](steps/Step_Playground/src/scroll.c) copies up
+  to two screens per scrolling axis from `bg_world_tiles[]` +
+  `bg_world_attrs[]` into `$2000` / `$2400` / `$2800` / `$2C00`.
+  Replaces the `graphics.s` `load_background()` call under
+  `SCROLL_BUILD`; the 1x1 path still calls the asm routine, so the
+  committed `level.nam` path is untouched.
+- **Column / row streaming.**  New
+  [scroll_stream()](steps/Step_Playground/src/scroll.c) runs in
+  VBlank.  When `cam_x >> 3` changes it writes a 30-tile column
+  into the off-screen nametable; when `cam_y >> 3` changes it
+  writes a 32-tile row.  Bit 5 of the target column / row picks
+  which nametable (`$2000` vs `$2400` or `$2800`) via the mirror
+  aliasing, so arbitrarily wide / tall worlds stream cleanly
+  without special-casing the second screen.
+- **Beyond-256-px scrolling.**  `scroll_apply_ppu()` now toggles
+  PPU_CTRL bits 0 / 1 based on `cam_x & 0x100` / `cam_y & 0x100`
+  so the "left" nametable flips when the camera crosses a screen
+  boundary.  Also resets the stride bit to +1 in case
+  `scroll_stream()` left it at +32.
+- **VBlank ordering.**  Each frame:
+    1. `waitvsync()`
+    2. `scroll_stream()` (PPU_ADDR/DATA writes, trashes scroll latch)
+    3. OAM writes (one sprite byte at a time via `$2004`)
+    4. `scroll_apply_ppu()` as the last PPU register write so the
+       final scroll latch is correct when rendering resumes.
+
+**Verification.**
+
+- 1x1 build produces `49168` byte NROM with the same main.c
+  assembly as slice 2 (scroll.o + bg_world.o are empty headers
+  only).  Hash shifts on each slice because the linker redistributes
+  fill bytes, but the executable code is unchanged.
+- Simulated 2x1 world (manual `BG_WORLD_COLS=64` test) compiles
+  cleanly with only the expected "constant comparison" / "unreachable"
+  warnings on the disabled vertical axis.
+
+**Known limitations (slice 3d / follow-ups).**
+
+- **iNES mirror byte** in [cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg)
+  is hard-coded to `NES_MIRRORING = 1` (V-mirror, good for
+  H-scroll).  Pure-V-scroll worlds will show mirror-seam artefacts
+  until the server picks cfg based on which axis scrolls.
+- **Attribute streaming** is absent.  `load_world_bg()` loads
+  attrs for the first two screens up front; `scroll_stream()` only
+  walks tile data.  3+ screen worlds will show 16-px attribute
+  seams at screen-3+ boundaries until per-16-px attribute writes
+  are added.
+- **Scene sprites** stay in screen 1 (u8 world coords).  Multi-
+  screen sprite placement requires promoting `ss_x[]` / `ss_y[]`
+  to u16 in the scene.inc emitter — deferred to S-2.
+
 ---
 
 ## Not done / deferred

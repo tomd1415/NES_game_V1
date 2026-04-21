@@ -12,6 +12,12 @@
 #define BG_WORLD_ATTR_COLS  8
 #define BG_WORLD_ATTR_ROWS  8
 
+/* Full-world pixel dimensions.  Exposed here (rather than in scroll.h)
+   because main.c bounds-checks the player against them even on the
+   1x1 fast path, where scroll.h is not included. */
+#define WORLD_W_PX          (BG_WORLD_COLS * 8)
+#define WORLD_H_PX          (BG_WORLD_ROWS * 8)
+
 extern const unsigned char bg_world_tiles[BG_WORLD_COLS * BG_WORLD_ROWS];
 extern const unsigned char bg_world_attrs[BG_WORLD_ATTR_COLS * BG_WORLD_ATTR_ROWS];
 
