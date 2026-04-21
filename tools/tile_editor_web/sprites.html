@@ -1844,6 +1844,8 @@ details.collapsible > summary .sub-count {
       <button type="button" class="sa-btn" data-sa="rot-r"  title="Rotate 90° clockwise (R)">↻ Rot-R</button>
       <button type="button" class="sa-btn" data-sa="flip-h" title="Flip horizontally (H)">⇔ Flip H</button>
       <button type="button" class="sa-btn" data-sa="flip-v" title="Flip vertically">⇕ Flip V</button>
+      <button type="button" class="sa-btn" data-sa="scale-up"   title="Enlarge the selection 2× — each pixel becomes a 2×2 block. Clipped at the sprite edge.">🔎+ ×2</button>
+      <button type="button" class="sa-btn" data-sa="scale-down" title="Shrink the selection 2× — keeps every other pixel (nearest-neighbour). Disabled below 2×2.">🔎− ÷2</button>
       <button type="button" class="sa-btn" data-sa="clear"  title="Zero all pixels inside the marquee (Delete)">✕ Clear</button>
     </div>
     <div class="sprite-minimap-wrap" id="sprite-minimap-wrap">
@@ -5160,6 +5162,66 @@ function rotateSelection(dir) {
   renderSelectionActions();
 }
 
+// Integer nearest-neighbour scaling. 'up' doubles each pixel into a
+// 2×2 block; 'down' samples every other pixel (top-left). Anchored at
+// the marquee's top-left; clipped at the sprite edge with a toast.
+function scaleSelection(dir) {
+  if (!selectedRegion || selectedRegionSpriteIdx !== selectedSpriteIdx) return;
+  const sp = currentSprite();
+  if (!sp) return;
+  const buf = readRegionBuffer(sp, selectedRegion);
+  const { w, h, pixels } = buf;
+  if (dir === 'down' && (w < 2 || h < 2)) {
+    showAutoToast('🔎− Too small to shrink — need at least 2×2');
+    return;
+  }
+  const factor = dir === 'up' ? 2 : 0.5;
+  const outW = dir === 'up' ? w * 2 : Math.floor(w / 2);
+  const outH = dir === 'up' ? h * 2 : Math.floor(h / 2);
+  const out = [];
+  for (let y = 0; y < outH; y++) {
+    const row = new Array(outW);
+    for (let x = 0; x < outW; x++) {
+      const sx = dir === 'up' ? Math.floor(x / 2) : x * 2;
+      const sy = dir === 'up' ? Math.floor(y / 2) : y * 2;
+      row[x] = pixels[sy][sx];
+    }
+    out.push(row);
+  }
+  pushUndo();
+  // Zero the source so shrink doesn't leave half-scaled ghost pixels
+  // and enlarge's "no longer written" source cells don't linger.
+  for (let y = selectedRegion.y0; y <= selectedRegion.y1; y++) {
+    for (let x = selectedRegion.x0; x <= selectedRegion.x1; x++) {
+      setSpritePixel(sp, x, y, 0);
+    }
+  }
+  const targetX1 = selectedRegion.x0 + outW - 1;
+  const targetY1 = selectedRegion.y0 + outH - 1;
+  const clipped = clampRegionToSprite(sp, selectedRegion.x0, selectedRegion.y0,
+                                          targetX1, targetY1);
+  let offEdge = false;
+  const W = sp.width * 8, H = sp.height * 8;
+  for (let y = 0; y < outH; y++) {
+    for (let x = 0; x < outW; x++) {
+      const dx = selectedRegion.x0 + x, dy = selectedRegion.y0 + y;
+      if (dx >= W || dy >= H) { offEdge = true; continue; }
+      setSpritePixel(sp, dx, dy, out[y][x]);
+    }
+  }
+  if (clipped) {
+    selectedRegion = clipped;
+    selectedRegionSpriteIdx = selectedSpriteIdx;
+  }
+  afterToolMutation(true);
+  if (dir === 'up' && offEdge) {
+    showAutoToast('🔎+ Enlarge clipped at sprite edge');
+  } else if (dir === 'down' && (w % 2 || h % 2)) {
+    showAutoToast('🔎− Shrink dropped the last row/column');
+  }
+  renderSelectionActions();
+}
+
 // --- Floating selection (drag-move) ------------------------------------
 
 // True when (x, y) in sprite-pixel coords is inside a settled marquee
@@ -5278,6 +5340,13 @@ function renderSelectionActions() {
   host.querySelector('[data-sa="rot-r"]').disabled  = !hasSel;
   host.querySelector('[data-sa="flip-h"]').disabled = !hasSel;
   host.querySelector('[data-sa="flip-v"]').disabled = !hasSel;
+  let selW = 0, selH = 0;
+  if (hasSel) {
+    selW = selectedRegion.x1 - selectedRegion.x0 + 1;
+    selH = selectedRegion.y1 - selectedRegion.y0 + 1;
+  }
+  host.querySelector('[data-sa="scale-up"]').disabled   = !hasSel;
+  host.querySelector('[data-sa="scale-down"]').disabled = !hasSel || selW < 2 || selH < 2;
   host.querySelector('[data-sa="clear"]').disabled  = !hasSel;
 }
 
@@ -5294,6 +5363,8 @@ function initSelectionActions() {
     else if (op === 'rot-r')  rotateSelection('cw');
     else if (op === 'flip-h') flipSelection('h');
     else if (op === 'flip-v') flipSelection('v');
+    else if (op === 'scale-up')   scaleSelection('up');
+    else if (op === 'scale-down') scaleSelection('down');
     else if (op === 'clear')  deleteSelectedRegion();
   });
   renderSelectionActions();

@@ -211,6 +211,15 @@ was unnecessary, and what was deferred.
   paste, `R` rotate CW, `Shift+R` rotate CCW, `H` flip horizontal,
   `Escape` cancel float / clear selection. Flip V is toolbar-only by
   design (lowercase `v` is already paste).
+- **Scale selection (`🔎+ ×2` / `🔎− ÷2`).** Toolbar-only integer
+  nearest-neighbour scaling. `×2` doubles each pixel into a 2×2
+  block (anchored at the marquee's top-left; clipped at the sprite
+  edge with a toast). `÷2` samples every other pixel (top-left
+  nearest-neighbour) and refuses to act below 2×2; odd dimensions
+  drop the last row/column with a toast. Both follow the rotate path:
+  one `pushUndo()` up-front, source zeroed, new `selectedRegion`
+  matches the clipped output rect. No keyboard shortcut — toolbar
+  only, to keep the key surface minimal.
   All changes in
   [sprites.html](tools/tile_editor_web/sprites.html); Backgrounds page
   untouched. Session-only state — no schema changes.
