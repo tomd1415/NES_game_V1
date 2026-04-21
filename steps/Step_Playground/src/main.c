@@ -43,9 +43,13 @@ unsigned char pad;
 unsigned char prev_pad;      // for edge-triggering the jump
 unsigned char jumping;       // 1 while airborne (rising or falling)
 unsigned char jmp_up;        // ascent frames remaining (0 = falling)
+unsigned char on_ladder;     // 1 while the player is overlapping a LADDER tile
 unsigned char plrdir;        // 0x40 when facing left (flip-H on every tile)
 //>> walk_speed: How many pixels the player moves each frame. 1 = slow, 2 = normal, 3 = fast.
 unsigned char walk_speed = 1;
+//<<
+//>> climb_speed: How many pixels the player moves per frame while on a LADDER tile. 1 = slow, 2 = normal.
+unsigned char climb_speed = 1;
 //<<
 unsigned char i;
 unsigned char r;
@@ -202,13 +206,45 @@ void main(void) {
             plrdir = 0x40;
         }
 
-        // UP = jump.  Edge-triggered: must release and re-press to
-        // bounce again, and only takes off from the ground.
-        if ((pad & 0x08) && !(prev_pad & 0x08) && !jumping) {
-            jumping = 1;
+        // Ladder probe.  If any tile the player overlaps is a LADDER the
+        // player can move up/down with the D-pad and gravity is suspended.
+        // Stepping sideways off the ladder resumes normal falling.
+        {
+            unsigned char lt_row = py >> 3;
+            unsigned char lb_row = (py + (PLAYER_H << 3) - 1) >> 3;
+            unsigned char ll_col = px >> 3;
+            unsigned char lr_col = (px + (PLAYER_W << 3) - 1) >> 3;
+            unsigned char lrr;
+            on_ladder = 0;
+            for (lrr = lt_row; lrr <= lb_row; lrr++) {
+                if (behaviour_at((unsigned int)ll_col, (unsigned int)lrr) == BEHAVIOUR_LADDER
+                 || behaviour_at((unsigned int)lr_col, (unsigned int)lrr) == BEHAVIOUR_LADDER) {
+                    on_ladder = 1;
+                    break;
+                }
+            }
+        }
+
+        if (on_ladder) {
+            // Climb: UP/DOWN move the player along the ladder; no jump
+            // or gravity while on the rungs.
+            if (pad & 0x08) {                 // UP
+                if (py >= climb_speed) py -= climb_speed; else py = 0;
+            }
+            if (pad & 0x04) {                 // DOWN
+                if (py < 232) py += climb_speed;
+            }
+            jumping = 0;
+            jmp_up = 0;
+        } else {
+            // UP = jump.  Edge-triggered: must release and re-press to
+            // bounce again, and only takes off from the ground.
+            if ((pad & 0x08) && !(prev_pad & 0x08) && !jumping) {
+                jumping = 1;
 //>> jump_height: How high the player jumps. Bigger number = higher jump (try 10 to 40).
-            jmp_up = 20;
+                jmp_up = 20;
 //<<
+            }
         }
         prev_pad = pad;
 
@@ -219,8 +255,11 @@ void main(void) {
         // jumping == 0) so walking off a ledge drops the player naturally.
         // If the tile above the player's head is SOLID_GROUND or WALL we
         // cancel the remaining ascent budget so the jump "bonks" off the
-        // ceiling and gravity takes over on the next frame.
-        if (jumping && jmp_up > 0) {
+        // ceiling and gravity takes over on the next frame.  LADDER
+        // overlap skips this block entirely (handled above).
+        if (on_ladder) {
+            /* handled in the ladder branch above */
+        } else if (jumping && jmp_up > 0) {
             unsigned char head_row = (py >= 2) ? ((py - 2) >> 3) : 0;
             unsigned char head_l = behaviour_at((unsigned int)(px >> 3),
                                                 (unsigned int)head_row);
@@ -244,6 +283,10 @@ void main(void) {
              || foot_l == BEHAVIOUR_PLATFORM
              || foot_r == BEHAVIOUR_SOLID_GROUND || foot_r == BEHAVIOUR_WALL
              || foot_r == BEHAVIOUR_PLATFORM) {
+                // Snap to the top of the landed tile so the player's body
+                // does not overlap the ground row (which would otherwise
+                // make the horizontal walk check fail on every step).
+                py = (unsigned char)((foot_row << 3) - (PLAYER_H << 3));
                 jumping = 0;   // feet on a surface — stop falling
             } else {
                 if (py < 232) py += 2;

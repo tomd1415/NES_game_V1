@@ -3,15 +3,15 @@
 #ifndef COLLISION_H
 #define COLLISION_H
 
-/* Behaviour type ids (0..7). Slots 6 and 7 are custom — if the
-   pupil renamed them, their chosen names appear here. */
+/* Behaviour type ids (0..7). Slot 7 is custom — if the pupil named
+   it, their chosen name appears here. */
 #define BEHAVIOUR_NONE             0
 #define BEHAVIOUR_SOLID_GROUND     1
 #define BEHAVIOUR_WALL             2
 #define BEHAVIOUR_PLATFORM         3
 #define BEHAVIOUR_DOOR             4
 #define BEHAVIOUR_TRIGGER          5
-#define BEHAVIOUR_CUSTOM6          6
+#define BEHAVIOUR_LADDER           6
 #define BEHAVIOUR_CUSTOM7          7
 
 /* Reaction verbs a sprite can have towards a behaviour id. */

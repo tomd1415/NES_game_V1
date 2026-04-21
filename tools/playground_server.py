@@ -674,6 +674,7 @@ BUILTIN_BEHAVIOUR_NAMES = {
     3: "PLATFORM",
     4: "DOOR",
     5: "TRIGGER",
+    6: "LADDER",
 }
 
 
@@ -681,8 +682,8 @@ def _sanitise_behaviour_name(name, slot_id):
     """Return an uppercase C identifier for the pupil's custom behaviour name.
 
     Strips non-[A-Z0-9_] characters, collapses runs of underscores, and
-    falls back to ``CUSTOM6`` / ``CUSTOM7`` when the cleaned name is empty
-    or starts with a digit.  Slot ids 1..5 always use the built-in name.
+    falls back to ``CUSTOM7`` when the cleaned name is empty or starts
+    with a digit.  Slot ids 1..6 always use the built-in name.
     """
     if slot_id in BUILTIN_BEHAVIOUR_NAMES:
         return BUILTIN_BEHAVIOUR_NAMES[slot_id]
@@ -790,8 +791,8 @@ def build_collision_h(state):
         "#ifndef COLLISION_H",
         "#define COLLISION_H",
         "",
-        "/* Behaviour type ids (0..7). Slots 6 and 7 are custom — if the",
-        "   pupil renamed them, their chosen names appear here. */",
+        "/* Behaviour type ids (0..7). Slot 7 is custom — if the pupil",
+        "   named it, their chosen name appears here. */",
     ]
     for slot_id in range(8):
         lines.append(f"#define BEHAVIOUR_{names[slot_id]:<16} {slot_id}")

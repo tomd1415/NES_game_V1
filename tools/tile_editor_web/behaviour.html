@@ -372,18 +372,14 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
     <p class="type-hint">Pick one, then click tiles on the map.
     Number keys 0–7 also switch type.</p>
     <div class="type-list" id="type-list"></div>
-    <h3>Custom slot #6</h3>
-    <div class="custom-edit">
-      <input type="color" id="custom6-colour" value="#cc66ff" title="Colour for this custom behaviour">
-      <input type="text" id="custom6-name" placeholder="e.g. spike" maxlength="20">
-    </div>
     <h3>Custom slot #7</h3>
     <div class="custom-edit">
       <input type="color" id="custom7-colour" value="#33dddd" title="Colour for this custom behaviour">
-      <input type="text" id="custom7-name" placeholder="e.g. water" maxlength="20">
+      <input type="text" id="custom7-name" placeholder="e.g. spike" maxlength="20">
     </div>
-    <p class="type-hint">Give your custom slot a name to use it.
-    Names follow C-identifier rules (letters / digits / underscore).</p>
+    <p class="type-hint">Give slot 7 a name to use your own behaviour
+    (e.g. <code>spike</code>, <code>water</code>).  Names follow
+    C-identifier rules (letters / digits / underscore).</p>
   </section>
 
   <!-- ============ Canvas (centre) ============ -->
@@ -578,8 +574,54 @@ function defaultBehaviourTypes() {
     { id: 3, name: 'platform',     colour: '#6aa3ff',     builtin: true },
     { id: 4, name: 'door',         colour: '#ffd866',     builtin: true },
     { id: 5, name: 'trigger',      colour: '#ff78a2',     builtin: true },
+    { id: 6, name: 'ladder',       colour: '#c08a3c',     builtin: true },
   ];
 }
+// Sprint 10 follow-up: the ladder builtin took over slot 6 (was a custom
+// slot in pre-ladder saves).  If an older project had a named custom-6,
+// move it to slot 7 if slot 7 is unused, and remap any painted cells
+// 6→7 so the pupil's artwork follows.  Idempotent: once slot 6 is the
+// ladder builtin this is a no-op.
+function relocateCustomSlotSixForLadder(s) {
+  const six = s.behaviour_types.find(t => t.id === 6);
+  if (!six || six.builtin) return;
+  const sixName = (six.name || '').trim();
+  if (!sixName) {
+    s.behaviour_types = s.behaviour_types.filter(t => t.id !== 6);
+    return;
+  }
+  const seven = s.behaviour_types.find(t => t.id === 7);
+  const sevenUnused = !seven || !seven.builtin && !((seven.name || '').trim());
+  if (sevenUnused) {
+    s.behaviour_types = s.behaviour_types.filter(t => t.id !== 7 && t.id !== 6);
+    s.behaviour_types.push({
+      id: 7, name: sixName, colour: six.colour || '#33dddd', builtin: false,
+    });
+    if (Array.isArray(s.backgrounds)) {
+      for (const bg of s.backgrounds) {
+        const grid = bg && bg.behaviour;
+        if (!Array.isArray(grid)) continue;
+        for (const row of grid) {
+          if (!Array.isArray(row)) continue;
+          for (let c = 0; c < row.length; c++) if (row[c] === 6) row[c] = 7;
+        }
+      }
+    }
+    if (Array.isArray(s.behaviour_reactions)) {
+      for (const rmap of s.behaviour_reactions) {
+        if (rmap && typeof rmap === 'object' && rmap['6'] !== undefined) {
+          rmap['7'] = rmap['6'];
+          delete rmap['6'];
+        }
+      }
+    }
+    console.warn('Slot 6 ("' + sixName + '") moved to slot 7 to make room for the new Ladder builtin.');
+  } else {
+    s.behaviour_types = s.behaviour_types.filter(t => t.id !== 6);
+    console.warn('Slot 6 ("' + sixName + '") dropped — replaced by the Ladder builtin (slot 7 already in use).');
+  }
+}
+
 function defaultReactionMap(sprite, idx) {
   const isHero = (sprite && sprite.role === 'hero') || idx === 0;
   return isHero
@@ -658,6 +700,7 @@ function migrateBehaviourFields(s) {
   if (!Array.isArray(s.behaviour_types) || s.behaviour_types.length === 0) {
     s.behaviour_types = defaultBehaviourTypes();
   }
+  relocateCustomSlotSixForLadder(s);
   const have = new Set(s.behaviour_types.map(t => t.id));
   for (const t of defaultBehaviourTypes()) {
     if (!have.has(t.id)) s.behaviour_types.push(t);
@@ -1207,12 +1250,11 @@ function wireCustomSlotInputs() {
     });
     read();
   }
-  wire(6);
   wire(7);
 }
 
 function refreshCustomSlotInputs() {
-  for (const slotId of [6, 7]) {
+  for (const slotId of [7]) {
     const t = (state.behaviour_types || []).find(x => x.id === slotId);
     const nameEl   = document.getElementById('custom' + slotId + '-name');
     const colourEl = document.getElementById('custom' + slotId + '-colour');

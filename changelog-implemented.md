@@ -344,6 +344,28 @@ was unnecessary, and what was deferred.
   bonk into a fall. `PLATFORM` stays one-way (land on top, pass
   through from below and sideways) so ledge-up-jumps still work.
   Scene-sprite gravity also treats `WALL` as a landing surface.
+- **Player landing snap (stuck-in-ground fix).** The foot-check
+  (`(py + PLAYER_H*8) >> 3`) is one tile below the player's body,
+  so a non-aligned starting `PLAYER_Y` (e.g. 185) could leave the
+  player's bottom pixel inside the ground row — which then made
+  the horizontal walk check's `bot_row` see that row as
+  `SOLID_GROUND` and refuse every step.  When gravity detects a
+  landing tile, `py` is now snapped to `(foot_row << 3) -
+  PLAYER_H * 8` so the body never overlaps the row below, and
+  walking works from frame 1.
+- **`BEHAVIOUR_LADDER` (builtin slot 6).** A sixth built-in
+  behaviour id with a wood-amber swatch (`#c08a3c`).  Paint ladder
+  tiles on the Behaviour page and the default `main.c` lets the
+  player climb: while any body cell is a ladder, `UP` / `DOWN`
+  move `py` by a tunable `climb_speed` (new `//>> climb_speed`
+  guided region), gravity is suspended, and stepping sideways off
+  the ladder resumes normal falling.  Custom slot count drops
+  from 2 to 1 (slot 7 only).  A one-time migration in all three
+  editor pages relocates any older custom-6 to slot 7 and remaps
+  painted cells `6→7` so pupils don't silently lose named
+  behaviours.  Emitter: `BUILTIN_BEHAVIOUR_NAMES[6] = "LADDER"`
+  so the `BEHAVIOUR_LADDER` `#define` appears in the generated
+  `collision.h`.
 
 ---
 
