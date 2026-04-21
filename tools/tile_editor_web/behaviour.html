@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Behaviour Editor</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+/* ===========================================================
+   NES BEHAVIOUR EDITOR — mark background tiles as ground, wall,
+   platform, door, trigger, and configure how each sprite reacts.
+   Phase A: paint the map + edit reactions. Code-gen lands in Phase B.
+   =========================================================== */
+:root {
+  --bg:        #14121f;
+  --panel:     #1f1b30;
+  --panel2:    #2a2440;
+  --border:    #3a3352;
+  --fg:        #f4f4f4;
+  --muted:     #9a97ad;
+  --accent:    #ffd866;
+  --good:      #47d16c;
+  --warn:      #ff6188;
+  --info:      #78dce8;
+  --shadow:    0 4px 16px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--fg);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  overflow-x: auto;
+}
+h1, h2, h3 { margin: 0; }
+h1 { font-size: 1.15em; color: var(--accent); }
+h2 { font-size: 1.0em;  color: var(--accent); margin-bottom: 6px; }
+h3 { font-size: 0.9em;  color: var(--info);   margin: 10px 0 4px; }
+button, select, input[type=text], input[type=color] {
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 10px; font-size: 0.9em;
+  cursor: pointer; font-family: inherit;
+}
+button:hover { background: #3a3560; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: #3a2f50; border-color: var(--accent); color: var(--accent); }
+button.active { background: #3a2f50; border-color: var(--accent); color: var(--accent); font-weight: bold; }
+input[type=text] { cursor: text; }
+label { -webkit-user-select: none; user-select: none; }
+
+/* --- Header / nav (mirrors other pages) --------------------- */
+.app-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.app-header .status-group {
+  display: flex; align-items: center; gap: 10px;
+  margin-left: 16px;
+}
+.page-nav { display: flex; gap: 4px; margin-left: 8px; }
+.page-link {
+  padding: 5px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg); text-decoration: none;
+  font-size: 0.9em;
+}
+.page-link:hover { background: #3a3560; }
+.page-link.active {
+  background: #3a2f50;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: bold;
+}
+.app-header .toolbar {
+  margin-left: auto;
+  display: flex; gap: 6px; align-items: center;
+}
+#save-status.saved    { color: var(--good); }
+#save-status.saving   { color: var(--info); }
+#save-status.error    { color: var(--warn); }
+#project-name {
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 8px; font-size: 0.9em;
+  width: 160px;
+}
+
+/* Projects menu (shared-ish across pages) */
+.projects-menu { position: relative; }
+.projects-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.projects-menu[open] > summary { background: #3a3560; }
+.projects-menu > .menu-body {
+  position: absolute;
+  left: 0; top: calc(100% + 4px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 220px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+.projects-list button {
+  width: 100%; text-align: left;
+  background: transparent; border: 1px solid transparent;
+  padding: 4px 6px;
+}
+.projects-list button.active { border-color: var(--accent); color: var(--accent); }
+.projects-list button:hover { background: #3a3560; }
+button.warn { border-color: var(--warn); color: var(--warn); }
+
+/* --- Main layout -------------------------------------------- */
+.app-main {
+  display: grid;
+  grid-template-columns: 260px 1fr 340px;
+  gap: 12px;
+  padding: 12px 16px;
+  align-items: start;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+/* --- Left: type palette ------------------------------------- */
+.type-list {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 6px;
+}
+.type-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.type-row.selected {
+  border-color: var(--accent);
+  background: #3a2f50;
+}
+.type-row .swatch {
+  width: 18px; height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.type-row .swatch.none {
+  background-image:
+    linear-gradient(45deg, #666 25%, transparent 25%),
+    linear-gradient(-45deg, #666 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #666 75%),
+    linear-gradient(-45deg, transparent 75%, #666 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-color: #333;
+}
+.type-row .name { flex: 1; font-weight: 500; }
+.type-row .shortcut {
+  color: var(--muted);
+  font-family: monospace;
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.custom-edit {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px;
+  background: var(--panel2);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+.custom-edit input[type=text] { flex: 1; }
+.type-hint {
+  color: var(--muted); font-size: 0.8em;
+  margin-top: 6px; line-height: 1.35;
+}
+
+/* --- Centre: canvas + toolbar ------------------------------- */
+.canvas-panel {
+  display: flex; flex-direction: column; gap: 8px;
+  overflow: auto;
+}
+.bg-picker-row {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.bg-picker-row select { min-width: 180px; }
+.tool-toolbar {
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.tool-toolbar .tool-group {
+  display: flex; gap: 4px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+}
+.tool-toolbar .tool-group:last-child { border-right: none; }
+.tool-toolbar button {
+  min-width: 34px;
+  padding: 5px 8px;
+}
+.zoom-control {
+  display: flex; align-items: center; gap: 6px;
+  margin-left: auto;
+}
+.canvas-wrap {
+  position: relative;
+  overflow: auto;
+  max-height: 74vh;
+  border: 1px solid var(--border);
+  background: #0c0a18;
+  border-radius: 4px;
+  padding: 4px;
+}
+#behaviour-canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: crosshair;
+}
+.canvas-hint {
+  color: var(--muted); font-size: 0.82em;
+  line-height: 1.35;
+}
+
+/* --- Right: reactions / backgrounds ------------------------- */
+.reactions-panel { min-width: 280px; }
+.reactions-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 0.85em;
+}
+.reactions-table th, .reactions-table td {
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+.reactions-table th {
+  position: sticky; top: 0;
+  background: var(--panel);
+  font-weight: bold;
+  color: var(--info);
+  white-space: nowrap;
+}
+.reactions-table td .swatch {
+  width: 12px; height: 12px; border-radius: 2px;
+  border: 1px solid var(--border);
+  display: inline-block; margin-right: 5px;
+  vertical-align: middle;
+}
+.reactions-table select {
+  width: 100%;
+  padding: 3px 4px;
+  font-size: 0.85em;
+}
+.reactions-sprite-row td:first-child {
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.role-chip {
+  display: inline-block;
+  font-size: 0.7em;
+  color: #111;
+  padding: 1px 5px;
+  border-radius: 9px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.no-sprites-hint {
+  color: var(--muted);
+  font-style: italic;
+  padding: 10px 0;
+}
+
+/* --- Toast (shared look) ------------------------------------ */
+.auto-assign-toast {
+  position: fixed;
+  right: 18px; bottom: 24px;
+  background: rgba(40,40,40,0.95);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 9999;
+}
+.auto-assign-toast.show { opacity: 1; }
+
+/* --- Dialog (shared look) ----------------------------------- */
+dialog {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 520px;
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(0,0,0,0.6); }
+.dialog-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 14px;
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🚧 NES Behaviour Editor</h1>
+  <nav class="page-nav" aria-label="Editor pages">
+    <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
+    <a class="page-link" href="sprites.html" title="Design sprites from the shared tileset">🦸 Sprites</a>
+    <a class="page-link active" href="behaviour.html" title="You are here — mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
+    <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
+  </nav>
+  <div class="status-group">
+    <span id="save-status" class="saved">● Loading…</span>
+    <input id="project-name" type="text" value="untitled" title="Project name (shared with other pages)" aria-label="Project name">
+  </div>
+  <div class="toolbar">
+    <details class="projects-menu" id="projects-menu">
+      <summary title="Switch project or create a new one"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
+      <div class="menu-body">
+        <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
+      </div>
+    </details>
+    <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+    <button type="button" id="btn-clear-all" title="Clear the behaviour map for the current background (undoable)">🗑 Clear map</button>
+    <button type="button" id="btn-help" title="Show help (?)">?</button>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- ============ Type palette (left) ============ -->
+  <section class="panel type-panel">
+    <h2>Behaviour types</h2>
+    <p class="type-hint">Pick one, then click tiles on the map.
+    Number keys 0–7 also switch type.</p>
+    <div class="type-list" id="type-list"></div>
+    <h3>Custom slot #6</h3>
+    <div class="custom-edit">
+      <input type="color" id="custom6-colour" value="#cc66ff" title="Colour for this custom behaviour">
+      <input type="text" id="custom6-name" placeholder="e.g. spike" maxlength="20">
+    </div>
+    <h3>Custom slot #7</h3>
+    <div class="custom-edit">
+      <input type="color" id="custom7-colour" value="#33dddd" title="Colour for this custom behaviour">
+      <input type="text" id="custom7-name" placeholder="e.g. water" maxlength="20">
+    </div>
+    <p class="type-hint">Give your custom slot a name to use it.
+    Names follow C-identifier rules (letters / digits / underscore).</p>
+  </section>
+
+  <!-- ============ Canvas (centre) ============ -->
+  <section class="panel canvas-panel">
+    <div class="bg-picker-row">
+      <label>Background&nbsp;
+        <select id="bg-select" title="Paint behaviour for which background?"></select>
+      </label>
+      <span id="bg-size-label" style="color:var(--muted);font-size:0.85em"></span>
+    </div>
+    <div class="tool-toolbar" role="toolbar" aria-label="Paint tools">
+      <div class="tool-group">
+        <button type="button" class="tool-btn" data-tool="pencil"  title="Pencil — click or drag to paint single tiles (P)">✏️ Pencil</button>
+        <button type="button" class="tool-btn" data-tool="fill"    title="Fill — flood-fill a connected region of one behaviour (F)">🪣 Fill</button>
+        <button type="button" class="tool-btn" data-tool="rect"    title="Rectangle — drag to paint a rectangle (R)">▭ Rect</button>
+        <button type="button" class="tool-btn" data-tool="eraser"  title="Eraser — paint ‘none’ (E)">⌫ Eraser</button>
+      </div>
+      <div class="tool-group">
+        <button type="button" id="btn-select-same" title="Highlight every tile already set to the selected type">⟐ Find same</button>
+        <button type="button" id="btn-clear-highlight" title="Clear the find-same highlight">✕ Clear find</button>
+      </div>
+      <div class="tool-group">
+        <label style="color:var(--muted);font-size:0.85em;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="show-tiles" checked> Show tiles
+        </label>
+        <label style="color:var(--muted);font-size:0.85em;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="show-grid" checked> Grid
+        </label>
+      </div>
+      <div class="zoom-control">
+        Zoom <input type="range" id="nt-zoom" min="1" max="6" step="1" value="2">
+        <span id="nt-zoom-label">2×</span>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="behaviour-canvas" width="512" height="480"></canvas>
+    </div>
+    <p class="canvas-hint">
+      Left-click / drag: paint selected type · Right-click: erase (set to <em>none</em>) ·
+      Shift-click with Pencil: pick the type under the cursor.
+    </p>
+  </section>
+
+  <!-- ============ Reactions (right) ============ -->
+  <section class="panel reactions-panel">
+    <h2>Sprite reactions</h2>
+    <p class="type-hint">For each sprite, pick what happens when it hits
+    each kind of tile. <strong>call_handler</strong> means your code
+    decides (a hook lands in <code>behaviour.c</code> in Phase B).</p>
+    <div id="reactions-body"></div>
+  </section>
+
+</main>
+
+<!-- ============ Help dialog ============ -->
+<dialog id="help-dialog">
+  <h2>Behaviour editor — quick help</h2>
+  <p><strong>What this page does.</strong> You pick a behaviour type
+  (ground, wall, platform, door, trigger, or one of your custom
+  slots) and paint it onto background tiles. Each sprite then has a
+  reaction for each type — <em>land</em>, <em>block</em>, <em>bounce</em>,
+  <em>exit</em>, <em>ignore</em>, or <em>call_handler</em>.</p>
+  <h3>Keyboard</h3>
+  <ul style="margin:4px 0 8px 18px; padding:0; line-height:1.5;">
+    <li><code>0</code>…<code>7</code> — pick behaviour type</li>
+    <li><code>P</code> pencil · <code>F</code> fill · <code>R</code> rect · <code>E</code> eraser</li>
+    <li><code>Ctrl+Z</code> undo · <code>Ctrl+Shift+Z</code> redo</li>
+    <li><code>Shift+click</code> with pencil picks the type under the cursor</li>
+  </ul>
+  <p class="type-hint">Nothing you do here changes the tile graphics —
+  just which cells count as ground / wall / etc. The Play-in-NES
+  pipeline reads this map (Phase B) to apply the reactions.</p>
+  <div class="dialog-actions">
+    <button type="button" id="btn-help-close">Close</button>
+  </div>
+</dialog>
+
+<script src="storage.js"></script>
+<script>
+'use strict';
+
+// ================================================================
+// NES master palette — kept in sync with index.html / sprites.html.
+// (Only needed here to render the nametable under-layer.)
+// ================================================================
+const NES_PALETTE_RGB = [
+  [0x62,0x62,0x62],[0x00,0x1F,0xB2],[0x24,0x04,0xC8],[0x52,0x00,0xB2],
+  [0x73,0x00,0x76],[0x80,0x00,0x24],[0x73,0x0B,0x00],[0x52,0x28,0x00],
+  [0x24,0x44,0x00],[0x00,0x57,0x00],[0x00,0x5C,0x00],[0x00,0x53,0x24],
+  [0x00,0x3C,0x76],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xAB,0xAB,0xAB],[0x0D,0x57,0xFF],[0x4B,0x30,0xFF],[0x8A,0x13,0xFF],
+  [0xBC,0x08,0xD6],[0xD2,0x12,0x69],[0xC7,0x2E,0x00],[0x9D,0x54,0x00],
+  [0x60,0x7B,0x00],[0x20,0x98,0x00],[0x00,0xA3,0x00],[0x00,0x99,0x42],
+  [0x00,0x7D,0xB4],[0x00,0x00,0x00],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xFF,0xFF,0xFF],[0x53,0xAE,0xFF],[0x90,0x85,0xFF],[0xD3,0x65,0xFF],
+  [0xFF,0x57,0xFF],[0xFF,0x5D,0xCF],[0xFF,0x77,0x57],[0xFA,0x9E,0x00],
+  [0xBD,0xC7,0x00],[0x7A,0xE7,0x00],[0x43,0xF6,0x11],[0x26,0xEF,0x7E],
+  [0x2C,0xD5,0xF6],[0x4E,0x4E,0x4E],[0x00,0x00,0x00],[0x00,0x00,0x00],
+  [0xFF,0xFF,0xFF],[0xB6,0xE1,0xFF],[0xCE,0xD1,0xFF],[0xE9,0xC3,0xFF],
+  [0xFF,0xBC,0xFF],[0xFF,0xBD,0xF4],[0xFF,0xC6,0xC3],[0xFF,0xD5,0x9A],
+  [0xE9,0xE6,0x81],[0xCE,0xF4,0x81],[0xB6,0xFB,0x9A],[0xA9,0xFA,0xC3],
+  [0xA9,0xF0,0xF4],[0xB8,0xB8,0xB8],[0x00,0x00,0x00],[0x00,0x00,0x00],
+];
+function nesRgb(idx) {
+  const c = NES_PALETTE_RGB[idx & 0x3F];
+  return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+}
+
+// ================================================================
+// State model — MUST match index.html / sprites.html or Storage
+// rejects the save. Keep these helpers in sync when the schema
+// changes on any page (see sprint10-plan.md).
+// ================================================================
+const STATE_VERSION = 1;
+const NUM_TILES = 256;
+const SCREEN_W = 32;
+const SCREEN_H = 30;
+const ROLE_COLOURS = {
+  player: '#ffd866', npc: '#78dce8', enemy: '#ff6188',
+  item: '#a9dc76', tool: '#ab9df2', powerup: '#fc9867',
+  pickup: '#a9dc76', projectile: '#78dce8', decoration: '#9a97ad',
+  hero: '#ffd866', other: '#9a97ad',
+};
+
+function emptyTile() {
+  return { name: '', pixels: Array.from({length:8}, () => [0,0,0,0,0,0,0,0]) };
+}
+function defaultBgPalettes() {
+  return [
+    { slots: [0x29, 0x19, 0x07] },
+    { slots: [0x30, 0x00, 0x2D] },
+    { slots: [0x27, 0x17, 0x07] },
+    { slots: [0x31, 0x21, 0x01] },
+  ];
+}
+function defaultSpritePalettes() {
+  return [
+    { slots: [0x27, 0x17, 0x30] },
+    { slots: [0x1A, 0x30, 0x0A] },
+    { slots: [0x30, 0x16, 0x00] },
+    { slots: [0x16, 0x36, 0x06] },
+  ];
+}
+function emptyNametable() {
+  return Array.from({length: SCREEN_H}, () =>
+    Array.from({length: SCREEN_W}, () => ({ tile: 0, palette: 0 }))
+  );
+}
+function emptyBehaviour(screensX, screensY) {
+  const rows = SCREEN_H * Math.max(1, screensY | 0 || 1);
+  const cols = SCREEN_W * Math.max(1, screensX | 0 || 1);
+  return Array.from({length: rows}, () => Array.from({length: cols}, () => 0));
+}
+function emptyBackground(name) {
+  return {
+    name: name || 'background',
+    dimensions: { screens_x: 1, screens_y: 1 },
+    nametable: emptyNametable(),
+    behaviour: emptyBehaviour(1, 1),
+  };
+}
+function createDefaultState() {
+  return {
+    version: STATE_VERSION,
+    name: 'untitled',
+    universal_bg: 0x21,
+    bg_palettes: defaultBgPalettes(),
+    sprite_palettes: defaultSpritePalettes(),
+    sprite_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    bg_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    backgrounds: [emptyBackground('background')],
+    selectedBgIdx: 0,
+    sprites: [],
+    behaviour_types: defaultBehaviourTypes(),
+    behaviour_reactions: [],
+    metadata: {
+      created: new Date().toISOString(),
+      modified: new Date().toISOString(),
+    },
+  };
+}
+
+function defaultBehaviourTypes() {
+  return [
+    { id: 0, name: 'none',         colour: 'transparent', builtin: true },
+    { id: 1, name: 'solid_ground', colour: '#8d6e4b',     builtin: true },
+    { id: 2, name: 'wall',         colour: '#555555',     builtin: true },
+    { id: 3, name: 'platform',     colour: '#6aa3ff',     builtin: true },
+    { id: 4, name: 'door',         colour: '#ffd866',     builtin: true },
+    { id: 5, name: 'trigger',      colour: '#ff78a2',     builtin: true },
+  ];
+}
+function defaultReactionMap(sprite, idx) {
+  const isHero = (sprite && sprite.role === 'hero') || idx === 0;
+  return isHero
+    ? { 1: 'land', 2: 'block',  3: 'land_top', 4: 'exit',   5: 'call_handler', 6: 'ignore', 7: 'ignore' }
+    : { 1: 'land', 2: 'bounce', 3: 'ignore',   4: 'ignore', 5: 'call_handler', 6: 'ignore', 7: 'ignore' };
+}
+
+function activeBg(s) {
+  const src = s || state;
+  if (!Array.isArray(src.backgrounds) || src.backgrounds.length === 0) {
+    return emptyBackground('background');
+  }
+  let idx = src.selectedBgIdx | 0;
+  if (idx < 0 || idx >= src.backgrounds.length) idx = 0;
+  return src.backgrounds[idx];
+}
+
+// Back-fill missing fields — same logic as the other pages, kept in
+// sync manually. When adding fields here, also update index.html and
+// sprites.html so any project opens cleanly from any page.
+function migrateState(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (!Array.isArray(s.sprites)) s.sprites = [];
+  if (Array.isArray(s.tiles) && (!Array.isArray(s.sprite_tiles) || !Array.isArray(s.bg_tiles))) {
+    if (!Array.isArray(s.sprite_tiles)) {
+      s.sprite_tiles = s.tiles.map(t => ({ pixels: t.pixels.map(r => r.slice()), name: t.name }));
+    }
+    if (!Array.isArray(s.bg_tiles)) {
+      s.bg_tiles = s.tiles.map(t => ({ pixels: t.pixels.map(r => r.slice()), name: t.name }));
+    }
+    delete s.tiles;
+  }
+  if (!Array.isArray(s.sprite_tiles)) {
+    s.sprite_tiles = Array.from({length: NUM_TILES}, () => emptyTile());
+  }
+  if (!Array.isArray(s.bg_tiles)) {
+    s.bg_tiles = Array.from({length: NUM_TILES}, () => emptyTile());
+  }
+  if (!Array.isArray(s.backgrounds)) {
+    const legacyName = (typeof s.name === 'string' && s.name !== 'untitled') ? s.name : 'background';
+    s.backgrounds = [{
+      name: legacyName,
+      dimensions: s.dimensions || { screens_x: 1, screens_y: 1 },
+      nametable: Array.isArray(s.nametable) ? s.nametable : emptyNametable(),
+    }];
+    s.selectedBgIdx = 0;
+  }
+  if (s.backgrounds.length === 0) s.backgrounds.push(emptyBackground('background'));
+  if (typeof s.selectedBgIdx !== 'number'
+      || s.selectedBgIdx < 0
+      || s.selectedBgIdx >= s.backgrounds.length) {
+    s.selectedBgIdx = 0;
+  }
+  for (const bg of s.backgrounds) {
+    if (!bg.name || typeof bg.name !== 'string') bg.name = 'background';
+    if (!bg.dimensions || typeof bg.dimensions !== 'object') {
+      bg.dimensions = { screens_x: 1, screens_y: 1 };
+    }
+    bg.dimensions.screens_x = Math.max(1, bg.dimensions.screens_x | 0 || 1);
+    bg.dimensions.screens_y = Math.max(1, bg.dimensions.screens_y | 0 || 1);
+    if (!Array.isArray(bg.nametable)) bg.nametable = emptyNametable();
+  }
+  delete s.nametable;
+  delete s.dimensions;
+  if (typeof s.customMainC !== 'string' && s.customMainC !== null) s.customMainC = null;
+  if (typeof s.currentLesson !== 'string' && s.currentLesson !== null) s.currentLesson = null;
+  if (s.template !== 'platformer' && s.template !== 'topdown') s.template = 'platformer';
+  if (s.movement !== 'platformer' && s.movement !== 'fourway') {
+    s.movement = s.template === 'topdown' ? 'fourway' : 'platformer';
+  }
+  migrateBehaviourFields(s);
+  return s;
+}
+
+function migrateBehaviourFields(s) {
+  if (!Array.isArray(s.behaviour_types) || s.behaviour_types.length === 0) {
+    s.behaviour_types = defaultBehaviourTypes();
+  }
+  const have = new Set(s.behaviour_types.map(t => t.id));
+  for (const t of defaultBehaviourTypes()) {
+    if (!have.has(t.id)) s.behaviour_types.push(t);
+  }
+  s.behaviour_types.sort((a, b) => a.id - b.id);
+  if (!Array.isArray(s.behaviour_reactions)) s.behaviour_reactions = [];
+  const sprites = Array.isArray(s.sprites) ? s.sprites : [];
+  while (s.behaviour_reactions.length < sprites.length) {
+    const idx = s.behaviour_reactions.length;
+    s.behaviour_reactions.push(defaultReactionMap(sprites[idx], idx));
+  }
+  if (s.behaviour_reactions.length > sprites.length) {
+    s.behaviour_reactions.length = sprites.length;
+  }
+  if (Array.isArray(s.backgrounds)) {
+    for (const bg of s.backgrounds) {
+      const cols = SCREEN_W * Math.max(1, bg.dimensions?.screens_x || 1);
+      const rows = SCREEN_H * Math.max(1, bg.dimensions?.screens_y || 1);
+      if (!Array.isArray(bg.behaviour)
+          || bg.behaviour.length !== rows
+          || !Array.isArray(bg.behaviour[0])
+          || bg.behaviour[0].length !== cols) {
+        const prev = Array.isArray(bg.behaviour) ? bg.behaviour : [];
+        bg.behaviour = Array.from({length: rows}, (_, y) =>
+          Array.from({length: cols}, (_, x) => {
+            const pr = prev[y];
+            return (pr && typeof pr[x] === 'number') ? (pr[x] | 0) : 0;
+          })
+        );
+      }
+    }
+  }
+}
+
+function validateState(s) {
+  if (!s || typeof s !== 'object') return 'not an object';
+  if (!Array.isArray(s.bg_tiles)) return 'missing bg_tiles';
+  if (!Array.isArray(s.sprite_tiles)) return 'missing sprite_tiles';
+  if (!Array.isArray(s.backgrounds) || s.backgrounds.length === 0) return 'missing backgrounds';
+  return null;
+}
+
+// ================================================================
+// Storage / undo / autosave  (same shape as the other pages)
+// ================================================================
+const Storage = createTileEditorStorage({ migrateState, validateState });
+
+const UNDO_LIMIT = 50;
+let state = createDefaultState();
+let undoStack = [];
+let redoStack = [];
+let undoSuspended = false;
+let dirty = false;
+let saveTimer = null;
+let lastSaveTs = 0;
+
+function pushUndo() {
+  if (undoSuspended) return;
+  undoStack.push(JSON.stringify(state));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack = [];
+  updateUndoButtons();
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(JSON.stringify(state));
+  state = JSON.parse(undoStack.pop());
+  afterStateReplaced();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(JSON.stringify(state));
+  state = JSON.parse(redoStack.pop());
+  afterStateReplaced();
+}
+function updateUndoButtons() {
+  document.getElementById('btn-undo').disabled = !undoStack.length;
+  document.getElementById('btn-redo').disabled = !redoStack.length;
+}
+function markDirty() {
+  dirty = true;
+  state.metadata = state.metadata || {};
+  state.metadata.modified = new Date().toISOString();
+  setStatus('saving', 'Saving…');
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const res = Storage.saveCurrent(state);
+    if (res.ok) {
+      dirty = false;
+      lastSaveTs = Date.now();
+      setStatus('saved', '● Saved just now');
+    } else {
+      setStatus('error', '⚠ Save failed');
+      console.error('save failed:', res.error);
+    }
+  }, 150);
+}
+function setStatus(cls, text) {
+  const el = document.getElementById('save-status');
+  el.className = cls;
+  el.textContent = text;
+}
+function updateSavedTimeLabel() {
+  if (dirty || !lastSaveTs) return;
+  const secs = Math.floor((Date.now() - lastSaveTs) / 1000);
+  if (secs < 2) setStatus('saved', '● Saved just now');
+  else if (secs < 60) setStatus('saved', '● Saved ' + secs + 's ago');
+  else setStatus('saved', '● Saved ' + Math.floor(secs/60) + 'm ago');
+}
+
+// --- Toast ------------------------------------------------------
+let _autoToastTimer = null;
+function showAutoToast(msg) {
+  let toast = document.getElementById('auto-assign-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'auto-assign-toast';
+    toast.className = 'auto-assign-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  if (_autoToastTimer) clearTimeout(_autoToastTimer);
+  _autoToastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+// ================================================================
+// Behaviour page — editor state
+// ================================================================
+let selectedTypeId  = 1;                 // defaults to solid_ground
+let currentTool     = 'pencil';          // pencil | fill | rect | eraser
+let isPainting      = false;
+let rectStart       = null;              // {x, y}
+let rectEnd         = null;              // {x, y}
+let highlightType   = null;              // find-same: type id whose cells get a halo
+let showTileLayer   = true;
+let showGrid        = true;
+
+function bgDims() {
+  const bg = activeBg();
+  return {
+    cols: SCREEN_W * bg.dimensions.screens_x,
+    rows: SCREEN_H * bg.dimensions.screens_y,
+  };
+}
+function ntZoom() {
+  return parseInt(document.getElementById('nt-zoom').value, 10) || 2;
+}
+function typeById(id) {
+  const list = state.behaviour_types || [];
+  return list.find(t => t.id === id) || null;
+}
+function isTypeUsable(id) {
+  const t = typeById(id);
+  if (!t) return false;
+  if (t.builtin) return true;
+  return !!(t.name && t.name.trim());
+}
+
+// Transparent hatch for 'none' cells in the palette row.
+function pixelRgbForTile(v, pal) {
+  if (v === 0) return pal.slot0 < 0 ? null : nesRgb(pal.slot0);
+  if (v === 1) return nesRgb(pal.slot1);
+  if (v === 2) return nesRgb(pal.slot2);
+  if (v === 3) return nesRgb(pal.slot3);
+  return null;
+}
+
+// ================================================================
+// Canvas rendering
+// ================================================================
+function renderBehaviourCanvas() {
+  const canvas = document.getElementById('behaviour-canvas');
+  const ctx = canvas.getContext('2d');
+  const bg = activeBg();
+  const { cols, rows } = bgDims();
+  const zoom = ntZoom();
+  const cellPx = 8 * zoom;
+  canvas.width = cols * cellPx;
+  canvas.height = rows * cellPx;
+  document.getElementById('nt-zoom-label').textContent = zoom + '×';
+  document.getElementById('bg-size-label').textContent =
+    cols + '×' + rows + ' tiles · ' + bg.dimensions.screens_x + '×' + bg.dimensions.screens_y + ' screens';
+
+  // 1) Nametable under-layer (dimmed by a dark overlay).
+  ctx.fillStyle = nesRgb(state.universal_bg);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (showTileLayer) {
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const cell = bg.nametable[y] && bg.nametable[y][x];
+        if (!cell) continue;
+        const tile = state.bg_tiles[cell.tile];
+        if (!tile) continue;
+        const pal = state.bg_palettes[cell.palette & 3];
+        const p = {
+          slot0: state.universal_bg,
+          slot1: pal.slots[0], slot2: pal.slots[1], slot3: pal.slots[2],
+        };
+        for (let py = 0; py < 8; py++) {
+          for (let px = 0; px < 8; px++) {
+            const v = tile.pixels[py][px];
+            const rgb = pixelRgbForTile(v, p);
+            if (!rgb) continue;
+            ctx.fillStyle = rgb;
+            ctx.fillRect(x*cellPx + px*zoom, y*cellPx + py*zoom, zoom, zoom);
+          }
+        }
+      }
+    }
+    // Global darkening so behaviour overlays read clearly.
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = '#101020';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // 2) Behaviour overlay.
+  for (let y = 0; y < rows; y++) {
+    const row = bg.behaviour[y];
+    if (!row) continue;
+    for (let x = 0; x < cols; x++) {
+      const id = row[x] | 0;
+      if (!id) continue;
+      const t = typeById(id);
+      if (!t) continue;
+      ctx.fillStyle = t.colour || '#888';
+      ctx.globalAlpha = 0.72;
+      ctx.fillRect(x*cellPx, y*cellPx, cellPx, cellPx);
+      ctx.globalAlpha = 1;
+      // First-letter glyph for readability when zoomed.
+      if (cellPx >= 14) {
+        const label = (t.name || '?').charAt(0).toUpperCase();
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.font = 'bold ' + Math.max(8, Math.floor(cellPx * 0.55)) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, x*cellPx + cellPx/2, y*cellPx + cellPx/2 + 1);
+      }
+    }
+  }
+
+  // 3) Grid.
+  if (showGrid) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    for (let gx = 0; gx <= cols; gx++) {
+      ctx.beginPath();
+      ctx.moveTo(gx*cellPx + 0.5, 0);
+      ctx.lineTo(gx*cellPx + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let gy = 0; gy <= rows; gy++) {
+      ctx.beginPath();
+      ctx.moveTo(0, gy*cellPx + 0.5);
+      ctx.lineTo(canvas.width, gy*cellPx + 0.5);
+      ctx.stroke();
+    }
+  }
+
+  // 4) Screen boundaries.
+  ctx.strokeStyle = 'rgba(120,220,232,0.75)';
+  ctx.lineWidth = 2;
+  for (let sx = 1; sx < bg.dimensions.screens_x; sx++) {
+    ctx.beginPath();
+    ctx.moveTo(sx*SCREEN_W*cellPx, 0);
+    ctx.lineTo(sx*SCREEN_W*cellPx, canvas.height);
+    ctx.stroke();
+  }
+  for (let sy = 1; sy < bg.dimensions.screens_y; sy++) {
+    ctx.beginPath();
+    ctx.moveTo(0, sy*SCREEN_H*cellPx);
+    ctx.lineTo(canvas.width, sy*SCREEN_H*cellPx);
+    ctx.stroke();
+  }
+
+  // 5) Find-same highlight halo.
+  if (highlightType !== null) {
+    ctx.strokeStyle = 'rgba(255,216,102,0.9)';
+    ctx.lineWidth = Math.max(2, Math.floor(zoom));
+    for (let y = 0; y < rows; y++) {
+      const row = bg.behaviour[y];
+      if (!row) continue;
+      for (let x = 0; x < cols; x++) {
+        if ((row[x] | 0) !== highlightType) continue;
+        ctx.strokeRect(x*cellPx + 1, y*cellPx + 1, cellPx - 2, cellPx - 2);
+      }
+    }
+  }
+
+  // 6) Rectangle-tool preview.
+  if (currentTool === 'rect' && isPainting && rectStart && rectEnd) {
+    const x0 = Math.min(rectStart.x, rectEnd.x);
+    const y0 = Math.min(rectStart.y, rectEnd.y);
+    const x1 = Math.max(rectStart.x, rectEnd.x);
+    const y1 = Math.max(rectStart.y, rectEnd.y);
+    const t = typeById(selectedTypeId);
+    ctx.fillStyle = (t && t.colour && t.id !== 0) ? t.colour : 'rgba(255,255,255,0.3)';
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(x0*cellPx, y0*cellPx, (x1 - x0 + 1)*cellPx, (y1 - y0 + 1)*cellPx);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(255,216,102,0.9)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0*cellPx + 1, y0*cellPx + 1, (x1 - x0 + 1)*cellPx - 2, (y1 - y0 + 1)*cellPx - 2);
+  }
+}
+
+// ================================================================
+// Canvas interaction
+// ================================================================
+function canvasCellAt(evt) {
+  const canvas = document.getElementById('behaviour-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const cellPx = 8 * ntZoom();
+  const x = Math.floor((evt.clientX - rect.left) / cellPx);
+  const y = Math.floor((evt.clientY - rect.top) / cellPx);
+  return { x, y };
+}
+function inBounds(x, y) {
+  const { cols, rows } = bgDims();
+  return x >= 0 && y >= 0 && x < cols && y < rows;
+}
+function paintCell(x, y, id) {
+  if (!inBounds(x, y)) return false;
+  const bg = activeBg();
+  if ((bg.behaviour[y][x] | 0) === id) return false;
+  bg.behaviour[y][x] = id;
+  return true;
+}
+function paintRect(x0, y0, x1, y1, id) {
+  const xa = Math.min(x0, x1), xb = Math.max(x0, x1);
+  const ya = Math.min(y0, y1), yb = Math.max(y0, y1);
+  let any = false;
+  for (let y = ya; y <= yb; y++) {
+    for (let x = xa; x <= xb; x++) {
+      if (paintCell(x, y, id)) any = true;
+    }
+  }
+  return any;
+}
+function floodFill(sx, sy, id) {
+  if (!inBounds(sx, sy)) return false;
+  const bg = activeBg();
+  const { cols, rows } = bgDims();
+  const target = bg.behaviour[sy][sx] | 0;
+  if (target === id) return false;
+  const q = [[sx, sy]];
+  let changed = false;
+  while (q.length) {
+    const [x, y] = q.pop();
+    if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+    if ((bg.behaviour[y][x] | 0) !== target) continue;
+    bg.behaviour[y][x] = id;
+    changed = true;
+    q.push([x+1,y], [x-1,y], [x,y+1], [x,y-1]);
+  }
+  return changed;
+}
+
+function onCanvasPointerDown(evt) {
+  evt.preventDefault();
+  const { x, y } = canvasCellAt(evt);
+  if (!inBounds(x, y)) return;
+  const right = (evt.button === 2);
+  const paintId = right ? 0 : (currentTool === 'eraser' ? 0 : selectedTypeId);
+
+  if (currentTool === 'pencil' || currentTool === 'eraser') {
+    if (evt.shiftKey && !right && currentTool === 'pencil') {
+      // Pick type under cursor.
+      const pickId = activeBg().behaviour[y][x] | 0;
+      if (typeById(pickId)) {
+        selectedTypeId = pickId;
+        renderTypeList();
+        return;
+      }
+    }
+    pushUndo();
+    if (paintCell(x, y, paintId)) { markDirty(); renderBehaviourCanvas(); }
+    isPainting = true;
+    return;
+  }
+
+  if (currentTool === 'fill') {
+    pushUndo();
+    if (floodFill(x, y, paintId)) { markDirty(); renderBehaviourCanvas(); }
+    return;
+  }
+
+  if (currentTool === 'rect') {
+    isPainting = true;
+    rectStart = { x, y };
+    rectEnd   = { x, y };
+    renderBehaviourCanvas();
+    return;
+  }
+}
+
+function onCanvasPointerMove(evt) {
+  if (!isPainting) return;
+  const { x, y } = canvasCellAt(evt);
+  if (!inBounds(x, y)) return;
+  if (currentTool === 'pencil' || currentTool === 'eraser') {
+    const id = (currentTool === 'eraser') ? 0 : selectedTypeId;
+    if (paintCell(x, y, id)) { markDirty(); renderBehaviourCanvas(); }
+  } else if (currentTool === 'rect') {
+    if (!rectEnd || rectEnd.x !== x || rectEnd.y !== y) {
+      rectEnd = { x, y };
+      renderBehaviourCanvas();
+    }
+  }
+}
+
+function onCanvasPointerUp(evt) {
+  if (!isPainting) return;
+  if (currentTool === 'rect' && rectStart && rectEnd) {
+    const id = (evt.button === 2) ? 0 : selectedTypeId;
+    pushUndo();
+    if (paintRect(rectStart.x, rectStart.y, rectEnd.x, rectEnd.y, id)) {
+      markDirty();
+    } else {
+      // No change — drop the empty undo entry.
+      undoStack.pop();
+      updateUndoButtons();
+    }
+  }
+  isPainting = false;
+  rectStart = rectEnd = null;
+  renderBehaviourCanvas();
+}
+
+// ================================================================
+// Type palette UI (left column)
+// ================================================================
+function renderTypeList() {
+  const list = document.getElementById('type-list');
+  list.innerHTML = '';
+  const types = state.behaviour_types || [];
+  // Sort by id so numbers match keyboard shortcuts.
+  types.sort((a, b) => a.id - b.id);
+  for (const t of types) {
+    const row = document.createElement('div');
+    row.className = 'type-row';
+    if (t.id === selectedTypeId) row.classList.add('selected');
+    row.dataset.id = t.id;
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    if (t.id === 0) sw.classList.add('none');
+    else sw.style.background = t.colour || '#888';
+    row.appendChild(sw);
+    const nm = document.createElement('span');
+    nm.className = 'name';
+    nm.textContent = t.name || '(unnamed)';
+    if (!t.builtin && !(t.name && t.name.trim())) {
+      nm.textContent = '(empty — name me)';
+      nm.style.color = 'var(--muted)';
+      nm.style.fontStyle = 'italic';
+    }
+    row.appendChild(nm);
+    const sc = document.createElement('span');
+    sc.className = 'shortcut';
+    sc.textContent = String(t.id);
+    row.appendChild(sc);
+    row.addEventListener('click', () => {
+      if (!isTypeUsable(t.id)) {
+        showAutoToast('✏️ Give slot #' + t.id + ' a name first.');
+        return;
+      }
+      selectedTypeId = t.id;
+      renderTypeList();
+    });
+    list.appendChild(row);
+  }
+}
+
+function wireCustomSlotInputs() {
+  function wire(slotId) {
+    const nameEl   = document.getElementById('custom' + slotId + '-name');
+    const colourEl = document.getElementById('custom' + slotId + '-colour');
+    function read() {
+      const list = state.behaviour_types;
+      let t = list.find(x => x.id === slotId);
+      if (!t) {
+        t = { id: slotId, name: '', colour: colourEl.value, builtin: false };
+        list.push(t);
+      }
+      nameEl.value   = t.name || '';
+      colourEl.value = t.colour && t.colour !== 'transparent' ? t.colour : '#cc66ff';
+    }
+    function normaliseName(raw) {
+      // C-identifier-friendly: letters, digits, underscore; trim.
+      return (raw || '').toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
+    }
+    nameEl.addEventListener('change', () => {
+      const list = state.behaviour_types;
+      let t = list.find(x => x.id === slotId);
+      if (!t) { t = { id: slotId, name: '', colour: colourEl.value, builtin: false }; list.push(t); }
+      const n = normaliseName(nameEl.value);
+      if (n !== nameEl.value) nameEl.value = n;
+      pushUndo();
+      t.name = n;
+      markDirty();
+      renderTypeList();
+      renderReactions();
+    });
+    colourEl.addEventListener('change', () => {
+      const list = state.behaviour_types;
+      let t = list.find(x => x.id === slotId);
+      if (!t) { t = { id: slotId, name: '', colour: colourEl.value, builtin: false }; list.push(t); }
+      pushUndo();
+      t.colour = colourEl.value;
+      markDirty();
+      renderTypeList();
+      renderReactions();
+      renderBehaviourCanvas();
+    });
+    read();
+  }
+  wire(6);
+  wire(7);
+}
+
+function refreshCustomSlotInputs() {
+  for (const slotId of [6, 7]) {
+    const t = (state.behaviour_types || []).find(x => x.id === slotId);
+    const nameEl   = document.getElementById('custom' + slotId + '-name');
+    const colourEl = document.getElementById('custom' + slotId + '-colour');
+    if (!nameEl || !colourEl) continue;
+    if (t) {
+      nameEl.value   = t.name || '';
+      colourEl.value = (t.colour && t.colour !== 'transparent') ? t.colour : '#cc66ff';
+    } else {
+      nameEl.value   = '';
+      colourEl.value = '#cc66ff';
+    }
+  }
+}
+
+// ================================================================
+// Reaction matrix (right column)
+// ================================================================
+const REACTION_VERBS = ['ignore', 'block', 'land', 'land_top', 'bounce', 'exit', 'call_handler'];
+
+function renderReactions() {
+  const host = document.getElementById('reactions-body');
+  host.innerHTML = '';
+  if (!Array.isArray(state.sprites) || state.sprites.length === 0) {
+    const p = document.createElement('p');
+    p.className = 'no-sprites-hint';
+    p.textContent = 'No sprites yet — head to the Sprites page to design some, then come back.';
+    host.appendChild(p);
+    return;
+  }
+  // Non-zero type ids only (type 0 = none, reaction never fires).
+  const types = (state.behaviour_types || []).filter(t => t.id !== 0 && isTypeUsable(t.id));
+  const table = document.createElement('table');
+  table.className = 'reactions-table';
+  const thead = document.createElement('thead');
+  const thr = document.createElement('tr');
+  thr.appendChild(document.createElement('th'));  // sprite name column
+  for (const t of types) {
+    const th = document.createElement('th');
+    th.title = t.name;
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    sw.style.background = t.colour || '#888';
+    th.appendChild(sw);
+    th.appendChild(document.createTextNode(t.name));
+    thr.appendChild(th);
+  }
+  thead.appendChild(thr);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  for (let i = 0; i < state.sprites.length; i++) {
+    const sp = state.sprites[i];
+    if (!state.behaviour_reactions[i]) {
+      state.behaviour_reactions[i] = defaultReactionMap(sp, i);
+    }
+    const rmap = state.behaviour_reactions[i];
+    const tr = document.createElement('tr');
+    tr.className = 'reactions-sprite-row';
+    const nameTd = document.createElement('td');
+    nameTd.textContent = sp.name || ('sprite ' + (i + 1));
+    if (sp.role) {
+      const chip = document.createElement('span');
+      chip.className = 'role-chip';
+      chip.style.background = ROLE_COLOURS[sp.role] || ROLE_COLOURS.other;
+      chip.textContent = sp.role;
+      nameTd.appendChild(chip);
+    }
+    tr.appendChild(nameTd);
+    for (const t of types) {
+      const td = document.createElement('td');
+      const sel = document.createElement('select');
+      for (const verb of REACTION_VERBS) {
+        const opt = document.createElement('option');
+        opt.value = verb; opt.textContent = verb;
+        sel.appendChild(opt);
+      }
+      sel.value = rmap[t.id] || 'ignore';
+      sel.addEventListener('change', () => {
+        pushUndo();
+        rmap[t.id] = sel.value;
+        markDirty();
+      });
+      td.appendChild(sel);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+// ================================================================
+// Background picker
+// ================================================================
+function renderBgPicker() {
+  const sel = document.getElementById('bg-select');
+  sel.innerHTML = '';
+  for (let i = 0; i < state.backgrounds.length; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = state.backgrounds[i].name || ('background ' + (i + 1));
+    sel.appendChild(opt);
+  }
+  sel.value = String(state.selectedBgIdx);
+}
+
+// ================================================================
+// Tool selection
+// ================================================================
+function setTool(name) {
+  currentTool = name;
+  for (const btn of document.querySelectorAll('.tool-btn')) {
+    btn.classList.toggle('active', btn.dataset.tool === name);
+  }
+}
+
+// ================================================================
+// Projects menu (read-only here — new/dup/delete live on other pages)
+// ================================================================
+function renderProjectsMenu() {
+  const list = document.getElementById('projects-list');
+  const activeId = Storage.getActiveProjectId();
+  list.innerHTML = '';
+  const projects = Storage.listProjects();
+  if (!projects.length) {
+    const hint = document.createElement('div');
+    hint.style.color = 'var(--muted)';
+    hint.style.padding = '4px 6px';
+    hint.textContent = '(no projects)';
+    list.appendChild(hint);
+  }
+  for (const p of projects) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = p.name + (p.id === activeId ? '  ● current' : '');
+    btn.classList.toggle('active', p.id === activeId);
+    btn.addEventListener('click', () => {
+      document.getElementById('projects-menu').open = false;
+      if (p.id !== activeId) switchProject(p.id);
+    });
+    list.appendChild(btn);
+  }
+  const active = Storage.getActiveProject();
+  document.getElementById('active-project-label').textContent =
+    (active && active.name) || state.name || 'untitled';
+}
+function switchProject(id) {
+  Storage.saveCurrent(state);
+  Storage.setActiveProjectId(id);
+  const loaded = Storage.loadCurrent();
+  state = loaded || createDefaultState();
+  if (!loaded) Storage.saveCurrent(state);
+  undoStack = []; redoStack = []; updateUndoButtons();
+  afterStateReplaced();
+  renderProjectsMenu();
+}
+
+// ================================================================
+// State replaced -> re-render everything
+// ================================================================
+function afterStateReplaced() {
+  document.getElementById('project-name').value = state.name || 'untitled';
+  refreshCustomSlotInputs();
+  renderBgPicker();
+  renderTypeList();
+  renderReactions();
+  renderBehaviourCanvas();
+  markDirty();
+  updateUndoButtons();
+}
+
+// ================================================================
+// Init
+// ================================================================
+function init() {
+  const loaded = Storage.loadCurrent();
+  if (loaded) {
+    state = loaded;
+  } else {
+    state = createDefaultState();
+    Storage.saveCurrent(state);
+  }
+
+  // Header wiring ------------------------------------------------
+  document.getElementById('project-name').value = state.name || 'untitled';
+  document.getElementById('project-name').addEventListener('input', e => {
+    pushUndo();
+    state.name = e.target.value || 'untitled';
+    try { Storage.renameProject(Storage.getActiveProjectId(), state.name); } catch (_) {}
+    document.getElementById('active-project-label').textContent = state.name;
+    markDirty();
+  });
+  document.getElementById('btn-undo').addEventListener('click', undo);
+  document.getElementById('btn-redo').addEventListener('click', redo);
+  document.getElementById('btn-clear-all').addEventListener('click', () => {
+    const bg = activeBg();
+    pushUndo();
+    const { cols, rows } = bgDims();
+    for (let y = 0; y < rows; y++)
+      for (let x = 0; x < cols; x++)
+        bg.behaviour[y][x] = 0;
+    markDirty();
+    renderBehaviourCanvas();
+    showAutoToast('🗑 Cleared behaviour map');
+  });
+  document.getElementById('btn-help').addEventListener('click', () => {
+    document.getElementById('help-dialog').showModal();
+  });
+  document.getElementById('btn-help-close').addEventListener('click', () => {
+    document.getElementById('help-dialog').close();
+  });
+  document.getElementById('projects-menu').addEventListener('toggle', e => {
+    if (e.target.open) renderProjectsMenu();
+  });
+
+  // Background picker -------------------------------------------
+  document.getElementById('bg-select').addEventListener('change', e => {
+    const idx = parseInt(e.target.value, 10) | 0;
+    if (idx >= 0 && idx < state.backgrounds.length) {
+      state.selectedBgIdx = idx;
+      markDirty();
+      renderBehaviourCanvas();
+    }
+  });
+
+  // Toolbar -----------------------------------------------------
+  for (const btn of document.querySelectorAll('.tool-btn')) {
+    btn.addEventListener('click', () => setTool(btn.dataset.tool));
+  }
+  document.getElementById('btn-select-same').addEventListener('click', () => {
+    if (!selectedTypeId) return;
+    highlightType = selectedTypeId;
+    renderBehaviourCanvas();
+  });
+  document.getElementById('btn-clear-highlight').addEventListener('click', () => {
+    highlightType = null;
+    renderBehaviourCanvas();
+  });
+  document.getElementById('show-tiles').addEventListener('change', e => {
+    showTileLayer = !!e.target.checked;
+    renderBehaviourCanvas();
+  });
+  document.getElementById('show-grid').addEventListener('change', e => {
+    showGrid = !!e.target.checked;
+    renderBehaviourCanvas();
+  });
+  document.getElementById('nt-zoom').addEventListener('input', renderBehaviourCanvas);
+
+  // Canvas interaction ------------------------------------------
+  const canvas = document.getElementById('behaviour-canvas');
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    onCanvasPointerDown(e);
+  });
+  canvas.addEventListener('pointermove', onCanvasPointerMove);
+  canvas.addEventListener('pointerup', e => {
+    try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+    onCanvasPointerUp(e);
+  });
+  canvas.addEventListener('pointerleave', () => {
+    // Leave a rect-preview alone until release; for pencil, just stop painting.
+    if (currentTool !== 'rect') isPainting = false;
+  });
+
+  // Keyboard ----------------------------------------------------
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+    const k = e.key;
+    if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) {
+      e.preventDefault();
+      if (e.shiftKey) redo(); else undo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (k === 'y' || k === 'Y')) {
+      e.preventDefault(); redo(); return;
+    }
+    if (/^[0-7]$/.test(k)) {
+      const id = parseInt(k, 10);
+      if (isTypeUsable(id)) {
+        selectedTypeId = id;
+        renderTypeList();
+      } else {
+        showAutoToast('✏️ Slot #' + id + ' needs a name first.');
+      }
+      return;
+    }
+    const kl = k.toLowerCase();
+    if (kl === 'p') setTool('pencil');
+    else if (kl === 'f') setTool('fill');
+    else if (kl === 'r') setTool('rect');
+    else if (kl === 'e') setTool('eraser');
+  });
+
+  // Custom slot editors ----------------------------------------
+  wireCustomSlotInputs();
+
+  // First render -----------------------------------------------
+  renderProjectsMenu();
+  renderBgPicker();
+  renderTypeList();
+  renderReactions();
+  setTool('pencil');
+  renderBehaviourCanvas();
+  setStatus('saved', '● Saved');
+  lastSaveTs = Date.now();
+
+  // Saved-time label ticker.
+  setInterval(updateSavedTimeLabel, 2000);
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

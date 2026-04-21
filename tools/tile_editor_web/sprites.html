@@ -1622,6 +1622,7 @@ details.collapsible > summary .sub-count {
   <nav class="page-nav" aria-label="Editor pages">
     <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
     <a class="page-link active" href="sprites.html" title="You are here — design sprites from the shared tileset">🦸 Sprites</a>
+    <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
     <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
   </nav>
   <div class="status-group">
@@ -2650,8 +2651,69 @@ function migrateState(s) {
   if (s.movement !== 'platformer' && s.movement !== 'fourway') {
     s.movement = s.template === 'topdown' ? 'fourway' : 'platformer';
   }
+  // Sprint 10 — behaviour / collision map. Full editor lives on
+  // behaviour.html; sprites.html only needs to seed/persist the fields
+  // so save/load round-trips cleanly from either page.
+  migrateBehaviourFields(s);
   return s;
 }
+
+function defaultBehaviourTypes() {
+  return [
+    { id: 0, name: 'none',         colour: 'transparent', builtin: true },
+    { id: 1, name: 'solid_ground', colour: '#8d6e4b',     builtin: true },
+    { id: 2, name: 'wall',         colour: '#555555',     builtin: true },
+    { id: 3, name: 'platform',     colour: '#6aa3ff',     builtin: true },
+    { id: 4, name: 'door',         colour: '#ffd866',     builtin: true },
+    { id: 5, name: 'trigger',      colour: '#ff78a2',     builtin: true },
+  ];
+}
+
+function defaultReactionMap(sprite, idx) {
+  const isHero = (sprite && sprite.role === 'hero') || idx === 0;
+  return isHero
+    ? { 1: 'land', 2: 'block',  3: 'land_top', 4: 'exit',   5: 'call_handler', 6: 'ignore', 7: 'ignore' }
+    : { 1: 'land', 2: 'bounce', 3: 'ignore',   4: 'ignore', 5: 'call_handler', 6: 'ignore', 7: 'ignore' };
+}
+
+function migrateBehaviourFields(s) {
+  if (!Array.isArray(s.behaviour_types) || s.behaviour_types.length === 0) {
+    s.behaviour_types = defaultBehaviourTypes();
+  }
+  const have = new Set(s.behaviour_types.map(t => t.id));
+  for (const t of defaultBehaviourTypes()) {
+    if (!have.has(t.id)) s.behaviour_types.push(t);
+  }
+  s.behaviour_types.sort((a, b) => a.id - b.id);
+  if (!Array.isArray(s.behaviour_reactions)) s.behaviour_reactions = [];
+  const sprites = Array.isArray(s.sprites) ? s.sprites : [];
+  while (s.behaviour_reactions.length < sprites.length) {
+    const idx = s.behaviour_reactions.length;
+    s.behaviour_reactions.push(defaultReactionMap(sprites[idx], idx));
+  }
+  if (s.behaviour_reactions.length > sprites.length) {
+    s.behaviour_reactions.length = sprites.length;
+  }
+  if (Array.isArray(s.backgrounds)) {
+    for (const bg of s.backgrounds) {
+      const cols = SCREEN_W * Math.max(1, bg.dimensions?.screens_x || 1);
+      const rows = SCREEN_H * Math.max(1, bg.dimensions?.screens_y || 1);
+      if (!Array.isArray(bg.behaviour)
+          || bg.behaviour.length !== rows
+          || !Array.isArray(bg.behaviour[0])
+          || bg.behaviour[0].length !== cols) {
+        const prev = Array.isArray(bg.behaviour) ? bg.behaviour : [];
+        bg.behaviour = Array.from({length: rows}, (_, y) =>
+          Array.from({length: cols}, (_, x) => {
+            const pr = prev[y];
+            return (pr && typeof pr[x] === 'number') ? (pr[x] | 0) : 0;
+          })
+        );
+      }
+    }
+  }
+}
+
 function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
 
 // ================================================================
