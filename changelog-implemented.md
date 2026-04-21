@@ -367,6 +367,35 @@ was unnecessary, and what was deferred.
   so the `BEHAVIOUR_LADDER` `#define` appears in the generated
   `collision.h`.
 
+### Sprint 11 S-1 slice 1 — 2026-04-21 full-world nametable data
+
+- **Full-world nametable emitter.** New `build_bg_world_h()` +
+  `build_bg_world_c()` in [playground_server.py](tools/playground_server.py)
+  write `src/bg_world.h` and `src/bg_world.c` alongside the existing
+  `scene.inc` / `collision.h` / `behaviour.c`.  Covers the full
+  `SCREEN_COLS × screens_x` by `SCREEN_ROWS × screens_y` painted
+  area, row-major, as two flat `const unsigned char[]` arrays
+  (`bg_world_tiles[]` and `bg_world_attrs[]`).  Attribute bytes
+  follow the NES 2×2-quad packing per screen, tiled across the
+  world so the scroll core can copy one attribute column per 16
+  px of travel.
+- **Committed 1×1 stubs** at
+  [steps/Step_Playground/src/bg_world.h](steps/Step_Playground/src/bg_world.h)
+  and [bg_world.c](steps/Step_Playground/src/bg_world.c) so a fresh
+  `make -C steps/Step_Playground` works from a clean checkout
+  before the server has ever run — same pattern as the Sprint 10
+  `collision.h` / `behaviour.c` stubs.
+- **Makefile wired up:** `bg_world.c` compiled unconditionally
+  alongside `main.c` and `behaviour.c`.  No runtime yet references
+  the symbols, so the data sits unused in the ROM image.  Fixed
+  NROM cartridge size (49168 bytes) is unchanged.
+- **Scope note:** this is the first of three planned slices for
+  S-1.  Slice 2 will add `src/scroll.c` + `src/scroll.h` (column
+  streaming, camera deadzone, world ↔ screen coords).  Slice 3
+  rewires `main.c` to actually consume `bg_world_tiles[]` and
+  scroll.  Multi-screen projects compile today but still play as
+  a single screen until those slices land.
+
 ---
 
 ## Not done / deferred

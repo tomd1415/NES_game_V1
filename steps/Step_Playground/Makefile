@@ -18,7 +18,7 @@ EMULATOR = fceux
 ROM     = game.nes
 BUILD   = build
 
-C_SRC   = src/main.c src/behaviour.c
+C_SRC   = src/main.c src/behaviour.c src/bg_world.c
 ASM_SRC = src/graphics.s
 
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
@@ -49,6 +49,15 @@ $(BUILD)/behaviour.o: src/behaviour.c src/collision.h | $(BUILD)
 	$(CC) -t $(TARGET) -o $(BUILD)/behaviour.s $<
 	$(AS) -t $(TARGET) -o $@ $(BUILD)/behaviour.s
 	rm -f $(BUILD)/behaviour.s
+
+# bg_world.c is the full-world nametable (Sprint 11 S-1).  Nothing in main.c
+# references it yet, but it is compiled unconditionally so the scroll core
+# sprints can assume the symbols are always linkable.  Depends on the
+# generated header so a Backgrounds-page edit rebuilds it.
+$(BUILD)/bg_world.o: src/bg_world.c src/bg_world.h | $(BUILD)
+	$(CC) -t $(TARGET) -o $(BUILD)/bg_world.s $<
+	$(AS) -t $(TARGET) -o $@ $(BUILD)/bg_world.s
+	rm -f $(BUILD)/bg_world.s
 
 $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $<
