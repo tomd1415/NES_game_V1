@@ -41,8 +41,7 @@ unsigned char px;
 unsigned char py;
 unsigned char pad;
 unsigned char prev_pad;      // for edge-triggering the jump
-unsigned char ground_y;      // Y the player was placed at — the "floor"
-unsigned char jumping;       // 1 while airborne
+unsigned char jumping;       // 1 while airborne (rising or falling)
 unsigned char jmp_up;        // ascent frames remaining (0 = falling)
 unsigned char plrdir;        // 0x40 when facing left (flip-H on every tile)
 //>> walk_speed: How many pixels the player moves each frame. 1 = slow, 2 = normal, 3 = fast.
@@ -143,10 +142,9 @@ void main(void) {
     PPU_SCROLL = 0;
     PPU_MASK = 0x1E;
 
-//>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200).
+//>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200). Paint SOLID_GROUND or PLATFORM tiles on the Behaviour page under this spot or the player will drop to the ground.
     px = PLAYER_X;
     py = PLAYER_Y;
-    ground_y = PLAYER_Y;
 //<<
     jumping = 0;
     jmp_up = 0;
@@ -180,18 +178,26 @@ void main(void) {
         }
         prev_pad = pad;
 
-        // Gravity: during the ascent phase move up 2 px/frame for
-        // jmp_up frames, then fall 2 px/frame until we reach ground_y.
-        if (jumping) {
-            if (jmp_up > 0) {
-                if (py >= 18) py -= 2; else py = 16;
-                jmp_up--;
+        // Jump ascent: while jmp_up ticks remain, rise 2 px/frame. Once
+        // the ascent budget is spent, gravity takes over and the player
+        // falls until both feet sit on a SOLID_GROUND / PLATFORM tile
+        // painted on the Behaviour page. This runs every frame (even when
+        // jumping == 0) so walking off a ledge drops the player naturally.
+        if (jumping && jmp_up > 0) {
+            if (py >= 18) py -= 2; else py = 16;
+            jmp_up--;
+        } else {
+            unsigned char foot_row = (py + (PLAYER_H << 3)) >> 3;
+            unsigned char foot_l = behaviour_at((unsigned int)(px >> 3), (unsigned int)foot_row);
+            unsigned char foot_r = behaviour_at(
+                (unsigned int)((px + (PLAYER_W << 3) - 1) >> 3),
+                (unsigned int)foot_row);
+            if (foot_l == BEHAVIOUR_SOLID_GROUND || foot_l == BEHAVIOUR_PLATFORM
+             || foot_r == BEHAVIOUR_SOLID_GROUND || foot_r == BEHAVIOUR_PLATFORM) {
+                jumping = 0;   // feet on a surface — stop falling
             } else {
-                py += 2;
-                if (py >= ground_y) {
-                    py = ground_y;
-                    jumping = 0;
-                }
+                if (py < 232) py += 2;
+                jumping = 1;   // airborne (jump descent or walked off a ledge)
             }
         }
 
