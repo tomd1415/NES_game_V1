@@ -21,6 +21,7 @@
 
 <!-- Shared localStorage layer (v2 projects catalog) -->
 <script src="storage.js"></script>
+<script src="feedback.js"></script>
 
 <style>
 :root {
@@ -482,6 +483,10 @@ li.CodeMirror-hint-active {
     <li><b>⌨ Symbols…</b> — see every auto-generated name your code can use (tiles, palettes, NPC helpers, etc.).</li>
     <li><b>↻ Restore default</b> — swap in the stock platformer starter. Your current code is snapshotted first.</li>
   </ul>
+  <details class="feedback-block">
+    <summary>💬 Leave feedback on this page</summary>
+    <div class="feedback-form-host"></div>
+  </details>
   <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
     <button type="button" class="primary" id="btn-help-close">Got it</button>
   </div>
@@ -1647,6 +1652,16 @@ document.getElementById('file-input-all').addEventListener('change', e => {
 
 document.getElementById('btn-help').addEventListener('click', () => document.getElementById('help-dialog').showModal());
 document.getElementById('btn-help-close').addEventListener('click', () => document.getElementById('help-dialog').close());
+(function wireFeedback() {
+  const block = document.querySelector('.feedback-block');
+  const host = document.querySelector('.feedback-form-host');
+  if (!block || !host || !window.Feedback) return;
+  const mount = () => Feedback.mountInto(host, {
+    page: 'code',
+    getProjectName: () => (typeof state !== 'undefined' && state && state.name) || '',
+  });
+  block.addEventListener('toggle', () => { if (block.open) mount(); });
+})();
 document.addEventListener('keydown', (e) => {
   if (e.key !== '?' || e.repeat) return;
   const t = e.target;

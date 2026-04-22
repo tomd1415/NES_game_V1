@@ -546,6 +546,52 @@ buildable after each.
   screen sprite placement requires promoting `ss_x[]` / `ss_y[]`
   to u16 in the scene.inc emitter — deferred to S-2.
 
+### Pupil feedback — 2026-04-22 in-editor feedback form
+
+Lightweight "tell us what you think" channel wired into the four
+editor pages without touching the header toolbar.  Plan document
+at [feedback-plan.md](feedback-plan.md).
+
+- **UI placement.**  On the tabbed help dialog (index.html,
+  sprites.html) a new `💬 Feedback` tab sits after *Tips / FAQ*.
+  The matching `.help-tab-panel` holds an empty
+  `.feedback-form-host` that the shared module populates on first
+  click.  Zero new header buttons, zero layout shift on other
+  pages.
+- **UI placement (non-tabbed).**  On behaviour.html and code.html
+  the help dialog is a single panel, so the form goes in a
+  `<details class="feedback-block">` just above the dialog's
+  *Close / Got it* row.  Closed by default; expands in place.
+- **Shared module.**  New
+  [feedback.js](tools/tile_editor_web/feedback.js) (~200 lines)
+  builds a three-radio + textarea + optional-name form, shows a
+  live `n / 500` character count, disables *Send* until a category
+  is picked and the message is non-empty, POSTs JSON to
+  `/feedback`, and flashes an inline green *"Thanks — sent!"*
+  banner on success (red banner on failure, form preserved).
+  Styles are injected from the module itself so the four HTML
+  files stay clean.
+- **Server endpoint.**  `POST /feedback` handled in
+  [playground_server.py](tools/playground_server.py) alongside the
+  existing `/play` branch.  Validates category ∈ `{feature,
+  broken, general}`, message 1-500 chars, name / project ≤ 80,
+  body ≤ 4 kB; appends a single JSONL line to
+  `feedback.jsonl` at the repo root guarded by a module-level
+  `threading.Lock`.  Record carries timestamp, client IP,
+  category, message, name, page, projectName, and truncated
+  User-Agent.
+- **Privacy.**  Submissions land in a local file the teacher
+  owns; no external services involved.  Project state is
+  deliberately *not* attached (~100 kB per click and contains the
+  pupil's work).  `feedback.jsonl` is `.gitignore`d so it never
+  enters the repo.
+- **Verification.**  Smoke-tested the endpoint on port 18765:
+  valid payload returned `{"ok": true}` and appended a correct
+  JSONL line; missing category, empty message, and oversize
+  message each returned 400 with a descriptive `error` field.
+  `python3 -c 'ast.parse(...)'` clean on the server; `node
+  --check` clean on feedback.js.
+
 ---
 
 ## Not done / deferred

@@ -4,3 +4,6 @@ build/
 level.nam
 game.chr
 scene.inc
+
+# Pupil feedback log (local only)
+feedback.jsonl

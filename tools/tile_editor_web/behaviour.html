@@ -456,12 +456,17 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   <p class="type-hint">Nothing you do here changes the tile graphics —
   just which cells count as ground / wall / etc. The Play-in-NES
   pipeline reads this map (Phase B) to apply the reactions.</p>
+  <details class="feedback-block">
+    <summary>💬 Leave feedback on this page</summary>
+    <div class="feedback-form-host"></div>
+  </details>
   <div class="dialog-actions">
     <button type="button" id="btn-help-close">Close</button>
   </div>
 </dialog>
 
 <script src="storage.js"></script>
+<script src="feedback.js"></script>
 <script>
 'use strict';
 
@@ -1465,6 +1470,16 @@ function init() {
   document.getElementById('btn-help-close').addEventListener('click', () => {
     document.getElementById('help-dialog').close();
   });
+  (function wireFeedback() {
+    const block = document.querySelector('.feedback-block');
+    const host = document.querySelector('.feedback-form-host');
+    if (!block || !host || !window.Feedback) return;
+    const mount = () => Feedback.mountInto(host, {
+      page: 'behaviour',
+      getProjectName: () => (state && state.name) || '',
+    });
+    block.addEventListener('toggle', () => { if (block.open) mount(); });
+  })();
 
   // --- Save / Load everything (single-file bundle = full state JSON) ---
   document.getElementById('btn-save-all').addEventListener('click', () => {

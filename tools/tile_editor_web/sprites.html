@@ -2062,6 +2062,7 @@ details.collapsible > summary .sub-count {
     <button type="button" class="help-tab" data-tab="nes">Sprite rules</button>
     <button type="button" class="help-tab" data-tab="saves">Saving &amp; recovery</button>
     <button type="button" class="help-tab" data-tab="faq">Tips / FAQ</button>
+    <button type="button" class="help-tab" data-tab="feedback">💬 Feedback</button>
   </div>
 
   <div class="help-tab-panel" data-panel="tutorial">
@@ -2169,6 +2170,11 @@ details.collapsible > summary .sub-count {
       <li><b>"Where is this tile used?"</b> Right-click the tile in the shared tileset — the editor will jump to the first sprite that uses it. Handy when you're hunting for where a specific shape lives.</li>
       <li><b>Dark colours hard to see?</b> Use the <b>BG:</b> picker (🌑 / 🌗 / 🌕) to change the transparent-pixel background. Picking "Light" makes blacks and dark purples pop.</li>
     </ul>
+  </div>
+
+  <div class="help-tab-panel" data-panel="feedback" hidden>
+    <h2>💬 Leave feedback</h2>
+    <div class="feedback-form-host"></div>
   </div>
 
   <div class="dialog-actions">
@@ -2333,6 +2339,7 @@ details.collapsible > summary .sub-count {
 
 <script src="storage.js"></script>
 <script src="tour.js"></script>
+<script src="feedback.js"></script>
 <script>
 'use strict';
 
@@ -7173,6 +7180,12 @@ function init() {
         t.classList.toggle('active', t === tab));
       document.querySelectorAll('.help-tab-panel').forEach(p =>
         p.hidden = p.dataset.panel !== which);
+      if (which === 'feedback' && window.Feedback) {
+        Feedback.mountInto(
+          document.querySelector('.feedback-form-host'),
+          { page: 'sprites', getProjectName: () => state && state.name }
+        );
+      }
     });
   });
 

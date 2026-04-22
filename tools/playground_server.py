@@ -55,6 +55,15 @@ DEFAULT_MAIN_C = STEP_DIR / "src" / "main.c"
 DEFAULT_MAIN_S = STEP_DIR / "src" / "main.s.starter"
 LESSONS_DIR = ROOT / "lessons"
 SNIPPETS_DIR = ROOT / "snippets"
+FEEDBACK_PATH = ROOT / "feedback.jsonl"
+
+FEEDBACK_CATEGORIES = ("feature", "broken", "general")
+FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code")
+FEEDBACK_MAX_BODY = 4096
+FEEDBACK_MAX_MESSAGE = 500
+FEEDBACK_MAX_NAME = 80
+FEEDBACK_MAX_PROJECT = 80
+FEEDBACK_LOCK = threading.Lock()
 
 # Lesson files carry a JSON metadata block at the top, delimited by
 # `/*! LESSON` and `*/`.  The rest of the file is a fully-compilable
@@ -1533,19 +1542,66 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/play":
-            return self.send_error(404)
+        if parsed.path == "/play":
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw = self.rfile.read(length)
+            try:
+                body = json.loads(raw.decode("utf-8"))
+            except Exception as e:
+                return self._json(400, {"ok": False, "stage": "input", "log": f"bad JSON: {e}"})
+            try:
+                result = run_play(body)
+            except Exception:
+                result = {"ok": False, "stage": "server", "log": traceback.format_exc()}
+            return self._json(200 if result.get("ok") else 500, result)
+        if parsed.path == "/feedback":
+            return self._feedback()
+        return self.send_error(404)
+
+    def _feedback(self):
         length = int(self.headers.get("Content-Length", "0") or "0")
-        raw = self.rfile.read(length)
+        if length <= 0 or length > FEEDBACK_MAX_BODY:
+            return self._json(400, {"ok": False, "error": "bad payload size"})
         try:
-            body = json.loads(raw.decode("utf-8"))
-        except Exception as e:
-            return self._json(400, {"ok": False, "stage": "input", "log": f"bad JSON: {e}"})
-        try:
-            result = run_play(body)
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
         except Exception:
-            result = {"ok": False, "stage": "server", "log": traceback.format_exc()}
-        self._json(200 if result.get("ok") else 500, result)
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+        if not isinstance(body, dict):
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+
+        category = body.get("category")
+        if category not in FEEDBACK_CATEGORIES:
+            return self._json(400, {"ok": False, "error": "category required"})
+
+        message = (body.get("message") or "").strip()
+        if not message:
+            return self._json(400, {"ok": False, "error": "message required"})
+        if len(message) > FEEDBACK_MAX_MESSAGE:
+            return self._json(400, {"ok": False, "error": "message too long"})
+
+        name = (body.get("name") or "").strip()[:FEEDBACK_MAX_NAME]
+        project_name = (body.get("projectName") or "").strip()[:FEEDBACK_MAX_PROJECT]
+        page = body.get("page") if body.get("page") in FEEDBACK_PAGES else ""
+
+        record = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "ip": self.client_address[0] if self.client_address else "",
+            "category": category,
+            "message": message,
+            "name": name,
+            "page": page,
+            "projectName": project_name,
+            "userAgent": self.headers.get("User-Agent", "")[:200],
+        }
+        line = json.dumps(record, ensure_ascii=False) + "\n"
+        try:
+            with FEEDBACK_LOCK:
+                with FEEDBACK_PATH.open("a", encoding="utf-8") as fh:
+                    fh.write(line)
+        except OSError as e:
+            sys.stderr.write(f"[playground] feedback write failed: {e}\n")
+            return self._json(500, {"ok": False, "error": "could not save feedback"})
+        return self._json(200, {"ok": True})
 
     def _json(self, code, obj):
         data = json.dumps(obj).encode("utf-8")

@@ -1179,6 +1179,7 @@ kbd {
     <button type="button" class="help-tab" data-tab="nes">NES rules</button>
     <button type="button" class="help-tab" data-tab="saves">Saving &amp; recovery</button>
     <button type="button" class="help-tab" data-tab="faq">Tips / FAQ</button>
+    <button type="button" class="help-tab" data-tab="feedback">💬 Feedback</button>
   </div>
 
   <div class="help-tab-panel" data-panel="tutorial">
@@ -1271,6 +1272,11 @@ kbd {
       <li><b>Undo history is gone after I reloaded.</b> Undo is in-memory only. Once you refresh, snapshots (every 30s) are how you go back further.</li>
       <li><b>I accidentally wrote over everything.</b> Open <b>Recover…</b> — a snapshot from seconds ago almost certainly has what you want.</li>
     </ul>
+  </div>
+
+  <div class="help-tab-panel" data-panel="feedback" hidden>
+    <h2>💬 Leave feedback</h2>
+    <div class="feedback-form-host"></div>
   </div>
 
   <div class="dialog-actions">
@@ -1381,6 +1387,7 @@ kbd {
 
 <script src="storage.js"></script>
 <script src="tour.js"></script>
+<script src="feedback.js"></script>
 <script>
 'use strict';
 
@@ -3814,6 +3821,12 @@ function init() {
         t.classList.toggle('active', t === tab));
       document.querySelectorAll('.help-tab-panel').forEach(p =>
         p.hidden = p.dataset.panel !== which);
+      if (which === 'feedback' && window.Feedback) {
+        Feedback.mountInto(
+          document.querySelector('.feedback-form-host'),
+          { page: 'index', getProjectName: () => state && state.name }
+        );
+      }
     });
   });
 
