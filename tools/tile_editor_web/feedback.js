@@ -91,6 +91,7 @@
     const getProjectState = opts.getProjectState || null;
 
     host.innerHTML = '';
+    host.classList.add('fb-form');
 
     const intro = document.createElement('p');
     intro.className = 'fb-hint';
