@@ -23,9 +23,13 @@
   const NAME_MAX = 80;
 
   const STYLE = `
+    /* Relax the tabbed help dialog's max-width so the feedback form
+       (and any other tab) gets a proper writing surface.  The dialog
+       was previously capped at 720px by .help-dialog-wide. */
+    dialog.help-dialog-wide { max-width: min(1040px, 94vw); }
     .fb-form { display: flex; flex-direction: column; gap: 10px;
       font-size: 0.95em; color: var(--fg, #eee);
-      min-width: min(520px, 85vw); }
+      min-width: min(960px, 92vw); }
     .fb-form h3 { margin: 0 0 2px; color: var(--accent, #ffd166);
       font-size: 1em; }
     .fb-form p.fb-hint { margin: 0; color: var(--muted, #aaa);
