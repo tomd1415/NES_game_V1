@@ -1659,6 +1659,8 @@ document.getElementById('btn-help-close').addEventListener('click', () => docume
   const mount = () => Feedback.mountInto(host, {
     page: 'code',
     getProjectName: () => (typeof state !== 'undefined' && state && state.name) || '',
+    getProjectState: () =>
+      (typeof state !== 'undefined' && state) ? state : null,
   });
   block.addEventListener('toggle', () => { if (block.open) mount(); });
 })();

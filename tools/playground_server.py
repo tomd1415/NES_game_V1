@@ -59,7 +59,8 @@ FEEDBACK_PATH = ROOT / "feedback.jsonl"
 
 FEEDBACK_CATEGORIES = ("feature", "broken", "general")
 FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code")
-FEEDBACK_MAX_BODY = 4096
+# 1 MB body cap — a project snapshot is typically 30-100 kB.
+FEEDBACK_MAX_BODY = 1024 * 1024
 FEEDBACK_MAX_MESSAGE = 500
 FEEDBACK_MAX_NAME = 80
 FEEDBACK_MAX_PROJECT = 80
@@ -1593,6 +1594,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "projectName": project_name,
             "userAgent": self.headers.get("User-Agent", "")[:200],
         }
+        project = body.get("project")
+        if isinstance(project, dict):
+            record["project"] = project
         line = json.dumps(record, ensure_ascii=False) + "\n"
         try:
             with FEEDBACK_LOCK:

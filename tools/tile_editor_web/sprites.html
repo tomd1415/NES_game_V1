@@ -7183,7 +7183,11 @@ function init() {
       if (which === 'feedback' && window.Feedback) {
         Feedback.mountInto(
           document.querySelector('.feedback-form-host'),
-          { page: 'sprites', getProjectName: () => state && state.name }
+          {
+            page: 'sprites',
+            getProjectName: () => state && state.name,
+            getProjectState: () => state,
+          }
         );
       }
     });

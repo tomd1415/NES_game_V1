@@ -24,7 +24,8 @@
 
   const STYLE = `
     .fb-form { display: flex; flex-direction: column; gap: 10px;
-      font-size: 0.95em; color: var(--fg, #eee); }
+      font-size: 0.95em; color: var(--fg, #eee);
+      min-width: min(520px, 85vw); }
     .fb-form h3 { margin: 0 0 2px; color: var(--accent, #ffd166);
       font-size: 1em; }
     .fb-form p.fb-hint { margin: 0; color: var(--muted, #aaa);
@@ -39,14 +40,17 @@
     .fb-cat.checked { border-color: var(--accent, #ffd166);
       background: var(--panel, #333); }
     .fb-form textarea { width: 100%; box-sizing: border-box;
-      min-height: 90px; resize: vertical; font: inherit;
-      padding: 6px 8px; border: 1px solid var(--border, #444);
+      min-height: 140px; resize: vertical; font: inherit;
+      padding: 8px 10px; border: 1px solid var(--border, #444);
       border-radius: 4px; background: var(--panel2, #1e1e1e);
       color: inherit; }
     .fb-form input[type="text"] { width: 100%; box-sizing: border-box;
       font: inherit; padding: 5px 8px;
       border: 1px solid var(--border, #444); border-radius: 4px;
       background: var(--panel2, #1e1e1e); color: inherit; }
+    .fb-include { display: flex; align-items: flex-start; gap: 8px;
+      font-size: 0.9em; color: var(--muted, #bbb); line-height: 1.4; }
+    .fb-include input { margin: 3px 0 0 0; }
     .fb-row { display: flex; align-items: center; gap: 8px;
       justify-content: space-between; flex-wrap: wrap; }
     .fb-count { color: var(--muted, #888); font-size: 0.85em; }
@@ -80,6 +84,7 @@
   function build(host, opts) {
     const page = opts.page || '';
     const getProjectName = opts.getProjectName || (() => '');
+    const getProjectState = opts.getProjectState || null;
 
     host.innerHTML = '';
 
@@ -92,14 +97,29 @@
 
     const catRow = document.createElement('div');
     catRow.className = 'fb-cat-row';
+    // One shared name across the three radios so picking a new one
+    // deselects the others (native radio-group behaviour).  Also wire
+    // mousedown-before-click so clicking the already-checked radio
+    // clears it — native radios can't normally be unchecked.
+    const groupName = 'fb-cat-' + Math.random().toString(36).slice(2, 8);
     const radios = CATEGORIES.map(c => {
       const lbl = document.createElement('label');
       lbl.className = 'fb-cat';
       lbl.title = c.label;
       const r = document.createElement('input');
       r.type = 'radio';
-      r.name = 'fb-cat-' + Math.random().toString(36).slice(2, 7);
+      r.name = groupName;
       r.value = c.id;
+      // Clicking the already-checked radio clears the whole group.
+      r.addEventListener('mousedown', () => {
+        r.dataset.wasChecked = r.checked ? '1' : '0';
+      });
+      r.addEventListener('click', () => {
+        if (r.dataset.wasChecked === '1') {
+          r.checked = false;
+          refresh();
+        }
+      });
       lbl.appendChild(r);
       const em = document.createElement('span');
       em.textContent = c.emoji + ' ' + c.label;
@@ -110,7 +130,7 @@
     host.appendChild(catRow);
 
     const msg = document.createElement('textarea');
-    msg.rows = 5;
+    msg.rows = 7;
     msg.maxLength = MSG_MAX;
     msg.placeholder = 'What would you like to tell us? (up to ' +
       MSG_MAX + ' characters)';
@@ -122,6 +142,24 @@
     nameInput.placeholder =
       'Your name (optional, so we can ask you about it later)';
     host.appendChild(nameInput);
+
+    // Optional: include the current project so the teacher can see
+    // what was on screen.  Default off.  Only rendered if the page
+    // supplied a getProjectState callback.
+    let includeInput = null;
+    if (typeof getProjectState === 'function') {
+      const wrap = document.createElement('label');
+      wrap.className = 'fb-include';
+      includeInput = document.createElement('input');
+      includeInput.type = 'checkbox';
+      wrap.appendChild(includeInput);
+      const txt = document.createElement('span');
+      txt.textContent =
+        'Include my project so the teacher can see what I was doing ' +
+        '(sends your tiles, palette and background to the teacher).';
+      wrap.appendChild(txt);
+      host.appendChild(wrap);
+    }
 
     const row = document.createElement('div');
     row.className = 'fb-row';
@@ -183,6 +221,12 @@
           catch (_) { return ''; }
         })(),
       };
+      if (includeInput && includeInput.checked && getProjectState) {
+        try {
+          const snap = getProjectState();
+          if (snap) payload.project = snap;
+        } catch (_) { /* skip on failure */ }
+      }
       try {
         const r = await fetch('/feedback', {
           method: 'POST',

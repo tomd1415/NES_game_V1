@@ -265,13 +265,14 @@ behaviour/code it happens when the help dialog is first opened.
   never leave localhost / the classroom LAN.
 - The optional name field is explicitly optional and labelled as
   such.
-- We do **not** attach the pupil's project state (tiles, palette,
-  background) to the submission.  That's ~100 KB per click, and
-  includes everything the pupil has been working on — a privacy
-  step we shouldn't take without explicit agreement.  If that turns
-  out to be useful, it's a one-line change later, gated behind an
-  *"Include my project so the teacher can see what I was doing"*
-  checkbox that defaults to off.
+- **Include-my-project checkbox.**  Default off.  When ticked,
+  the pupil's full editor state (tiles, palettes, backgrounds,
+  sprites, behaviour map, code) is attached to the submission
+  under the `project` key.  The checkbox label makes it clear
+  what is being sent: *"Include my project so the teacher can see
+  what I was doing (sends your tiles, palette and background to
+  the teacher)."*  Server body cap is raised to 1 MB to fit
+  typical project snapshots (~30-100 kB).
 - IP address is captured because the server already knows it — but
   since this is a LAN, it'll typically be `192.168.x.y`.  If we
   ever ran this on a public host, we'd drop IP capture.
@@ -298,12 +299,10 @@ behaviour/code it happens when the help dialog is first opened.
 
 - **Pupils submitting nonsense.**  Expected, acceptable, easy to
   skim past in a JSONL file.
-- **Concurrent writes racing.**  Two tabs submitting at the exact
-  same moment could interleave bytes.  Python's `open(..., 'a')`
-  + a single `write()` with a newline is atomic up to the OS
-  page size on Linux, so for JSON objects under 4 KB this is
-  safe in practice.  If we ever hit interleaving in the wild, a
-  `threading.Lock` around the write is one line.
+- **Concurrent writes racing.**  Two tabs submitting at the same
+  moment could in principle interleave bytes.  A module-level
+  `threading.Lock` serialises the append so each record lands as
+  one contiguous JSONL line regardless of size.
 
 ## Acceptance criteria
 

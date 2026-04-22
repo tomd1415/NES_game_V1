@@ -1477,6 +1477,7 @@ function init() {
     const mount = () => Feedback.mountInto(host, {
       page: 'behaviour',
       getProjectName: () => (state && state.name) || '',
+      getProjectState: () => state,
     });
     block.addEventListener('toggle', () => { if (block.open) mount(); });
   })();

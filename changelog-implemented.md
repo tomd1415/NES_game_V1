@@ -592,6 +592,43 @@ at [feedback-plan.md](feedback-plan.md).
   `python3 -c 'ast.parse(...)'` clean on the server; `node
   --check` clean on feedback.js.
 
+### Pupil feedback — 2026-04-22 follow-ups
+
+Three tweaks after pupil testing of the first cut:
+
+- **Shared radio-group name.**  The three category radios each
+  had a different random `name` attribute, which meant they
+  behaved like independent checkboxes — picking a second category
+  left the first still highlighted.  Fixed by generating one
+  `name` per form instance and reusing it across the three
+  radios, restoring native radio-group behaviour.
+- **Click-to-clear category.**  Native radios can't normally be
+  un-checked by clicking them a second time.  Added a
+  `mousedown`/`click` pair that records whether the radio was
+  already checked at press time, then clears the whole group on
+  the click if so.  *Send* disables itself again, matching the
+  empty-category state.
+- **Wider textarea.**  Bumped `rows` from 5 to 7, `min-height`
+  from 90 px to 140 px, and added `min-width: min(520px, 85vw)`
+  to `.fb-form` so the text area (and the form as a whole) has a
+  proper writing surface — in particular on behaviour.html and
+  code.html where the surrounding help dialog was otherwise
+  narrow.
+- **Include-my-project checkbox.**  New optional control under
+  the name field: *"Include my project so the teacher can see
+  what I was doing (sends your tiles, palette and background to
+  the teacher)."*  Default off.  Only rendered when the page's
+  `mountInto` call provides a `getProjectState` callback — all
+  four pages now do.  When ticked, the pupil's full editor
+  `state` is attached to the submission under the `project` key.
+  Server body cap raised from 4 kB to 1 MB to fit typical
+  snapshots (~30-100 kB).  Server validates
+  `isinstance(project, dict)` before storing, so malformed
+  payloads are silently dropped rather than saved.
+- **Verification.**  Smoke-tested both payload shapes (with and
+  without `project`) on port 18765 — each returned `{"ok":
+  true}` and produced the expected JSONL line.
+
 ---
 
 ## Not done / deferred
