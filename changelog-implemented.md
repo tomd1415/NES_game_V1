@@ -1219,3 +1219,73 @@ definition, instead of the role-wide auto-placement of Phase A.
   `ai_speed`, `maxHp`, etc.; surfacing them in the UI is a
   small follow-up once we know which knobs pupils actually
   reach for.
+
+---
+
+## Builder — 2026-04-23 Phase B chunk 3 (animation role/style tagging)
+
+Answers the pupil ask *"it is probably worth being able to tag the
+animations as 'player' 'enemy' 'pickup' etc."* — introduces a
+metadata layer so animations describe themselves, auto-wiring the
+player's walk / jump along the way.
+
+- **New fields on each animation:** `role` ∈ `player | enemy | npc
+  | pickup | any`, `style` ∈ `walk | jump | idle | die | attack |
+  custom`.  Defaults are `player` + `custom` for brand-new
+  animations, so existing pupils see the tags appear without any
+  content changing.
+- **Two dropdowns on the Sprites page animation editor** — *Used
+  by* and *Style*.  Next to them, the muted hint *"Tag once, wired
+  automatically."*  Each animation's list entry also shows its tag
+  inline (e.g. *"3 frames · 8 fps · Player/Walk"*) when the tag is
+  specific enough to be interesting.
+- **Auto-derivation.**  `state.animation_assignments.walk` and
+  `.jump` are kept in sync with tagged player animations
+  automatically.  Tag an animation as Player + Walk and the Walk
+  assignment dropdown below updates without a second click.  The
+  Walk / Jump dropdowns are still present — pupils who want
+  explicit override still can — and each entry shows a *"✓
+  (tagged)"* marker next to animations whose tag already matches.
+- **Migration is two-way.**  Old saves with a non-null
+  `animation_assignments.walk` but no tags get their walk-assigned
+  animation tagged `player + walk` (same for jump); new tags
+  without explicit assignments populate the assignments.  Existing
+  projects round-trip unchanged.  Invalid `role` / `style` values
+  (from hand-edited JSON or future tag values) are clamped to the
+  defaults during migration.
+- **Constants exported:** `ANIM_ROLES`, `ANIM_STYLES`,
+  `ANIM_ROLE_LABELS`, `ANIM_STYLE_LABELS` at the top of sprites.html
+  next to the existing `ROLE_*` tables — single source of truth
+  for both the UI dropdowns and the migration validator.
+
+### Verification — Phase B chunk 3
+
+`/tmp/builder-smoketest-5.mjs` runs seven assertions, all pass:
+
+1. `sprites.html` still contains the tagging constants and the
+   key migration snippets (guard against accidental drift).
+2. Default animation gets `role=player, style=custom`.
+3. Legacy `animation_assignments.walk = 5` back-tags animation 5
+   as `player + walk`.
+4. A pre-tagged `player + jump` animation auto-populates
+   `animation_assignments.jump`.
+5. `enemy + walk` does *not* claim the player's walk slot.
+6. Both walk + jump auto-derive simultaneously when both tags
+   exist.
+7. Invalid tag values clamp to defaults (`role=pirate` →
+   `player`, `style=moonwalk` → `custom`).
+8. Real cc65 builds the resulting `main.c` in 35 ms — no
+   regression for existing pipelines.
+
+### Deliberately out of chunk 3 — next chunks
+
+- **Runtime playback of tagged animations on scene sprites.**
+  Enemies currently use their static `ss_tiles[]` layout.  Wiring
+  a per-instance animation frame cycle needs the server's
+  `build_scene_inc` to emit per-role animation tables and the
+  platformer template to add per-instance animation state.  Next
+  chunk.
+- **Player 2** — teacher Q4.  Benefits from the scene-instances
+  foundation; will likely reuse the same per-instance renderer
+  as enemies.
+- **HUD, doors, HP/damage** — still in the Phase B backlog.

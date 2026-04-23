@@ -1807,12 +1807,22 @@ details.collapsible > summary .sub-count {
           </div>
         </div>
 
+        <div class="anim-tags dim-row">
+          <label title="Which kind of sprite uses this animation">Used by
+            <select id="anim-role" title="Role tag: filters which sprites pick this up for auto-wiring"></select>
+          </label>
+          <label title="What this animation represents">Style
+            <select id="anim-style" title="Style tag: walk / jump / idle / die / attack / custom"></select>
+          </label>
+          <span class="tag-hint" title="Player + Walk is auto-used as the walk animation below. Same for Jump." style="color:var(--muted);font-size:0.85em">Tag once, wired automatically.</span>
+        </div>
+
         <div class="anim-assignments">
           <label>Walk
-            <select id="anim-assign-walk" title="Which animation to play while walking in the Play-in-NES test"></select>
+            <select id="anim-assign-walk" title="Which animation to play while walking in the Play-in-NES test. Auto-filled by Player + Walk tagged animations."></select>
           </label>
           <label>Jump
-            <select id="anim-assign-jump" title="Which animation to play while jumping (UP held) in the Play-in-NES test"></select>
+            <select id="anim-assign-jump" title="Which animation to play while jumping (UP held) in the Play-in-NES test. Auto-filled by Player + Jump tagged animations."></select>
           </label>
         </div>
       </div>
@@ -2555,6 +2565,22 @@ const ROLE_ORDER = [
   'player', 'npc', 'enemy', 'item', 'tool', 'powerup',
   'pickup', 'projectile', 'decoration', 'other',
 ];
+
+// Sprint-B — animation tagging.  `role` says which kind of sprite
+// uses the animation; `style` says what the animation is for.  Kept
+// in sync with the dropdowns on sprites.html below.
+const ANIM_ROLES = ['player', 'enemy', 'npc', 'pickup', 'any'];
+const ANIM_ROLE_VALUES = new Set(ANIM_ROLES);
+const ANIM_STYLES = ['walk', 'jump', 'idle', 'die', 'attack', 'custom'];
+const ANIM_STYLE_VALUES = new Set(ANIM_STYLES);
+const ANIM_ROLE_LABELS = {
+  player: 'Player', enemy: 'Enemy', npc: 'NPC',
+  pickup: 'Pickup', any: 'Any role',
+};
+const ANIM_STYLE_LABELS = {
+  walk: 'Walk', jump: 'Jump', idle: 'Idle',
+  die: 'Die', attack: 'Attack', custom: 'Custom',
+};
 function resizeSprite(sprite, w, h) {
   w = Math.max(1, Math.min(MAX_SPRITE_W, w));
   h = Math.max(1, Math.min(MAX_SPRITE_H, h));
@@ -2651,11 +2677,44 @@ function migrateState(s) {
       .map(f => f | 0)
       .filter(f => f >= 0);
     an.fps = Math.max(1, Math.min(60, (an.fps | 0) || 8));
+    // Sprint-B — animation role / style tags.  `role` says WHICH kind
+    // of sprite uses this animation (player / enemy / pickup / npc /
+    // decoration / any).  `style` says WHAT the animation is for
+    // (walk / jump / idle / die / attack / custom).  The tags are
+    // metadata only today; the runtime still reads
+    // animation_assignments, which we auto-derive from the tagged
+    // player animations further down.
+    if (typeof an.role !== 'string' || !ANIM_ROLE_VALUES.has(an.role)) {
+      an.role = 'player';
+    }
+    if (typeof an.style !== 'string' || !ANIM_STYLE_VALUES.has(an.style)) {
+      an.style = 'custom';
+    }
   }
   const validIds = new Set(s.animations.map(a => a.id));
   for (const k of ['walk', 'jump']) {
     const v = s.animation_assignments[k];
     if (v != null && !validIds.has(v)) s.animation_assignments[k] = null;
+  }
+  // Back-fill tags for the two legacy assignments so old saves gain
+  // useful tags on first migration.  Don't overwrite tags the pupil
+  // has already set: if walk's tagged animation is already roled
+  // 'player' with style 'walk', leave it alone.
+  for (const kind of ['walk', 'jump']) {
+    const aid = s.animation_assignments[kind];
+    if (aid == null) continue;
+    const an = s.animations.find(x => x.id === aid);
+    if (!an) continue;
+    if (an.role === 'player' && an.style === 'custom') an.style = kind;
+  }
+  // Reverse the derivation so teachers who tag an animation
+  // player+walk see it auto-assigned as the walk animation.  First
+  // tagged animation wins; ties are broken by list order.
+  for (const kind of ['walk', 'jump']) {
+    if (s.animation_assignments[kind] != null) continue;
+    const hit = s.animations.find(a =>
+      a.role === 'player' && a.style === kind);
+    if (hit) s.animation_assignments[kind] = hit.id;
   }
   // Sanity-patch each sprite.
   if (Array.isArray(s.sprites)) {
@@ -3507,8 +3566,11 @@ function renderAnimationList() {
     li.appendChild(label);
     const meta = document.createElement('span');
     meta.className = 'anim-meta';
+    const tagStr = (a.role && a.role !== 'any' && a.style && a.style !== 'custom')
+      ? ' · ' + (ANIM_ROLE_LABELS[a.role] || a.role) + '/' + (ANIM_STYLE_LABELS[a.style] || a.style)
+      : '';
     meta.textContent = a.frames.length + ' frame' + (a.frames.length === 1 ? '' : 's')
-                     + ' · ' + a.fps + ' fps';
+                     + ' · ' + a.fps + ' fps' + tagStr;
     li.appendChild(meta);
     li.addEventListener('click', () => {
       selectedAnimId = a.id;
@@ -3524,6 +3586,7 @@ function renderAnimationEditor() {
   const a = currentAnim();
   if (!a) return;
   document.getElementById('anim-fps').value = a.fps;
+  renderAnimTagDropdowns(a);
 
   const framesEl = document.getElementById('anim-frames');
   framesEl.innerHTML = '';
@@ -3644,17 +3707,60 @@ function renderAnimationAssignments() {
     for (const a of state.animations) {
       const opt = document.createElement('option');
       opt.value = String(a.id);
-      opt.textContent = a.name;
+      const tag = (a.role === 'player' && a.style === kind)
+        ? '  ✓ (tagged)'
+        : '';
+      opt.textContent = a.name + tag;
       sel.appendChild(opt);
     }
     sel.value = current == null ? '' : String(current);
   }
 }
 
+// Populate the Role + Style dropdowns on the animation editor with
+// the current animation's values.  Called on every selection change.
+function renderAnimTagDropdowns(a) {
+  const roleSel = document.getElementById('anim-role');
+  const styleSel = document.getElementById('anim-style');
+  if (!roleSel || !styleSel) return;
+  if (roleSel.children.length === 0) {
+    for (const r of ANIM_ROLES) {
+      const o = document.createElement('option');
+      o.value = r;
+      o.textContent = ANIM_ROLE_LABELS[r] || r;
+      roleSel.appendChild(o);
+    }
+  }
+  if (styleSel.children.length === 0) {
+    for (const s of ANIM_STYLES) {
+      const o = document.createElement('option');
+      o.value = s;
+      o.textContent = ANIM_STYLE_LABELS[s] || s;
+      styleSel.appendChild(o);
+    }
+  }
+  roleSel.value = a.role || 'player';
+  styleSel.value = a.style || 'custom';
+}
+
+// Re-derive animation_assignments.walk / .jump from whichever
+// animations are currently tagged `player` + `walk` / `jump`.  The
+// first match wins.  Called whenever a tag changes.  Keeps the
+// server-facing contract unchanged while making the Sprites page
+// "one tag, auto-wired" for pupils.
+function syncAnimationAssignmentsFromTags() {
+  for (const kind of ['walk', 'jump']) {
+    const hit = state.animations.find(a =>
+      a.role === 'player' && a.style === kind);
+    state.animation_assignments[kind] = hit ? hit.id : null;
+  }
+}
+
 function initAnimationHandlers() {
   document.getElementById('btn-anim-new').addEventListener('click', () => {
     pushUndo();
-    const a = { id: allocAnimId(), name: 'anim' + state.animations.length, frames: [], fps: 8 };
+    const a = { id: allocAnimId(), name: 'anim' + state.animations.length,
+      frames: [], fps: 8, role: 'player', style: 'custom' };
     state.animations.push(a);
     selectedAnimId = a.id;
     animPreview.frameIdx = 0;
@@ -3665,7 +3771,9 @@ function initAnimationHandlers() {
     const a = currentAnim();
     if (!a) return;
     pushUndo();
-    const copy = { id: allocAnimId(), name: a.name + '_copy', frames: a.frames.slice(), fps: a.fps };
+    const copy = { id: allocAnimId(), name: a.name + '_copy',
+      frames: a.frames.slice(), fps: a.fps,
+      role: a.role || 'player', style: a.style || 'custom' };
     const idx = state.animations.indexOf(a);
     state.animations.splice(idx + 1, 0, copy);
     selectedAnimId = copy.id;
@@ -3737,6 +3845,28 @@ function initAnimationHandlers() {
       renderAnimationAssignments();
     });
   }
+
+  // Tag dropdowns — changing either re-derives animation_assignments
+  // so a pupil who tags an animation `player + walk` sees the Walk
+  // assignment update without a second click.
+  document.getElementById('anim-role').addEventListener('change', e => {
+    const a = currentAnim();
+    if (!a) return;
+    pushUndo();
+    a.role = e.target.value;
+    syncAnimationAssignmentsFromTags();
+    markDirty();
+    renderAnimations();
+  });
+  document.getElementById('anim-style').addEventListener('change', e => {
+    const a = currentAnim();
+    if (!a) return;
+    pushUndo();
+    a.style = e.target.value;
+    syncAnimationAssignmentsFromTags();
+    markDirty();
+    renderAnimations();
+  });
 }
 
 // --- Composite sprite canvas -------------------------------
