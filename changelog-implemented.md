@@ -728,3 +728,54 @@ separated by thin dividers, matching the browser's own File / Edit
 - `node --check` clean on the extracted inline JS block of each of
   the four pages after the restructure.
 - Each page's header now fits on one row at 1366 px.
+
+---
+
+## Feedback viewer — 2026-04-23 `GET /feedback` teacher page
+
+Plan: [feedback-viewer-plan.md](feedback-viewer-plan.md).
+Follow-up to the pupil feedback form shipped the day before.
+
+- **`GET /feedback` renders a dark-themed page.**  Reads
+  `feedback.jsonl` and `feedback-handled.json`, groups each
+  submission into a card — category chip (✨/🐛/💭), pupil name
+  (or *"anonymous"* italics), page, project name, timestamp,
+  message in a wrapping `<pre>`.  Newest first.  Top-right of each
+  card has a ✓ handled checkbox.  Opens at
+  `http://localhost:8765/feedback` — no separate UI to launch.
+- **Project snapshot fold-out.**  If the submission included the
+  pupil's project (via the "include my project" checkbox in the
+  form), the card gets a `<details>` labelled *"📎 project
+  snapshot (N KB)"* with pretty-printed JSON inside.  Closed by
+  default so long snapshots don't dominate the page.
+- **`POST /feedback/handled` persists the toggle.**  Body is
+  `{"index": N, "handled": true|false}`; server writes
+  `feedback-handled.json` next to the JSONL via a temp-file
+  rename under a module-level `RLock`.  Index is the 1-based line
+  number in `feedback.jsonl` — stable as long as the file is only
+  appended to.
+- **Show handled toggle at the top.**  Default off; preference
+  persisted in `localStorage` so the teacher doesn't have to
+  re-tick on every reload.  Handled cards stay counted in the
+  stats line but get hidden via a `body.hide-handled .handled`
+  CSS rule.
+- **Deadlock fixed during smoke-test.**  First pass used a plain
+  `Lock` and the handler deadlocked because `_save_handled_set`
+  tried to re-acquire it from inside the handler's `with` block.
+  Switched to `threading.RLock` so read-modify-write stays atomic
+  without nested-lock grief.
+
+### Verification — feedback viewer
+
+- Smoke-tested on port 18766 with three `POST /feedback`
+  submissions (two without project, one with), then
+  `GET /feedback`: 200 OK, 3 cards, newest first, correct
+  category emoji, anonymous label on the no-name entry, snapshot
+  fold-out only on the third.
+- `POST /feedback/handled {"index":2,"handled":true}` → 200,
+  `feedback-handled.json` contains `{"handled":[2]}`; re-fetching
+  the viewer shows stats "1 handled, 2 open" and the card has
+  the `handled` class.  Unchecking round-trips back to an empty
+  list.  Malformed JSON and a negative index each produce a 400
+  with a clear `error` field.
+- `python3 -m py_compile tools/playground_server.py` clean.

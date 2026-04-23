@@ -56,6 +56,7 @@ DEFAULT_MAIN_S = STEP_DIR / "src" / "main.s.starter"
 LESSONS_DIR = ROOT / "lessons"
 SNIPPETS_DIR = ROOT / "snippets"
 FEEDBACK_PATH = ROOT / "feedback.jsonl"
+FEEDBACK_HANDLED_PATH = ROOT / "feedback-handled.json"
 
 FEEDBACK_CATEGORIES = ("feature", "broken", "general")
 FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code")
@@ -65,6 +66,292 @@ FEEDBACK_MAX_MESSAGE = 500
 FEEDBACK_MAX_NAME = 80
 FEEDBACK_MAX_PROJECT = 80
 FEEDBACK_LOCK = threading.Lock()
+FEEDBACK_HANDLED_LOCK = threading.RLock()
+
+FEEDBACK_CATEGORY_META = {
+    "feature": ("✨", "Feature request"),
+    "broken":  ("🐛", "Something broken"),
+    "general": ("💭", "General comment"),
+}
+
+
+def _load_feedback_records():
+    """Return a list of (index, record) pairs from feedback.jsonl.
+
+    Index is 1-based and stable as long as the file is only appended
+    to — which is the only way records are added.  Malformed lines are
+    skipped with a stderr warning but still consume an index so the
+    numbering matches what a text editor would show.
+    """
+    if not FEEDBACK_PATH.exists():
+        return []
+    out = []
+    try:
+        with FEEDBACK_PATH.open("r", encoding="utf-8") as fh:
+            for i, line in enumerate(fh, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append((i, json.loads(line)))
+                except Exception as e:
+                    sys.stderr.write(
+                        f"[playground] feedback line {i} bad JSON: {e}\n"
+                    )
+    except OSError as e:
+        sys.stderr.write(f"[playground] feedback read failed: {e}\n")
+    return out
+
+
+def _load_handled_set():
+    """Load the set of handled feedback indices from disk."""
+    if not FEEDBACK_HANDLED_PATH.exists():
+        return set()
+    try:
+        with FEEDBACK_HANDLED_PATH.open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return set(int(x) for x in data.get("handled", []))
+    except Exception as e:
+        sys.stderr.write(f"[playground] handled-set read failed: {e}\n")
+        return set()
+
+
+def _save_handled_set(handled):
+    data = {"handled": sorted(handled)}
+    tmp = FEEDBACK_HANDLED_PATH.with_suffix(".json.tmp")
+    with FEEDBACK_HANDLED_LOCK:
+        with tmp.open("w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        tmp.replace(FEEDBACK_HANDLED_PATH)
+
+
+_FEEDBACK_VIEWER_CSS = """
+:root {
+  --bg: #1a1623; --panel: #241f33; --panel2: #2e2744;
+  --fg: #e9e6f2; --muted: #a299c2; --accent: #ffd166;
+  --good: #7ed996; --warn: #ff8a80; --info: #80c7ff;
+  --border: #3a3150;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: system-ui, sans-serif;
+  background: var(--bg); color: var(--fg); line-height: 1.5;
+}
+header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 20px; background: var(--panel);
+  border-bottom: 1px solid var(--border); position: sticky;
+  top: 0; z-index: 10;
+}
+header h1 { margin: 0; font-size: 1.15em; color: var(--accent); }
+header .stats { color: var(--muted); font-size: 0.9em; }
+header label { display: flex; gap: 6px; align-items: center;
+  margin-left: auto; color: var(--muted); cursor: pointer; }
+main { max-width: 960px; margin: 0 auto; padding: 20px; }
+.empty {
+  text-align: center; color: var(--muted); padding: 60px 20px;
+  font-size: 1.1em;
+}
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 18px; margin: 12px 0;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 10px 14px;
+  align-items: start;
+}
+.card.handled { opacity: 0.55; }
+.card .chip {
+  grid-row: 1 / span 2;
+  font-size: 1.6em; line-height: 1;
+  padding: 6px 10px; border-radius: 8px;
+  background: var(--panel2); border: 1px solid var(--border);
+}
+.card.feature .chip { border-color: var(--accent); }
+.card.broken  .chip { border-color: var(--warn); }
+.card.general .chip { border-color: var(--info); }
+.card .meta {
+  display: flex; flex-wrap: wrap; gap: 6px 12px;
+  font-size: 0.88em; color: var(--muted);
+}
+.card .meta .name { color: var(--fg); font-weight: 600; }
+.card .meta .name.anon { color: var(--muted); font-weight: normal;
+  font-style: italic; }
+.card .meta .sep::before { content: "•"; margin-right: 10px; }
+.card .message {
+  grid-column: 2;
+  white-space: pre-wrap; word-break: break-word;
+  margin: 0; font: inherit;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+}
+.card .handled-toggle {
+  grid-row: 1 / span 2; align-self: center;
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted); font-size: 0.88em; cursor: pointer;
+  user-select: none;
+}
+.card .snapshot {
+  grid-column: 2; margin: 0;
+}
+.card .snapshot > summary {
+  cursor: pointer; color: var(--info); font-size: 0.88em;
+}
+.card .snapshot pre {
+  max-height: 400px; overflow: auto;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+  font-size: 0.82em; margin-top: 8px; color: var(--muted);
+}
+body.hide-handled .card.handled { display: none; }
+"""
+
+_FEEDBACK_VIEWER_JS = """
+(function () {
+  const body = document.body;
+  const toggle = document.getElementById('show-handled');
+  const applyFilter = () => {
+    body.classList.toggle('hide-handled', !toggle.checked);
+    localStorage.setItem('fb-show-handled', toggle.checked ? '1' : '0');
+  };
+  toggle.checked = localStorage.getItem('fb-show-handled') === '1';
+  applyFilter();
+  toggle.addEventListener('change', applyFilter);
+
+  document.querySelectorAll('.handled-toggle input').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const idx = parseInt(cb.dataset.index, 10);
+      const handled = cb.checked;
+      const card = cb.closest('.card');
+      card.classList.toggle('handled', handled);
+      try {
+        const r = await fetch('/feedback/handled', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index: idx, handled }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      } catch (e) {
+        cb.checked = !handled;
+        card.classList.toggle('handled', !handled);
+        alert("Couldn't save — check the server: " + e.message);
+      }
+      updateCounts();
+      applyFilter();
+    });
+  });
+
+  function updateCounts() {
+    const total = document.querySelectorAll('.card').length;
+    const done = document.querySelectorAll('.card.handled').length;
+    const el = document.getElementById('stats');
+    if (el) el.textContent =
+      total + ' submission' + (total === 1 ? '' : 's') +
+      ' — ' + done + ' handled, ' + (total - done) + ' open';
+  }
+})();
+"""
+
+
+def _render_feedback_viewer(records, handled):
+    """Server-render the feedback viewer page.
+
+    `records` is the list of `(index, record)` pairs from
+    `_load_feedback_records()`; `handled` is the set of handled
+    indices.  Newest-first.
+    """
+    import html as _html
+
+    total = len(records)
+    done = sum(1 for idx, _ in records if idx in handled)
+    stats_text = (
+        f"{total} submission{'' if total == 1 else 's'} — "
+        f"{done} handled, {total - done} open"
+    )
+
+    if total == 0:
+        body = (
+            '<main><div class="empty">No feedback yet.<br>'
+            'Submissions from the editor’s ? dialog will appear here.'
+            '</div></main>'
+        )
+    else:
+        cards = []
+        for idx, rec in reversed(records):
+            cards.append(_render_card(idx, rec, idx in handled))
+        body = '<main>\n' + '\n'.join(cards) + '\n</main>'
+
+    return (
+        '<!doctype html>\n'
+        '<html lang="en"><head><meta charset="utf-8">\n'
+        '<title>Pupil feedback</title>\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f'<style>{_FEEDBACK_VIEWER_CSS}</style>\n'
+        '</head><body class="hide-handled">\n'
+        '<header>\n'
+        '  <h1>💬 Pupil feedback</h1>\n'
+        f'  <span class="stats" id="stats">{_html.escape(stats_text)}</span>\n'
+        '  <label><input type="checkbox" id="show-handled"> '
+        'Show handled</label>\n'
+        '</header>\n'
+        f'{body}\n'
+        f'<script>{_FEEDBACK_VIEWER_JS}</script>\n'
+        '</body></html>\n'
+    )
+
+
+def _render_card(idx, rec, is_handled):
+    import html as _html
+
+    category = rec.get("category", "general")
+    emoji, cat_label = FEEDBACK_CATEGORY_META.get(
+        category, ("💭", "General comment")
+    )
+    name = (rec.get("name") or "").strip()
+    name_html = (
+        f'<span class="name">{_html.escape(name)}</span>'
+        if name else '<span class="name anon">anonymous</span>'
+    )
+    page = rec.get("page") or "?"
+    project_name = rec.get("projectName") or ""
+    ts = rec.get("ts") or ""
+    message = rec.get("message") or ""
+    project = rec.get("project")
+
+    meta_bits = [name_html, f'<span class="sep">{_html.escape(cat_label)}</span>']
+    if page:
+        meta_bits.append(f'<span class="sep">page: {_html.escape(page)}</span>')
+    if project_name:
+        meta_bits.append(
+            f'<span class="sep">project: {_html.escape(project_name)}</span>'
+        )
+    if ts:
+        meta_bits.append(f'<span class="sep">{_html.escape(ts)}</span>')
+    meta_html = '\n    '.join(meta_bits)
+
+    snapshot_html = ''
+    if isinstance(project, dict):
+        pretty = json.dumps(project, indent=2, ensure_ascii=False)
+        kb = max(1, round(len(pretty) / 1024))
+        snapshot_html = (
+            f'  <details class="snapshot">\n'
+            f'    <summary>📎 project snapshot ({kb} KB)</summary>\n'
+            f'    <pre>{_html.escape(pretty)}</pre>\n'
+            f'  </details>\n'
+        )
+
+    checked_attr = ' checked' if is_handled else ''
+    handled_class = ' handled' if is_handled else ''
+
+    return (
+        f'<article class="card {_html.escape(category)}{handled_class}">\n'
+        f'  <div class="chip" title="{_html.escape(cat_label)}">{emoji}</div>\n'
+        f'  <div class="meta">\n    {meta_html}\n  </div>\n'
+        f'  <label class="handled-toggle" title="Mark as handled">\n'
+        f'    <input type="checkbox" data-index="{idx}"{checked_attr}> handled\n'
+        f'  </label>\n'
+        f'  <pre class="message">{_html.escape(message)}</pre>\n'
+        f'{snapshot_html}'
+        f'</article>'
+    )
 
 # Lesson files carry a JSON metadata block at the top, delimited by
 # `/*! LESSON` and `*/`.  The rest of the file is a fully-compilable
@@ -1475,6 +1762,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._snippets_index()
         if parsed.path.startswith("/snippets/"):
             return self._snippet_body(unquote(parsed.path[len("/snippets/"):]))
+        if parsed.path == "/feedback":
+            return self._feedback_viewer()
         return super().do_GET()
 
     def _lessons_index(self):
@@ -1557,6 +1846,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(200 if result.get("ok") else 500, result)
         if parsed.path == "/feedback":
             return self._feedback()
+        if parsed.path == "/feedback/handled":
+            return self._feedback_toggle_handled()
         return self.send_error(404)
 
     def _feedback(self):
@@ -1605,6 +1896,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except OSError as e:
             sys.stderr.write(f"[playground] feedback write failed: {e}\n")
             return self._json(500, {"ok": False, "error": "could not save feedback"})
+        return self._json(200, {"ok": True})
+
+    def _feedback_viewer(self):
+        records = _load_feedback_records()
+        handled = _load_handled_set()
+        html = _render_feedback_viewer(records, handled).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html)
+
+    def _feedback_toggle_handled(self):
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0 or length > 4096:
+            return self._json(400, {"ok": False, "error": "bad payload size"})
+        try:
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+        if not isinstance(body, dict):
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+        try:
+            idx = int(body.get("index"))
+        except Exception:
+            return self._json(400, {"ok": False, "error": "index required"})
+        if idx < 1:
+            return self._json(400, {"ok": False, "error": "bad index"})
+        handled_flag = bool(body.get("handled"))
+        with FEEDBACK_HANDLED_LOCK:
+            current = _load_handled_set()
+            if handled_flag:
+                current.add(idx)
+            else:
+                current.discard(idx)
+            _save_handled_set(current)
         return self._json(200, {"ok": True})
 
     def _json(self, code, obj):
