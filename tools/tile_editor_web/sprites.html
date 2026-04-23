@@ -1656,6 +1656,7 @@ details.collapsible > summary .sub-count {
     <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
     <a class="page-link active" href="sprites.html" title="You are here — design sprites from the shared tileset">🦸 Sprites</a>
     <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
+    <a class="page-link" href="builder.html" title="Build the game by ticking modules — no C required">🧱 Builder</a>
     <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
   </nav>
   <div class="toolbar">
@@ -2716,7 +2717,33 @@ function migrateState(s) {
   // behaviour.html; sprites.html only needs to seed/persist the fields
   // so save/load round-trips cleanly from either page.
   migrateBehaviourFields(s);
+  // Builder MVP — seed the module tree so the Builder page has
+  // something to render the first time a pupil opens it.
+  migrateBuilderFields(s);
   return s;
+}
+
+function migrateBuilderFields(s) {
+  if (s.builder && s.builder.version === 1) return;
+  s.builder = {
+    version: 1,
+    modules: {
+      game: { enabled: true, config: { type: 'platformer' } },
+      players: {
+        enabled: true,
+        config: { count: 1 },
+        submodules: {
+          player1: {
+            enabled: true,
+            config: {
+              startX: 60, startY: 120,
+              walkSpeed: 1, jumpHeight: 20, maxHp: 0,
+            },
+          },
+        },
+      },
+    },
+  };
 }
 
 function defaultBehaviourTypes() {

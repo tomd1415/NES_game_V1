@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Builder</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+:root {
+  --bg:        #14121f;
+  --panel:     #1f1b30;
+  --panel2:    #2a2440;
+  --border:    #3a3352;
+  --fg:        #f4f4f4;
+  --muted:     #9a97ad;
+  --accent:    #ffd866;
+  --good:      #47d16c;
+  --warn:      #ff6188;
+  --info:      #78dce8;
+  --shadow:    0 4px 16px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--fg);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+}
+h1, h2, h3, h4 { margin: 0; }
+h1 { font-size: 1.15em; color: var(--accent); }
+h2 { font-size: 1.0em;  color: var(--accent); margin-bottom: 6px; }
+h3 { font-size: 0.9em;  color: var(--info);   margin: 10px 0 4px; }
+button, select, input[type=text], input[type=number] {
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 10px; font-size: 0.9em;
+  cursor: pointer; font-family: inherit;
+}
+button:hover { background: #3a3560; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: #3a2f50; border-color: var(--accent); color: var(--accent); }
+input[type=text], input[type=number] { cursor: text; }
+label { -webkit-user-select: none; user-select: none; }
+
+/* --- Header / nav (matches other pages) --------------------- */
+.app-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.page-nav { display: flex; gap: 4px; margin-left: 8px; }
+.page-link {
+  padding: 5px 10px; background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--fg); text-decoration: none; font-size: 0.9em;
+}
+.page-link:hover { background: #3a3560; }
+.page-link.active { background: #3a2f50; border-color: var(--accent); color: var(--accent); font-weight: bold; }
+
+.app-header .toolbar {
+  margin-left: auto;
+  display: flex; gap: 4px; align-items: center;
+}
+.tb-group { display: flex; align-items: center; gap: 6px; }
+.tb-group + .tb-group {
+  margin-left: 6px; padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.tb-group:empty { display: none; }
+.tb-inline-divider { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.tb-section-label {
+  font-size: 0.8em; color: var(--muted);
+  margin: 2px 0; padding: 0 4px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tb-rename-row { display: flex; gap: 4px; align-items: center; padding: 0 4px; }
+.tb-rename-row input {
+  flex: 1; padding: 4px 6px;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--fg); font: inherit;
+}
+.projects-menu { position: relative; }
+.projects-menu > summary {
+  list-style: none; cursor: pointer;
+  padding: 5px 10px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 4px;
+  max-width: 220px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.projects-menu[open] > summary { background: #3a3560; }
+.projects-menu > .menu-body {
+  position: absolute; left: 0; top: calc(100% + 4px);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 260px; box-shadow: var(--shadow); z-index: 25;
+}
+.projects-menu .projects-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 180px; overflow-y: auto;
+}
+.projects-menu .projects-list button { text-align: left; padding: 5px 8px; }
+.projects-menu .projects-list button.active {
+  background: var(--accent); color: #000; font-weight: 600;
+}
+.projects-menu .menu-body button { text-align: left; }
+
+#save-status {
+  font-size: 0.9em; padding: 2px 6px; border-radius: 10px;
+  background: var(--panel2); border: 1px solid var(--border);
+  text-align: center; max-width: 1.6em;
+  overflow: hidden; white-space: nowrap; cursor: help;
+}
+#save-status.saved  { color: var(--good); border-color: var(--good); }
+#save-status.saving { color: var(--accent); }
+#save-status.error  {
+  color: var(--warn); border-color: var(--warn);
+  max-width: 220px;
+}
+
+/* --- Main layout --------------------------------------------- */
+.app-main {
+  display: grid;
+  grid-template-columns: minmax(400px, 1fr) minmax(380px, 1fr);
+  gap: 12px;
+  padding: 12px 16px;
+  align-items: start;
+  height: calc(100vh - 53px);
+  overflow: hidden;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+/* --- Module tree (left column) -------------------------------- */
+.builder-intro {
+  color: var(--muted); line-height: 1.5; margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.builder-intro strong { color: var(--fg); }
+.module {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.module.disabled-module { opacity: 0.7; }
+.module-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; cursor: pointer;
+  -webkit-user-select: none; user-select: none;
+}
+.module-header:hover { background: #332d50; }
+.module-header input[type="checkbox"] { transform: scale(1.2); }
+.module-header .title { font-weight: 600; color: var(--fg); flex: 1; }
+.module-header .chevron {
+  color: var(--muted); transition: transform 0.15s;
+}
+.module.expanded .chevron { transform: rotate(90deg); }
+.module-body {
+  padding: 4px 14px 12px 38px;
+  border-top: 1px solid var(--border);
+  display: none;
+}
+.module.expanded .module-body { display: block; }
+.module-body .module-description {
+  color: var(--muted); font-size: 0.88em; margin: 8px 0 10px;
+  line-height: 1.5;
+}
+.field-row {
+  display: flex; flex-direction: column;
+  gap: 4px; margin: 10px 0;
+}
+.field-row label { font-size: 0.9em; color: var(--muted); }
+.field-row input, .field-row select {
+  width: 100%; max-width: 360px;
+}
+.field-help {
+  font-size: 0.82em; color: var(--muted);
+  font-style: italic; margin-top: 2px;
+}
+.submodule-list {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+/* --- Scene module dynamic list (custom renderer) ------------- */
+.scene-instances {
+  display: flex; flex-direction: column;
+  gap: 6px; margin: 8px 0;
+}
+.scene-instance {
+  display: grid;
+  grid-template-columns: 1.4fr auto 70px 70px auto auto;
+  gap: 6px; align-items: center;
+  padding: 6px 8px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.scene-instance select, .scene-instance input {
+  max-width: none; min-width: 0;
+}
+.scene-instance .label-xy {
+  font-size: 0.82em; color: var(--muted); text-align: right;
+}
+.scene-instance .role-badge {
+  font-size: 0.72em; color: var(--muted);
+  padding: 1px 6px; border-radius: 9px;
+  background: var(--panel2); border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.scene-instance button.del {
+  background: var(--panel2); border-color: var(--warn); color: var(--warn);
+  padding: 4px 8px;
+}
+.scene-instance button.del:hover { background: #3a2840; }
+.scene-add-row {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 8px;
+}
+.scene-summary {
+  color: var(--muted); font-style: italic; font-size: 0.88em;
+  margin: 4px 0 8px;
+}
+
+/* --- Right column: problems + preview ------------------------- */
+.problems-panel h2,
+.preview-panel h2 { margin-bottom: 8px; }
+.problems-list { list-style: none; padding: 0; margin: 0; }
+.problems-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px; align-items: start;
+  padding: 8px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 5px; margin-bottom: 6px;
+}
+.problems-list li.error   { border-color: var(--warn); }
+.problems-list li.warn    { border-color: var(--accent); }
+.problems-list .icon { font-size: 1.1em; }
+.problems-list .body .msg { color: var(--fg); font-weight: 600; }
+.problems-list .body .fix { color: var(--muted); font-size: 0.88em;
+  line-height: 1.45; margin-top: 2px; }
+.problems-list .go {
+  font-size: 0.78em; padding: 3px 8px;
+  background: var(--panel); border: 1px solid var(--info); color: var(--info);
+}
+.problems-list .go:hover { background: var(--info); color: #000; }
+.problems-all-green {
+  color: var(--good); font-weight: 600;
+  padding: 10px 12px;
+  background: rgba(71, 209, 108, 0.08);
+  border: 1px solid var(--good); border-radius: 5px;
+}
+
+.preview-panel pre {
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 5px; padding: 10px 12px;
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 12px; line-height: 1.4;
+  color: #d6d4e0;
+  overflow: auto;
+  max-height: 60vh; white-space: pre;
+  margin: 0;
+}
+
+/* --- Play log (inside the help / play dialog) ---------------- */
+#build-log-wrap {
+  display: none;
+  margin-top: 10px;
+  border-top: 1px solid var(--border); padding-top: 10px;
+}
+#build-log-wrap.show { display: block; }
+#build-log {
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 5px; padding: 8px 10px;
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 12px; line-height: 1.4; color: #d6d4e0;
+  max-height: 240px; overflow: auto; white-space: pre-wrap;
+}
+#build-log.err  { color: var(--warn); }
+#build-status { color: var(--muted); margin-top: 6px; font-size: 0.88em; }
+
+/* --- Emulator dialog (reused pattern) ------------------------ */
+.emu-dialog {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 14px; width: min(680px, 96vw);
+}
+.emu-dialog::backdrop { background: rgba(0,0,0,0.7); }
+.emu-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.emu-header h2 { margin: 0; }
+.emu-header .close-fab {
+  margin-left: auto;
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 28px; height: 28px;
+  cursor: pointer;
+}
+#emu-canvas {
+  display: block; margin: 0 auto;
+  image-rendering: pixelated;
+  background: #000;
+  width: 512px; height: 480px;
+}
+.emu-status {
+  color: var(--muted); font-size: 0.88em;
+  margin-top: 8px; text-align: center;
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🧱 NES Builder</h1>
+  <nav class="page-nav" aria-label="Editor pages">
+    <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
+    <a class="page-link" href="sprites.html" title="Design sprites from the shared tileset">🦸 Sprites</a>
+    <a class="page-link" href="behaviour.html" title="Mark what each tile does and how sprites react">🚧 Behaviour</a>
+    <a class="page-link active" href="builder.html" title="You are here — build the game by ticking modules">🧱 Builder</a>
+    <a class="page-link" href="code.html?stay=1" title="Hand-edit the generated C — use this once you're comfortable reading code">📝 Code</a>
+  </nav>
+  <div class="toolbar">
+    <span id="save-status" class="saved" title="Loading…">●</span>
+    <div class="tb-group" role="group" aria-label="File">
+      <details class="projects-menu" id="file-menu">
+        <summary title="Project + Save / Open"><span aria-hidden="true">📁 </span><span id="active-project-label">untitled</span> <span aria-hidden="true">▾</span></summary>
+        <div class="menu-body">
+          <div class="tb-section-label">Projects</div>
+          <div class="tb-rename-row">
+            <input id="project-name" type="text" value="untitled" title="Rename this project (shared with other pages)" aria-label="Project name" placeholder="untitled">
+          </div>
+          <hr class="tb-inline-divider">
+          <div class="tb-section-label">Save &amp; restore</div>
+          <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code, builder selections. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+          <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+        </div>
+      </details>
+    </div>
+    <div class="tb-group" role="group" aria-label="Edit">
+      <button type="button" id="btn-reset-modules" title="Reset every module back to its default settings (your sprites and backgrounds are untouched)">↻ Reset modules</button>
+    </div>
+    <div class="tb-group" role="group" aria-label="Run">
+      <button type="button" id="btn-play" class="primary" title="Assemble main.c from your module selections, compile it and run it in the browser emulator">▶ Play in NES</button>
+      <button type="button" id="btn-help" title="Show help">?</button>
+    </div>
+    <input id="file-input-all" type="file" accept=".json" style="display:none">
+  </div>
+</header>
+
+<main class="app-main">
+  <section class="panel module-tree-panel">
+    <h2>Your game</h2>
+    <div class="builder-intro">
+      Tick a module, fill in the boxes, and press <strong>▶ Play</strong>.
+      The <strong>Problems</strong> panel on the right lists anything
+      you still need to do.  No C code required — but if you want to
+      see what was generated, scroll down to the preview.
+    </div>
+    <div id="module-tree"></div>
+  </section>
+
+  <section class="panel" style="display: flex; flex-direction: column;">
+    <div class="problems-panel">
+      <h2>Problems</h2>
+      <div id="problems"></div>
+    </div>
+    <div class="preview-panel" style="margin-top: 16px; flex: 1; display: flex; flex-direction: column;">
+      <h2>Preview — generated <code>main.c</code></h2>
+      <pre id="preview" style="flex: 1; min-height: 0;">(loading…)</pre>
+    </div>
+    <div id="build-log-wrap">
+      <h3 id="build-status">Building…</h3>
+      <pre id="build-log"></pre>
+    </div>
+  </section>
+</main>
+
+<!-- Emulator dialog (mirrors the one on sprites.html / code.html) -->
+<dialog id="emu-dialog" class="emu-dialog">
+  <div class="emu-header">
+    <h2>▶ Your game</h2>
+    <button type="button" class="close-fab" id="emu-close" title="Close">×</button>
+  </div>
+  <canvas id="emu-canvas" width="256" height="240"></canvas>
+  <div class="emu-status" id="emu-status">Controls: arrow keys move, F jumps (A), D is B.</div>
+</dialog>
+
+<!-- Help dialog (tabbed so the feedback form has somewhere to live) -->
+<dialog id="help-dialog" class="emu-dialog help-dialog-wide" style="width: min(1040px, 94vw);">
+  <div class="emu-header">
+    <h2>🧱 Builder — help</h2>
+    <button type="button" class="close-fab" id="help-close" title="Close">×</button>
+  </div>
+  <p>The Builder turns your ticked modules + filled-in boxes into a
+  compilable <code>main.c</code>.  The rest of the pipeline —
+  compiling with <code>cc65</code> and running in the emulator — is
+  exactly the same as the Code page.</p>
+  <ol>
+    <li>Make sure at least one sprite is tagged <strong>Player</strong>
+      on the <a href="sprites.html">Sprites page</a>.</li>
+    <li>On the Builder page, tick the modules you want.  Fill in
+      the settings (start position, walk speed, jump height, …).</li>
+    <li>Watch the <strong>Problems</strong> panel on the right — it
+      lists anything that would stop your game from working.</li>
+    <li>When it's all green, press <strong>▶ Play</strong>.</li>
+  </ol>
+  <details class="feedback-block">
+    <summary>💬 Leave feedback on the Builder</summary>
+    <div class="feedback-form-host"></div>
+  </details>
+</dialog>
+
+<script src="storage.js"></script>
+<script src="feedback.js"></script>
+<script src="builder-assembler.js"></script>
+<script src="builder-modules.js"></script>
+<script src="builder-validators.js"></script>
+<script>
+/* ===================================================================
+   Builder page — chunk 1.
+
+   Renders the module tree, persists changes to state.builder, runs
+   validators on every change, re-assembles the preview main.c, and
+   wires Play to the existing /play endpoint.
+   =================================================================== */
+(function () {
+  'use strict';
+
+  const PLAYGROUND_SERVER = '/play';
+
+  // Storage.js exports a factory, not a singleton.  The authoritative
+  // migrate/validate pair lives on index.html / sprites.html; here we
+  // just round-trip whatever they wrote.  If the pupil somehow opens
+  // the Builder before visiting any other page, we'll still get a
+  // workable state object via migrateBuilderState below.
+  const Storage = createTileEditorStorage({
+    migrateState: (s) => s,
+    validateState: () => null,
+  });
+
+  let state = null;
+  let templateText = null;    // fetched once at init
+  let saveTimer = 0;
+  let lastRom = null;
+
+  // --- Save status (matches the shrunk dot on other pages) --------
+  function setStatus(cls, text) {
+    const el = document.getElementById('save-status');
+    el.className = cls;
+    if (cls === 'error') {
+      el.textContent = text;
+      el.title = text;
+    } else {
+      el.textContent = '●';
+      el.title = text;
+    }
+  }
+
+  // --- Schedule a debounced save + re-render ---------------------
+  function scheduleSave() {
+    // Belt-and-braces: refuse to save a state that the other
+    // pages' validators would reject.  If something has somehow
+    // stripped the core fields, fail loud instead of clobbering
+    // the pupil's project on disk.
+    if (!stateLooksComplete(state)) {
+      setStatus('error', '⚠ State looks broken — not saving. Reopen the Sprites page.');
+      console.error('[builder] refusing to save incomplete state', state);
+      return;
+    }
+    setStatus('saving', 'Saving…');
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const res = Storage.saveCurrent(state);
+      if (res && res.ok) {
+        setStatus('saved', '● Saved just now');
+      } else {
+        setStatus('error', '⚠ Save failed');
+        console.error('[builder] save failed', res && res.error);
+      }
+    }, 150);
+    renderAll();
+  }
+
+  // Render a friendly "no project yet" banner when the Builder is
+  // opened and Storage.loadCurrent() returns nothing (or something
+  // the other pages would reject).  No UI wired up, no saves — the
+  // pupil goes to the Sprites page to create or open a project.
+  function renderNoProjectFallback() {
+    const host = document.getElementById('module-tree');
+    host.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'builder-intro';
+    card.innerHTML =
+      '<strong>No project loaded yet.</strong><br><br>' +
+      'The Builder needs a project to work from — tiles, palettes, and at ' +
+      'least one sprite tagged <em>Player</em>.<br><br>' +
+      'Open the <a href="sprites.html" style="color:var(--accent)">Sprites page</a> ' +
+      'first: create a new project (or open one you saved), design your sprites, ' +
+      'then come back here.';
+    host.appendChild(card);
+    document.getElementById('preview').textContent =
+      '(waiting for a project — open the Sprites page first)';
+    document.getElementById('problems').innerHTML = '';
+    document.getElementById('btn-play').disabled = true;
+    setStatus('error', '⚠ No project yet — open the Sprites page first');
+  }
+
+  // --- Get / set a module node given a dotted id (e.g. "players.player1")
+  function moduleNode(dottedId) {
+    const parts = dottedId.split('.');
+    let n = state.builder.modules;
+    for (let i = 0; i < parts.length; i++) {
+      if (!n) return null;
+      if (i === 0) n = n[parts[i]];
+      else {
+        if (!n.submodules) n.submodules = {};
+        n = n.submodules[parts[i]];
+      }
+    }
+    return n || null;
+  }
+  function ensureModuleNode(dottedId) {
+    const parts = dottedId.split('.');
+    let parent = state.builder.modules;
+    for (let i = 0; i < parts.length; i++) {
+      const key = parts[i];
+      if (i === 0) {
+        if (!parent[key]) {
+          parent[key] = { enabled: false, config: {} };
+        }
+        if (i < parts.length - 1) {
+          if (!parent[key].submodules) parent[key].submodules = {};
+          parent = parent[key].submodules;
+        }
+      } else {
+        if (!parent[key]) {
+          parent[key] = { enabled: false, config: {} };
+        }
+        if (i < parts.length - 1) {
+          if (!parent[key].submodules) parent[key].submodules = {};
+          parent = parent[key].submodules;
+        }
+      }
+    }
+    return moduleNode(dottedId);
+  }
+
+  // --- Render a single module card (header + body + fields) ------
+  function renderModule(dottedId) {
+    const def = window.BuilderModules[dottedId];
+    if (!def) return null;
+    const node = ensureModuleNode(dottedId);
+    if (!node.config) node.config = Object.assign({}, def.defaultConfig || {});
+    for (const k of Object.keys(def.defaultConfig || {})) {
+      if (node.config[k] === undefined) node.config[k] = def.defaultConfig[k];
+    }
+
+    const card = document.createElement('div');
+    card.className = 'module' + (node.enabled ? ' expanded' : ' disabled-module');
+    card.dataset.moduleId = dottedId;
+
+    // Header (checkbox + title + chevron)
+    const header = document.createElement('div');
+    header.className = 'module-header';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!node.enabled;
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', () => {
+      node.enabled = cb.checked;
+      card.classList.toggle('expanded', cb.checked);
+      card.classList.toggle('disabled-module', !cb.checked);
+      scheduleSave();
+    });
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = def.label || dottedId;
+    const chevron = document.createElement('span');
+    chevron.className = 'chevron';
+    chevron.textContent = '▸';
+    header.appendChild(cb);
+    header.appendChild(title);
+    header.appendChild(chevron);
+    header.addEventListener('click', () => {
+      card.classList.toggle('expanded');
+    });
+    card.appendChild(header);
+
+    // Body (description + fields + submodules)
+    const body = document.createElement('div');
+    body.className = 'module-body';
+    if (def.description) {
+      const d = document.createElement('div');
+      d.className = 'module-description';
+      d.textContent = def.description;
+      body.appendChild(d);
+    }
+    (def.schema || []).forEach(field => {
+      body.appendChild(renderField(dottedId, node, field));
+    });
+    // Modules can opt-in to custom rendering for fields the schema
+    // system can't express (e.g. dynamic lists).  We call a named
+    // renderer rather than a function reference on the module def so
+    // the module catalogue stays easy to read without callbacks.
+    if (def.customRender && dottedId === 'scene') {
+      renderSceneInstances(body, node);
+    }
+
+    // Submodules: descend one level and include any modules whose
+    // `parent` field matches dottedId.
+    const subIds = Object.keys(window.BuilderModules).filter(k =>
+      window.BuilderModules[k].parent === dottedId);
+    if (subIds.length) {
+      const subWrap = document.createElement('div');
+      subWrap.className = 'submodule-list';
+      subIds.forEach(childId => {
+        // submodule ids in the module registry are full dotted
+        // ids, but the node lookup uses them too.
+        const child = renderModule(childId);
+        if (child) subWrap.appendChild(child);
+      });
+      body.appendChild(subWrap);
+    }
+    card.appendChild(body);
+    return card;
+  }
+
+  function renderField(dottedId, node, field) {
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    const lbl = document.createElement('label');
+    lbl.textContent = field.label || field.key;
+    row.appendChild(lbl);
+
+    let input;
+    if (field.type === 'enum') {
+      input = document.createElement('select');
+      (field.options || []).forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.label || opt.value;
+        if (opt.disabled) {
+          o.disabled = true;
+          if (opt.disabledReason) o.textContent += ' — ' + opt.disabledReason;
+        }
+        input.appendChild(o);
+      });
+      input.value = node.config[field.key];
+      input.addEventListener('change', () => {
+        node.config[field.key] = input.value;
+        scheduleSave();
+      });
+    } else if (field.type === 'bool') {
+      input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = !!node.config[field.key];
+      input.addEventListener('change', () => {
+        node.config[field.key] = input.checked;
+        scheduleSave();
+      });
+    } else {
+      // int (default)
+      input = document.createElement('input');
+      input.type = 'number';
+      if (field.min != null) input.min = field.min;
+      if (field.max != null) input.max = field.max;
+      if (field.step != null) input.step = field.step;
+      input.value = node.config[field.key];
+      if (field.readOnly) input.readOnly = true;
+      input.addEventListener('input', () => {
+        const v = parseInt(input.value, 10);
+        if (!Number.isNaN(v)) {
+          node.config[field.key] = v;
+          scheduleSave();
+        }
+      });
+    }
+    row.appendChild(input);
+    if (field.help) {
+      const h = document.createElement('div');
+      h.className = 'field-help';
+      h.textContent = field.help;
+      row.appendChild(h);
+    }
+    return row;
+  }
+
+  // ---- Scene module: dynamic per-instance list -------------------
+  // Each instance = one sprite on the game screen.  The same sprite
+  // (spriteIdx) can appear more than once, which is how pupils place
+  // three "goombas" when they only drew one goomba.
+  function renderSceneInstances(host, node) {
+    if (!node.config) node.config = { instances: [] };
+    if (!Array.isArray(node.config.instances)) node.config.instances = [];
+    const instances = node.config.instances;
+    const sprites = (state && state.sprites) || [];
+    const placeable = sprites
+      .map((sp, idx) => ({ sp, idx }))
+      .filter(e => e.sp && e.sp.role !== 'player');
+
+    const summary = document.createElement('div');
+    summary.className = 'scene-summary';
+    if (placeable.length === 0) {
+      summary.textContent = 'No non-player sprites to place. Add some ' +
+        'on the Sprites page (tag them Enemy, Pickup, NPC, …) and ' +
+        'come back.';
+    } else if (instances.length === 0) {
+      summary.textContent = 'Empty list → the Builder will auto-place ' +
+        'one of each non-player sprite at default positions. Click ' +
+        '"+ Add instance" to take control.';
+    } else {
+      summary.textContent = instances.length + ' instance' +
+        (instances.length === 1 ? '' : 's') + ' placed. Walker / ' +
+        'Chaser modules above are ignored while this list is in use.';
+    }
+    host.appendChild(summary);
+
+    const list = document.createElement('div');
+    list.className = 'scene-instances';
+    host.appendChild(list);
+
+    function rerender() {
+      list.innerHTML = '';
+      instances.forEach((inst, i) => {
+        list.appendChild(renderSceneInstanceRow(inst, i, node, placeable,
+          rerender));
+      });
+    }
+    rerender();
+
+    if (placeable.length === 0) return;
+    const addRow = document.createElement('div');
+    addRow.className = 'scene-add-row';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.textContent = '+ Add instance';
+    addBtn.addEventListener('click', () => {
+      // Default new instance to the first non-player sprite, placed
+      // to the right of any existing instances so they don't stack.
+      const defaultSpriteIdx = placeable[0].idx;
+      const nextX = Math.min(216, 96 + instances.length * 32);
+      instances.push({
+        id: 'i_' + Date.now().toString(36) +
+          Math.random().toString(36).slice(2, 5),
+        spriteIdx: defaultSpriteIdx,
+        x: nextX,
+        y: 120,
+        ai: 'static',
+      });
+      rerender();
+      scheduleSave();
+    });
+    addRow.appendChild(addBtn);
+    host.appendChild(addRow);
+  }
+
+  function renderSceneInstanceRow(inst, i, node, placeable, rerender) {
+    const row = document.createElement('div');
+    row.className = 'scene-instance';
+
+    // Sprite picker — shows every non-player sprite; the same sprite
+    // is allowed to appear in multiple rows.
+    const spSel = document.createElement('select');
+    placeable.forEach(e => {
+      const opt = document.createElement('option');
+      opt.value = String(e.idx);
+      opt.textContent = (e.sp.name || 'sprite ' + e.idx) +
+        ' (' + (e.sp.role || 'other') + ')';
+      spSel.appendChild(opt);
+    });
+    spSel.value = String(inst.spriteIdx);
+    spSel.addEventListener('change', () => {
+      inst.spriteIdx = parseInt(spSel.value, 10) | 0;
+      // Role changed → AI options may change; redraw this row.
+      rerender();
+      scheduleSave();
+    });
+
+    const roleBadge = document.createElement('span');
+    roleBadge.className = 'role-badge';
+    const sprite = (state.sprites || [])[inst.spriteIdx];
+    roleBadge.textContent = (sprite && sprite.role) || 'other';
+
+    const xIn = document.createElement('input');
+    xIn.type = 'number'; xIn.min = 0; xIn.max = 240; xIn.step = 4;
+    xIn.value = inst.x;
+    xIn.title = 'Pixel x position on screen (0 = left, 240 = right)';
+    xIn.addEventListener('input', () => {
+      const v = parseInt(xIn.value, 10);
+      if (!Number.isNaN(v)) { inst.x = v; scheduleSave(); }
+    });
+    const yIn = document.createElement('input');
+    yIn.type = 'number'; yIn.min = 16; yIn.max = 216; yIn.step = 4;
+    yIn.value = inst.y;
+    yIn.title = 'Pixel y position on screen (16 = top, 216 = bottom)';
+    yIn.addEventListener('input', () => {
+      const v = parseInt(yIn.value, 10);
+      if (!Number.isNaN(v)) { inst.y = v; scheduleSave(); }
+    });
+
+    // AI dropdown is role-aware: only enemies get walker/chaser.
+    const aiSel = document.createElement('select');
+    const role = (sprite && sprite.role) || 'other';
+    const aiOptions = role === 'enemy'
+      ? [
+          { v: 'static', l: 'Static (no movement)' },
+          { v: 'walker', l: 'Walker (paces left/right)' },
+          { v: 'chaser', l: 'Chaser (follows player)' },
+        ]
+      : [{ v: 'static', l: 'Static (no movement)' }];
+    aiOptions.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.v;
+      o.textContent = opt.l;
+      aiSel.appendChild(o);
+    });
+    aiSel.value = aiOptions.some(o => o.v === inst.ai) ? inst.ai : 'static';
+    if (aiOptions.length === 1) aiSel.disabled = true;
+    aiSel.addEventListener('change', () => {
+      inst.ai = aiSel.value;
+      scheduleSave();
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'del';
+    delBtn.textContent = '🗑';
+    delBtn.title = 'Remove this instance';
+    delBtn.addEventListener('click', () => {
+      const idx = node.config.instances.indexOf(inst);
+      if (idx >= 0) node.config.instances.splice(idx, 1);
+      rerender();
+      scheduleSave();
+    });
+
+    row.appendChild(spSel);
+    row.appendChild(roleBadge);
+    row.appendChild(xIn);
+    row.appendChild(yIn);
+    row.appendChild(aiSel);
+    row.appendChild(delBtn);
+    return row;
+  }
+
+  function renderTree() {
+    const host = document.getElementById('module-tree');
+    host.innerHTML = '';
+    const topIds = Object.keys(window.BuilderModules).filter(k =>
+      !window.BuilderModules[k].parent);
+    topIds.forEach(id => {
+      const card = renderModule(id);
+      if (card) host.appendChild(card);
+    });
+  }
+
+  function renderProblems() {
+    const problems = window.BuilderValidators.validate(state);
+    const host = document.getElementById('problems');
+    host.innerHTML = '';
+    if (!problems.length) {
+      const ok = document.createElement('div');
+      ok.className = 'problems-all-green';
+      ok.textContent = '✓ All green — press Play when ready.';
+      host.appendChild(ok);
+      document.getElementById('btn-play').disabled = false;
+      return;
+    }
+    const list = document.createElement('ul');
+    list.className = 'problems-list';
+    problems.forEach(p => {
+      const li = document.createElement('li');
+      li.className = p.severity || 'error';
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.textContent = p.severity === 'warn' ? '⚠' : '⛔';
+      const b = document.createElement('div');
+      b.className = 'body';
+      const msg = document.createElement('div');
+      msg.className = 'msg';
+      msg.textContent = p.message;
+      const fix = document.createElement('div');
+      fix.className = 'fix';
+      fix.textContent = p.fix;
+      b.appendChild(msg);
+      b.appendChild(fix);
+      li.appendChild(icon);
+      li.appendChild(b);
+      if (p.jumpTo) {
+        const go = document.createElement('button');
+        go.type = 'button';
+        go.className = 'go';
+        go.textContent = 'Open →';
+        go.addEventListener('click', () => {
+          Storage.saveCurrent(state);
+          location.href = p.jumpTo;
+        });
+        li.appendChild(go);
+      }
+      list.appendChild(li);
+    });
+    host.appendChild(list);
+    document.getElementById('btn-play').disabled =
+      window.BuilderValidators.hasErrors(problems);
+  }
+
+  function renderPreview() {
+    const previewEl = document.getElementById('preview');
+    if (!templateText) {
+      previewEl.textContent = '(loading template…)';
+      return;
+    }
+    try {
+      const out = window.BuilderAssembler.assemble(state, templateText);
+      previewEl.textContent = out;
+    } catch (e) {
+      previewEl.textContent = 'assembler error: ' + e.message;
+    }
+  }
+
+  function renderAll() {
+    renderProblems();
+    renderPreview();
+    document.getElementById('active-project-label').textContent =
+      state.name || 'untitled';
+  }
+
+  // --- Play — assemble main.c and POST /play ---------------------
+  async function play() {
+    if (!templateText) {
+      setStatus('error', '⚠ Template not loaded yet');
+      return;
+    }
+    const problems = window.BuilderValidators.validate(state);
+    if (window.BuilderValidators.hasErrors(problems)) {
+      setStatus('error', '⚠ Fix the problems listed on the right first');
+      return;
+    }
+    Storage.saveCurrent(state);
+
+    const playerIdx = window.BuilderAssembler.findSpriteByRole(state, 'player');
+    const p1 = moduleNode('players.player1');
+    const playerStart = (p1 && p1.config) ? {
+      x: p1.config.startX, y: p1.config.startY,
+    } : { x: 60, y: 120 };
+
+    // Scene sprites come from one of two sources:
+    //   1. Explicit instances[] on the Scene module (pupil-placed,
+    //      per-instance AI, sprite reuse allowed).
+    //   2. Auto-placement of every non-player sprite tagged with a
+    //      gameplay role (original MVP behaviour — kicks in when the
+    //      pupil has not added any instances yet).
+    // Slot order of sceneSprites matters: the assembler's per-instance
+    // AI references ss_x[i] by its index in the payload, so we keep
+    // instance ordering 1:1 with the list in state.builder.
+    let sceneSprites;
+    const sceneModule = moduleNode('scene');
+    const instances = (sceneModule && sceneModule.config &&
+      Array.isArray(sceneModule.config.instances))
+      ? sceneModule.config.instances : [];
+    if (instances.length > 0) {
+      sceneSprites = [];
+      for (const inst of instances) {
+        const sp = state.sprites[inst.spriteIdx];
+        if (!sp) continue;
+        sceneSprites.push({
+          spriteIdx: inst.spriteIdx | 0,
+          x: inst.x | 0,
+          y: inst.y | 0,
+        });
+      }
+    } else {
+      sceneSprites = [];
+      let cursorX = 96;
+      const includedRoles = new Set(['enemy', 'npc', 'pickup',
+        'powerup', 'item', 'tool', 'projectile', 'decoration']);
+      for (let i = 0; i < (state.sprites || []).length; i++) {
+        if (i === playerIdx) continue;
+        const sp = state.sprites[i];
+        if (!sp || !includedRoles.has(sp.role)) continue;
+        const w = (sp.width || 2) * 8;
+        const x = Math.min(240 - w, cursorX);
+        sceneSprites.push({ spriteIdx: i, x: x, y: 120 });
+        cursorX += w + 24;
+        if (cursorX > 240) break;
+      }
+    }
+
+    const customMainC = window.BuilderAssembler.assemble(state, templateText);
+
+    const btn = document.getElementById('btn-play');
+    btn.disabled = true;
+    showBuildStatus('Compiling…', null);
+
+    try {
+      const payload = {
+        state: state,
+        playerSpriteIdx: playerIdx >= 0 ? playerIdx : 0,
+        playerStart: playerStart,
+        sceneSprites: sceneSprites,
+        mode: 'browser',
+        customMainC: customMainC,
+      };
+      const res = await fetch(PLAYGROUND_SERVER, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      let body;
+      try { body = await res.json(); } catch { body = { ok: false, log: 'non-JSON response' }; }
+      if (body.ok) {
+        showBuildStatus('✓ Build OK — launching emulator…',
+          (body.log || '').split('\n').slice(-8).join('\n'));
+        if (body.rom_b64) {
+          const rom = decodeRomBase64(body.rom_b64);
+          openEmulator(rom);
+        }
+      } else {
+        showBuildStatus('✗ ' + (body.stage ? '[' + body.stage + '] ' : '') +
+          'build failed', body.log || 'no details', true);
+      }
+    } catch (err) {
+      showBuildStatus('✗ Could not reach the playground server.',
+        'Start it with the "Start Playground Server" VSCode task.', true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function showBuildStatus(title, log, isErr) {
+    document.getElementById('build-log-wrap').classList.add('show');
+    document.getElementById('build-status').textContent = title;
+    const logEl = document.getElementById('build-log');
+    logEl.textContent = log || '';
+    logEl.className = isErr ? 'err' : '';
+  }
+
+  function decodeRomBase64(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // --- Emulator (uses jsnes if present on the page — we load it
+  // on demand the first time Play runs, so projects that never play
+  // pay no cost) ------------------------------------------------------
+  function ensureJsnes() {
+    if (window.jsnes) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'jsnes.min.js';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('jsnes.min.js failed to load'));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function openEmulator(rom) {
+    await ensureJsnes();
+    const dlg = document.getElementById('emu-dialog');
+    const canvas = document.getElementById('emu-canvas');
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(256, 240);
+    const frame = new Uint32Array(img.data.buffer);
+
+    const nes = new jsnes.NES({
+      onFrame(buf) {
+        for (let i = 0; i < buf.length; i++) frame[i] = 0xff000000 | buf[i];
+        ctx.putImageData(img, 0, 0);
+      },
+      onAudioSample() {},
+    });
+    let romStr = '';
+    for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
+    nes.loadROM(romStr);
+
+    function map(code) {
+      switch (code) {
+        case 'ArrowUp':    return jsnes.Controller.BUTTON_UP;
+        case 'ArrowDown':  return jsnes.Controller.BUTTON_DOWN;
+        case 'ArrowLeft':  return jsnes.Controller.BUTTON_LEFT;
+        case 'ArrowRight': return jsnes.Controller.BUTTON_RIGHT;
+        case 'KeyF':       return jsnes.Controller.BUTTON_A;
+        case 'KeyD':       return jsnes.Controller.BUTTON_B;
+        case 'Enter':      return jsnes.Controller.BUTTON_START;
+        case 'ShiftRight': return jsnes.Controller.BUTTON_SELECT;
+      }
+      return -1;
+    }
+    const kd = (e) => { const b = map(e.code); if (b >= 0) nes.buttonDown(1, b); };
+    const ku = (e) => { const b = map(e.code); if (b >= 0) nes.buttonUp(1, b); };
+    window.addEventListener('keydown', kd);
+    window.addEventListener('keyup', ku);
+
+    let raf = null;
+    function tick() {
+      nes.frame();
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+
+    dlg.showModal();
+    const close = () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', kd);
+      window.removeEventListener('keyup', ku);
+      dlg.close();
+    };
+    document.getElementById('emu-close').onclick = close;
+    dlg.addEventListener('close', close, { once: true });
+  }
+
+  // --- Init -------------------------------------------------------
+  // True if the loaded state has the shape every other editor page
+  // needs (tileset pools, backgrounds, sprites array).  The Builder
+  // *must not* write a state that fails this check — sprites.html's
+  // / behaviour.html's validateState would reject it and the pupil
+  // would see the "not a correct project file" banner.
+  function stateLooksComplete(s) {
+    return !!(s && typeof s === 'object'
+      && Array.isArray(s.sprite_tiles)
+      && Array.isArray(s.bg_tiles)
+      && Array.isArray(s.backgrounds) && s.backgrounds.length > 0
+      && Array.isArray(s.sprites));
+  }
+
+  async function init() {
+    // Load state via the shared Storage layer (same as other pages).
+    state = Storage.loadCurrent();
+    // If loadCurrent returned null, there is genuinely no project
+    // yet — show a banner pointing the pupil at the Sprites page
+    // and refuse to auto-save over whatever happens to be in
+    // localStorage.  This avoids silently overwriting a state the
+    // other pages' validators would have accepted.
+    if (!stateLooksComplete(state)) {
+      renderNoProjectFallback();
+      return;
+    }
+    migrateBuilderState(state);
+
+    // Fetch the platformer template once; subsequent re-renders
+    // re-use the cached string.
+    try {
+      const res = await fetch('builder-templates/platformer.c',
+        { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      templateText = await res.text();
+    } catch (e) {
+      console.error('[builder] could not load template:', e);
+      setStatus('error', '⚠ Could not load the platformer template — is the Playground Server running?');
+    }
+
+    // Wire UI
+    renderTree();
+    renderAll();
+    setStatus('saved', '● Ready');
+
+    document.getElementById('btn-play').addEventListener('click', play);
+    document.getElementById('btn-help').addEventListener('click', () => {
+      document.getElementById('help-dialog').showModal();
+    });
+    document.getElementById('help-close').addEventListener('click', () => {
+      document.getElementById('help-dialog').close();
+    });
+    document.getElementById('btn-reset-modules').addEventListener('click', () => {
+      if (!confirm('Reset every module to its default settings?')) return;
+      state.builder = window.BuilderDefaults();
+      renderTree();
+      scheduleSave();
+    });
+    document.getElementById('project-name').addEventListener('input', (e) => {
+      state.name = e.target.value || 'untitled';
+      document.getElementById('active-project-label').textContent = state.name;
+      scheduleSave();
+    });
+    document.getElementById('project-name').value = state.name || 'untitled';
+
+    document.getElementById('btn-save-all').addEventListener('click', () => {
+      Storage.saveCurrent(state);
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (state.name || 'project') + '.json';
+      a.click();
+    });
+    document.getElementById('btn-load-all').addEventListener('click', () => {
+      document.getElementById('file-input-all').click();
+    });
+    document.getElementById('file-input-all').addEventListener('change', async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const text = await f.text();
+      try {
+        const loaded = JSON.parse(text);
+        if (!stateLooksComplete(loaded)) {
+          alert('That file does not look like a complete project — ' +
+            "it's missing tiles, backgrounds, or sprites. " +
+            'Open it from the Sprites page instead if you want to recover it.');
+          return;
+        }
+        migrateBuilderState(loaded);
+        state = loaded;
+        Storage.saveCurrent(state);
+        renderTree();
+        renderAll();
+        setStatus('saved', '● Loaded');
+      } catch (err) {
+        alert('Could not read that file: ' + err.message);
+      }
+    });
+
+    // Feedback form (same mount pattern as other pages)
+    const host = document.querySelector('.feedback-form-host');
+    if (host && window.Feedback) {
+      window.Feedback.mountInto(host, {
+        page: 'builder',
+        getProjectName: () => state.name,
+        getProjectState: () => state,
+      });
+    }
+  }
+
+  function migrateBuilderState(st) {
+    if (!st.builder || st.builder.version !== 1) {
+      st.builder = window.BuilderDefaults();
+    }
+    // Defensive: ensure every module listed in the registry has a
+    // corresponding entry in the tree with a valid config shape.
+    const defaults = window.BuilderDefaults().modules;
+    for (const id of Object.keys(defaults)) {
+      if (!st.builder.modules[id]) {
+        st.builder.modules[id] = defaults[id];
+      }
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

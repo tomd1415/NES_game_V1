@@ -827,3 +827,395 @@ feedback viewer.
   sprite from 2×2 to 3×3 now claims four distinct consecutive
   tile indices; painting into one leaves the other three blank
   as expected.
+
+---
+
+## Builder — 2026-04-23 chunk 1 (end-to-end pipeline + Player module)
+
+Plan: [builder-plan.md](builder-plan.md).
+First slice of Phase A — the infrastructure and one working module
+(Player 1), enough to prove the pipeline compiles end-to-end.
+
+- **New page `🧱 Builder`** sits between Behaviour and Code in the
+  page nav of every editor page.  Toolbar mirrors the other pages
+  (File ▾ / Edit / Run groups, save-status dot, Play + ? in Run).
+- **Three client-side JS modules, no Python changes:**
+  - [tools/tile_editor_web/builder-assembler.js](tools/tile_editor_web/builder-assembler.js)
+    — pure `assemble(state, templateText)` function with
+    `replaceRegion()` (rewrites the body between `//>> id: … //<<`
+    markers), `appendToSlot()` (for later insertion points),
+    `stripSlotMarkers()`, and `findSpriteByRole()` helpers.
+  - [tools/tile_editor_web/builder-modules.js](tools/tile_editor_web/builder-modules.js)
+    — module catalogue keyed by dotted id (`game`, `players`,
+    `players.player1`).  Each entry carries `label`, `description`,
+    `defaultConfig`, a typed `schema`, and an optional
+    `applyToTemplate(template, node, state)` pure function.
+    Chunk 1 ships `game` (type picker — platformer only today,
+    topdown disabled with a tooltip) and `players.player1`
+    (startX, startY, walkSpeed, jumpHeight, maxHp).
+  - [tools/tile_editor_web/builder-validators.js](tools/tile_editor_web/builder-validators.js)
+    — an array of small `(state) -> problem | null` functions.
+    Chunk 1 ships two: **no-player-role** (error, blocks Play) and
+    **no-walk-animation** (warn only — game still runs without).
+- **Template loaded via HTTP.**  [tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+  is a verbatim copy of `steps/Step_Playground/src/main.c` — the
+  Builder page fetches it on init, runs it through the assembler
+  on every state change, shows the result in the Preview pane.
+  Keeping it verbatim for chunk 1 means the Builder's zero-tweak
+  output is byte-compatible with what the Code page's stock
+  template ships today.
+- **Default-to-Builder redirect on `code.html`.** Per the teacher's
+  answer to Q1 in builder-plan.md: if `state.customMainC` and
+  `state.customMainAsm` are both empty, `code.html` does a
+  `location.replace('builder.html')` at the top of its inline
+  script — before CodeMirror initialises — so new pupils land on
+  the Builder.  Pupils who already have custom C on file keep
+  opening in the Code page.  The nav link from Builder → Code
+  carries `?stay=1` to bypass the redirect, and the Code page
+  honours that flag.
+- **`migrateBuilderFields(s)`** added to both `index.html` and
+  `sprites.html`'s existing migration chains.  Older projects
+  gain a default `state.builder` tree on first load from any page,
+  same idiom as `migrateBehaviourFields`.
+- **Play wiring** on the Builder page mirrors sprites.html: assemble
+  `main.c`, POST to `/play` with `customMainC` set, decode the
+  returned `rom_b64`, play in the jsnes embed.  No `sceneSprites`
+  yet (chunk 2 wires that up).
+
+### Verification — Builder chunk 1
+
+- `node --check` clean on all three new JS files and on the inline
+  script of the four edited HTML pages.
+- Programmatic smoke-test `/tmp/builder-smoketest.mjs` loads the
+  three modules in a faux-window, asserts:
+  - Validators fire correctly on a broken (no-player-sprite) state
+    and go silent on a valid one.
+  - `assemble()` substitutes all four region values (`walk_speed`,
+    `jmp_up`, `px`, `py`) with a tweaked config.
+  - The assembled `main.c` still contains `void main(void)` and
+    `#include <nes.h>` (the scaffolding didn't get clipped).
+  - `make -C steps/Step_Playground` accepts the assembled output
+    via cc65 — build time 78 ms on the test machine.
+- Manual: `GET /builder-templates/platformer.c` returns 200 and the
+  expected 485-line template; `GET /builder.html`,
+  `/builder-assembler.js`, `/builder-modules.js`,
+  `/builder-validators.js` all 200.
+
+### Deliberately out of chunk 1 — follow-up items
+
+- **`enemies.walker`, `behaviour_walls`, `win_condition` modules**
+  and the `topdown.c` template.  These are Phase A chunk 2; they
+  add the first `//@ insert:` slots and the enemy-role
+  scene-sprites wiring in the `/play` payload.
+- **Preview syntax highlighting.**  Plain `<pre>` for now —
+  promoting to CodeMirror is a one-line swap once chunk 2 proves
+  the assembler output is worth reading.
+- **"Eject to Code" one-way switch.**  Today a pupil can visit the
+  Code page with `?stay=1` and hand-edit; the button + confirm
+  dialog comes in Phase D.
+
+### Chunk 1 hardening — 2026-04-23 same-day fixes
+
+Three small follow-ups shipped the same day, driven by pupil
+testing:
+
+- **`Storage.loadCurrent is not a function`.**  `storage.js` exports
+  `createTileEditorStorage(deps)` as a factory, not a singleton.
+  My Builder page referenced `Storage` as if it were already
+  instantiated, so init() threw on first load.  Fix: construct the
+  instance the same way code.html does —
+  `createTileEditorStorage({ migrateState: (s) => s, validateState: () => null })`
+  at the top of the inline script.
+- **Incomplete-state guard.**  When `Storage.loadCurrent()` returned
+  null (no project yet), the Builder's fallback was
+  `{ name: 'untitled', sprites: [] }` — missing `bg_tiles`,
+  `sprite_tiles`, `backgrounds`.  Any later save clobbered the
+  pupil's real project (which was still in storage but now
+  overwritten), leaving sprites.html / behaviour.html's
+  `validateState` rejecting the saved blob as *"not a correct
+  project file"*.  Hardened by adding a `stateLooksComplete(s)`
+  predicate: if it fails on load, the Builder renders a
+  *"open the Sprites page first"* fallback and **refuses to save
+  anything** until a complete state is present.  `scheduleSave()`
+  now also checks the predicate and surfaces a red-banner error
+  rather than silently writing over the project.
+- **Load-from-disk guard.**  The "Open saved work" handler on the
+  Builder now rejects JSON files that don't pass
+  `stateLooksComplete(loaded)` — the pupil gets a clear message
+  before the file overwrites the active project.
+
+---
+
+## Builder — 2026-04-23 chunk 2 (enemies, walls, win condition)
+
+Fills out Phase A with the three remaining gameplay modules and
+the `sceneSprites` wiring that places role-tagged sprites into the
+scene automatically.
+
+- **Three insertion slots** added to
+  [builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c):
+  `//@ insert: declarations` (module-scope variables, just before
+  `void main()`), `//@ insert: init` (one-time startup code, right
+  before the `while (1)`), and `//@ insert: per_frame` (per-frame
+  game logic, after gravity + before `waitvsync`).  Marker lines
+  are `//`-comments — cc65 treats them as plain comments, and
+  `stripSlotMarkers()` removes them from the final output so the
+  generated `main.c` is clean.
+- **`enemies` + `enemies.walker` modules.**  Ticking Walkers emits
+  a loop into `per_frame` that paces every `ROLE_ENEMY` sprite
+  left/right at the chosen speed (1–4 px/frame), using a
+  builder-local `bw_enemy_dir[16]` direction table.  The emitted
+  code mirrors the existing [snippets/enemy-walker.c](snippets/enemy-walker.c)
+  so anyone who knows the snippet library will recognise the
+  pattern.  Variable names are `bw_*`-prefixed to avoid clashing
+  with pupil code if they later eject to the Code page.
+- **`behaviour_walls` info module.**  Explains (via its label and
+  description) that the Behaviour page's painted tiles already
+  drive player collision — so the pupil knows to paint walls
+  without the Builder needing to inject any code.  A validator
+  (severity: warn) fires if no solid-ground / wall / platform
+  tiles are painted on the active background, with a "Fix on
+  Behaviour page" button.
+- **`win_condition` module.**  Enum config picks which behaviour
+  type is the "winning" tile (Trigger by default; Door /
+  Solid-ground / etc. as alternatives).  On collision, the
+  emitted code flips a `bw_won` flag and zeros `walk_speed` /
+  `climb_speed` — the player simply freezes in place, which is
+  enough feedback for the MVP.  Proper "You win" text ships in
+  Phase B.
+- **`sceneSprites` auto-population** in the Builder's `/play`
+  payload: every non-player sprite with a gameplay role (enemy,
+  npc, pickup, powerup, item, tool, projectile, decoration) is
+  placed at `x = 96 + stride`, `y = 120` — matching the default
+  layout on sprites.html's Play dialog so muscle memory
+  transfers.  Pupils who want fine control can still place
+  manually on sprites.html; the Builder just picks sensible
+  defaults so a ticked Walker module has something to drive.
+- **Validators added** — `walker-no-enemies` (warn), `no-wall-tiles`
+  (warn), `win-no-tiles` (error, blocks Play).  Each carries a
+  one-sentence fix message and a jump button to the right page.
+
+### Verification — chunk 2
+
+- `node --check` clean on every edited JS file and on the
+  extracted inline script of builder.html.
+- `/tmp/builder-smoketest-2.mjs` exercises every new module and
+  validator against a synthetic state, asserts that:
+  - Empty behaviour map yields exactly `win-no-tiles:error +
+    no-wall-tiles:warn + no-walk-animation:warn`.
+  - Painting a solid-ground + trigger tile clears both errors.
+  - Assembled output contains the walker loop, the win-condition
+    block referencing `BEHAVIOUR_TRIGGER`, the `bw_won`
+    declaration, and the kept `walk_speed` / `jmp_up` defaults.
+  - Switching `win_condition.config.behaviourType` from `trigger`
+    to `door` produces `BEHAVIOUR_DOOR` in the emitted code
+    instead.
+  - `make -C steps/Step_Playground` compiles the chunk-2 output
+    via real cc65 — 26 ms on the test machine.
+
+### Deliberately out of chunk 2 — Phase B candidates
+
+- **`topdown.c` template** + the `topdown` option in the `game`
+  module (currently disabled with a *"Coming in Phase B"*
+  tooltip).
+- **Pickups** — sprites that vanish on touch and increment a
+  score counter.
+- **Doors** — scene transitions tied to door tiles + multi-background
+  switching.
+- **HUD** — hearts (HP) and score drawn at the top of the screen.
+- **Player 2** — pad-2 routed through a second player module.
+- **Damage / HP** — the `maxHp` and `damagesPlayer` fields are
+  already in state shape; they just aren't wired to code yet.
+- **Proper "You win" text** — requires a tile-based text helper
+  with a font-tile seed, bigger lift than the MVP.
+- **"Eject to Code" confirm dialog** — Phase D polish.
+
+### Chunk 2 polish — 2026-04-23 win feedback + jump freeze
+
+Two follow-ups after first pupil test of chunk 2:
+
+- **No visible feedback on winning.**  The original win block
+  only zeroed `walk_speed` / `climb_speed`; the player stopped
+  moving but the pupil had no clear signal that the game had
+  ended.  Fix: when `bw_won` flips, the emitted code now writes
+  `PPU_MASK = 0x1F | 0x20` — greyscale (bit 0) + red emphasis
+  (bit 5).  The whole scene desaturates and tints pale red, a
+  classic NES "level complete" look that works without any
+  specific tiles or palette entries being painted.
+- **Player could still jump after winning.**  `walk_speed = 0`
+  blocks horizontal movement but the jump path uses its own
+  `jmp_up = 20` seed and an edge-triggered `pad & 0x08` check.
+  Fix: when `bw_won` is set, the emitted code now also zeros
+  `jumping` + `jmp_up` (cancels any in-progress ascent) and
+  pins `prev_pad = 0xFF` so the edge detector stops firing on
+  fresh UP presses.
+
+The `win_condition` module description on the Builder page
+updated to match: *"freezes in place and the screen tints red"*.
+Smoke-test grew two assertions to guard both behaviours.
+
+---
+
+## Builder — 2026-04-23 Phase B chunk 1 (chaser, pickups, collect-to-win)
+
+First slice of Phase B from [builder-plan.md](builder-plan.md):
+adds enemy variety + a pickup-collection mechanic + a new win type
+that composes with it.  No template changes — every addition rides
+the `//@ insert:` slots added in chunk 2.
+
+- **`enemies.chaser` module** (disabled by default).  Ticking it
+  emits a per-frame loop that nudges every `ROLE_ENEMY` sprite one
+  pixel at a time (configurable 1–3 px/frame) toward the player's
+  `(px, py)`.  Same pattern as [snippets/enemy-chaser.c](snippets/enemy-chaser.c).
+- **`pickups` module** (disabled by default).  Sprites tagged
+  `ROLE_PICKUP` on the Sprites page disappear when the player
+  touches them (AABB overlap in the emitted code); a `bw_pickup_count`
+  counter ticks up, and `bw_pickup_total` is set once in the
+  `init` slot by counting every pickup-roled sprite.  Collected
+  pickups are hidden by writing `ss_y[i] = 0xFF` — the NES
+  "off-screen" sentinel — so no OAM entry is wasted on them.
+- **Extended `win_condition`.**  New `type` enum with two values:
+  `reach_tile` (the chunk-2 behaviour, unchanged) and
+  `all_pickups_collected` (win when `bw_pickup_count ≥
+  bw_pickup_total`).  The emitted code branches on `type`, so the
+  reach-tile `BEHAVIOUR_*` check simply isn't compiled when
+  collect-every-pickup is selected — no dead code in the output.
+- **Three new validators:**
+  - `walker-and-chaser` (error) — fires when both enemy movement
+    modules are ticked, because their per-frame loops both
+    rewrite `ss_x[]` and the enemies wobble in place.
+  - `all-pickups-needs-pickups` (error) — blocks Play if the win
+    type is "collect every pickup" but the Pickups module is off
+    (the emitted code would reference undeclared
+    `bw_pickup_total`).
+  - `all-pickups-no-sprites` (error) — same win type but no
+    sprite is tagged `ROLE_PICKUP`: the game can never end.
+
+### Verification — Phase B chunk 1
+
+`/tmp/builder-smoketest-3.mjs` runs seven assertions:
+
+1. Walker + Chaser both on → `walker-and-chaser` error fires.
+2. Walker off, Chaser on → error clears; chaser code emitted,
+   walker code omitted.
+3. `all_pickups_collected` with pickups module off →
+   `all-pickups-needs-pickups` error.
+4. `all_pickups_collected` with pickups on and two role=pickup
+   sprites → no errors; output contains the declarations, init
+   loop, collect AABB, and `bw_pickup_count >= bw_pickup_total`
+   win check; crucially, `BEHAVIOUR_TRIGGER` does *not* leak
+   into this branch.
+5. cc65 compiles the pickups + all_pickups output in 37 ms.
+6. `all_pickups_collected` with pickups on but zero pickup
+   sprites tagged → `all-pickups-no-sprites` error.
+7. Default-state output (walker + reach_tile + trigger painted)
+   still compiles unchanged — belt-and-braces regression check
+   for chunk 2 callers.
+
+### Deliberately out of this chunk — further Phase B candidates
+
+- **HUD** (player.hud) — hearts / score drawn on screen.  Needs
+  font tiles or pupil-art digit tiles; tractable but non-trivial.
+- **Player 2** — flagged as Phase B in teacher Q4.  Pad-2 routing
+  on cc65 is straightforward; scope is the UI for configuring a
+  second player module + its own start position / controls.
+- **Doors** — multi-background scene transitions on door-tile
+  overlap.  Depends on the scroll / multi-screen work.
+- **HP + damage** — wire `players.player1.config.maxHp` and
+  `enemies.*.config.damagesPlayer` to actual hearts + knockback
+  behaviour.  Needs HUD landed first.
+- **Sound** — waits on the FamiStudio audio roadmap.
+
+---
+
+## Builder — 2026-04-23 Phase B chunk 2 (Scene editor)
+
+Directly answers the pupil asks: *"select which enemies are walkers
+and which are chasers, where to place them, and use the same sprite
+more than once"*.  Introduces a proper scene-editor layer so each
+game object is a **placed instance** referencing a sprite
+definition, instead of the role-wide auto-placement of Phase A.
+
+- **`scene` module + `instances[]` data model.**  New entry in
+  `state.builder.modules.scene.config.instances` — each
+  `{ id, spriteIdx, x, y, ai }`.  The same `spriteIdx` is allowed
+  to appear any number of times, so a pupil who drew one
+  *"goomba"* can drop three of them on the level.  `ai` ∈
+  `static | walker | chaser`; the UI greys out walker/chaser for
+  non-enemy roles automatically.
+- **Custom-rendered UI.**  Modules can opt into a `customRender`
+  flag that the builder.html tree renderer recognises.  The Scene
+  module uses it to build a dynamic list with a sprite dropdown,
+  role badge, x/y number inputs (constrained 0–240 / 16–216 with
+  step 4), AI dropdown (role-aware), and a delete button per row.
+  **+ Add instance** defaults new rows to the first non-player
+  sprite, placed to the right of existing instances so they do
+  not stack.
+- **Walker / Chaser modules stand down gracefully.**  Both
+  `enemies.walker` and `enemies.chaser` check
+  `sceneHasInstances(state)` in their `applyToTemplate` and
+  return the template unchanged when any instance is defined —
+  so the role-wide loops never fight the per-instance AI.  The
+  Scene summary line on the page makes this explicit:
+  *"Walker / Chaser modules above are ignored while this list is
+  in use."*
+- **Assembler: per-instance AI emission.**  When instances are
+  present, the Scene module emits one tailored block per
+  instance.  Walkers get their own `bw_dir_<i>` static direction
+  variable (so each walker flips independently); chasers get an
+  inline nudge-toward-player block targeting `ss_x[i]` / `ss_y[i]`
+  directly.  Static instances emit no AI.
+- **Play payload: `sceneSprites` now derived from instances.**
+  When the scene has entries, `sceneSprites` maps 1:1 to the
+  list (keeping index order so `ss_x[i]` references stay
+  correct).  When the list is empty, the previous auto-placement
+  pipeline kicks in — zero regression for existing projects.
+- **Two new validators:**
+  - `scene-invalid-sprite` (error) — an instance references a
+    `spriteIdx` that no longer exists (pupil deleted the sprite
+    on the Sprites page).  Build would break; Play is blocked
+    until the row is removed or the sprite recreated.
+  - `scene-off-screen` (warn) — an instance's x/y is outside
+    0-240 / 16-216.  The sprite will not be visible but the
+    build is fine; surfaced as a warning so the pupil notices.
+- **Assembler MODULE_ORDER** reshuffled to
+  `game → players → scene → enemies → behaviour_walls → pickups
+  → doors → events → win_condition` so Scene's per-instance
+  blocks land in `per_frame` before the role-wide blocks would
+  (the latter are no-ops once Scene is active, but the ordering
+  keeps the output readable).
+
+### Verification — Phase B chunk 2
+
+`/tmp/builder-smoketest-4.mjs` covers six scenarios, all pass:
+
+1. Empty scene → walker role loop still emitted (backward
+   compatibility for projects that never touch the Scene list).
+2. Single walker instance → walker role loop silenced, per-
+   instance block emitted with `ss_x[0] += 1`.
+3. Two instances of the *same* spriteIdx with different AI →
+   `bw_dir_0` for the walker at ss_x[0], direct chaser nudge on
+   ss_x[1] / ss_y[1].  cc65 compiles the result in 38 ms.
+4. Static instance of an enemy → no `bw_dir_*` and no `ss_x[i]
+   +=` emission.
+5. Invalid spriteIdx → `scene-invalid-sprite` (error) fires.
+6. Off-screen position → `scene-off-screen` (warn) fires.
+
+### Deliberately out of chunk 2 — next chunks
+
+- **Visual scene preview / click-to-place.**  A small canvas in
+  the right-hand column that draws placed instances would make
+  positioning much faster than number inputs.  Tractable
+  follow-up once the data model has proven itself.
+- **Animation role tagging** (pupil ask).  Currently
+  `state.animation_assignments` only knows about the *player's*
+  walk / jump.  Next chunk will add a `role` + `style` tag to
+  each animation and let the Scene assembler pick the right
+  animation for each enemy instance.
+- **Player 2** — still Phase B; benefits from having scene
+  instances as its second player has the same "per-placement"
+  character as enemies.
+- **Per-instance speed / HP** — the data model has room for
+  `ai_speed`, `maxHp`, etc.; surfacing them in the UI is a
+  small follow-up once we know which knobs pupils actually
+  reach for.

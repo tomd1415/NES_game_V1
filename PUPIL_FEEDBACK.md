@@ -55,6 +55,7 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-20 | Audio              | Import FamiStudio music/SFX files                                 | [new]     |
 | 2026-04-20 | Sharing            | Gallery to upload screenshots / ROMs for others to play           | [new]     |
 | 2026-04-20 | Accessibility      | Make text size configurable / bigger                              | [new]     |
+| 2026-04-23 | Code page          | Simpler, no-C "module builder" alternative to the Code page       | [planned] |
 
 ---
 
@@ -477,6 +478,42 @@ of a game without writing new C themselves.
 
 ---
 
+### Code page — no-C module builder
+
+#### Replace the Code page with ticks-and-dropdowns for the common cases
+
+- **Said (multiple pupils, paraphrased):** *"The code page is great
+  for exploring, but I just want to pick a platformer, say how many
+  players, say walk + jump use these animations, drop some enemies
+  in, and hit play. I don't want to read C to do that."* They
+  suggested a version where you tick modules — platform game,
+  number of players, enemies, doors, events — fill in attributes
+  (starting position, HP, animations, damages-on-touch), and the
+  system assembles compilable code from the selections. Conflicts
+  should be flagged with fix-up instructions before Play is
+  enabled.
+- **Mitigation:** add a fifth editor page, tentatively **🧱
+  Builder**, that edits a declarative *module tree* on the state
+  blob. A pure-JS assembler stitches the selections into a
+  compilable `main.c` by injecting values into the existing `//>>
+  region //<<` markers and by expanding snippet templates into
+  named insertion slots in a base platformer / top-down template.
+  A validator runs on every change and disables Play while
+  problems remain. The feature reuses most of the existing
+  scaffolding — sprite roles, animation assignments,
+  behaviour-map tile types, the snippet library with its `regions`
+  / `tags` metadata, and the `/play` endpoint — so it's less a
+  new engine and more a declarative wrapper. Full design doc with
+  data model, module catalogue, assembly algorithm, validator
+  spec, UI layout, phasing (MVP → richer content → events →
+  polish) and open questions is in
+  [builder-plan.md](builder-plan.md).
+- **Status / date:** [planned] 2026-04-23 — plan documented; MVP
+  is effort M (2–4 focused sessions). Awaiting teacher green-light
+  on phase A.
+
+---
+
 ## Additional ideas (teacher / Claude)
 
 Things no pupil has raised yet, but worth having on the list:
@@ -638,3 +675,9 @@ sub-item so a half-baked piece never blocks a pupil session.
   tools, follower sprite, text size). Marked six 2026-04-13 items
   as `[done]` per `changelog-implemented.md`. Added the "Proposed
   roadmap" section with Sprints 6–9.
+- 2026-04-23 — logged the most-common pupil request: a simpler,
+  reliable, module-based alternative to the Code page ("tick
+  platformer, pick sprites, fill in attributes, play"). Detailed
+  design lives in [builder-plan.md](builder-plan.md); summary row
+  and entry added under a new *Code page — no-C module builder*
+  theme.

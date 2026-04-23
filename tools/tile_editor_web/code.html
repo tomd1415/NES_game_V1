@@ -400,6 +400,7 @@ li.CodeMirror-hint-active {
     <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
     <a class="page-link" href="sprites.html" title="Design sprites from the shared tileset">🦸 Sprites</a>
     <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
+    <a class="page-link" href="builder.html" title="Build the game by ticking modules — no C required">🧱 Builder</a>
     <a class="page-link active" href="code.html" title="You are here — edit the C code that drives the NES game">📝 Code</a>
   </nav>
   <div class="toolbar">
@@ -622,6 +623,35 @@ li.CodeMirror-hint-active {
 
 <script>
 'use strict';
+
+// ================================================================
+// Default-to-Builder redirect.  Teacher chose (builder-plan.md Q1):
+// new pupils land on the Builder page by default; pupils who have
+// *already* written custom C keep landing on the Code page.  The
+// `?stay=1` query string lets the "Open as Code" nudge from the
+// Builder page bypass the redirect.  Must run before CodeMirror
+// builds the DOM so the bounce happens instantly.
+// ================================================================
+(function maybeRedirectToBuilder() {
+  try {
+    if (/[?&]stay=1\b/.test(location.search)) return;
+    const raw = localStorage.getItem('nes_tile_editor.current.v1');
+    if (!raw) {
+      // No project yet — Builder is the better landing page.
+      location.replace('builder.html');
+      return;
+    }
+    const st = JSON.parse(raw);
+    const hasCustomC   = typeof st.customMainC   === 'string' && st.customMainC.trim().length > 0;
+    const hasCustomAsm = typeof st.customMainAsm === 'string' && st.customMainAsm.trim().length > 0;
+    if (!hasCustomC && !hasCustomAsm) {
+      location.replace('builder.html');
+    }
+  } catch (_) {
+    // On any storage parse error we let the Code page load normally —
+    // safer to show the editor than to bounce into an unknown state.
+  }
+})();
 
 // ================================================================
 // Shared storage — uses the v2 projects catalog via storage.js so

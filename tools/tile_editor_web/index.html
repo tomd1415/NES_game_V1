@@ -952,6 +952,7 @@ kbd {
     <a class="page-link active" href="index.html" title="You are here — edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
     <a class="page-link" href="sprites.html" title="Design sprites from the same shared tileset — hero, enemies, items">🦸 Sprites</a>
     <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
+    <a class="page-link" href="builder.html" title="Build the game by ticking modules — no C required">🧱 Builder</a>
     <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
   </nav>
   <div class="toolbar">
@@ -1636,7 +1637,34 @@ function migrateState(s) {
   // through save/load. Defaults are seeded here so older projects open
   // cleanly from any page.
   migrateBehaviourFields(s);
+  // Builder MVP — the Builder page owns state.builder, but every page
+  // preserves it through save/load.  Seed a default tree here so older
+  // projects open cleanly when a pupil first clicks 🧱 Builder.
+  migrateBuilderFields(s);
   return s;
+}
+
+function migrateBuilderFields(s) {
+  if (s.builder && s.builder.version === 1) return;
+  s.builder = {
+    version: 1,
+    modules: {
+      game: { enabled: true, config: { type: 'platformer' } },
+      players: {
+        enabled: true,
+        config: { count: 1 },
+        submodules: {
+          player1: {
+            enabled: true,
+            config: {
+              startX: 60, startY: 120,
+              walkSpeed: 1, jumpHeight: 20, maxHp: 0,
+            },
+          },
+        },
+      },
+    },
+  };
 }
 
 function defaultBehaviourTypes() {
