@@ -3102,17 +3102,48 @@ function assignFreshTiles(sp, s) {
   return start;
 }
 
-// First run of `count` consecutive tile indices with no pixels, starting at 1.
-// Returns the starting index, or -1 if no run fits. `s` lets callers
-// target a state other than the global `state`.
+// Collect the set of tile indices already pointed at by some
+// non-empty cell in any sprite.  Used by the "find free tile"
+// helpers so a blank-but-referenced tile isn't handed out twice.
+// A cell can reference a tile index whose pixels are still all zero
+// (e.g. a freshly auto-assigned cell that the pupil has not painted
+// into yet); before this check, the next call would return the same
+// tile and two cells would silently share graphics.
+function _referencedTileIndices(s) {
+  const src = s || state;
+  const used = new Set();
+  const sprites = src.sprites || [];
+  for (const sp of sprites) {
+    if (!sp || !sp.cells) continue;
+    for (const row of sp.cells) {
+      for (const cell of row) {
+        if (cell && !cell.empty) used.add(cell.tile | 0);
+      }
+    }
+  }
+  return used;
+}
+
+// True if tile `i` in state `src` is free to claim — no painted
+// pixels AND not already referenced by any cell.
+function _tileIndexIsFree(src, i, used) {
+  const t = src.sprite_tiles[i];
+  if (t.pixels.some(r => r.some(v => v !== 0))) return false;
+  return !used.has(i);
+}
+
+// First run of `count` consecutive tile indices that are free
+// (no painted pixels AND not referenced by any sprite cell),
+// starting at 1.  Returns the starting index, or -1 if no run
+// fits.  `s` lets callers target a state other than the global
+// `state`.
 function findFreeTileRun(count, s) {
   const src = s || state;
   if (count <= 0) return 1;
+  const used = _referencedTileIndices(src);
   let run = 0, runStart = -1;
   for (let i = 1; i < NUM_TILES; i++) {
-    const t = src.sprite_tiles[i];
-    const empty = !t.pixels.some(r => r.some(v => v !== 0));
-    if (empty) {
+    if (_tileIndexIsFree(src, i, used)) {
       if (run === 0) runStart = i;
       run++;
       if (run >= count) return runStart;
@@ -3238,13 +3269,12 @@ function findFirstSpriteUsingTile(tileIdx) {
 // for callers that don't care about placement.
 function findNextEmptyTileSlot(startIdx) {
   const start = Math.max(0, startIdx || 0);
+  const used = _referencedTileIndices(state);
   for (let i = start; i < NUM_TILES; i++) {
-    const t = state.sprite_tiles[i];
-    if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
+    if (_tileIndexIsFree(state, i, used)) return i;
   }
   for (let i = 0; i < start; i++) {
-    const t = state.sprite_tiles[i];
-    if (!t.pixels.some(r => r.some(v => v !== 0))) return i;
+    if (_tileIndexIsFree(state, i, used)) return i;
   }
   return -1;
 }

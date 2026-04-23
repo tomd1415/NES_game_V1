@@ -1869,6 +1869,7 @@ function scheduleSave() {
   setStatus('saving', 'Saving…');
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    state.metadata.lastSelectedTile = selectedTileIdx;
     const res = Storage.saveCurrent(state);
     if (res.ok) {
       dirty = false;
@@ -2120,7 +2121,15 @@ function forceEmergencyDownload(state, reason) {
 // ================================================================
 let state = createDefaultState();
 let prefs = { autoDownloadBackups: false };
-let selectedTileIdx = 0;
+let selectedTileIdx = 1;  // land on tile 1 (tile 0 is the transparent bg)
+// Clamp a raw persisted tile index into the valid range [1, NUM_TILES-1].
+// Tile 0 is reserved for the transparent background — defaulting to it
+// forced pupils to click a second time before they could paint anything.
+function restoreSelectedTile() {
+  const raw = state && state.metadata && state.metadata.lastSelectedTile;
+  const n = parseInt(raw, 10);
+  selectedTileIdx = (n >= 1 && n < NUM_TILES) ? n : 1;
+}
 let currentColour = 1;
 let selectedPaletteKind = 'bg';  // 'bg' | 'sprite' | 'universal'
 let selectedPaletteIdx = 0;
@@ -3103,6 +3112,7 @@ function ntFloodFill(sx, sy, newTile, newPal) {
 function afterStateReplaced() {
   // Called after load/undo/redo. Re-syncs UI + persists.
   resizeNametable(state);
+  restoreSelectedTile();
   document.getElementById('project-name').value = state.name || 'untitled';
   refreshBgUi();
   renderAll();
@@ -3210,6 +3220,7 @@ function init() {
     Storage.saveCurrent(state);
   }
   resizeNametable(state);
+  restoreSelectedTile();
   prefs = Object.assign({ autoDownloadBackups: false }, Storage.readPrefs());
   document.getElementById('auto-download').checked = prefs.autoDownloadBackups;
   document.getElementById('auto-download').addEventListener('change', e => {
@@ -4005,6 +4016,7 @@ function init() {
 
   // --- beforeunload: final save ---
   window.addEventListener('beforeunload', () => {
+    state.metadata.lastSelectedTile = selectedTileIdx;
     Storage.saveCurrent(state);
     Storage.saveSnapshot(state, 'beforeunload');
   });
