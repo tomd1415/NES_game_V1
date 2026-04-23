@@ -676,3 +676,55 @@ Three tweaks after pupil testing of the first cut:
 - localStorage schema unchanged; existing projects load.
 - Shortcuts still bound: `0–3`, `[`, `]`, `D`, `Del`, `Shift+click`,
   `M`, `F`.
+
+---
+
+## Menu reorganisation — 2026-04-22 toolbar grouped into four zones
+
+Plan: [menu-plan.md](menu-plan.md) (Plan B — grouped toolbar).
+
+The header toolbar on all four editor pages was wrapping onto two
+rows on 1366-wide laptops because every action sat at the top level.
+The actions are now bucketed into four visually distinct groups
+separated by thin dividers, matching the browser's own File / Edit
+/ View / Window idiom.
+
+- **Shared target layout.**
+  `[🎮 Title] [tabs…] │ ● [📁 project ▾] │ ↶ ↷ [Clear …] │ [page tools] │ [▶ Play] [?]`.
+  `.tb-group` + `border-left` on each subsequent group gives the
+  dividers without any JS.  Each page has its own inline style
+  block so the CSS additions landed in all four files.
+- **File ▾ absorbs Projects ▾ and most file actions.**  The single
+  dropdown now contains: Projects list → Rename this project
+  (moved in from the standalone `#project-name` input) → New /
+  Duplicate / Delete → Save all my work / Open saved work →
+  Recover (index + sprites only) → Import / Export (index +
+  sprites only) → auto-download backups checkbox (index only).
+  The summary stays `📁 <project-name> ▾` so pupils' muscle-memory
+  click target is unchanged.
+- **Save-status pill shrunk to a dot.**  130-px "● Saved just now"
+  pill became a 1.6-em coloured dot; the full message moved into
+  the `title` attribute so hovering still shows it.  `setStatus()`
+  on each page now sets both `textContent` and `title`; error
+  state still shows the full text inline so something going wrong
+  can't be missed.
+- **Edit group — three items per page.**  Undo, Redo, and one
+  "Clear X" (🗑 Clear project on index + sprites, 🗑 Clear map on
+  behaviour, ↻ Restore default on code).  All kept their existing
+  ids so click handlers are unchanged.
+- **code.html gets two new dropdowns.**  Mode ▾ (🎓 Guided · C)
+  bundles the two mode-toggle `<span>`s — Guided/Advanced and
+  C/Asm — with a live summary label that updates whenever either
+  sub-toggle flips.  Code tools ▾ (🧰) hides Snippets… and
+  Symbols… behind one click.  The lesson chip stays visible in
+  the group because pupils need to see which lesson is loaded.
+- **All button ids preserved.**  The change is pure DOM location
+  (and CSS) — no event handler was touched, keyboard shortcuts
+  (Ctrl+Z/Y/S, `?`) still work, and saved projects load
+  unchanged.
+
+### Verification — menu reorganisation
+
+- `node --check` clean on the extracted inline JS block of each of
+  the four pages after the restructure.
+- Each page's header now fits on one row at 1366 px.

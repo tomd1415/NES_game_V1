@@ -79,11 +79,53 @@ label { -webkit-user-select: none; user-select: none; }
 }
 .app-header .toolbar {
   margin-left: auto;
-  display: flex; gap: 6px; align-items: center;
+  display: flex; gap: 4px; align-items: center;
 }
-#save-status.saved    { color: var(--good); }
+.tb-group {
+  display: flex; align-items: center; gap: 6px;
+}
+.tb-group + .tb-group {
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.tb-group:empty { display: none; }
+.tb-inline-divider {
+  border: 0; border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+.tb-section-label {
+  font-size: 0.8em; color: var(--muted);
+  margin: 2px 0; padding: 0 4px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tb-rename-row {
+  display: flex; gap: 4px; align-items: center;
+  padding: 0 4px;
+}
+.tb-rename-row input {
+  flex: 1; padding: 4px 6px;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--fg); font: inherit;
+}
+#save-status {
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  text-align: center;
+  max-width: 1.6em;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: help;
+}
+#save-status.saved    { color: var(--good); border-color: var(--good); }
 #save-status.saving   { color: var(--info); }
-#save-status.error    { color: var(--warn); }
+#save-status.error    {
+  color: var(--warn); border-color: var(--warn);
+  max-width: 220px;
+}
 #project-name {
   background: var(--panel2); color: var(--fg);
   border: 1px solid var(--border); border-radius: 4px;
@@ -343,24 +385,33 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
     <a class="page-link active" href="behaviour.html" title="You are here — mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
     <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
   </nav>
-  <div class="status-group">
-    <span id="save-status" class="saved">● Loading…</span>
-    <input id="project-name" type="text" value="untitled" title="Project name (shared with other pages)" aria-label="Project name">
-  </div>
   <div class="toolbar">
-    <details class="projects-menu" id="projects-menu">
-      <summary title="Switch project or create a new one"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
-      <div class="menu-body">
-        <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
-      </div>
-    </details>
-    <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
-    <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-    <button type="button" id="btn-clear-all" title="Clear the behaviour map for the current background (undoable)">🗑 Clear map</button>
-    <button type="button" id="btn-save-all"  class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
-    <button type="button" id="btn-load-all"             title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+    <span id="save-status" class="saved" title="Loading…">●</span>
+    <div class="tb-group" role="group" aria-label="File">
+      <details class="projects-menu" id="projects-menu">
+        <summary title="Project + Save / Open"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
+        <div class="menu-body">
+          <div class="tb-section-label">Projects</div>
+          <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
+          <div class="tb-rename-row">
+            <input id="project-name" type="text" value="untitled" title="Rename this project (shared with other pages)" aria-label="Project name" placeholder="untitled">
+          </div>
+          <hr class="tb-inline-divider">
+          <div class="tb-section-label">Save &amp; restore</div>
+          <button type="button" id="btn-save-all"  class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+          <button type="button" id="btn-load-all"             title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+        </div>
+      </details>
+    </div>
+    <div class="tb-group" role="group" aria-label="Edit">
+      <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+      <button type="button" id="btn-clear-all" title="Clear the behaviour map for the current background (undoable)">🗑 Clear map</button>
+    </div>
+    <div class="tb-group" role="group" aria-label="Run">
+      <button type="button" id="btn-help" title="Show help (?)">?</button>
+    </div>
     <input id="file-input-all" type="file" accept=".json" style="display:none">
-    <button type="button" id="btn-help" title="Show help (?)">?</button>
   </div>
 </header>
 
@@ -806,7 +857,13 @@ function markDirty() {
 function setStatus(cls, text) {
   const el = document.getElementById('save-status');
   el.className = cls;
-  el.textContent = text;
+  if (cls === 'error') {
+    el.textContent = text;
+    el.title = text;
+  } else {
+    el.textContent = '●';
+    el.title = text;
+  }
 }
 function updateSavedTimeLabel() {
   if (dirty || !lastSaveTs) return;

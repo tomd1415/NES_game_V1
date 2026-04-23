@@ -88,16 +88,88 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 .page-link:hover { background: #3a3560; }
 .page-link.active { background: #3a2f50; border-color: var(--accent); color: var(--accent); font-weight: bold; }
 
-.app-header .status-group { display: flex; align-items: center; gap: 10px; margin-left: 16px; }
-.app-header .toolbar { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.app-header .toolbar { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+.tb-group { display: flex; align-items: center; gap: 6px; }
+.tb-group + .tb-group {
+  margin-left: 6px; padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.tb-group:empty { display: none; }
+.tb-inline-divider {
+  border: 0; border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+.tb-section-label {
+  font-size: 0.8em; color: var(--muted);
+  margin: 2px 0; padding: 0 4px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tb-rename-row {
+  display: flex; gap: 4px; align-items: center;
+  padding: 0 4px;
+}
+.tb-rename-row input {
+  flex: 1; padding: 4px 6px;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--fg); font: inherit;
+}
+/* File ▾ dropdown (shares .projects-menu idiom with the other pages). */
+.projects-menu { position: relative; }
+.projects-menu > summary {
+  list-style: none; cursor: pointer;
+  padding: 5px 10px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 4px;
+  max-width: 220px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.projects-menu[open] > summary { background: #3a3560; }
+.projects-menu > .menu-body {
+  position: absolute; left: 0; top: calc(100% + 4px);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 260px; box-shadow: var(--shadow); z-index: 25;
+}
+.projects-menu .projects-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 180px; overflow-y: auto;
+}
+.projects-menu .projects-list button {
+  text-align: left; padding: 5px 8px;
+}
+.projects-menu .projects-list button.active {
+  background: var(--accent); color: #000; font-weight: 600;
+}
+.projects-menu .menu-body button { text-align: left; }
+/* Mode ▾ / Code tools ▾ dropdowns */
+.menu-drop { position: relative; }
+.menu-drop > summary {
+  list-style: none; cursor: pointer;
+  padding: 5px 10px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.menu-drop[open] > summary { background: #3a3560; }
+.menu-drop > .menu-body {
+  position: absolute; right: 0; top: calc(100% + 4px);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 220px; box-shadow: var(--shadow); z-index: 25;
+}
+.menu-drop > .menu-body button { text-align: left; }
 
 #save-status {
-  font-size: 0.85em; padding: 3px 10px; border-radius: 10px;
+  font-size: 0.9em; padding: 2px 6px; border-radius: 10px;
   background: var(--panel2); border: 1px solid var(--border);
-  min-width: 110px; text-align: center;
+  text-align: center; max-width: 1.6em;
+  overflow: hidden; white-space: nowrap; cursor: help;
 }
 #save-status.saved  { color: var(--good); border-color: var(--good); }
 #save-status.saving { color: var(--accent); }
+#save-status.error  {
+  color: var(--warn); border-color: var(--warn);
+  max-width: 220px;
+}
 
 .app-main {
   display: grid;
@@ -330,35 +402,64 @@ li.CodeMirror-hint-active {
     <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
     <a class="page-link active" href="code.html" title="You are here — edit the C code that drives the NES game">📝 Code</a>
   </nav>
-  <div class="status-group">
-    <span id="save-status" class="saved">● Loading…</span>
-    <input id="project-name" type="text" value="untitled" title="Project name (shared with the other pages)" aria-label="Project name">
-  </div>
   <div class="toolbar">
-    <span class="mode-toggle" role="group" aria-label="Editor mode">
-      <button type="button" id="btn-mode-guided"   class="active" title="Guided: only the highlighted lines are editable. Perfect if you're just starting out.">🎓 Guided</button>
-      <button type="button" id="btn-mode-advanced"              title="Advanced: edit anything in main.c. Use this once you're confident.">⚙️ Advanced</button>
-    </span>
-    <span class="mode-toggle" role="group" aria-label="Language">
-      <button type="button" id="btn-lang-c"   class="active" title="Edit main.c — compiled with cc65.">C</button>
-      <button type="button" id="btn-lang-asm"              title="Edit main.s — 6502 assembly, assembled with ca65. No nes.lib: the starter writes its own iNES header and vectors.">Asm</button>
-    </span>
-    <button type="button" id="btn-lesson-chip" class="lesson-chip empty" title="Pick a lesson from the library">📚 <span id="lesson-chip-label">Pick a lesson…</span></button>
-    <button type="button" id="btn-snippets" title="Insert a pre-written block of code at your cursor">🧩 Snippets…</button>
-    <button type="button" id="btn-restore" title="Replace your code with the stock platformer starter. Your current version is saved to a snapshot first.">↻ Restore default</button>
-    <button type="button" id="btn-symbols" title="See the auto-generated symbols (player_tiles, walk_tiles…) your code can use">⌨ Symbols…</button>
-    <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
-    <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+    <span id="save-status" class="saved" title="Loading…">●</span>
+    <div class="tb-group" role="group" aria-label="File">
+      <details class="projects-menu" id="file-menu">
+        <summary title="Project + Save / Open"><span aria-hidden="true">📁 </span><span id="active-project-label">untitled</span> <span aria-hidden="true">▾</span></summary>
+        <div class="menu-body">
+          <div class="tb-section-label">Projects</div>
+          <div class="tb-rename-row">
+            <input id="project-name" type="text" value="untitled" title="Rename this project (shared with the other pages)" aria-label="Project name" placeholder="untitled">
+          </div>
+          <hr class="tb-inline-divider">
+          <div class="tb-section-label">Save &amp; restore</div>
+          <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+          <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+        </div>
+      </details>
+    </div>
+    <div class="tb-group" role="group" aria-label="Edit">
+      <button type="button" id="btn-restore" title="Replace your code with the stock platformer starter. Your current version is saved to a snapshot first.">↻ Restore default</button>
+    </div>
+    <div class="tb-group" role="group" aria-label="Code tools">
+      <details class="menu-drop" id="mode-menu">
+        <summary title="Choose the editor mode and language"><span aria-hidden="true">🎓 </span><span id="mode-menu-label">Guided · C</span> <span aria-hidden="true">▾</span></summary>
+        <div class="menu-body">
+          <div class="tb-section-label">Editor mode</div>
+          <span class="mode-toggle" role="group" aria-label="Editor mode">
+            <button type="button" id="btn-mode-guided"   class="active" title="Guided: only the highlighted lines are editable. Perfect if you're just starting out.">🎓 Guided</button>
+            <button type="button" id="btn-mode-advanced"              title="Advanced: edit anything in main.c. Use this once you're confident.">⚙️ Advanced</button>
+          </span>
+          <hr class="tb-inline-divider">
+          <div class="tb-section-label">Language</div>
+          <span class="mode-toggle" role="group" aria-label="Language">
+            <button type="button" id="btn-lang-c"   class="active" title="Edit main.c — compiled with cc65.">C</button>
+            <button type="button" id="btn-lang-asm"              title="Edit main.s — 6502 assembly, assembled with ca65. No nes.lib: the starter writes its own iNES header and vectors.">Asm</button>
+          </span>
+        </div>
+      </details>
+      <button type="button" id="btn-lesson-chip" class="lesson-chip empty" title="Pick a lesson from the library">📚 <span id="lesson-chip-label">Pick a lesson…</span></button>
+      <details class="menu-drop" id="code-tools-menu">
+        <summary title="Snippets and auto-generated symbols"><span aria-hidden="true">🧰 </span>Code tools <span aria-hidden="true">▾</span></summary>
+        <div class="menu-body">
+          <button type="button" id="btn-snippets" title="Insert a pre-written block of code at your cursor">🧩 Snippets…</button>
+          <button type="button" id="btn-symbols" title="See the auto-generated symbols (player_tiles, walk_tiles…) your code can use">⌨ Symbols…</button>
+        </div>
+      </details>
+    </div>
+    <div class="tb-group" role="group" aria-label="Run">
+      <label class="pg-runon" title="Where the compiled ROM gets played">
+        <span>Run on:</span>
+        <select id="pg-runon">
+          <option value="browser">This browser (jsnes)</option>
+          <option value="native">FCEUX (server desktop)</option>
+        </select>
+      </label>
+      <button type="button" id="btn-play" class="primary play-btn" title="Compile this C file and launch it">▶ Play in NES</button>
+      <button type="button" id="btn-help" title="Show help and keyboard shortcuts (?)">?</button>
+    </div>
     <input id="file-input-all" type="file" accept=".json" style="display:none">
-    <label class="pg-runon" title="Where the compiled ROM gets played">
-      <span>Run on:</span>
-      <select id="pg-runon">
-        <option value="browser">This browser (jsnes)</option>
-        <option value="native">FCEUX (server desktop)</option>
-      </select>
-    </label>
-    <button type="button" id="btn-play" class="primary play-btn" title="Compile this C file and launch it">▶ Play in NES</button>
-    <button type="button" id="btn-help" title="Show help and keyboard shortcuts (?)">?</button>
   </div>
 </header>
 
@@ -679,8 +780,14 @@ let saveTimer = 0;
 
 function setSaveStatus(kind, msg) {
   const el = document.getElementById('save-status');
-  el.textContent = msg;
   el.className = kind;
+  if (kind === 'error') {
+    el.textContent = msg;
+    el.title = msg;
+  } else {
+    el.textContent = '●';
+    el.title = msg;
+  }
 }
 
 function scheduleSave() {
@@ -766,9 +873,18 @@ async function initEditor() {
 // per-language source separately so flipping back restores the pupil's
 // previous work, not a reset.
 // ================================================================
+function updateModeMenuLabel() {
+  const el = document.getElementById('mode-menu-label');
+  if (!el) return;
+  const modeWord = (typeof editorMode !== 'undefined' && editorMode === 'advanced')
+    ? 'Advanced' : 'Guided';
+  const langWord = codeLang === 'asm' ? 'Asm' : 'C';
+  el.textContent = modeWord + ' · ' + langWord;
+}
 function applyLanguageUI() {
   document.getElementById('btn-lang-c').classList.toggle('active', codeLang === 'c');
   document.getElementById('btn-lang-asm').classList.toggle('active', codeLang === 'asm');
+  updateModeMenuLabel();
   // Lessons and snippets are C-only (for now).  Dim the chips when in asm
   // mode so pupils aren't confused about why the dialog is empty.
   const asm = codeLang === 'asm';
@@ -960,6 +1076,7 @@ function setEditorMode(next, { persist = true } = {}) {
   }
   document.getElementById('btn-mode-guided').classList.toggle('active', editorMode === 'guided');
   document.getElementById('btn-mode-advanced').classList.toggle('active', editorMode === 'advanced');
+  updateModeMenuLabel();
   if (editorMode === 'guided') applyGuidedMode();
   else { clearGuidedMarks(); guidedRegions = []; renderGuidedBanner(); }
 }

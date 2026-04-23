@@ -104,21 +104,54 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 }
 .app-header .toolbar {
   margin-left: auto;
-  display: flex; gap: 6px;
+  display: flex; gap: 4px;
   align-items: center;
 }
+.tb-group {
+  display: flex; align-items: center; gap: 6px;
+}
+.tb-group + .tb-group {
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.tb-group:empty { display: none; }
+.tb-inline-divider {
+  border: 0; border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+.tb-section-label {
+  font-size: 0.8em; color: var(--muted);
+  margin: 2px 0; padding: 0 4px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tb-rename-row {
+  display: flex; gap: 4px; align-items: center;
+  padding: 0 4px;
+}
+.tb-rename-row input {
+  flex: 1; padding: 4px 6px;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 3px; color: var(--fg); font: inherit;
+}
 #save-status {
-  font-size: 0.85em;
-  padding: 3px 10px;
+  font-size: 0.9em;
+  padding: 2px 6px;
   border-radius: 10px;
   background: var(--panel2);
   border: 1px solid var(--border);
-  min-width: 130px;
   text-align: center;
+  max-width: 1.6em;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: help;
 }
 #save-status.saved  { color: var(--good); border-color: var(--good); }
 #save-status.saving { color: var(--accent); }
-#save-status.error  { color: var(--warn); border-color: var(--warn); }
+#save-status.error  {
+  color: var(--warn); border-color: var(--warn);
+  max-width: 220px;
+}
 #project-name {
   background: transparent;
   border: 1px solid transparent;
@@ -1625,41 +1658,51 @@ details.collapsible > summary .sub-count {
     <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
     <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
   </nav>
-  <div class="status-group">
-    <span id="save-status" class="saved">● Loading…</span>
-    <input id="project-name" type="text" value="untitled" title="Project name (shared with Backgrounds)" aria-label="Project name">
-  </div>
   <div class="toolbar">
-    <details class="projects-menu" id="projects-menu">
-      <summary title="Switch project or create a new one"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
-      <div class="menu-body">
-        <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
-        <hr>
-        <button type="button" id="btn-project-new">+ New project…</button>
-        <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
-        <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
-        <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
-      </div>
-    </details>
-    <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
-    <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
-    <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
-    <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
-    <button type="button" id="btn-new" title="Clear this project back to defaults (use Projects ▾ to create a new project)">Clear</button>
-    <button type="button" id="btn-recover" title="Recover from a snapshot or backup">Recover…</button>
-    <details class="export-menu">
-      <summary title="Export your sprites for the NES game">Export ▾</summary>
-      <div class="menu-body">
-        <button type="button" data-export="json">💾 JSON save (round-trip)</button>
-        <button type="button" data-export="inc">📜 sprites.inc  (OAM C arrays)</button>
-        <button type="button" data-export="h">📄 sprites.h   (C header)</button>
-      </div>
-    </details>
-    <button type="button" id="btn-import" title="Load sprites + tileset from a JSON file. Your background stays untouched.">Import sprites…</button>
+    <span id="save-status" class="saved" title="Loading…">●</span>
+    <div class="tb-group" role="group" aria-label="File">
+      <details class="projects-menu" id="projects-menu">
+        <summary title="Project + Save / Open / Recover / Import / Export"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
+        <div class="menu-body">
+          <div class="tb-section-label">Projects</div>
+          <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
+          <div class="tb-rename-row">
+            <input id="project-name" type="text" value="untitled" title="Rename this project (shared with Backgrounds)" aria-label="Project name" placeholder="untitled">
+          </div>
+          <button type="button" id="btn-project-new">+ New project…</button>
+          <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
+          <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
+          <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
+          <hr class="tb-inline-divider">
+          <div class="tb-section-label">Save &amp; restore</div>
+          <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+          <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+          <button type="button" id="btn-recover" title="Recover from a snapshot or backup">♻ Recover from snapshot…</button>
+          <hr class="tb-inline-divider">
+          <div class="tb-section-label">Import / export</div>
+          <button type="button" id="btn-import" title="Load sprites + tileset from a JSON file. Your background stays untouched.">🌐 Import sprites…</button>
+          <details class="export-menu">
+            <summary>📤 Export as…</summary>
+            <div class="menu-body">
+              <button type="button" data-export="json">💾 JSON save (round-trip)</button>
+              <button type="button" data-export="inc">📜 sprites.inc  (OAM C arrays)</button>
+              <button type="button" data-export="h">📄 sprites.h   (C header)</button>
+            </div>
+          </details>
+        </div>
+      </details>
+    </div>
+    <div class="tb-group" role="group" aria-label="Edit">
+      <button type="button" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
+      <button type="button" id="btn-new" title="Clear this project back to defaults (use File ▾ to create a new project)">🗑 Clear project</button>
+    </div>
+    <div class="tb-group" role="group" aria-label="Run">
+      <button type="button" id="btn-play" class="primary play-btn" title="Compile and run your background + sprites as a mini NES game you can move around in (needs the Playground Server running)">▶ Play in NES</button>
+      <button type="button" id="btn-help" title="Show help and keyboard shortcuts (?)">?</button>
+    </div>
     <input id="file-input" type="file" accept=".json" style="display:none">
     <input id="file-input-all" type="file" accept=".json" style="display:none">
-    <button type="button" id="btn-play" class="primary play-btn" title="Compile and run your background + sprites as a mini NES game you can move around in (needs the Playground Server running)">▶ Play in NES</button>
-    <button type="button" id="btn-help" title="Show help and keyboard shortcuts (?)">?</button>
   </div>
 </header>
 
@@ -2852,14 +2895,20 @@ function scheduleSave() {
 function setStatus(cls, text) {
   const el = document.getElementById('save-status');
   el.className = cls;
-  el.textContent = text;
+  if (cls === 'error') {
+    el.textContent = text;
+    el.title = text;
+  } else {
+    el.textContent = '●';
+    el.title = text;
+  }
 }
 function updateSavedTimeLabel() {
   if (!lastSaveTs) return;
   const diff = Math.floor((Date.now() - lastSaveTs) / 1000);
   const el = document.getElementById('save-status');
   if (el.classList.contains('saved')) {
-    el.textContent = diff < 2 ? '● Saved' : '● Saved ' + diff + 's ago';
+    el.title = diff < 2 ? '● Saved' : '● Saved ' + diff + 's ago';
   }
 }
 
