@@ -53,6 +53,11 @@ three clicks, that lands in a file I can read on the server.
   to the teacher, admin read-back UI, moderation, including the
   pupil's full project state in the submission, attachments /
   screenshots, per-pupil dashboards.  Flagged in *Deferred* below.
+- **Follow-ups shipped since this plan was written:** the
+  include-my-project checkbox (2026-04-22, see
+  [changelog-implemented.md](changelog-implemented.md)) and the
+  teacher-facing `GET /feedback` viewer (2026-04-23, see
+  [feedback-viewer-plan.md](feedback-viewer-plan.md)).
 
 ---
 
@@ -279,10 +284,10 @@ behaviour/code it happens when the help dialog is first opened.
 
 ## Deferred / out of scope
 
-- **Teacher-facing read-back UI.**  For now I just open
-  `feedback.jsonl` in a text editor.  A simple `/feedback/list`
-  GET + a one-page viewer is a 20-minute follow-up if it's
-  needed.
+- **Teacher-facing read-back UI.** *Shipped 2026-04-23* —
+  `GET /feedback` renders a dark-themed viewer page with cards per
+  submission, a ✓ handled toggle, and a "show handled" filter.  See
+  [feedback-viewer-plan.md](feedback-viewer-plan.md).
 - **Email notifications.**  Trivial to add via `smtplib` later; not
   needed while I check the file manually.
 - **Screenshots / attachments.**  The browser already has the

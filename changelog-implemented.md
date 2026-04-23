@@ -779,3 +779,51 @@ Follow-up to the pupil feedback form shipped the day before.
   list.  Malformed JSON and a negative index each produce a 400
   with a clear `error` field.
 - `python3 -m py_compile tools/playground_server.py` clean.
+
+---
+
+## Editor polish — 2026-04-23 tile-selection defaults
+
+Two small editor bug-fixes shipped in the same session as the
+feedback viewer.
+
+- **Backgrounds page now lands on tile 1, not tile 0.** Tile 0 is
+  the transparent/background tile — defaulting the tileset
+  selection to it meant every pupil had to click somewhere else
+  before they could paint anything. `selectedTileIdx` now starts
+  at 1. A small `restoreSelectedTile()` helper reads
+  `state.metadata.lastSelectedTile` and clamps it to
+  `[1, NUM_TILES-1]`, falling back to 1 for brand-new projects.
+  Called from `init()` and `afterStateReplaced()`.  The current
+  selection is written back into `state.metadata.lastSelectedTile`
+  inside `scheduleSave()` and the `beforeunload` handler, so it
+  round-trips per project — open a project, click tile 42, close
+  the tab, reopen, tile 42 is still selected.
+
+- **Sprites auto-assign no longer hands out the same tile twice.**
+  `findFreeTileRun()` and `findNextEmptyTileSlot()` previously
+  only treated a tile as "used" if its pixels were non-zero.
+  That missed freshly auto-assigned cells — after
+  `autoAssignFreeTileToCell()` set `cell.tile = N; cell.empty =
+  false`, tile N's pixels were still all zero, so the next call
+  happily returned N again.  Result: multiple cells pointing at
+  the same blank tile, painting one secretly painted all of them.
+  Fix is a new helper `_referencedTileIndices(s)` that walks every
+  sprite's non-empty cells and collects the tile indices in use;
+  `_tileIndexIsFree()` combines that with the pixel-zero check.
+  Both callers now see truly-free tiles.  Works identically for
+  per-cell auto-assign in `spApply`, for the resize handler's
+  bulk `findFreeTileRun(newCells.length)`, and for
+  `duplicateTileForCurrentCell()`.
+
+### Verification — editor polish
+
+- `node --check` clean on the extracted inline JS blocks of
+  index.html and sprites.html.
+- Manual trace: on the Backgrounds page with an empty project,
+  `selectedTileIdx` starts at 1 (`init()` path); after clicking
+  tile 7 and reloading, `state.metadata.lastSelectedTile === 7`
+  and the selection restores.  On the Sprites page, resizing a
+  sprite from 2×2 to 3×3 now claims four distinct consecutive
+  tile indices; painting into one leaves the other three blank
+  as expected.
