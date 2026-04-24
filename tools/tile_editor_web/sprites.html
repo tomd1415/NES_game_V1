@@ -1730,6 +1730,7 @@ details.collapsible > summary .sub-count {
         <option value="pickup">Pickup</option>
         <option value="projectile">Projectile</option>
         <option value="decoration">Decoration</option>
+        <option value="hud">HUD (hearts / icons)</option>
         <option value="other">Other</option>
       </select>
     </label>
@@ -1750,6 +1751,7 @@ details.collapsible > summary .sub-count {
         <option value="pickup">Pickup</option>
         <option value="projectile">Projectile</option>
         <option value="decoration">Decoration</option>
+        <option value="hud">HUD (hearts / icons)</option>
         <option value="other">Other</option>
       </select>
     </label>
@@ -2547,6 +2549,7 @@ const ROLE_COLOURS = {
   pickup:     '#a6761d',
   projectile: '#ff7f00',
   decoration: '#386cb0',
+  hud:        '#e7298a',
   other:      '#666666',
 };
 const ROLE_LABELS = {
@@ -2559,11 +2562,12 @@ const ROLE_LABELS = {
   pickup: 'Pickup',
   projectile: 'Projectile',
   decoration: 'Decoration',
+  hud: 'HUD (hearts / icons)',
   other: 'Other',
 };
 const ROLE_ORDER = [
   'player', 'npc', 'enemy', 'item', 'tool', 'powerup',
-  'pickup', 'projectile', 'decoration', 'other',
+  'pickup', 'projectile', 'decoration', 'hud', 'other',
 ];
 
 // Sprint-B — animation tagging.  `role` says which kind of sprite
@@ -2817,6 +2821,19 @@ function migrateBuilderFields(s) {
         walkSpeed: 1, jumpHeight: 20, maxHp: 0,
       },
     };
+  }
+  // Phase B finale — damage + HUD modules.  Disabled by default so
+  // older saves don't suddenly freeze on first playtest.
+  const mods = s.builder.modules || {};
+  if (mods && !mods.damage) {
+    mods.damage = { enabled: false,
+      config: { amount: 1, invincibilityFrames: 30 } };
+  }
+  if (mods && !mods.hud) {
+    mods.hud = { enabled: false, config: {} };
+  }
+  if (mods && !mods.doors) {
+    mods.doors = { enabled: false, config: { spawnX: 24, spawnY: 120 } };
   }
 }
 

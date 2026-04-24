@@ -132,12 +132,12 @@
       },
       {
         key: 'maxHp',
-        label: 'Max HP (0 = no HP system yet)',
+        label: 'Max HP (0 = no damage system)',
         type: 'int',
         min: 0,
-        max: 0,
-        help: 'HP / damage arrives in Phase B.',
-        readOnly: true,
+        max: 9,
+        help: '0 = the player never takes damage.  Set 1–9 and tick ' +
+          'the Damage module below to let enemies hurt the player.',
       },
     ],
     applyToTemplate(template, node, state) {
@@ -146,6 +146,7 @@
       const jumpHeight = A.clampInt(c.jumpHeight, 1, 60, 20);
       const startX     = A.clampInt(c.startX, 0, 240, 60);
       const startY     = A.clampInt(c.startY, 16, 200, 120);
+      const maxHp      = A.clampInt(c.maxHp, 0, 9, 0);
       template = A.replaceRegion(template, 'walk_speed', [
         '    unsigned char walk_speed = ' + walkSpeed + ';'
       ]);
@@ -158,6 +159,19 @@
         '    px = ' + startX + ';',
         '    py = ' + startY + ';'
       ]);
+      // HP on/off is flipped by whether maxHp is > 0 AND the damage
+      // module is enabled.  The damage module itself emits the
+      // collision + freeze logic; the player module only exposes the
+      // `PLAYER_MAX_HP` constant so the damage block can reference it.
+      const damage = state && state.builder && state.builder.modules &&
+        state.builder.modules.damage;
+      const damageOn = !!(damage && damage.enabled);
+      if (maxHp > 0 && damageOn) {
+        template = A.appendToSlot(template, 'declarations', [
+          '#define PLAYER_HP_ENABLED 1',
+          '#define PLAYER_MAX_HP ' + maxHp,
+        ].join('\n'));
+      }
       return template;
     },
   };
@@ -258,6 +272,18 @@
       'place the same sprite more than once — handy for three ' +
       'identical goombas.  Leave the list empty and the Builder ' +
       'will auto-place one of each non-player sprite for you.',
+    detailedHelp: [
+      'A scene instance is one sprite placement.  Each instance ' +
+      'points at a sprite definition (its art + role) and says ' +
+      'where it appears + what AI drives it.',
+      'Three enemies drawn as the same "goomba" sprite?  Add three ' +
+      'instances all pointing at the goomba.  One walks, one chases, ' +
+      'one stands still?  Pick the AI per instance.',
+      'Leaving the list empty falls back to auto-placement: one ' +
+      'copy of every non-player sprite, spread along the mid-line.  ' +
+      'Handy when you\'re starting a project; swap to explicit ' +
+      'instances once you want control.',
+    ],
     defaultConfig: {
       instances: [],   // [{ id, spriteIdx, x, y, ai }]
     },
@@ -518,6 +544,198 @@
   // playground (which is a no-op in chunk 2 — Phase B may add a
   // "ignore behaviour map" switch that actually disables the checks).
   // --------------------------------------------------------------------
+  // --------------------------------------------------------------------
+  // Damage — enemies hurt the player on touch (Phase B finale chunk A).
+  // Needs Player 1's Max HP set above 0; validator enforces.  When on,
+  // the module emits an AABB collision loop into per_frame that
+  // decrements player_hp and starts an invincibility window on hit,
+  // plus a freeze block that triggers when HP reaches 0.
+  // --------------------------------------------------------------------
+  modules['damage'] = {
+    label: 'Damage',
+    description: 'When Player 1 touches a sprite tagged Enemy, the ' +
+      'player loses HP and flashes briefly so you see the hit land.  ' +
+      'When HP reaches 0, the screen tints blue — game over.  Pair ' +
+      'with HUD to show hearts.',
+    detailedHelp: [
+      'Damage checks every frame whether Player 1 is overlapping an ' +
+      'Enemy-tagged sprite using an axis-aligned-bounding-box check ' +
+      '(AABB) — the standard platformer collision.',
+      'On a hit, Player 1 loses Damage-per-touch HP and becomes ' +
+      'invincible for Invincibility frames.  During invincibility, ' +
+      'enemies can walk through the player without triggering again.',
+      'When HP reaches 0, the player freezes, the screen tints pale ' +
+      'blue, and the game ends (matches the Win condition\'s pale-red ' +
+      'tint — same vocabulary, different outcome).',
+      'Requires Player 1\'s Max HP > 0; the Builder blocks Play if ' +
+      'you tick Damage without raising Max HP.',
+    ],
+    defaultConfig: {
+      amount: 1,
+      invincibilityFrames: 30,
+    },
+    schema: [
+      {
+        key: 'amount',
+        label: 'Damage per touch',
+        type: 'int',
+        min: 1, max: 9,
+        help: 'How much HP is lost per enemy touch.',
+      },
+      {
+        key: 'invincibilityFrames',
+        label: 'Invincibility after hit (frames — 60 = 1 sec)',
+        type: 'int',
+        min: 0, max: 120,
+        help: 'Player can\'t be hit again for this many frames after ' +
+          'each hit.  0 = instant repeat hits.',
+      },
+    ],
+    applyToTemplate(template, node, state) {
+      const c = (node && node.config) || {};
+      const amount = A.clampInt(c.amount, 1, 9, 1);
+      const iframes = A.clampInt(c.invincibilityFrames, 0, 120, 30);
+      template = A.appendToSlot(template, 'declarations', [
+        '#define DAMAGE_AMOUNT ' + amount,
+        '#define INVINCIBILITY_FRAMES ' + iframes,
+      ].join('\n'));
+      const body = [
+        '        // [builder] damage — enemies hurt the player on touch.',
+        '#if PLAYER_HP_ENABLED',
+        '        if (!player_dead && player_iframes == 0) {',
+        '            unsigned char dmg_hit = 0;',
+        '            for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
+        '                if (ss_role[i] != ROLE_ENEMY) continue;',
+        '                if (ss_y[i] >= 240) continue;',
+        '                if (px + (PLAYER_W << 3) <= ss_x[i]) continue;',
+        '                if (px >= ss_x[i] + (ss_w[i] << 3)) continue;',
+        '                if (py + (PLAYER_H << 3) <= ss_y[i]) continue;',
+        '                if (py >= ss_y[i] + (ss_h[i] << 3)) continue;',
+        '                dmg_hit = 1; break;',
+        '            }',
+        '            if (dmg_hit) {',
+        '                player_hp = (player_hp > DAMAGE_AMOUNT)',
+        '                          ? (player_hp - DAMAGE_AMOUNT) : 0;',
+        '                player_iframes = INVINCIBILITY_FRAMES;',
+        '                if (player_hp == 0) player_dead = 1;',
+        '            }',
+        '        } else if (player_iframes > 0) {',
+        '            player_iframes--;',
+        '        }',
+        '        if (player_dead) {',
+        '            jumping = 0; jmp_up = 0; prev_pad = 0xFF;',
+        '            walk_speed = 0; climb_speed = 0;',
+        '            // Greyscale + blue emphasis = "defeated" (win uses red).',
+        '            PPU_MASK = 0x1F | 0x80;',
+        '        }',
+        '#endif',
+      ].join('\n');
+      return A.appendToSlot(template, 'per_frame', body);
+    },
+  };
+
+  // --------------------------------------------------------------------
+  // HUD — draw N hearts at the top of the screen, one per remaining HP.
+  // Uses a sprite tagged `hud` on the Sprites page as the heart icon.
+  // Rendered via OAM sprites in the per-frame OAM loop; no PPU writes,
+  // no font-tile seed.  Active only when both HUD_ENABLED and
+  // PLAYER_HP_ENABLED are on — the template's #if gate enforces.
+  // --------------------------------------------------------------------
+  modules['hud'] = {
+    label: 'HUD (hearts)',
+    description: 'Show hearts at the top of the screen — one per ' +
+      'remaining HP.  Tag a small sprite as HUD on the Sprites page ' +
+      'to choose the heart icon.',
+    defaultConfig: {},
+    schema: [],
+    // No applyToTemplate — the template\'s built-in #if HUD_ENABLED
+    // block reads hud_tiles / hud_attrs directly from scene.inc.
+    // The server only emits those when a sprite has role=hud, so the
+    // Builder's job here is just to surface the module.
+  };
+
+  // --------------------------------------------------------------------
+  // Doors (Phase B finale chunk C, narrowed-scope MVP).  The full
+  // plan called for multi-background scene transitions — that's a
+  // bigger change (parallel nametable emission + runtime PPU swap)
+  // so this chunk ships the simpler variant: walking onto a DOOR
+  // tile teleports the player to a configured spawn point in the
+  // same background.  Still useful: secret passages, fall-off-map
+  // respawns, "portals" to another part of the map.  The multi-bg
+  // story slots cleanly on top once pupils ask for it.
+  // --------------------------------------------------------------------
+  modules['doors'] = {
+    label: 'Doors (teleport)',
+    description: 'Paint a tile as Door on the Behaviour page.  When ' +
+      'the player (or Player 2) walks onto it, they teleport to the ' +
+      'spawn point you set below.  Great for secret passages or a ' +
+      '"respawn point" after falling off the map.',
+    detailedHelp: [
+      'Doors are a tile-based event: whenever the player\'s centre ' +
+      'tile matches a behaviour marked Door, the player is moved to ' +
+      'the spawn point you configure here.',
+      'All doors share the same spawn point in this MVP — ' +
+      'per-door spawns are a future upgrade.  Useful patterns today: ' +
+      'paint a single Door tile in a wall for a secret passage, or ' +
+      'paint the row of tiles below your level as Doors to respawn ' +
+      'the player if they fall off the bottom.',
+      'Player 2 (when enabled) uses the same spawn point — either ' +
+      'player stepping onto a Door teleports to the configured ' +
+      'position.',
+    ],
+    defaultConfig: {
+      spawnX: 24,
+      spawnY: 120,
+    },
+    schema: [
+      {
+        key: 'spawnX',
+        label: 'Spawn X (0 = left, 240 = right)',
+        type: 'int',
+        min: 0, max: 240, step: 4,
+        help: 'Where the player appears after going through a door.',
+      },
+      {
+        key: 'spawnY',
+        label: 'Spawn Y (16 = top, 200 = bottom)',
+        type: 'int',
+        min: 16, max: 200, step: 4,
+        help: 'Y coordinate of the spawn point.',
+      },
+    ],
+    applyToTemplate(template, node, state) {
+      const c = (node && node.config) || {};
+      const spawnX = A.clampInt(c.spawnX, 0, 240, 24);
+      const spawnY = A.clampInt(c.spawnY, 16, 200, 120);
+      const body = [
+        '        // [builder] doors — step on a BEHAVIOUR_DOOR tile → teleport.',
+        '        {',
+        '            unsigned char bw_door_pcentre = behaviour_at(',
+        '                (unsigned int)((px + ((PLAYER_W << 3) >> 1)) >> 3),',
+        '                (unsigned int)((py + ((PLAYER_H << 3) >> 1)) >> 3));',
+        '            if (bw_door_pcentre == BEHAVIOUR_DOOR) {',
+        '                px = ' + spawnX + ';',
+        '                py = ' + spawnY + ';',
+        '                jumping = 0; jmp_up = 0;',
+        '            }',
+        '#if PLAYER2_ENABLED',
+        '            {',
+        '                unsigned char bw_door_p2centre = behaviour_at(',
+        '                    (unsigned int)((px2 + ((PLAYER2_W << 3) >> 1)) >> 3),',
+        '                    (unsigned int)((py2 + ((PLAYER2_H << 3) >> 1)) >> 3));',
+        '                if (bw_door_p2centre == BEHAVIOUR_DOOR) {',
+        '                    px2 = ' + spawnX + ';',
+        '                    py2 = ' + spawnY + ';',
+        '                    jumping2 = 0; jmp_up2 = 0;',
+        '                }',
+        '            }',
+        '#endif',
+        '        }',
+      ].join('\n');
+      return A.appendToSlot(template, 'per_frame', body);
+    },
+  };
+
   modules['behaviour_walls'] = {
     label: 'Walls from the Behaviour map',
     description: 'Tiles you paint Solid ground / Wall / Platform / ' +
@@ -702,6 +920,18 @@
         pickups: {
           enabled: false,
           config: {},
+        },
+        damage: {
+          enabled: false,
+          config: Object.assign({}, modules['damage'].defaultConfig),
+        },
+        hud: {
+          enabled: false,
+          config: {},
+        },
+        doors: {
+          enabled: false,
+          config: Object.assign({}, modules['doors'].defaultConfig),
         },
         behaviour_walls: {
           enabled: true,

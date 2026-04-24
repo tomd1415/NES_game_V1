@@ -1515,3 +1515,369 @@ P2.
   scrolling lands for real levels.
 - **Player-vs-player collision.**  Not implemented.  The two
   characters pass through each other for now.
+
+### Chunk 5 polish — 2026-04-24 same-day fixes
+
+Three follow-ups from the first pupil test after Player 2 shipped:
+
+- **Player drag regression — fixed.**  When chunk 5 renamed the
+  player handle's `kind` from `'player'` to `'player1'` /
+  `'player2'`, `draggableSprite()` was left checking the old
+  string.  That silently returned null for both player handles so
+  drags on the preview did nothing — the release update ran but
+  with a stale sprite reference, leaving the marker where it
+  started.  Fix is one line: match the two new kinds.
+- **Player 2 keyboard map on the browser emulator.**  The jsnes
+  embed was only wiring pad 1.  The `map()` helper now returns
+  `{pad, button}` pairs so the switch table can target either
+  controller.  Layout picked for zero-conflict with Player 1:
+  - **P1** keeps Arrow keys + `F` = A + `D` = B + `Enter` = Start + `Right Shift` = Select.
+  - **P2** uses `I` / `J` / `K` / `L` for D-pad, `O` = A, `U` = B, `1` = Start, `2` = Select.
+  The IJKL cluster is the classic NES emulator "player 2" layout,
+  and none of P2's keys collide with P1's.
+- **Controls surfaced to pupils in two places.**  The
+  `emu-status` strip under the emulator canvas was a single
+  one-line hint; it now renders both players' keys with
+  `<kbd>`-styled chips and a CSS rule (`body.emu-single-player
+  #emu-p2-controls { display: none; }`) that hides the P2 line
+  when the current ROM didn't wire P2 in, so the hint never
+  advertises keys that do nothing.  The Help dialog (`?` button)
+  grew an **Emulator controls** section with a proper two-row
+  table — D-pad / A / B / Start / Select columns — so pupils can
+  look up the mapping without launching a game.  A footnote
+  reminds pupils that P2 keys only activate when the module is
+  ticked and a second Player sprite exists.
+
+### Verification — chunk 5 polish
+
+- `node --check` clean on the extracted inline JS of builder.html.
+- Same `/tmp/builder-player2-smoke.mjs` from chunk 5 still passes
+  all five assertions — both P1-only (49168 bytes, 45 ms) and
+  P2-enabled (49168 bytes, 44 ms) builds compile cleanly via
+  real cc65.  The polish was pure UI/drag-handler and didn't
+  touch the assembler or template paths.
+- Inline-style lint warnings caught by the IDE on the help
+  dialog's new bits were moved into the existing inline `<style>`
+  block (`.help-controls-heading`, `.help-controls-lead`,
+  `.controls-table`, `.help-controls-foot` + `kbd` chip
+  styling) so the page is clean of additions on the
+  project-wide-inline-style warning list.
+
+---
+
+## Builder — 2026-04-24 Phase B finale chunk A (HP, damage, HUD)
+
+First of four chunks planned in
+[builder-plan-phase-b-finale.md](builder-plan-phase-b-finale.md).
+Enemies become threats; a visible heart counter shows the
+consequences.  The mechanics are on-by-opt-in so pre-chunk-A
+projects compile byte-for-byte unchanged (verified by sha1sum
+against the baseline ROM).
+
+- **New role `ROLE_HUD = 10`** on the Sprites page's role
+  dropdown + in `ROLE_CODES` on the server.  First sprite tagged
+  HUD becomes the heart icon the HUD render loop paints N times
+  across the top of the screen (one per remaining HP).
+- **Server emits HUD glyphs** when a sprite has role=hud:
+  `#define HUD_ENABLED 1` + `HUD_W` / `HUD_H` + `hud_tiles[]` /
+  `hud_attrs[]`.  Otherwise `HUD_ENABLED 0` stub so the
+  template's gate compiles cleanly.
+- **Template additions** (all behind `#if PLAYER_HP_ENABLED` /
+  `#if HUD_ENABLED`):
+  - Three new globals: `player_hp`, `player_iframes`,
+    `player_dead` (HP count, invincibility timer, game-over
+    latch).
+  - HP init in `main()`: `player_hp = PLAYER_MAX_HP`.
+  - HUD render loop inside the OAM write block — one copy of
+    the hud sprite per HP, stepping right from (8, 8).
+  - The declarations slot moved to *before* the first `#if`
+    block so `#define PLAYER_HP_ENABLED 1` reaches the
+    preprocessor in time — an ordering bug caught by the
+    smoke-test and fixed in the same commit.
+- **Builder modules:**
+  - `damage` (new, off by default) — fields: damage amount
+    (1–9), invincibility frames (0–120).  `applyToTemplate`
+    emits `#define DAMAGE_AMOUNT` / `#define INVINCIBILITY_FRAMES`
+    into the declarations slot plus an AABB enemy-vs-player
+    collision loop into per_frame; a hit decrements `player_hp` by
+    `DAMAGE_AMOUNT` and starts the iframes timer; HP == 0 → `player_dead = 1`; `if (player_dead)`
+    freeze block zeros walk/climb/jump and tints the screen
+    greyscale + blue (`PPU_MASK = 0x1F | 0x80`).  Blue = defeated,
+    paired with win_condition's red = victory, for a consistent
+    visual vocabulary.
+  - `hud` (new, off by default) — UI-only, no
+    applyToTemplate; the template's `#if HUD_ENABLED` gate
+    fires as soon as a HUD-tagged sprite exists and the module
+    is ticked.
+  - `players.player1.maxHp` — schema unlocked from readOnly
+    (was 0..0) to a regular 0–9 integer.  The player module's
+    `applyToTemplate` appends `#define PLAYER_HP_ENABLED 1` +
+    `#define PLAYER_MAX_HP <n>` only when maxHp > 0 AND the
+    damage module is enabled, keeping the preprocessor gate
+    conservative.
+- **Three new validators:**
+  - `hp-zero-with-damage` (error) — damage on but maxHp = 0.
+    Blocks Play; message *"Raise Player 1 → Max HP above 0, or
+    turn Damage off."*
+  - `damage-no-enemies` (warn) — damage on but no sprite is
+    tagged Enemy.  Game builds; nothing to collide with.
+  - `hud-no-sprite` (warn) — HUD on but no sprite is tagged
+    HUD.  Game builds; hearts silently won't render.
+- **Migration is non-destructive**: `migrateBuilderFields` on
+  both sprites.html and index.html back-fills `damage` and
+  `hud` modules (disabled, default config) onto existing saves
+  without touching pupil state.
+
+### Verification — chunk A
+
+`/tmp/builder-chunk-a-smoke.mjs` runs eight assertions, all pass:
+
+1. `hp-zero-with-damage` error fires on damage-without-HP state.
+2. `damage-no-enemies` warn fires on damage-on / no-enemy-sprite.
+3. `hud-no-sprite` warn fires on HUD-on / no-HUD-sprite.
+4. Default state does not leak `#define PLAYER_HP_ENABLED 1`.
+5. Damage + maxHp=3 state emits every expected macro +
+   collision loop + blue-tint freeze block.
+6. `/play` default build compiles via real cc65 (49168 bytes,
+   46 ms).
+7. `/play` damage build compiles (49168 bytes, 45 ms).
+8. `/play` damage + HUD + hud-tagged-sprite build compiles
+   (49168 bytes, 44 ms).
+
+Manual: sha1sum of the stock Step_Playground ROM is unchanged
+when platformer.c is swapped in with no Builder modules ticked.
+
+### What's next — chunks B, C, D
+
+- **Chunk B — runtime animations on scene sprites.**  Tagged
+  walk/idle animations actually cycle frames on enemies /
+  pickups.  Touches `playground_server.py` for per-role
+  animation tables.
+- **Chunk C — doors & scene transitions MVP.**  Tile-based
+  doors; walking onto a DOOR tile swaps to a target background.
+  Needs multi-nametable emission from the server.
+- **Chunk D — polish.**  Eject-to-Code button, per-module
+  detailed help popover, sprite-preview picker in the scene
+  instance dropdown.
+
+All three are planned in detail in
+[builder-plan-phase-b-finale.md](builder-plan-phase-b-finale.md).
+
+---
+
+## Builder — 2026-04-24 Phase B finale chunk B (runtime animations)
+
+Second of four chunks.  The `role + style` animation tags we
+shipped in Phase B chunk 3 finally drive visible frames on scene
+sprites — enemies walking, cycling through their tagged animation.
+
+- **MVP scope:** `enemy + walk` only.  Other `(role, style)`
+  pairs (`enemy + idle`, `pickup + idle`, `npc + walk/idle`) are a
+  follow-up micro-chunk; scope here kept narrow to limit the
+  template / server surface change.
+- **New server helper `_resolve_tagged_animation(state, role, style)`**
+  finds the first animation tagged that way, drops frames whose
+  size mismatches the first frame, and returns `(frames, fps, w, h)`.
+  Sibling to the existing `_resolve_animation` used by the player's
+  walk/jump.
+- **Server emits** `#define ANIM_ENEMY_WALK_COUNT/TICKS/W/H` plus
+  `anim_enemy_walk_tiles[]` / `anim_enemy_walk_attrs[]` when a
+  matching tagged animation exists; stub `COUNT 0` otherwise so
+  the template's `#if` gate compiles cleanly.  Also emits two new
+  mutable arrays per scene instance — `ss_anim_frame[N]` and
+  `ss_anim_tick[N]`, both zero-initialised.
+- **Template changes** (all `#if ANIM_ENEMY_WALK_COUNT`-gated):
+  - A per-frame tick advancer that walks every scene sprite,
+    picks up enemies whose size matches the animation's, and
+    advances `ss_anim_tick[i]` → wraps `ss_anim_frame[i]` when
+    it hits `ANIM_ENEMY_WALK_TICKS`.
+  - The static-sprite render loop is duplicated behind
+    `#if ANIM_ENEMY_WALK_COUNT > 0` / `#else` so the animation
+    variant can swing a `src_tiles` / `src_attrs` pointer between
+    `ss_tiles[off]` (static) and `anim_enemy_walk_tiles[frame*W*H]`
+    (animated) per instance.  The `#else` branch is a character-
+    for-character copy of the pre-chunk-B loop so a ROM with no
+    tagged animation compiles byte-identical to today's
+    baseline (verified by sha1sum round-trip against
+    Step_Playground's own `main.c`).
+- **Validator `enemy-walk-anim-size-mismatch` (warn)** fires when
+  an enemy+walk animation exists but no sprite tagged Enemy
+  shares its W×H.  Animation silently fails the template's size
+  check today; the validator tells the pupil why the frames
+  aren't playing.
+
+### Verification — chunk B
+
+`/tmp/builder-chunk-b-smoke.mjs` runs three assertions, all pass:
+
+1. `enemy-walk-anim-size-mismatch` warn fires on 2×2 enemy
+   sprite + 3×3 walk animation frames.
+2. No-animation `/play` build compiles via real cc65 (49168
+   bytes, 42 ms) — byte-identical pipeline to pre-chunk-B.
+3. `enemy + walk` tagged animation + two enemy instances → ROM
+   compiles (49168 bytes, 42 ms) and scene.inc includes
+   `ANIM_ENEMY_WALK_COUNT 3` + the frame tables.
+
+Manual: Step_Playground's stock `main.c` replaced by the updated
+`platformer.c` (no tagged animation in its state) compiles to
+sha1sum `c77d502b7439`, identical to the baseline — no
+regression.
+
+### Deferred from chunk B (follow-up micro-chunks)
+
+- **Other (role, style) pairs:** `enemy + idle` for static enemies,
+  `pickup + idle` for bouncing collectibles, `npc + walk` /
+  `npc + idle`.  Same emission pattern; just more symbols.
+- **Direction-aware animation:** left-facing enemies could cycle
+  a `walk_left` vs `walk_right` table.  Today the existing
+  attr XOR with `plrdir` handles flip-H for static sprites;
+  animated enemies don't know about direction yet.
+- **Per-instance animation override** — pick one animation per
+  scene instance rather than "first tagged wins".  Needs the
+  Scene editor's instance row to grow a small animation picker.
+
+---
+
+## Builder — 2026-04-24 Phase B finale chunk C (teleport doors)
+
+Third chunk of the Phase-B-finale plan, shipped at a narrowed
+scope from the original multi-background vision.  The full
+"walk from Room A into Room B" vision needs `build_nam()` to
+emit multiple nametables + `graphics.s` to be parameterised +
+runtime PPU-register swaps — a ~500-line delta that deserves
+its own chunk.  The MVP here ships the tile-event half of
+doors: **stepping on a DOOR tile teleports the player to a
+configured spawn point in the same background.**
+
+Still valuable for pupils: secret passages, "fall off the map
+→ respawn at start", portal loops.  Teaches the tile-based
+event pattern that the multi-background story will build on.
+
+- **New `doors` module** with `spawnX` / `spawnY` config.
+  `applyToTemplate` emits a per-frame block that reads
+  `BEHAVIOUR_DOOR` at the player's centre tile; on match the
+  player is teleported to `(spawnX, spawnY)` and any in-progress
+  jump is cancelled.  Player 2 gets the same check in an
+  `#if PLAYER2_ENABLED` block so either player can step through.
+- **New validator `doors-no-door-tiles` (error)** — module on
+  but no DOOR behaviour tile painted → teleport can never
+  trigger; Play is blocked until the pupil paints a door or
+  ticks the module off.
+- **Migration:** non-destructive back-fill in
+  `migrateBuilderFields` adds a disabled `doors` module to
+  existing saves on first load from any page.
+
+### Verification — chunk C
+
+`/tmp/builder-chunk-c-smoke.mjs` runs four assertions, all pass:
+
+1. `doors-no-door-tiles` error fires when doors on but no door
+   painted.
+2. Validator goes silent once a door tile is painted.
+3. Assembler emits the teleport marker + spawn coord
+   substitutions + `BEHAVIOUR_DOOR` check + the
+   `#if PLAYER2_ENABLED` P2 branch.
+4. `/play` end-to-end build compiles via real cc65 (49168 bytes,
+   50 ms).
+
+### Deferred from chunk C (future work)
+
+- **Multi-background doors.**  The real goal: step onto a door,
+  the nametable swaps to a new room.  Needs `build_nam()` to
+  emit one nametable per `state.backgrounds[]` entry, the stock
+  `graphics.s` / `load_background()` to be parameterised over
+  nametable addresses, and a runtime palette swap path.
+  Planned; not in this chunk.
+- **Per-door spawn points.**  All doors currently share a single
+  spawn (module-level config).  A richer version would let each
+  door paint configure its own `targetBg` + `(x, y)` — the
+  Behaviour page already supports custom-per-tile metadata, so
+  this is mostly UI.
+- **Door animations / sound on transition.**  Out of scope
+  entirely; waits on the FamiStudio chunk.
+
+---
+
+## Builder — 2026-04-24 Phase B finale chunk D (polish)
+
+Final chunk in the Phase-B-finale plan.  Three small UX
+improvements landed together; none is big enough to warrant
+its own chunk but together they noticeably sand the rough
+edges off the Builder.
+
+- **📝 Open as Code (advanced)** in the File ▾ menu (new
+  *Advanced* section under *Save & restore*).  Assembles the
+  current state's `main.c` via the Builder assembler, saves
+  the result to `state.customMainC`, and navigates to
+  `code.html?stay=1`.  One-way by design (matches teacher Q1's
+  decision back in the chunk-1 plan): after ejecting, the
+  Code page owns the game; returning to the Builder is fine
+  but C edits don't round-trip.  Confirm dialog explains the
+  one-way nature before committing.
+- **Per-module detailed help popover (ℹ️).**  Modules can
+  opt into a longer-form explanation via a new optional
+  `detailedHelp` field on the module definition (either a
+  string or an array of paragraphs).  When present, an ℹ️
+  button appears next to the module header; clicking it
+  toggles a bordered panel under the header with the
+  paragraphs rendered one-per-`<p>`.  Panel toggles
+  independently of the card's expand/collapse so pupils can
+  read the help without opening every setting at once.
+  Three modules ship with `detailedHelp` today — **Damage**,
+  **Doors**, and **Scene** — chosen because they're the
+  most-questioned in pupil sessions.
+- **Sprite thumbnail on each scene-instance row.**  The
+  Scene module's per-instance dropdown sat next to a role
+  badge; pupils had to read names to know what they were
+  placing.  Chunk-D adds a 24×24 canvas before the dropdown
+  that paints the currently-selected sprite via
+  `NesRender.drawSpriteIntoCtx`.  Updates live when the
+  dropdown changes; no new picker dialog, just instant
+  visual confirmation.
+
+### Verification — chunk D
+
+- `node --check` clean on the extracted inline JS of
+  builder.html and on `builder-modules.js`.
+- All five prior smoke-test suites still pass:
+  - Chunk A (HP + damage + HUD) — 49168 bytes, 47 ms.
+  - Chunk B (runtime animations) — 49168 bytes, 44 ms.
+  - Chunk C (teleport doors) — 49168 bytes, 40 ms.
+  - Scene preview — NesRender headless + same-sprite-twice
+    still compiles.
+  - Player 2 — 49168 bytes, 48 ms.
+  No regression across any of the chunks shipped this
+  session.
+
+### Phase B finale — status
+
+- **Chunk A — HP + damage + HUD:** shipped.
+- **Chunk B — Runtime animations (enemy+walk):** shipped.
+- **Chunk C — Teleport doors (narrowed MVP):** shipped
+  (multi-background deferred).
+- **Chunk D — Polish (eject / help / thumbs):** shipped.
+
+Phase B is effectively done.  The Builder now ships with a
+proper game-feel feature set: placed enemies animate, touching
+them hurts, collected pickups can win the level, doors
+teleport, two-player is supported, the preview canvas shows
+real art over the real background, and help is one click
+away.  Remaining items on the Phase-B backlog that were
+explicitly descoped:
+
+- **Multi-background doors.**  Full room-to-room transitions
+  need `build_nam()` to emit N nametables and the template's
+  `load_background()` to be parameterised.  Deferred.
+- **Per-player animations for P2.**  P2 still uses its static
+  layout.  Either share P1's walk cycle (wrong art when
+  they're different sprites) or emit a second animation
+  table set — neither is free.
+- **Other `(role, style)` animation pairs.**  Only
+  `enemy + walk` is wired in chunk B; `enemy + idle`,
+  `pickup + idle`, `npc + walk`, `npc + idle` are a
+  micro-chunk each when pupils ask.
+- **HP for Player 2.**  The `maxHp` field is already in state
+  shape; wiring it up is a damage-block copy behind
+  `#if PLAYER2_ENABLED`.
+- **Sound.**  Waits on the FamiStudio engine landing as a
+  separate sprint.

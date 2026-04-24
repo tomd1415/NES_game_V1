@@ -746,6 +746,41 @@ def _resolve_animation(state, kind, pw, ph):
     return good, fps
 
 
+def _resolve_tagged_animation(state, role, style):
+    """Find the first animation tagged (role, style) and flatten it.
+
+    Returns (frames, fps, w, h) on success, or None if no matching
+    animation exists, its frame list is empty, or the frames don't
+    all share a single (W, H).  Phase B finale chunk B uses this to
+    emit per-(role, style) animation tables without needing the
+    animation to be assigned via `animation_assignments`.
+    """
+    anims = state.get("animations") or []
+    sprites = state.get("sprites") or []
+    hit = next((a for a in anims
+                if (a.get("role") or "") == role
+                and (a.get("style") or "") == style), None)
+    if not hit:
+        return None
+    frame_idxs = hit.get("frames") or []
+    frame_sprites = []
+    for fi in frame_idxs:
+        if 0 <= fi < len(sprites):
+            frame_sprites.append(sprites[fi])
+    if not frame_sprites:
+        return None
+    # All frames must share the same W×H or the emitted table's
+    # indexing breaks.  Drop mismatches; if nothing's left, bail.
+    w = int(frame_sprites[0].get("width", 0))
+    h = int(frame_sprites[0].get("height", 0))
+    good = [sp for sp in frame_sprites
+            if int(sp.get("width", 0)) == w and int(sp.get("height", 0)) == h]
+    if not good:
+        return None
+    fps = max(1, min(60, int(hit.get("fps", 8) or 8)))
+    return good, fps, w, h
+
+
 def _flatten_sprite(sp):
     """Flatten a sprite's cells (row-major) into (tiles, attrs) byte lists."""
     w = int(sp["width"])
@@ -766,6 +801,8 @@ ROLE_CODES = {
     "projectile": 7,
     "decoration": 8,
     "other":      9,
+    "hud":       10,   # Phase B finale — chunk A.  Tagged sprites drive
+                       #                  the HUD render (hearts etc.).
 }
 
 
@@ -805,6 +842,7 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         "#define ROLE_PROJECTILE 7",
         "#define ROLE_DECORATION 8",
         "#define ROLE_OTHER      9",
+        "#define ROLE_HUD        10",
         "",
     ]
 
@@ -909,6 +947,70 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             "",
         ]
 
+    # --- HUD icon (Phase B finale chunk A) -------------------------------
+    # First sprite tagged `hud` on the Sprites page becomes the heart
+    # icon used by the HP/HUD module.  No tagged HUD sprite → emit the
+    # HUD_ENABLED = 0 stub so the template's #if gates compile clean.
+    hud_sprite = next((sp for sp in sprites if (sp.get("role") or "").lower() == "hud"), None)
+    if hud_sprite is not None:
+        hw = int(hud_sprite["width"])
+        hh = int(hud_sprite["height"])
+        hcells = hud_sprite["cells"]
+        hud_tiles = [cell_tile(hcells[r][c]) for r in range(hh) for c in range(hw)]
+        hud_attrs = [cell_attr(hcells[r][c]) for r in range(hh) for c in range(hw)]
+        lines += [
+            "#define HUD_ENABLED 1",
+            f"#define HUD_W {hw}",
+            f"#define HUD_H {hh}",
+            "",
+            f"static const unsigned char hud_tiles[{hw*hh}] = {{",
+            "    " + ", ".join(f"0x{t:02X}" for t in hud_tiles),
+            "};",
+            f"static const unsigned char hud_attrs[{hw*hh}] = {{",
+            "    " + ", ".join(f"0x{a:02X}" for a in hud_attrs),
+            "};",
+            "",
+        ]
+    else:
+        lines += ["#define HUD_ENABLED 0", ""]
+
+    # --- Tagged scene animations (Phase B finale chunk B) -----------
+    # For each (role, style) pair the template cares about, look for
+    # an animation tagged that way on the Sprites page.  If one
+    # exists and all its frames share a single (W, H), emit the frame
+    # table plus the count/ticks/W/H defines.  The template gates on
+    # `ANIM_<ROLE>_<STYLE>_COUNT > 0` so absent pairs cost nothing.
+    # Chunk B scope is enemy+walk only; other pairs (enemy+idle,
+    # pickup+idle, npc+walk) are a follow-up micro-chunk.
+    anim_targets = [("enemy", "walk")]
+    for role, style in anim_targets:
+        token = f"{role.upper()}_{style.upper()}"
+        resolved = _resolve_tagged_animation(state, role, style)
+        if resolved is None:
+            lines.append(f"#define ANIM_{token}_COUNT 0")
+            lines.append("")
+            continue
+        frames, fps, aw, ah = resolved
+        ticks = max(1, round(60 / fps))
+        flat_t, flat_a = [], []
+        for sp in frames:
+            t, a = _flatten_sprite(sp)
+            flat_t += t
+            flat_a += a
+        lines += [
+            f"#define ANIM_{token}_COUNT {len(frames)}",
+            f"#define ANIM_{token}_TICKS {ticks}",
+            f"#define ANIM_{token}_W {aw}",
+            f"#define ANIM_{token}_H {ah}",
+            f"static const unsigned char anim_{role}_{style}_tiles[{len(flat_t)}] = {{",
+            "    " + ", ".join(f"0x{t:02X}" for t in flat_t),
+            "};",
+            f"static const unsigned char anim_{role}_{style}_attrs[{len(flat_a)}] = {{",
+            "    " + ", ".join(f"0x{a:02X}" for a in flat_a),
+            "};",
+            "",
+        ]
+
     # --- Static sprites --------------------------------------------------
     n = len(scene_sprites)
     lines.append(f"#define NUM_STATIC_SPRITES {n}")
@@ -926,7 +1028,9 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             "static const unsigned char ss_tiles[1]  = { 0 };\n"
             "static const unsigned char ss_attrs[1]  = { 0 };\n"
             "static const unsigned char ss_role[1]   = { 0 };\n"
-            "static const unsigned char ss_flying[1] = { 0 };"
+            "static const unsigned char ss_flying[1] = { 0 };\n"
+            "static unsigned char ss_anim_frame[1]   = { 0 };\n"
+            "static unsigned char ss_anim_tick[1]    = { 0 };"
         )
         lines.append(stub)
     else:
@@ -963,6 +1067,11 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         # ss_x / ss_y are mutable so movement / AI snippets can modify
         # positions at runtime; cc65's DATA segment is copied ROM->RAM at
         # startup per the nes.cfg linker script.
+        # Per-instance animation state — one frame counter + one
+        # tick counter per scene sprite.  Zero-initialised; the
+        # template advances them when a matching tagged animation
+        # exists (Phase B finale chunk B).
+        anim_zero = [0] * n
         lines += [
             arr("ss_x", xs, mutable=True),
             arr("ss_y", ys, mutable=True),
@@ -973,6 +1082,8 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             arr("ss_attrs", attrs_flat, as_hex=True),
             arr("ss_role", roles),
             arr("ss_flying", flying),
+            arr("ss_anim_frame", anim_zero, mutable=True),
+            arr("ss_anim_tick", anim_zero, mutable=True),
         ]
 
     lines += ["", "#endif", ""]

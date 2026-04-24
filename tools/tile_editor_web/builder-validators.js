@@ -266,6 +266,104 @@
       return null;
     },
 
+    // V10: Damage module on but player has 0 maxHp → emitted macro
+    // `PLAYER_HP_ENABLED` never flips on and the emitted damage code
+    // does nothing.  Error so the pupil fixes one or the other.
+    function hpZeroWithDamage(state) {
+      if (!moduleEnabled(state, 'damage')) return null;
+      const p1 = moduleNode(state, 'players.player1');
+      const maxHp = (p1 && p1.config && p1.config.maxHp) | 0;
+      if (maxHp > 0) return null;
+      return {
+        id: 'hp-zero-with-damage',
+        severity: 'error',
+        message: 'Damage is on but Player 1\'s Max HP is 0 — enemies ' +
+          'will never hurt anyone.',
+        fix: 'Raise Player 1 → Max HP above 0, or turn Damage off.',
+        jumpTo: null,
+      };
+    },
+
+    // V11: Damage on but no Enemy-tagged sprite exists.  Warn —
+    // game builds but nothing ever hits the player.
+    function damageNoEnemies(state) {
+      if (!moduleEnabled(state, 'damage')) return null;
+      if (countSpritesByRole(state, 'enemy') > 0) return null;
+      return {
+        id: 'damage-no-enemies',
+        severity: 'warn',
+        message: 'Damage is on, but no sprite is tagged Enemy.',
+        fix: 'Tag a sprite as Enemy on the Sprites page so there\'s ' +
+          'something to take damage from.',
+        jumpTo: 'sprites.html',
+      };
+    },
+
+    // V14: doors ticked but no DOOR behaviour tile painted on the
+    // active background → teleport will never trigger.  Error so
+    // the pupil fixes one or the other.
+    function doorsNoDoorTiles(state) {
+      if (!moduleEnabled(state, 'doors')) return null;
+      if (countTilesByBehaviourName(state, 'door') > 0) return null;
+      return {
+        id: 'doors-no-door-tiles',
+        severity: 'error',
+        message: 'Doors is on but no tile is painted Door on this ' +
+          'background — the teleport will never trigger.',
+        fix: 'Open the Behaviour page, pick Door from the type list, ' +
+          'and paint at least one tile.',
+        jumpTo: 'behaviour.html',
+      };
+    },
+
+    // V13: a tagged enemy+walk animation exists but no enemy-roled
+    // sprite has its matching W×H.  Warn — the animation simply
+    // won't play (template's size check filters mismatches) but the
+    // pupil probably meant it to.  Checks frames[0]'s dimensions
+    // against every role=enemy sprite; match any = OK.
+    function enemyWalkAnimSizeMismatch(state) {
+      const anims = (state && state.animations) || [];
+      const sprites = (state && state.sprites) || [];
+      const anim = anims.find(a => a && a.role === 'enemy' && a.style === 'walk');
+      if (!anim || !Array.isArray(anim.frames) || anim.frames.length === 0) return null;
+      const first = sprites[anim.frames[0] | 0];
+      if (!first) return null;
+      const w = first.width | 0;
+      const h = first.height | 0;
+      const match = sprites.some(sp =>
+        sp && sp.role === 'enemy' &&
+        (sp.width | 0) === w && (sp.height | 0) === h);
+      if (match) return null;
+      return {
+        id: 'enemy-walk-anim-size-mismatch',
+        severity: 'warn',
+        message: 'An Enemy + Walk animation exists (' + w + '×' + h +
+          ') but no sprite tagged Enemy shares that size — the ' +
+          'animation will not play on any of your enemies.',
+        fix: 'Either resize an Enemy sprite to ' + w + '×' + h + ' or ' +
+          'change the animation\'s frames on the Sprites page so its ' +
+          'sprites match your enemy size.',
+        jumpTo: 'sprites.html',
+      };
+    },
+
+    // V12: HUD on but no HUD-tagged sprite.  Warn — HUD silently
+    // won\'t render.  Upgraded to error would block a valid state
+    // where the pupil has ticked HUD but isn\'t ready yet; warn is
+    // nicer to work-in-progress projects.
+    function hudNoSprite(state) {
+      if (!moduleEnabled(state, 'hud')) return null;
+      if (countSpritesByRole(state, 'hud') > 0) return null;
+      return {
+        id: 'hud-no-sprite',
+        severity: 'warn',
+        message: 'HUD is on, but no sprite is tagged HUD.',
+        fix: 'Tag a small sprite (a heart, a coin icon…) as HUD on ' +
+          'the Sprites page so the hearts have something to draw.',
+        jumpTo: 'sprites.html',
+      };
+    },
+
     // V9: Player 2 is enabled but fewer than 2 sprites are tagged
     // Player on the Sprites page.  Error — the server would fall back
     // to single-player, but the pupil's intent was 2-player so we

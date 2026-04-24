@@ -1677,6 +1677,18 @@ function migrateBuilderFields(s) {
       },
     };
   }
+  // Phase B finale — damage + HUD modules, disabled by default.
+  const mods = s.builder.modules || {};
+  if (mods && !mods.damage) {
+    mods.damage = { enabled: false,
+      config: { amount: 1, invincibilityFrames: 30 } };
+  }
+  if (mods && !mods.hud) {
+    mods.hud = { enabled: false, config: {} };
+  }
+  if (mods && !mods.doors) {
+    mods.doors = { enabled: false, config: { spawnX: 24, spawnY: 120 } };
+  }
 }
 
 function defaultBehaviourTypes() {

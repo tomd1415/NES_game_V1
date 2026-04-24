@@ -87,6 +87,19 @@ unsigned char sy;
 unsigned char tile;
 unsigned char attr;
 
+//@ insert: declarations
+
+#if PLAYER_HP_ENABLED
+/* Phase B finale chunk A — HP + damage.  The Builder's damage module
+ * writes `#define PLAYER_HP_ENABLED 1` + `#define PLAYER_MAX_HP <n>`
+ * + `#define DAMAGE_AMOUNT <n>` + `#define INVINCIBILITY_FRAMES <n>`
+ * into the declarations slot above; that flips these globals on.
+ * All of them are zeroed at init inside main(). */
+unsigned char player_hp;
+unsigned char player_iframes;
+unsigned char player_dead;
+#endif
+
 #if PLAYER2_ENABLED
 /* Phase B chunk 5 — Player 2 state.  Inlined alongside P1 globals so
  * reading them side-by-side makes the "same thing, second name"
@@ -104,8 +117,6 @@ unsigned char plrdir2;
 unsigned char walk_speed2 = 1;
 //<<
 #endif
-
-//@ insert: declarations
 
 // Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
 // changes we reset frame/tick so a new animation always plays from its
@@ -241,6 +252,12 @@ void main(void) {
     jmp_up2 = 0;
     prev_pad2 = 0;
     plrdir2 = 0x00;
+#endif
+
+#if PLAYER_HP_ENABLED
+    player_hp = PLAYER_MAX_HP;
+    player_iframes = 0;
+    player_dead = 0;
 #endif
 
     //@ insert: init
@@ -611,6 +628,50 @@ void main(void) {
         }
 #endif
 
+#if HUD_ENABLED && PLAYER_HP_ENABLED
+        /* --- HUD: hearts across the top of the screen ------------
+         * One copy of the hud sprite per remaining HP, starting
+         * at (8, 8) and stepping right.  Uses OAM sprites so no
+         * PPU writes are needed — fits the vblank budget. */
+        {
+            unsigned char hud_x = 8;
+            unsigned char hud_y = 8;
+            unsigned char hud_h;
+            unsigned char hud_r, hud_c;
+            for (hud_h = 0; hud_h < player_hp; hud_h++) {
+                for (hud_r = 0; hud_r < HUD_H; hud_r++) {
+                    for (hud_c = 0; hud_c < HUD_W; hud_c++) {
+                        OAM_DATA = hud_y + (hud_r << 3);
+                        OAM_DATA = hud_tiles[hud_r * HUD_W + hud_c];
+                        OAM_DATA = hud_attrs[hud_r * HUD_W + hud_c];
+                        OAM_DATA = hud_x + (hud_c << 3);
+                    }
+                }
+                hud_x += (HUD_W << 3) + 4;
+            }
+        }
+#endif
+
+#if ANIM_ENEMY_WALK_COUNT > 1
+        /* Phase B finale chunk B — advance enemy-walk animation ticks.
+         * Only enemies whose sprite size matches the tagged animation
+         * cycle frames; mismatched sizes fall through to static tiles
+         * in the render loop below. */
+        for (i = 0; i < NUM_STATIC_SPRITES; i++) {
+            if (ss_role[i] != ROLE_ENEMY) continue;
+            if (ss_w[i] != ANIM_ENEMY_WALK_W) continue;
+            if (ss_h[i] != ANIM_ENEMY_WALK_H) continue;
+            ss_anim_tick[i]++;
+            if (ss_anim_tick[i] >= ANIM_ENEMY_WALK_TICKS) {
+                ss_anim_tick[i] = 0;
+                ss_anim_frame[i]++;
+                if (ss_anim_frame[i] >= ANIM_ENEMY_WALK_COUNT) {
+                    ss_anim_frame[i] = 0;
+                }
+            }
+        }
+#endif
+
         // --- Static scene sprites ---------------------------------------
         // Scene sprites stay u8 world-space (inside screen 1) — as the
         // camera scrolls away from screen 1 the world_to_screen helpers
@@ -618,6 +679,50 @@ void main(void) {
         // NES OAM "off-screen" sentinel) and the sprite simply scrolls
         // out of view.  Matches pupil mental model: sprites live in the
         // world, not glued to the camera.
+        //
+        // Phase B finale chunk B: when any tagged scene animation
+        // exists, a second copy of the render loop runs where the
+        // tile / attr source can swing between ss_tiles (static) and
+        // anim_<role>_<style>_tiles (animated) per instance.  The
+        // #if / #else keeps the original baseline path byte-identical
+        // when no tagged animation is emitted.
+#if ANIM_ENEMY_WALK_COUNT > 0
+        for (i = 0; i < NUM_STATIC_SPRITES; i++) {
+            const unsigned char *src_tiles;
+            const unsigned char *src_attrs;
+            off = ss_offset[i];
+            sw = ss_w[i];
+            sh = ss_h[i];
+            src_tiles = ss_tiles + off;
+            src_attrs = ss_attrs + off;
+            if (ss_role[i] == ROLE_ENEMY
+             && sw == ANIM_ENEMY_WALK_W
+             && sh == ANIM_ENEMY_WALK_H) {
+                unsigned int anim_off = (unsigned int)ss_anim_frame[i]
+                                      * ANIM_ENEMY_WALK_W
+                                      * ANIM_ENEMY_WALK_H;
+                src_tiles = anim_enemy_walk_tiles + anim_off;
+                src_attrs = anim_enemy_walk_attrs + anim_off;
+            }
+            for (r = 0; r < sh; r++) {
+                for (c = 0; c < sw; c++) {
+#ifdef SCROLL_BUILD
+                    OAM_DATA = world_to_screen_y(
+                        (unsigned int)ss_y[i] + (r << 3));
+                    OAM_DATA = src_tiles[r * sw + c];
+                    OAM_DATA = src_attrs[r * sw + c];
+                    OAM_DATA = world_to_screen_x(
+                        (unsigned int)ss_x[i] + (c << 3));
+#else
+                    OAM_DATA = ss_y[i] + (r << 3);
+                    OAM_DATA = src_tiles[r * sw + c];
+                    OAM_DATA = src_attrs[r * sw + c];
+                    OAM_DATA = ss_x[i] + (c << 3);
+#endif
+                }
+            }
+        }
+#else
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             off = ss_offset[i];
             sw = ss_w[i];
@@ -640,6 +745,7 @@ void main(void) {
                 }
             }
         }
+#endif
 
 #ifdef SCROLL_BUILD
         // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR

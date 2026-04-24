@@ -343,6 +343,90 @@ label { -webkit-user-select: none; user-select: none; }
 .emu-status {
   color: var(--muted); font-size: 0.88em;
   margin-top: 8px; text-align: center;
+  line-height: 1.7;
+}
+.emu-status > div + div { margin-top: 2px; }
+.emu-status kbd {
+  display: inline-block;
+  font-family: 'Menlo', 'Consolas', monospace;
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 3px; padding: 0 5px;
+  font-size: 0.9em;
+}
+/* Hide the Player 2 control hint when single-player is active so the
+ * status panel doesn't lie about what's wired up.  Toggled by a body
+ * class that openEmulator() sets based on the payload's playerSpriteIdx2. */
+body.emu-single-player #emu-p2-controls { display: none; }
+
+/* Help dialog — controls table for both players. */
+.help-controls-heading { margin-top: 16px; color: var(--accent); }
+.help-controls-lead { color: var(--muted); margin-bottom: 6px; }
+.controls-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 6px;
+  font-size: 0.9em;
+}
+.controls-table th, .controls-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.controls-table thead th {
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 0.88em;
+  border-bottom: 1px solid var(--border);
+}
+.controls-table kbd {
+  display: inline-block;
+  font-family: 'Menlo', 'Consolas', monospace;
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 3px; padding: 0 5px;
+  font-size: 0.9em;
+}
+.help-controls-foot { color: var(--muted); font-size: 0.9em; }
+
+/* Chunk-D polish: optional per-module info popover. */
+.module-info-btn {
+  margin-right: 6px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 0.85em;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+.module-info-btn:hover {
+  background: var(--panel2);
+  color: var(--info);
+  border-color: var(--info);
+}
+.module-detailed-help {
+  display: none;
+  background: var(--panel2);
+  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+  font-size: 0.9em;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.module-detailed-help p { margin: 0 0 8px; }
+.module-detailed-help p:last-child { margin-bottom: 0; }
+.module.help-open .module-detailed-help { display: block; }
+
+/* Scene-instance thumbnail — chunk-D polish. */
+.scene-instance-thumb {
+  image-rendering: pixelated;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  width: 24px; height: 24px;
+  flex: 0 0 auto;
 }
 </style>
 </head>
@@ -371,6 +455,9 @@ label { -webkit-user-select: none; user-select: none; }
           <div class="tb-section-label">Save &amp; restore</div>
           <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code, builder selections. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
           <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+          <hr class="tb-inline-divider">
+          <div class="tb-section-label">Advanced</div>
+          <button type="button" id="btn-eject-to-code" title="Copy the Builder's generated main.c to the Code page so you can hand-edit it. After ejecting, the Builder's settings stop affecting your game — the Code page owns it.">📝 Open as Code (advanced)</button>
         </div>
       </details>
     </div>
@@ -420,7 +507,10 @@ label { -webkit-user-select: none; user-select: none; }
     <button type="button" class="close-fab" id="emu-close" title="Close">×</button>
   </div>
   <canvas id="emu-canvas" width="256" height="240"></canvas>
-  <div class="emu-status" id="emu-status">Controls: arrow keys move, F jumps (A), D is B.</div>
+  <div class="emu-status" id="emu-status">
+    <div><strong>Player 1:</strong> Arrow keys move · <kbd>F</kbd>&nbsp;= jump (A) · <kbd>D</kbd>&nbsp;= B · <kbd>Enter</kbd>&nbsp;= Start · <kbd>Right&nbsp;Shift</kbd>&nbsp;= Select</div>
+    <div id="emu-p2-controls"><strong>Player 2:</strong> <kbd>I</kbd>/<kbd>J</kbd>/<kbd>K</kbd>/<kbd>L</kbd> move · <kbd>O</kbd>&nbsp;= jump (A) · <kbd>U</kbd>&nbsp;= B · <kbd>1</kbd>&nbsp;= Start · <kbd>2</kbd>&nbsp;= Select</div>
+  </div>
 </dialog>
 
 <!-- Help dialog (tabbed so the feedback form has somewhere to live) -->
@@ -442,6 +532,43 @@ label { -webkit-user-select: none; user-select: none; }
       lists anything that would stop your game from working.</li>
     <li>When it's all green, press <strong>▶ Play</strong>.</li>
   </ol>
+
+  <h3 class="help-controls-heading">Emulator controls</h3>
+  <p class="help-controls-lead">
+    The browser emulator maps keyboard keys to NES controllers.
+    Player 1 uses the right side of the keyboard; Player 2 uses the
+    <kbd>I</kbd>&nbsp;<kbd>J</kbd>&nbsp;<kbd>K</kbd>&nbsp;<kbd>L</kbd>
+    cluster so two pupils can share one keyboard.
+  </p>
+  <table class="controls-table">
+    <thead>
+      <tr><th></th><th>D-pad</th><th>A (jump)</th><th>B</th><th>Start</th><th>Select</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Player 1</strong></td>
+        <td>Arrow keys</td>
+        <td><kbd>F</kbd></td>
+        <td><kbd>D</kbd></td>
+        <td><kbd>Enter</kbd></td>
+        <td><kbd>Right&nbsp;Shift</kbd></td>
+      </tr>
+      <tr>
+        <td><strong>Player 2</strong></td>
+        <td><kbd>I</kbd>&nbsp;<kbd>J</kbd>&nbsp;<kbd>K</kbd>&nbsp;<kbd>L</kbd></td>
+        <td><kbd>O</kbd></td>
+        <td><kbd>U</kbd></td>
+        <td><kbd>1</kbd></td>
+        <td><kbd>2</kbd></td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="help-controls-foot">
+    Player 2 only responds when you've ticked <strong>Player 2</strong>
+    under Players and have at least two sprites tagged Player on the
+    Sprites page.
+  </p>
+
   <details class="feedback-block">
     <summary>💬 Leave feedback on the Builder</summary>
     <div class="feedback-form-host"></div>
@@ -614,16 +741,48 @@ label { -webkit-user-select: none; user-select: none; }
     const title = document.createElement('div');
     title.className = 'title';
     title.textContent = def.label || dottedId;
+    header.appendChild(cb);
+    header.appendChild(title);
+    // Optional info-popover button (ℹ️) — appears when the module
+    // exposes a `detailedHelp` field.  Click to toggle a panel under
+    // the header with longer-form explanation.  Stops the click from
+    // bubbling so toggling help doesn't also expand/collapse the card.
+    if (def.detailedHelp) {
+      const info = document.createElement('button');
+      info.type = 'button';
+      info.className = 'module-info-btn';
+      info.title = 'What does this module do?';
+      info.textContent = 'ℹ️';
+      info.addEventListener('click', (e) => {
+        e.stopPropagation();
+        card.classList.toggle('help-open');
+      });
+      header.appendChild(info);
+    }
     const chevron = document.createElement('span');
     chevron.className = 'chevron';
     chevron.textContent = '▸';
-    header.appendChild(cb);
-    header.appendChild(title);
     header.appendChild(chevron);
     header.addEventListener('click', () => {
       card.classList.toggle('expanded');
     });
     card.appendChild(header);
+    // Collapsible help panel (chunk-D polish).  Renders before the
+    // body so the explanation reads top-to-bottom.  Visibility is
+    // driven by the `.help-open` class set by the info button above.
+    if (def.detailedHelp) {
+      const helpPanel = document.createElement('div');
+      helpPanel.className = 'module-detailed-help';
+      // `detailedHelp` can be a string or an array of paragraphs.
+      const paras = Array.isArray(def.detailedHelp)
+        ? def.detailedHelp : [def.detailedHelp];
+      for (const p of paras) {
+        const para = document.createElement('p');
+        para.textContent = p;
+        helpPanel.appendChild(para);
+      }
+      card.appendChild(helpPanel);
+    }
 
     // Body (description + fields + submodules)
     const body = document.createElement('div');
@@ -823,7 +982,22 @@ label { -webkit-user-select: none; user-select: none; }
     row.className = 'scene-instance';
 
     // Sprite picker — shows every non-player sprite; the same sprite
-    // is allowed to appear in multiple rows.
+    // is allowed to appear in multiple rows.  Chunk-D polish: a
+    // thumbnail of the currently-selected sprite sits beside the
+    // dropdown so pupils don't have to read sprite names to know
+    // what they're placing.
+    const thumb = document.createElement('canvas');
+    thumb.className = 'scene-instance-thumb';
+    thumb.width = 24; thumb.height = 24;
+    const paintThumb = () => {
+      const sp = (state.sprites || [])[inst.spriteIdx];
+      if (sp && window.NesRender) {
+        window.NesRender.drawSpriteIntoCtx(
+          thumb.getContext('2d'), sp, state, 24, 24);
+      }
+    };
+    paintThumb();
+
     const spSel = document.createElement('select');
     placeable.forEach(e => {
       const opt = document.createElement('option');
@@ -835,6 +1009,7 @@ label { -webkit-user-select: none; user-select: none; }
     spSel.value = String(inst.spriteIdx);
     spSel.addEventListener('change', () => {
       inst.spriteIdx = parseInt(spSel.value, 10) | 0;
+      paintThumb();
       // Role changed → AI options may change; redraw this row.
       rerender();
       scheduleSave();
@@ -897,6 +1072,7 @@ label { -webkit-user-select: none; user-select: none; }
       scheduleSave();
     });
 
+    row.appendChild(thumb);
     row.appendChild(spSel);
     row.appendChild(roleBadge);
     row.appendChild(xIn);
@@ -1117,12 +1293,13 @@ label { -webkit-user-select: none; user-select: none; }
     return { x: cx, y: cy };
   }
 
-  // A draggable is a scene instance (has `spriteIdx`) or the player
-  // handle (has `kind === 'player'`).  Both expose `.sp`, `.x`, `.y`
-  // getters/setters so the drag code treats them uniformly.
+  // A draggable is a scene instance (has `spriteIdx`) or a player
+  // handle (kind === 'player1' / 'player2' since chunk 5 — the older
+  // singular 'player' kind is gone).  Handles expose `.sp` directly;
+  // scene instances look up their sprite via spriteIdx.
   function draggableSprite(d) {
     if (!d) return null;
-    if (d.kind === 'player') return d.sp;
+    if (d.kind === 'player1' || d.kind === 'player2') return d.sp;
     return (state.sprites || [])[d.spriteIdx] || null;
   }
 
@@ -1397,6 +1574,10 @@ label { -webkit-user-select: none; user-select: none; }
           (body.log || '').split('\n').slice(-8).join('\n'));
         if (body.rom_b64) {
           const rom = decodeRomBase64(body.rom_b64);
+          // Show or hide the Player 2 control hint based on whether
+          // this build actually wired P2 in.  Single-player games
+          // shouldn't advertise keys that do nothing.
+          document.body.classList.toggle('emu-single-player', playerIdx2 < 0);
           openEmulator(rom);
         }
       } else {
@@ -1459,21 +1640,37 @@ label { -webkit-user-select: none; user-select: none; }
     for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
     nes.loadROM(romStr);
 
+    // Keyboard → NES pad mapping.  Player 1 keeps the arrow-keys +
+    // F / D layout pupils have built muscle memory for.  Player 2
+    // uses the I / J / K / L cluster with U (B) + O (A) — the
+    // classic "player 2" layout on NES emulators, and specifically
+    // chosen to avoid every Player 1 key so two pupils can share
+    // one keyboard without a chord war.
     function map(code) {
       switch (code) {
-        case 'ArrowUp':    return jsnes.Controller.BUTTON_UP;
-        case 'ArrowDown':  return jsnes.Controller.BUTTON_DOWN;
-        case 'ArrowLeft':  return jsnes.Controller.BUTTON_LEFT;
-        case 'ArrowRight': return jsnes.Controller.BUTTON_RIGHT;
-        case 'KeyF':       return jsnes.Controller.BUTTON_A;
-        case 'KeyD':       return jsnes.Controller.BUTTON_B;
-        case 'Enter':      return jsnes.Controller.BUTTON_START;
-        case 'ShiftRight': return jsnes.Controller.BUTTON_SELECT;
+        // --- Player 1 (pad index 1 in jsnes) ---
+        case 'ArrowUp':    return { pad: 1, button: jsnes.Controller.BUTTON_UP };
+        case 'ArrowDown':  return { pad: 1, button: jsnes.Controller.BUTTON_DOWN };
+        case 'ArrowLeft':  return { pad: 1, button: jsnes.Controller.BUTTON_LEFT };
+        case 'ArrowRight': return { pad: 1, button: jsnes.Controller.BUTTON_RIGHT };
+        case 'KeyF':       return { pad: 1, button: jsnes.Controller.BUTTON_A };
+        case 'KeyD':       return { pad: 1, button: jsnes.Controller.BUTTON_B };
+        case 'Enter':      return { pad: 1, button: jsnes.Controller.BUTTON_START };
+        case 'ShiftRight': return { pad: 1, button: jsnes.Controller.BUTTON_SELECT };
+        // --- Player 2 (pad index 2 in jsnes) ---
+        case 'KeyI':       return { pad: 2, button: jsnes.Controller.BUTTON_UP };
+        case 'KeyK':       return { pad: 2, button: jsnes.Controller.BUTTON_DOWN };
+        case 'KeyJ':       return { pad: 2, button: jsnes.Controller.BUTTON_LEFT };
+        case 'KeyL':       return { pad: 2, button: jsnes.Controller.BUTTON_RIGHT };
+        case 'KeyO':       return { pad: 2, button: jsnes.Controller.BUTTON_A };
+        case 'KeyU':       return { pad: 2, button: jsnes.Controller.BUTTON_B };
+        case 'Digit1':     return { pad: 2, button: jsnes.Controller.BUTTON_START };
+        case 'Digit2':     return { pad: 2, button: jsnes.Controller.BUTTON_SELECT };
       }
-      return -1;
+      return null;
     }
-    const kd = (e) => { const b = map(e.code); if (b >= 0) nes.buttonDown(1, b); };
-    const ku = (e) => { const b = map(e.code); if (b >= 0) nes.buttonUp(1, b); };
+    const kd = (e) => { const m = map(e.code); if (m) nes.buttonDown(m.pad, m.button); };
+    const ku = (e) => { const m = map(e.code); if (m) nes.buttonUp(m.pad, m.button); };
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup', ku);
 
@@ -1570,6 +1767,38 @@ label { -webkit-user-select: none; user-select: none; }
     });
     document.getElementById('btn-load-all').addEventListener('click', () => {
       document.getElementById('file-input-all').click();
+    });
+    // Eject to Code — assemble the current main.c, save it to
+    // state.customMainC, and navigate to the Code page.  Once
+    // ejected the Builder's settings stop driving the game (the
+    // Code page's customMainC takes priority in the /play path);
+    // the pupil can come back to the Builder any time but their
+    // hand-edits won't round-trip.  One-way by design, per
+    // builder-plan.md Q1.
+    document.getElementById('btn-eject-to-code').addEventListener('click', () => {
+      if (!templateText) {
+        alert('Template still loading — try again in a moment.');
+        return;
+      }
+      const ok = confirm(
+        'Open the current game as Code?\n\n' +
+        'The Builder will assemble your modules into main.c and hand ' +
+        'it to the Code page for hand-editing.  After this, the ' +
+        'Code page is in charge — your Builder ticks/boxes will stop ' +
+        'changing your game.\n\n' +
+        'Your project and its sprites stay intact.  You can come ' +
+        'back to the Builder but any C edits you made won\'t ' +
+        'flow back.\n\n' +
+        'Continue?');
+      if (!ok) return;
+      try {
+        const assembled = window.BuilderAssembler.assemble(state, templateText);
+        state.customMainC = assembled;
+        Storage.saveCurrent(state);
+        location.href = 'code.html?stay=1';
+      } catch (e) {
+        alert('Could not assemble main.c: ' + (e.message || e));
+      }
     });
     document.getElementById('file-input-all').addEventListener('change', async (e) => {
       const f = e.target.files[0];
