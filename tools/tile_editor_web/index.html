@@ -2861,6 +2861,16 @@ function assignColourToSlot(kind, palIdx, slot, nesIdx) {
   renderTileset();
   renderTileEditor();
   renderNametable();
+  // The 0/1/2/3 colour-picker buttons above the tile editor read their
+  // background from activePreviewPalette(); without this call they kept
+  // the stale colour until the pupil clicked one of them, which looked
+  // like the palette change hadn't taken effect.
+  refreshColourButtons();
+  // Universal BG also drives the big swatch next to the BG-colour
+  // button — keep it in sync when slot 0 moves.
+  if (kind === 'universal' || (kind === 'bg' && slot === 0)) {
+    renderBgColourSwatch();
+  }
 }
 
 function persistPaletteEditor() {
