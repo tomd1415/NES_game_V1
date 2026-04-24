@@ -2219,3 +2219,44 @@ explicitly descoped:
   `#if PLAYER2_ENABLED`.
 - **Sound.**  Waits on the FamiStudio engine landing as a
   separate sprint.
+
+### Dialogue — 2026-04-24 auto-close + pause options
+
+Driven by pupil feedback that open dialogue boxes felt like a
+trap (you had to guess when to press B again) *and* that the
+player kept walking off-screen while reading.  Two new config
+fields on the `dialogue` module solve both:
+
+- **`pauseOnOpen`** (bool, default **on**) — the moment the box
+  appears the module snapshots `walk_speed`, `climb_speed`, and
+  (under `PLAYER2_ENABLED`) `walk_speed2` into
+  `bw_dialog_saved_*` globals, then zeros them every open frame
+  alongside `jumping` / `jmp_up` / `prev_pad` (= `0xFF` so a
+  held A doesn't queue a jump).  Close restores the snapshot
+  exactly, so movement resumes as though nothing interrupted.
+- **`autoClose`** (int 0–240, default **0** = off) — when set,
+  `bw_dialog_timer` is initialised on open and decremented every
+  `per_frame` tick; hitting 0 sets the same `should_close` flag
+  as a manual B press, so the close / restore path is shared.
+  B still closes early when the timer is set — a generous
+  default for pupils who read fast.
+
+Both paths are macro-gated (`BW_DIALOG_PAUSE` 0/1 and
+`BW_DIALOG_AUTOCLOSE` 0–240), so the code that's compiled when
+dialogue is off is unchanged — baseline ROM still hashes
+`c77d502b7439`.  The P2-specific save/restore / freeze lines sit
+inside `#if PLAYER2_ENABLED`, so a single-player project
+doesn't emit dead references to `walk_speed2` etc.
+
+**Tests.**  `tools/builder-tests/round2-dialogue.mjs` grew five
+new cases (B1–B5) walking the full (pause × timer) matrix:
+defaults emit `BW_DIALOG_PAUSE 1` + save/restore,
+pause + timer emits the timer init + decrement, no-pause + timer
+drops the freeze define, no-pause + no-timer keeps only the
+`b_edge` close path, and `autoClose = 9999` clamps to 240.
+`node tools/builder-tests/run-all.mjs` stays green with the new
+cases rolled in.
+
+**Docs.**  [BUILDER_GUIDE.md](BUILDER_GUIDE.md) §2 gains an
+"Extra config" subsection under `dialogue` that spells out both
+fields, their defaults, and the macros that gate them.

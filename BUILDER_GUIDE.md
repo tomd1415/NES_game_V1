@@ -163,6 +163,23 @@ the bottom of the screen.  Press B again to close.  See §4 for
 the **critical font-tile convention** — pupils have to paint
 letter glyphs on the Backgrounds page for text to render.
 
+Extra config:
+
+- **Pause while open** (`pauseOnOpen`, default on) — freezes both
+  players in place (zeros `walk_speed` / `climb_speed`, cancels
+  any in-progress jump, swallows the current pad edge) while the
+  box is up, restoring the snapshot on close.  Untick for a
+  floating-hint style where the player keeps moving.
+- **Auto-close after N frames** (`autoClose`, 0–240, default 0 =
+  off) — counts down once per `per_frame` tick and closes the box
+  when it hits zero.  B still closes early even when a timer is
+  set, so pupils who read fast aren't stuck waiting.
+
+Emitted macros control the extra code paths so the baseline ROM
+stays byte-identical when dialogue is off:
+`BW_DIALOG_PAUSE` (0/1) gates the save/restore + freeze block,
+and `BW_DIALOG_AUTOCLOSE` (0–240) gates the timer decrement.
+
 ### `win_condition`
 How the pupil's game ends.  Two types:
 

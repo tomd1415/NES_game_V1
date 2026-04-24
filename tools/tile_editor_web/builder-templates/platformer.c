@@ -114,10 +114,28 @@ unsigned char player2_dead;
  * slot consumes it and pokes the nametable during the main
  * vblank window (no double-waitvsync → no frame skip).  `_open`
  * tracks whether a text box is on screen so the B press toggles;
- * `_prev_b` stores last frame's pad for edge detection. */
+ * `_prev_b` stores last frame's pad for edge detection.
+ *
+ * Round-2 follow-up (auto-close + pause): when BW_DIALOG_AUTOCLOSE
+ * is > 0 the text closes itself after that many frames; B still
+ * closes early.  When BW_DIALOG_PAUSE is 1 we snapshot the
+ * player(s)' walk / climb speeds on open and zero them each
+ * frame while the text is visible, then restore on close.  Both
+ * flags are independent — pupils pick whichever combination
+ * they want. */
 unsigned char bw_dialog_open;
 unsigned char bw_dialog_prev_b;
 unsigned char bw_dialog_cmd;
+#if BW_DIALOG_AUTOCLOSE > 0
+unsigned char bw_dialog_timer;
+#endif
+#if BW_DIALOG_PAUSE
+unsigned char bw_dialog_saved_walk;
+unsigned char bw_dialog_saved_climb;
+#if PLAYER2_ENABLED
+unsigned char bw_dialog_saved_walk2;
+#endif
+#endif
 #endif
 
 #if BW_DOORS_MULTIBG_ENABLED
@@ -358,6 +376,9 @@ void main(void) {
     bw_dialog_open = 0;
     bw_dialog_prev_b = 0;
     bw_dialog_cmd = 0;
+#if BW_DIALOG_AUTOCLOSE > 0
+    bw_dialog_timer = 0;
+#endif
 #endif
 
 #if BW_DOORS_MULTIBG_ENABLED

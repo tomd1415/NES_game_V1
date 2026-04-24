@@ -108,6 +108,87 @@ function mkState({ withNpc = true, dialogueOn = false, text = 'HELLO' } = {}) {
   }
   console.log('✓ A dialogue assembler: HELLO → bytes emit, vblank-writes pattern used');
 }
+
+// ----- autoClose + pauseOnOpen combinations -----------------------------
+// Each case exercises one quadrant of the (pause × autoClose) matrix and
+// asserts the exact #define values + presence/absence of the save-restore
+// freeze block so the four behaviours can't regress silently.
+function assembleWithDialog(overrides) {
+  const s = mkState({ dialogueOn: true, text: 'HI' });
+  Object.assign(s.builder.modules.dialogue.config, overrides);
+  return window.BuilderAssembler.assemble(s, tpl);
+}
+// Default config (pauseOnOpen=true, autoClose=0) — this is what a pupil
+// sees if they just tick the module and never open the config form.
+{
+  const out = assembleWithDialog({});
+  if (!/^#define BW_DIALOG_PAUSE 1$/m.test(out)) {
+    console.error('FAIL B1a: default should emit BW_DIALOG_PAUSE 1'); process.exit(1);
+  }
+  if (!/^#define BW_DIALOG_AUTOCLOSE 0$/m.test(out)) {
+    console.error('FAIL B1b: default should emit BW_DIALOG_AUTOCLOSE 0'); process.exit(1);
+  }
+  if (!/bw_dialog_saved_walk = walk_speed;/.test(out)) {
+    console.error('FAIL B1c: default pause=on should snapshot walk_speed'); process.exit(1);
+  }
+  if (!/walk_speed = bw_dialog_saved_walk;/.test(out)) {
+    console.error('FAIL B1d: default pause=on should restore walk_speed on close'); process.exit(1);
+  }
+  console.log('✓ B1 defaults: pause=1, autoClose=0, save/restore emitted');
+}
+// Pause on + timer on (e.g. 120 frames ≈ 2s) — text freezes the world
+// AND the box auto-closes after the delay.  B may still close it early.
+{
+  const out = assembleWithDialog({ pauseOnOpen: true, autoClose: 120 });
+  if (!/^#define BW_DIALOG_AUTOCLOSE 120$/m.test(out)) {
+    console.error('FAIL B2a: autoClose=120 should emit matching define'); process.exit(1);
+  }
+  if (!/bw_dialog_timer = BW_DIALOG_AUTOCLOSE;/.test(out)) {
+    console.error('FAIL B2b: expected timer assignment on open'); process.exit(1);
+  }
+  if (!/bw_dialog_timer--;/.test(out)) {
+    console.error('FAIL B2c: expected per-frame timer decrement'); process.exit(1);
+  }
+  console.log('✓ B2 pause+timer: timer init + decrement present alongside pause');
+}
+// Pause off + timer on — floating-hint style that disappears on its own.
+{
+  const out = assembleWithDialog({ pauseOnOpen: false, autoClose: 60 });
+  if (!/^#define BW_DIALOG_PAUSE 0$/m.test(out)) {
+    console.error('FAIL B3a: pauseOnOpen=false → BW_DIALOG_PAUSE 0'); process.exit(1);
+  }
+  if (!/^#define BW_DIALOG_AUTOCLOSE 60$/m.test(out)) {
+    console.error('FAIL B3b: autoClose=60 should emit matching define'); process.exit(1);
+  }
+  // The freeze/save code is guarded by #if BW_DIALOG_PAUSE so at cc65
+  // build-time it simply drops out, but the source text still contains
+  // the #if lines themselves.  The marker we assert on is the define.
+  console.log('✓ B3 no-pause+timer: BW_DIALOG_PAUSE 0, timer active');
+}
+// Pause off + timer off — plain "hint text, B to dismiss" mode, no
+// world-freeze.  Mostly a sanity check that nothing assumes pause.
+{
+  const out = assembleWithDialog({ pauseOnOpen: false, autoClose: 0 });
+  if (!/^#define BW_DIALOG_PAUSE 0$/m.test(out)) {
+    console.error('FAIL B4a: expected BW_DIALOG_PAUSE 0'); process.exit(1);
+  }
+  if (!/^#define BW_DIALOG_AUTOCLOSE 0$/m.test(out)) {
+    console.error('FAIL B4b: expected BW_DIALOG_AUTOCLOSE 0'); process.exit(1);
+  }
+  // B-press path must still exist — close logic keys off should_close.
+  if (!/unsigned char should_close = b_edge;/.test(out)) {
+    console.error('FAIL B4c: b_edge close path missing'); process.exit(1);
+  }
+  console.log('✓ B4 no-pause+no-timer: minimal emission, B still closes');
+}
+// Clamp: autoClose should clamp to [0, 240].
+{
+  const out = assembleWithDialog({ autoClose: 9999 });
+  if (!/^#define BW_DIALOG_AUTOCLOSE 240$/m.test(out)) {
+    console.error('FAIL B5: autoClose should clamp to 240'); process.exit(1);
+  }
+  console.log('✓ B5 autoClose clamps to 240');
+}
 // /play end-to-end
 const srv = spawn('python3',
   [path.join(ROOT, 'tools', 'playground_server.py')],

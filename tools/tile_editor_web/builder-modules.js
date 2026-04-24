@@ -831,6 +831,8 @@
     defaultConfig: {
       text: 'HELLO',
       proximity: 2,
+      pauseOnOpen: true,
+      autoClose: 0,
     },
     schema: [
       {
@@ -848,6 +850,23 @@
         help: 'How close the player must be (in tile units) before ' +
           'B opens the dialog.',
       },
+      {
+        key: 'pauseOnOpen',
+        label: 'Pause the game while the dialogue is open',
+        type: 'bool',
+        help: 'When ticked, neither player can move / jump while the ' +
+          'text box is showing — classic RPG feel.  Untick for a ' +
+          'floating hint that lets the player keep moving around.',
+      },
+      {
+        key: 'autoClose',
+        label: 'Auto-close after (frames; 0 = never)',
+        type: 'int',
+        min: 0, max: 240,
+        help: '0 = the text stays until the pupil presses B again.  ' +
+          '60 = about 1 second.  240 = about 4 seconds.  B still ' +
+          'closes the box early even when this is set.',
+      },
     ],
     detailedHelp: [
       'Dialogue renders text one tile per character using your ' +
@@ -858,10 +877,16 @@
       'indices on the Backgrounds page tile set (one glyph per ' +
       'tile).  You do not have to paint every letter — characters ' +
       'whose tile is blank just show as empty.',
-      'The text box sits near the bottom of the screen and stays ' +
-      'until the pupil presses B again.  All NPC-tagged sprites ' +
-      'share the same dialog text in this MVP; per-NPC text is a ' +
-      'future upgrade.',
+      'Pause while open is on by default: both players freeze in ' +
+      'place until the box closes.  Untick it for floating hint ' +
+      'text that lets the player keep walking.',
+      'Auto-close works with any Pause setting.  Set it to 0 to ' +
+      'wait for a B press; set it to any frame count up to 240 ' +
+      '(~4 seconds) for a timed pop-up.  B still closes early even ' +
+      'when auto-close is on — a generous default if pupils read ' +
+      'faster than the timer.',
+      'All NPC-tagged sprites share the same dialog text in this ' +
+      'MVP; per-NPC text is a future upgrade.',
     ],
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
@@ -870,6 +895,8 @@
       // margin on each side.
       const text = rawText.slice(0, 28);
       const proximity = A.clampInt(c.proximity, 1, 6, 2);
+      const autoClose = A.clampInt(c.autoClose, 0, 240, 0);
+      const pauseOn = (c.pauseOnOpen === undefined) ? true : !!c.pauseOnOpen;
       // Emit bytes as hex so unusual characters (if the pupil typed
       // lowercase or punctuation outside ASCII-printable) don't
       // break the cc65 source.  The null terminator comes for free
@@ -885,16 +912,26 @@
         '#define BW_DIALOG_COL 2',
         '#define BW_DIALOG_PROXIMITY ' + proximity,
         '#define BW_DIALOG_WIDTH 28',
+        '#define BW_DIALOG_AUTOCLOSE ' + autoClose,
+        '#define BW_DIALOG_PAUSE ' + (pauseOn ? 1 : 0),
         'static const unsigned char bw_dialogue_text[] = { ' +
           bytes.join(', ') + ' };',
       ].join('\n'));
       // Per-frame: detect the B-edge + NPC proximity, set a
-      // pending-command flag (1 = draw, 2 = clear).  The template's
-      // vblank_writes slot consumes the flag during the main
-      // waitvsync window — doing the PPU writes THERE is essential:
-      // the older version called draw_text() (which itself calls
-      // waitvsync + toggles PPU_MASK) from per_frame, causing a
-      // double-vblank hiccup and visible sprite stutter.
+      // pending-command flag (1 = draw, 2 = clear).  The vblank_writes
+      // slot later does the actual PPU poke — keeping draw_text() out
+      // of per_frame is essential (double-waitvsync = frame stutter,
+      // see the regression-guard in round2-dialogue.mjs).
+      //
+      // Round-2 follow-up additions, driven by the BW_DIALOG_AUTOCLOSE
+      // / BW_DIALOG_PAUSE macros emitted above:
+      //   * AUTOCLOSE > 0 → bw_dialog_timer counts down every frame
+      //     the dialog is open and triggers a close when it hits 0.
+      //   * PAUSE == 1   → on open we snapshot walk/climb speeds to
+      //     bw_dialog_saved_*; every open frame we zero them + cancel
+      //     any in-progress jump; on close we restore from the
+      //     snapshot.  Works symmetrically for Player 2 when
+      //     PLAYER2_ENABLED is on.
       const perFrame = [
         '        // [builder] dialogue — NPC interaction via B press.',
         '        // Detects the trigger here; the actual PPU text write',
@@ -905,10 +942,50 @@
         '            unsigned char b_edge = (pad & 0x40) && !(bw_dialog_prev_b & 0x40);',
         '            bw_dialog_prev_b = pad;',
         '            if (bw_dialog_open) {',
-        '                if (b_edge) {',
+        '                /* Close conditions: manual B press OR the',
+        '                 * auto-close timer just hit zero.  B wins',
+        '                 * ties (closes the box immediately even if',
+        '                 * the timer would have closed it next frame). */',
+        '                unsigned char should_close = b_edge;',
+        '#if BW_DIALOG_AUTOCLOSE > 0',
+        '                if (bw_dialog_timer > 0) {',
+        '                    bw_dialog_timer--;',
+        '                    if (bw_dialog_timer == 0) should_close = 1;',
+        '                }',
+        '#endif',
+        '                if (should_close) {',
         '                    bw_dialog_cmd = 2;   /* clear */',
         '                    bw_dialog_open = 0;',
+        '#if BW_DIALOG_PAUSE',
+        '                    /* Restore the speeds we snapshot on open. */',
+        '                    walk_speed = bw_dialog_saved_walk;',
+        '                    climb_speed = bw_dialog_saved_climb;',
+        '#if PLAYER2_ENABLED',
+        '                    walk_speed2 = bw_dialog_saved_walk2;',
+        '#endif',
+        '#endif',
         '                }',
+        '#if BW_DIALOG_PAUSE',
+        '                else {',
+        '                    /* Still open → keep everyone frozen.  Zeroing',
+        '                     * walk_speed stops horizontal motion next',
+        '                     * frame; zeroing jumping/jmp_up kills any',
+        '                     * in-progress ascent; prev_pad = 0xFF blocks',
+        '                     * fresh edge-triggered jumps while the text',
+        '                     * is showing. */',
+        '                    walk_speed = 0;',
+        '                    climb_speed = 0;',
+        '                    jumping = 0;',
+        '                    jmp_up = 0;',
+        '                    prev_pad = 0xFF;',
+        '#if PLAYER2_ENABLED',
+        '                    walk_speed2 = 0;',
+        '                    jumping2 = 0;',
+        '                    jmp_up2 = 0;',
+        '                    prev_pad2 = 0xFF;',
+        '#endif',
+        '                }',
+        '#endif',
         '            } else if (b_edge) {',
         '                unsigned char px_tile = (px + ((PLAYER_W << 3) >> 1)) >> 3;',
         '                unsigned char py_tile = (py + ((PLAYER_H << 3) >> 1)) >> 3;',
@@ -925,6 +1002,18 @@
         '                    if (dx + dy <= BW_DIALOG_PROXIMITY) {',
         '                        bw_dialog_cmd = 1;   /* draw */',
         '                        bw_dialog_open = 1;',
+        '#if BW_DIALOG_AUTOCLOSE > 0',
+        '                        bw_dialog_timer = BW_DIALOG_AUTOCLOSE;',
+        '#endif',
+        '#if BW_DIALOG_PAUSE',
+        '                        /* Snapshot the pre-pause speeds so the',
+        '                         * close block can restore them exactly. */',
+        '                        bw_dialog_saved_walk = walk_speed;',
+        '                        bw_dialog_saved_climb = climb_speed;',
+        '#if PLAYER2_ENABLED',
+        '                        bw_dialog_saved_walk2 = walk_speed2;',
+        '#endif',
+        '#endif',
         '                        break;',
         '                    }',
         '                }',
