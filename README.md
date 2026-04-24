@@ -150,6 +150,32 @@ editor for the game's main source file. Your edits drive the ROM that
 Code auto-saves to the browser. **Restore default** reverts the file
 to the stock starter for the current language.
 
+### 🧱 Building a whole game without typing C (Builder page)
+
+The **🧱 Builder** tab is the simplest way to make a working game.
+Instead of writing code, you tick modules (Players, Enemies,
+Pickups, Damage, HUD, Doors, Dialogue, …) and fill in the
+attributes you care about.  The Builder assembles all of that
+into a real `main.c` behind the scenes and hits the same ▶ Play
+pipeline as the Code page.
+
+You can:
+
+- Tag sprites by role (Player, Enemy, NPC, Pickup, HUD…) on the
+  Sprites page, then drag-and-place them on the Builder's
+  preview canvas.
+- Give enemies walker or chaser AI per instance.
+- Turn on HP + hearts, damage, pickup collection, win-condition
+  logic.
+- Paint Door tiles on the Behaviour page and have them swap to
+  a second background.
+- Add NPC dialogue boxes (press B near the NPC).
+
+Two-player co-op is supported — Player 2 uses the `I` / `J` / `K`
+/ `L` cluster on the keyboard.  See
+[BUILDER_GUIDE.md](BUILDER_GUIDE.md) for the module reference +
+the font-tile convention you need to know for Dialogue.
+
 ### 💾 Exporting your work
 
 The editor writes a few different formats. Most of the time you want

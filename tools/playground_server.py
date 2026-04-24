@@ -459,9 +459,11 @@ def _active_nametable(state):
     return state.get("nametable") or []
 
 
-def build_nam(state):
-    """32x30 tile bytes + 64 attribute bytes = 1024-byte NES nametable."""
-    nt = _active_nametable(state)
+def _nametable_bytes_for(nt):
+    """Encode a single background's nametable (2D list of {tile,palette})
+    into the raw NES format: 32*30 tile bytes followed by 64 attribute
+    bytes.  Extracted from build_nam so build_scene_inc can emit one
+    per background for Phase B+ Round 3 (multi-background doors)."""
     tiles_out = bytearray(SCREEN_COLS * SCREEN_ROWS)
     for r in range(SCREEN_ROWS):
         row = nt[r] if r < len(nt) else []
@@ -469,10 +471,6 @@ def build_nam(state):
             cell = row[c] if c < len(row) else None
             if cell:
                 tiles_out[r * SCREEN_COLS + c] = int(cell.get("tile", 0)) & 0xFF
-
-    # Attribute table: 8x8 bytes, each covers a 4x4 tile region split into
-    # four 2x2 tile quads.  Quad layout in the byte: top-left=bits 0-1,
-    # top-right=bits 2-3, bottom-left=bits 4-5, bottom-right=bits 6-7.
     attr_out = bytearray(64)
     for ar in range(8):
         for ac in range(8):
@@ -480,7 +478,6 @@ def build_nam(state):
             for quad in range(4):
                 qr = (quad >> 1) & 1
                 qc = quad & 1
-                # top-left tile of this 2x2 quad
                 tr = ar * 4 + qr * 2
                 tc = ac * 4 + qc * 2
                 pal = 0
@@ -488,8 +485,12 @@ def build_nam(state):
                     pal = int(nt[tr][tc].get("palette", 0)) & 3
                 byte |= pal << (quad * 2)
             attr_out[ar * 8 + ac] = byte
-
     return bytes(tiles_out) + bytes(attr_out)
+
+
+def build_nam(state):
+    """32x30 tile bytes + 64 attribute bytes = 1024-byte NES nametable."""
+    return _nametable_bytes_for(_active_nametable(state))
 
 
 def _palette_slots(state, group, i):
@@ -980,9 +981,16 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
     # exists and all its frames share a single (W, H), emit the frame
     # table plus the count/ticks/W/H defines.  The template gates on
     # `ANIM_<ROLE>_<STYLE>_COUNT > 0` so absent pairs cost nothing.
-    # Chunk B scope is enemy+walk only; other pairs (enemy+idle,
-    # pickup+idle, npc+walk) are a follow-up micro-chunk.
-    anim_targets = [("enemy", "walk")]
+    # Chunk B shipped enemy+walk.  Phase B+ round 1b/1c extends to
+    # player2+walk, enemy+idle, and pickup+idle.  Future rounds can
+    # drop npc+walk / npc+idle in alongside dialogue; the loop below
+    # makes each pair mechanical to add.
+    anim_targets = [
+        ("enemy",   "walk"),
+        ("enemy",   "idle"),
+        ("pickup",  "idle"),
+        ("player2", "walk"),
+    ]
     for role, style in anim_targets:
         token = f"{role.upper()}_{style.upper()}"
         resolved = _resolve_tagged_animation(state, role, style)
@@ -1084,6 +1092,26 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             arr("ss_flying", flying),
             arr("ss_anim_frame", anim_zero, mutable=True),
             arr("ss_anim_tick", anim_zero, mutable=True),
+        ]
+
+    # --- Per-background nametables (Phase B+ Round 3) ----------------
+    # For multi-background door transitions we need every painted
+    # background's 1024-byte nametable available in ROM.  Emit as
+    # const byte arrays — the template's `load_background_n` helper
+    # reads them into PPU $2000 when the pupil walks through a DOOR.
+    # Size budget: one nametable = 1024 B, a typical pupil project
+    # has 1-3 rooms so ~1-3 KB of additional PRG.
+    bgs = state.get("backgrounds") or []
+    lines += ["", f"#define BG_COUNT {len(bgs)}", ""]
+    for bi, bg in enumerate(bgs):
+        nt = bg.get("nametable") or []
+        nt_bytes = _nametable_bytes_for(nt)
+        hex_body = ", ".join(f"0x{b:02X}" for b in nt_bytes)
+        lines += [
+            f"static const unsigned char bg_nametable_{bi}[1024] = {{",
+            "    " + hex_body,
+            "};",
+            "",
         ]
 
     lines += ["", "#endif", ""]

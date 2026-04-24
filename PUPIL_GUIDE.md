@@ -310,6 +310,40 @@ Full editor walkthrough: [`assets/pupil/TILE_EDITOR_GUIDE.md`](assets/pupil/TILE
 
 ---
 
+## 🧱 Building a whole game by ticking boxes (Builder page)
+
+There's a fifth tab in the editor called **🧱 Builder**.  It's
+the easiest way to make a real working game — you don't have to
+write any C.
+
+In the Builder you tick modules (Players, Enemies, Pickups,
+Damage, HUD, Doors, Dialogue, …) and fill in the settings you
+care about.  Everything else gets generated for you when you
+press ▶ Play.
+
+Things you can build out of the box:
+
+- Platformers with walking + jumping + gravity + wall collision.
+- Two-player co-op games (Controller 2 uses the `I` / `J` / `K` /
+  `L` keys + `O` for A + `U` for B).
+- Enemies that walk back-and-forth, chase the player, or stand
+  still.  Animate them by tagging an animation **Enemy / Walk**
+  on the Sprites page.
+- Pickups (coins, keys) that disappear on touch and increment a
+  counter.
+- Hearts that appear at the top of the screen (paint one tile
+  tagged **HUD** and it gets used as the heart icon).
+- Doors that either teleport within the same room, or swap you
+  to a whole new room you painted on the Backgrounds page.
+- NPCs that say something when you press B near them.  You need
+  to paint your own letter tiles for this — see the "Dialogue
+  font" section in [BUILDER_GUIDE.md](BUILDER_GUIDE.md).
+
+Full module reference + the font-tile convention for Dialogue
+live in [BUILDER_GUIDE.md](BUILDER_GUIDE.md).
+
+---
+
 ## Ideas for next steps
 
 Look at the step folders to see how each feature was added! Each step builds on the one before it.

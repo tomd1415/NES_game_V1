@@ -51,11 +51,14 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-20 | Sprite UX          | Make the Animation panel easier to find and use                   | [new]     |
 | 2026-04-20 | Drawing tools      | Fill, shape select (rect/circle), resize regions, shape delete    | [new]     |
 | 2026-04-20 | Palette UX         | Pick colours for palettes more easily                             | [new]     |
-| 2026-04-20 | Scenes             | Trigger next-scene load (uses existing multi-background support)  | [new]     |
+| 2026-04-20 | Scenes             | Trigger next-scene load (uses existing multi-background support)  | [done]    |
 | 2026-04-20 | Audio              | Import FamiStudio music/SFX files                                 | [new]     |
 | 2026-04-20 | Sharing            | Gallery to upload screenshots / ROMs for others to play           | [new]     |
 | 2026-04-20 | Accessibility      | Make text size configurable / bigger                              | [new]     |
-| 2026-04-23 | Code page          | Simpler, no-C "module builder" alternative to the Code page       | [planned] |
+| 2026-04-23 | Code page          | Simpler, no-C "module builder" alternative to the Code page       | [done]    |
+| 2026-04-24 | Builder            | Two-player co-op (P2 controller, HP, walk animation)              | [done]    |
+| 2026-04-24 | Builder            | NPC dialogue boxes from inside the Builder (module, no C)         | [done]    |
+| 2026-04-24 | Builder            | Multi-background doors / room transitions                         | [done]    |
 
 ---
 
@@ -681,3 +684,13 @@ sub-item so a half-baked piece never blocks a pupil session.
   design lives in [builder-plan.md](builder-plan.md); summary row
   and entry added under a new *Code page — no-C module builder*
   theme.
+- 2026-04-24 — Builder shipped in full across Phase A (chunks 1–5,
+  Player 2), Phase B (chunks 1–4, scene editor + animations +
+  teleport doors + polish), and Phase B+ (rounds 1–3, P2 HP + P2
+  animation + multi-pair animations + dialogue + multi-background
+  doors).  See [BUILDER_GUIDE.md](BUILDER_GUIDE.md) for the pupil
+  reference.  Marked the following earlier requests as `[done]`:
+  the "Simpler, no-C module builder" ask, scene-transition
+  triggers (now delivered via multi-background doors), and added
+  three new `[done]` rows covering the Phase B+ additions
+  (co-op, in-Builder NPC dialogue, room transitions).

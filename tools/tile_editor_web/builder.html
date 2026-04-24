@@ -858,6 +858,17 @@ body.emu-single-player #emu-p2-controls { display: none; }
         node.config[field.key] = input.checked;
         scheduleSave();
       });
+    } else if (field.type === 'text') {
+      input = document.createElement('input');
+      input.type = 'text';
+      if (field.maxLength != null) input.maxLength = field.maxLength;
+      input.value = (node.config[field.key] != null)
+        ? String(node.config[field.key]) : '';
+      if (field.readOnly) input.readOnly = true;
+      input.addEventListener('input', () => {
+        node.config[field.key] = input.value;
+        scheduleSave();
+      });
     } else {
       // int (default)
       input = document.createElement('input');

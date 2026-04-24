@@ -1857,6 +1857,344 @@ edges off the Builder.
   (multi-background deferred).
 - **Chunk D — Polish (eject / help / thumbs):** shipped.
 
+---
+
+## Builder — 2026-04-24 Phase B+ Round 1 (polish sweep)
+
+Three consolidation pieces from
+[builder-plan-phase-b-plus.md](builder-plan-phase-b-plus.md),
+shipped together because each is 20–80 lines.  Byte-identical
+baseline preserved throughout.
+
+- **1a — Player 2 HP + damage.**  New `PLAYER2_HP_ENABLED` /
+  `PLAYER2_MAX_HP` macros emitted by the Player 2 module's
+  `applyToTemplate` when P2 is on + Damage is on + P2's maxHp > 0
+  (field unlocked from read-only; range 0–9).  Template gains
+  `player2_hp / iframes / dead` globals behind the new gate;
+  `damage.applyToTemplate` emits a mirror P2 collision loop
+  inside `#if PLAYER2_HP_ENABLED`.  The blue-tint game-over
+  condition now fires only when every HP-enabled player is dead
+  — pre-processed to the right variant based on which gates are
+  on.  HUD gained a top-right mirror of the P1 heart row,
+  anchored to `248 - (HUD_W << 3)` and stepping leftwards.  New
+  validator `p2-hp-zero-with-damage` (warn) nudges pupils who
+  tick Damage with P2 enabled but P2.maxHp == 0 — not an error
+  because "assist mode" co-op (P2 invincible) is legitimate.
+- **1b — Player 2 animation.**  New `player2` entry in
+  `ANIM_ROLES` / `ANIM_ROLE_LABELS` on the Sprites page.  Server's
+  `anim_targets` list extended so `role=player2, style=walk`
+  emits `#define ANIM_PLAYER2_WALK_COUNT / TICKS / W / H` plus
+  `anim_player2_walk_tiles[]` / `anim_player2_walk_attrs[]` when
+  tagged.  Template gains `p2_walk_frame` / `p2_walk_tick`
+  globals and a second copy of the P2 render loop (behind
+  `#if ANIM_PLAYER2_WALK_COUNT > 0` / `#else`) that swings the
+  tile source to the animation table when P2 is walking
+  (`pad2 & 0x03`) AND the sprite size matches the animation's
+  W×H.  Idle resets the cycle so walking restarts cleanly.
+- **1c — `enemy + idle` and `pickup + idle` animation pairs.**
+  Server's `anim_targets` extended (one line added).  Template's
+  per-instance animation driver refactored to one priority
+  cascade (`#if ANIM_ENEMY_WALK` → `#if ANIM_ENEMY_IDLE` → `#if
+  ANIM_PICKUP_IDLE`) so adding more pairs later is a
+  `||`-extension of the `BW_HAS_SCENE_ANIM` macro.  Render
+  loop and tick advance both read the new pairs; mismatched
+  sizes fall through to static art same as chunk B.
+
+### Verification — Round 1
+
+`/tmp/builder-round1-smoke.mjs` — five assertions, all green:
+
+1. Assembler emits `PLAYER2_HP_ENABLED 1`, `PLAYER2_MAX_HP 3`,
+   and the `dmg2_hit` collision loop when the right combination
+   is ticked.
+2. `enemy + idle` tagged animation → `/play` build compiles via
+   real cc65 (49168 bytes, 110 ms).
+3. `pickup + idle` tagged animation → compiles (49168 bytes,
+   157 ms).
+4. `player2 + walk` tagged animation + P2 enabled → compiles
+   (49168 bytes, 185 ms).
+5. **Everything-on** — P2 enabled + P2 HP + P2 walk anim +
+   enemy idle + pickup idle + damage + HUD + hud-tagged sprite
+   — compiles (49168 bytes, 169 ms).
+
+Baseline ROM hash `c77d502b7439` still holds with the new
+template swapped in and no new modules ticked.  All prior
+smoke-test suites (chunks A, B, C, preview, P2) still pass.
+
+### What's next
+
+Moving straight into Round 2 (dialogue) and Round 3
+(multi-background doors) per the same plan.
+
+---
+
+## Builder — 2026-04-24 Phase B+ Round 2 (dialogue)
+
+NPC interaction via B button — classic JRPG pattern, pupils have
+been asking for this.
+
+- **New `dialogue` module** (disabled by default).  Config:
+  - `text` (up to 28 characters).
+  - `proximity` (1–6 tiles — how close the player must be).
+- **Font-tile convention.**  Text is rendered as NES tile indices
+  using ASCII values — `A = 0x41`, `Z = 0x5A`, `0–9 = 0x30–0x39`,
+  space = `0x20`.  Pupils paint letter-shaped BG tiles at these
+  indices on the Backgrounds page; the string `"HELLO"` becomes
+  `{ 0x48, 0x45, 0x4C, 0x4C, 0x4F, 0x00 }` at build time which
+  reads directly out of their tile set.  Characters without
+  painted tiles silently render as empty — not broken, just
+  invisible.
+- **Template changes:**
+  - Globals `bw_dialog_open`, `bw_dialog_prev_b` behind
+    `#if BW_DIALOGUE_ENABLED`.
+  - Init at main() top: zero both.
+  - Per-frame logic (emitted by the module's `applyToTemplate`):
+    edge-detect B, walk the scene-sprite list for NPCs, compute
+    Manhattan tile-distance to the player's centre, and on
+    match draw the text at row 25, col 2.  Second press closes
+    via `clear_text_row()`.
+  - Reuses the existing `draw_text` / `clear_text_row` helpers
+    from Sprint 7's NPC snippet.
+- **New `'text'` field type** in the Builder's field renderer
+  so the `text` config has a plain-text input rather than a
+  number spinner.  Other modules can use it going forward.
+- **Two new validators:**
+  - `dialogue-no-npc` (error) — dialogue on but no sprite tagged
+    NPC.  Blocks Play.
+  - `dialogue-empty-text` (warn) — dialogue on but text is
+    blank.  Game still plays; the NPC just shows an empty box.
+
+### Verification — Round 2
+
+`/tmp/builder-round2-smoke.mjs` — four assertions, all pass:
+
+1. `dialogue-no-npc` error fires when module is on without
+   any NPC-tagged sprite.
+2. `dialogue-empty-text` warn fires on blank text.
+3. Assembler converts `"HELLO"` to the expected hex byte
+   sequence and emits the `clear_text_row` close path.
+4. `/play` end-to-end build with a tagged NPC + dialog text
+   compiles via real cc65 (49168 bytes, 145 ms).
+
+Baseline ROM still `c77d502b7439` with no new modules ticked.
+
+### Deferred from Round 2
+
+- **Per-NPC dialogue text** — today all NPC-tagged sprites
+  share the module's single text config.  Per-instance text
+  needs the scene editor's instance rows to grow a text field
+  (Phase C).
+- **Multi-line dialog boxes** — current MVP is one row.  Two-
+  or three-row boxes need `draw_text` to loop over sub-strings
+  or a new helper.
+- **Auto-font-seed** — pupils still have to paint their own
+  letter tiles.  A future "import font.chr" button would let
+  them bypass painting.
+
+---
+
+## Builder — 2026-04-24 Phase B+ Round 3 (multi-bg doors)
+
+Third and final round of the Phase B+ plan — completes the
+doors story.  Pupils can now paint multiple backgrounds on the
+Backgrounds page and use a door tile to move between them,
+Zelda-style.
+
+- **Server:** new helper `_nametable_bytes_for(nt)` factored out
+  of `build_nam()`.  `build_scene_inc` now emits, for every
+  painted background, a 1024-byte `bg_nametable_<N>[]` const
+  array plus a `#define BG_COUNT <n>`.  Size is 1 KB per
+  background — pupil projects with 3-5 rooms add 3-5 KB of PRG,
+  well within cc65's budget.
+- **Template:** new globals and helper (all behind
+  `#if BW_DOORS_MULTIBG_ENABLED`):
+  - `unsigned char current_bg` — which room the player is in.
+  - `static void load_background_n(unsigned char n)` — blits
+    `bg_nametable_<n>[]` into PPU $2000 during a brief
+    render-off window, resets scroll to (0,0), updates
+    `current_bg`.  Uses a `switch` so cc65 knows which const
+    array to reach for each N ≤ BG_COUNT.
+  - Initialisation: `current_bg = 0` at `main()` top.
+- **Doors module** gains `targetBgIdx` config (int, -1..9, default
+  -1 = same-room).  `applyToTemplate` emits:
+  - `#define BW_DOORS_MULTIBG_ENABLED 1` + `#define
+    BW_DOOR_TARGET_BG <n>` into the declarations slot *only*
+    when `targetBgIdx` is a valid index — same-room doors
+    (targetBgIdx == -1) keep the chunk-C teleport code path
+    untouched.
+  - A `load_background_n(BW_DOOR_TARGET_BG)` call inside the
+    DOOR-tile detection block, guarded by `if (current_bg !=
+    BW_DOOR_TARGET_BG)` so a pupil stepping on a door from
+    within the already-loaded room doesn't trigger a
+    pointless reload.
+  - Both P1 and P2 door-tile checks gain the swap call
+    (gated by `#if PLAYER2_ENABLED`).
+- **New validator `doors-target-invalid-bg` (error)** fires when
+  `targetBgIdx` is ≥ the number of painted backgrounds.  Without
+  it the build would still compile (the `switch` falls through
+  to the default case), but the pupil's intent — "swap to
+  room 3" — wouldn't be expressible.
+- **Migration** on both sprites.html and index.html back-fills
+  `targetBgIdx: -1` onto doors modules saved before Round 3.
+  Legacy same-room-teleport behaviour preserved.
+
+### Verification — Round 3
+
+`/tmp/builder-round3-smoke.mjs` — six assertions, all pass:
+
+1. `doors-target-invalid-bg` error fires when targetBgIdx=3 on
+   a single-background project.
+2. Same-room mode (targetBg=-1) does **not** emit
+   `BW_DOORS_MULTIBG_ENABLED` — chunk-C code path intact.
+3. Multi-bg mode (targetBg=1, two backgrounds) emits all three
+   macros + the `load_background_n` swap call.
+4. `/play` single-bg default build compiles (49168 bytes, 74 ms).
+5. `/play` multi-bg (2 backgrounds, target 1) compiles
+   (49168 bytes, 149 ms).
+6. **Kitchen-sink** — 3 backgrounds + doors (target 2) +
+   dialogue (NPC with "GO EAST") + damage (P1 maxHp=3) + the
+   usual enemy — compiles end-to-end (49168 bytes, 123 ms).
+
+Full regression across all six prior suites (chunks A, B, C;
+Player 2; Round 1; Round 2) still green — no breakage.  Baseline
+ROM hash `c77d502b7439` preserved with the new template swapped
+in and no new modules ticked.
+
+---
+
+## Phase B+ — status
+
+All three rounds shipped in one session:
+
+- **Round 1 — polish sweep**: P2 HP + damage + HUD, P2 walk
+  animation via `role=player2` tag, `enemy+idle` and
+  `pickup+idle` animation pairs.
+- **Round 2 — dialogue**: NPC-proximity + B-press → text box
+  from pupil-painted ASCII-mapped letter tiles.
+- **Round 3 — multi-bg doors**: Zelda-style room-to-room
+  transitions via DOOR tile + targetBgIdx.
+
+Six smoke-test suites all green.  Baseline ROM untouched when
+no new modules are enabled.  The Builder is now a genuinely
+capable NES game-builder covering:
+
+- Two-player co-op platformers.
+- HP, damage, hearts HUD, game-over.
+- Enemy AI (walker / chaser) + pickups + score-to-win.
+- Tagged animations for enemies, pickups, both players.
+- Multi-room levels with tile-based doors.
+- NPC dialogue.
+- Scene editor with visual drag-to-place preview.
+
+Remaining items on the *future* backlog:
+
+- **Per-door / per-NPC config** — today the doors module and
+  dialogue module both use single global configs.  Per-tile
+  (doors) and per-sprite (dialogue) metadata is the natural
+  next UI upgrade.
+- **Other `(role, style)` animation pairs** — `npc+walk`,
+  `npc+idle` are mechanical additions.
+- **P2 jump animation** — P2 walk animation landed in Round 1;
+  P2 jump is the same pattern with a different tagged style.
+- **Font-tile seed** — pupils still paint their own letters
+  for Dialogue; an import-default-font button would skip that.
+- **Sound** — still awaits the FamiStudio chunk.
+- **Player-vs-player collision, multi-line dialog boxes,
+  per-background palette swaps** — all deferred.
+
+---
+
+## Builder — 2026-04-24 dialogue fix + regression suite + doc sweep
+
+Follow-up after pupil testing reported a "screen glitch" when
+pressing B to open an NPC dialog box.
+
+### Dialogue double-vblank bug — root cause + fix
+
+- **Root cause.**  Round 2's dialogue module called
+  `draw_text()` / `clear_text_row()` from the `per_frame` slot.
+  Both helpers internally call `waitvsync()` + toggle `PPU_MASK`.
+  Because `per_frame` runs *before* the main loop's own
+  `waitvsync()`, the main `waitvsync()` then waited for a
+  *second* vblank — one whole frame of stale OAM.  Pupils saw
+  a one-frame sprite hiccup on every B press.
+- **Fix.**  New `//@ insert: vblank_writes` slot added to
+  `platformer.c` immediately after the main `waitvsync()`,
+  before scroll / OAM writes.  The dialogue module now:
+  - In `per_frame`: detects the B edge-press + NPC proximity
+    and sets a pending-command byte (`bw_dialog_cmd = 1` to
+    draw, `2` to clear).
+  - In `vblank_writes`: consumes the byte inside the main
+    vblank window, pokes PPU_DATA directly (no `waitvsync`
+    round-trip, no `PPU_MASK` toggle).
+  - Emits `#define BW_DIALOG_WIDTH 28` as part of the
+    declarations so the clear loop has a named constant.
+- **Regression guard.**  `round2-dialogue.mjs` now explicitly
+  asserts the emitted code contains **neither**
+  `draw_text(BW_DIALOG_ROW…)` nor `clear_text_row(BW_DIALOG_ROW…)`
+  — any re-introduction of the pre-fix pattern fails the test.
+
+### Regression test suite promoted
+
+The `/tmp/builder-*-smoke.mjs` files that accumulated during
+Phase A / B / B+ moved into a proper home at
+[tools/builder-tests/](tools/builder-tests/).  They survive
+sessions now.  New files:
+
+- `tools/builder-tests/run-all.mjs` — single entry point.
+  Syntax-checks every JS / Python module + every inline script
+  block (builder / sprites / index / behaviour / code pages),
+  verifies the byte-identical-ROM invariant against
+  Step_Playground, then runs every smoke suite sequentially.
+  Exits 0 iff everything passes.
+- `tools/builder-tests/README.md` — what each suite covers,
+  invariants the runner enforces, how to add a new test.
+- Eight standalone suites covering Chunks A/B/C, Player 2, the
+  preview/scene editor, and all three Phase B+ rounds (polish /
+  dialogue / multi-bg).
+
+Current output: **22 checks pass** — 13 syntax checks + 1
+byte-identical invariant + 8 smoke suites.
+
+### Documentation
+
+- **[BUILDER_GUIDE.md](BUILDER_GUIDE.md)** (new) — pupil + teacher
+  reference for the Builder page.  Covers the pipeline,
+  insertion slots, `//>>` region contract, every shipped
+  module, controller mapping, the **font-tile convention for
+  Dialogue** (pupils paint letter tiles at ASCII positions in
+  their BG tile set — `A = 0x41`, `Z = 0x5A`, `0..9 = 0x30..0x39`),
+  the tagged-animation `(role, style)` matrix, and the
+  regression-test protocol.
+- **[README.md](README.md)** — new §"Building a whole game
+  without typing C (Builder page)" with a short description +
+  link to BUILDER_GUIDE.md, including the P2 keyboard cluster.
+- **[PUPIL_GUIDE.md](PUPIL_GUIDE.md)** — new §"Building a whole
+  game by ticking boxes (Builder page)" with a pupil-friendly
+  tour: platformer, co-op (`I/J/K/L` + `O`/`U`), enemy AI,
+  pickups, hearts, doors, NPC dialogue + pointer to
+  BUILDER_GUIDE.md.
+- **[TEACHER_GUIDE.md](TEACHER_GUIDE.md)** — new §"Phase B —
+  Builder page" with the pipeline diagram, pointers to the
+  JS module files, the byte-identical-baseline invariant, and
+  the **Regression tests** section explaining
+  `node tools/builder-tests/run-all.mjs`.
+- **[PUPIL_FEEDBACK.md](PUPIL_FEEDBACK.md)** — three Phase-B+
+  features marked `[done]` in the summary table (co-op, NPC
+  dialogue, multi-background doors); "Simpler no-C module
+  builder" and "Trigger next-scene load" both moved from
+  `[planned]` / `[new]` to `[done]`; a 2026-04-24 changelog
+  entry summarising the Builder's full delivery.
+
+### Verification — this session
+
+- `node tools/builder-tests/run-all.mjs` → ✅ all 22 checks.
+- Manual: dialogue open + close no longer skips a frame (the
+  sprite-stutter "glitch" is gone), and the failure mode when
+  letter tiles aren't painted is clearly documented in
+  BUILDER_GUIDE.md §4 + PUPIL_GUIDE.md so pupils know to paint
+  them rather than expect text to "just appear".
+
 Phase B is effectively done.  The Builder now ships with a
 proper game-feel feature set: placed enemies animate, touching
 them hurts, collected pickups can win the level, doors

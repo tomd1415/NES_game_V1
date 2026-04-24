@@ -100,6 +100,37 @@ unsigned char player_iframes;
 unsigned char player_dead;
 #endif
 
+#if PLAYER2_HP_ENABLED
+/* Phase B+ round 1a — Player 2 HP.  Separate macro so single-
+ * player damage-enabled games don't pay the P2 RAM cost. */
+unsigned char player2_hp;
+unsigned char player2_iframes;
+unsigned char player2_dead;
+#endif
+
+#if BW_DIALOGUE_ENABLED
+/* Phase B+ round 2 — dialogue.  The per_frame slot sets
+ * bw_dialog_cmd on a B edge-press near an NPC; the vblank_writes
+ * slot consumes it and pokes the nametable during the main
+ * vblank window (no double-waitvsync → no frame skip).  `_open`
+ * tracks whether a text box is on screen so the B press toggles;
+ * `_prev_b` stores last frame's pad for edge detection. */
+unsigned char bw_dialog_open;
+unsigned char bw_dialog_prev_b;
+unsigned char bw_dialog_cmd;
+#endif
+
+#if BW_DOORS_MULTIBG_ENABLED
+/* Phase B+ round 3 — multi-background doors.  The Builder's doors
+ * module writes `#define BW_DOORS_MULTIBG_ENABLED 1` when the
+ * target background differs from the starting one.  `current_bg`
+ * tracks which room the player is in; `load_background_n(n)`
+ * blits `bg_nametable_<n>` into PPU $2000 during a brief
+ * render-off window. */
+unsigned char current_bg;
+static void load_background_n(unsigned char n);
+#endif
+
 #if PLAYER2_ENABLED
 /* Phase B chunk 5 — Player 2 state.  Inlined alongside P1 globals so
  * reading them side-by-side makes the "same thing, second name"
@@ -116,6 +147,14 @@ unsigned char plrdir2;
 //>> player2_walk_speed: How many pixels Player 2 moves each frame.
 unsigned char walk_speed2 = 1;
 //<<
+#if ANIM_PLAYER2_WALK_COUNT > 0
+/* Phase B+ round 1b — Player 2 walk animation state.  Cycles the
+ * pupil's `role=player2, style=walk` tagged animation while P2 is
+ * moving.  Idle resets the frame counter so the cycle restarts
+ * cleanly each time they start walking. */
+unsigned char p2_walk_frame;
+unsigned char p2_walk_tick;
+#endif
 #endif
 
 // Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
@@ -209,6 +248,51 @@ void clear_text_row(unsigned char row, unsigned char col, unsigned char width) {
     PPU_MASK = 0x1E;
 }
 
+#if BW_DOORS_MULTIBG_ENABLED
+/* Blit one of the bg_nametable_<n>[] arrays into PPU $2000.
+ * Rendering is off during the transfer; 1024 bytes takes a few
+ * vblanks but pupils won't notice — it feels like a room swap.
+ * Scroll is reset to (0,0) so the new room starts cleanly. */
+static void load_background_n(unsigned char n) {
+    unsigned int k;
+    const unsigned char *src;
+    waitvsync();
+    PPU_MASK = 0;
+    switch (n) {
+#if BG_COUNT > 0
+        case 0: src = bg_nametable_0; break;
+#endif
+#if BG_COUNT > 1
+        case 1: src = bg_nametable_1; break;
+#endif
+#if BG_COUNT > 2
+        case 2: src = bg_nametable_2; break;
+#endif
+#if BG_COUNT > 3
+        case 3: src = bg_nametable_3; break;
+#endif
+        default:
+#if BG_COUNT > 0
+            src = bg_nametable_0;
+#else
+            src = 0;
+#endif
+            break;
+    }
+    if (src) {
+        PPU_ADDR = 0x20;
+        PPU_ADDR = 0x00;
+        for (k = 0; k < 1024; k++) {
+            PPU_DATA = src[k];
+        }
+    }
+    PPU_SCROLL = 0;
+    PPU_SCROLL = 0;
+    PPU_MASK = 0x1E;
+    current_bg = n;
+}
+#endif
+
 void main(void) {
     waitvsync();
     PPU_MASK = 0;
@@ -252,12 +336,32 @@ void main(void) {
     jmp_up2 = 0;
     prev_pad2 = 0;
     plrdir2 = 0x00;
+#if ANIM_PLAYER2_WALK_COUNT > 0
+    p2_walk_frame = 0;
+    p2_walk_tick = 0;
+#endif
 #endif
 
 #if PLAYER_HP_ENABLED
     player_hp = PLAYER_MAX_HP;
     player_iframes = 0;
     player_dead = 0;
+#endif
+
+#if PLAYER2_HP_ENABLED
+    player2_hp = PLAYER2_MAX_HP;
+    player2_iframes = 0;
+    player2_dead = 0;
+#endif
+
+#if BW_DIALOGUE_ENABLED
+    bw_dialog_open = 0;
+    bw_dialog_prev_b = 0;
+    bw_dialog_cmd = 0;
+#endif
+
+#if BW_DOORS_MULTIBG_ENABLED
+    current_bg = 0;
 #endif
 
     //@ insert: init
@@ -550,6 +654,9 @@ void main(void) {
 #endif
 
         waitvsync();
+
+        //@ insert: vblank_writes
+
 #ifdef SCROLL_BUILD
         // Stream off-screen tile columns / rows for any 8-px boundary
         // the camera has crossed since last frame — has to happen while
@@ -597,9 +704,67 @@ void main(void) {
 #if PLAYER2_ENABLED
         /* --- Player 2 ---------------------------------------------
          * Uses player2_tiles / player2_attrs emitted by scene.inc
-         * when a second Player-tagged sprite is present.  No
-         * animation in the MVP — static layout only; walk / jump
-         * animations for P2 are a later chunk. */
+         * by default.  When the pupil has tagged an animation
+         * `role=player2, style=walk`, ANIM_PLAYER2_WALK_COUNT flips
+         * on, per-frame tick advances below, and the render picks
+         * the animated tile set when P2 is walking. */
+#if ANIM_PLAYER2_WALK_COUNT > 0
+        {
+            const unsigned char *p2_src_tiles = player2_tiles;
+            const unsigned char *p2_src_attrs = player2_attrs;
+            unsigned char p2_walking = (pad2 & 0x03) ? 1 : 0;
+            if (p2_walking && PLAYER2_W == ANIM_PLAYER2_WALK_W
+                           && PLAYER2_H == ANIM_PLAYER2_WALK_H) {
+#if ANIM_PLAYER2_WALK_COUNT > 1
+                p2_walk_tick++;
+                if (p2_walk_tick >= ANIM_PLAYER2_WALK_TICKS) {
+                    p2_walk_tick = 0;
+                    p2_walk_frame++;
+                    if (p2_walk_frame >= ANIM_PLAYER2_WALK_COUNT) {
+                        p2_walk_frame = 0;
+                    }
+                }
+#endif
+                {
+                    unsigned int p2_anim_off = (unsigned int)p2_walk_frame
+                        * ANIM_PLAYER2_WALK_W * ANIM_PLAYER2_WALK_H;
+                    p2_src_tiles = anim_player2_walk_tiles + p2_anim_off;
+                    p2_src_attrs = anim_player2_walk_attrs + p2_anim_off;
+                }
+            } else {
+                /* Not walking → reset the cycle so it restarts clean
+                 * next time P2 moves. */
+                p2_walk_frame = 0;
+                p2_walk_tick = 0;
+            }
+            for (r = 0; r < PLAYER2_H; r++) {
+                for (c = 0; c < PLAYER2_W; c++) {
+#ifdef SCROLL_BUILD
+                    sy = world_to_screen_y((unsigned int)py2 + (r << 3));
+                    if (plrdir2 == 0x40) {
+                        sx = world_to_screen_x((unsigned int)px2 +
+                             ((PLAYER2_W - 1 - c) << 3));
+                    } else {
+                        sx = world_to_screen_x((unsigned int)px2 + (c << 3));
+                    }
+#else
+                    sy = py2 + (r << 3);
+                    if (plrdir2 == 0x40) {
+                        sx = px2 + (unsigned char)((PLAYER2_W - 1 - c) << 3);
+                    } else {
+                        sx = px2 + (c << 3);
+                    }
+#endif
+                    tile = p2_src_tiles[r * PLAYER2_W + c];
+                    attr = p2_src_attrs[r * PLAYER2_W + c] ^ plrdir2;
+                    OAM_DATA = sy;
+                    OAM_DATA = tile;
+                    OAM_DATA = attr;
+                    OAM_DATA = sx;
+                }
+            }
+        }
+#else
         for (r = 0; r < PLAYER2_H; r++) {
             for (c = 0; c < PLAYER2_W; c++) {
 #ifdef SCROLL_BUILD
@@ -627,9 +792,10 @@ void main(void) {
             }
         }
 #endif
+#endif
 
 #if HUD_ENABLED && PLAYER_HP_ENABLED
-        /* --- HUD: hearts across the top of the screen ------------
+        /* --- HUD: P1 hearts across the top-left -----------------
          * One copy of the hud sprite per remaining HP, starting
          * at (8, 8) and stepping right.  Uses OAM sprites so no
          * PPU writes are needed — fits the vblank budget. */
@@ -652,21 +818,81 @@ void main(void) {
         }
 #endif
 
-#if ANIM_ENEMY_WALK_COUNT > 1
-        /* Phase B finale chunk B — advance enemy-walk animation ticks.
-         * Only enemies whose sprite size matches the tagged animation
-         * cycle frames; mismatched sizes fall through to static tiles
-         * in the render loop below. */
+#if HUD_ENABLED && PLAYER2_HP_ENABLED
+        /* --- HUD: P2 hearts across the top-right ----------------
+         * Mirrors the P1 block but anchors to the right edge so
+         * two-player games can read both lives at a glance. */
+        {
+            unsigned char hud_y = 8;
+            unsigned char hud_h;
+            unsigned char hud_r, hud_c;
+            unsigned char step = (HUD_W << 3) + 4;
+            /* Right edge - first heart width, then step leftwards. */
+            unsigned char hud_x = 248 - (HUD_W << 3);
+            for (hud_h = 0; hud_h < player2_hp; hud_h++) {
+                for (hud_r = 0; hud_r < HUD_H; hud_r++) {
+                    for (hud_c = 0; hud_c < HUD_W; hud_c++) {
+                        OAM_DATA = hud_y + (hud_r << 3);
+                        OAM_DATA = hud_tiles[hud_r * HUD_W + hud_c];
+                        OAM_DATA = hud_attrs[hud_r * HUD_W + hud_c];
+                        OAM_DATA = hud_x + (hud_c << 3);
+                    }
+                }
+                if (hud_x >= step) hud_x -= step; else hud_x = 0;
+            }
+        }
+#endif
+
+/* Any tagged scene-sprite animation?  One macro so the big render
+ * block below only has to check one symbol.  Phase B+ round 1c
+ * extends the set; adding more pairs later is a ||-extension. */
+#if (ANIM_ENEMY_WALK_COUNT > 0) || (ANIM_ENEMY_IDLE_COUNT > 0) || (ANIM_PICKUP_IDLE_COUNT > 0)
+#define BW_HAS_SCENE_ANIM 1
+#else
+#define BW_HAS_SCENE_ANIM 0
+#endif
+
+#if BW_HAS_SCENE_ANIM
+        /* Tick advance — one pass over scene sprites, each picking
+         * the first pair that matches.  Priority for enemies is
+         * walk > idle so a pupil who tags both styles gets walking
+         * art while the enemy is moving (movement handled by the
+         * walker / chaser AI; for MVP we just always advance walk
+         * if tagged).  Pickups only have idle. */
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
-            if (ss_role[i] != ROLE_ENEMY) continue;
-            if (ss_w[i] != ANIM_ENEMY_WALK_W) continue;
-            if (ss_h[i] != ANIM_ENEMY_WALK_H) continue;
-            ss_anim_tick[i]++;
-            if (ss_anim_tick[i] >= ANIM_ENEMY_WALK_TICKS) {
-                ss_anim_tick[i] = 0;
-                ss_anim_frame[i]++;
-                if (ss_anim_frame[i] >= ANIM_ENEMY_WALK_COUNT) {
-                    ss_anim_frame[i] = 0;
+            unsigned char anim_count = 0;
+            unsigned char anim_ticks = 1;
+            if (0) { /* ladder */ }
+#if ANIM_ENEMY_WALK_COUNT > 0
+            else if (ss_role[i] == ROLE_ENEMY
+                  && ss_w[i] == ANIM_ENEMY_WALK_W
+                  && ss_h[i] == ANIM_ENEMY_WALK_H) {
+                anim_count = ANIM_ENEMY_WALK_COUNT;
+                anim_ticks = ANIM_ENEMY_WALK_TICKS;
+            }
+#endif
+#if ANIM_ENEMY_IDLE_COUNT > 0
+            else if (ss_role[i] == ROLE_ENEMY
+                  && ss_w[i] == ANIM_ENEMY_IDLE_W
+                  && ss_h[i] == ANIM_ENEMY_IDLE_H) {
+                anim_count = ANIM_ENEMY_IDLE_COUNT;
+                anim_ticks = ANIM_ENEMY_IDLE_TICKS;
+            }
+#endif
+#if ANIM_PICKUP_IDLE_COUNT > 0
+            else if (ss_role[i] == ROLE_PICKUP
+                  && ss_w[i] == ANIM_PICKUP_IDLE_W
+                  && ss_h[i] == ANIM_PICKUP_IDLE_H) {
+                anim_count = ANIM_PICKUP_IDLE_COUNT;
+                anim_ticks = ANIM_PICKUP_IDLE_TICKS;
+            }
+#endif
+            if (anim_count > 1) {
+                ss_anim_tick[i]++;
+                if (ss_anim_tick[i] >= anim_ticks) {
+                    ss_anim_tick[i] = 0;
+                    ss_anim_frame[i]++;
+                    if (ss_anim_frame[i] >= anim_count) ss_anim_frame[i] = 0;
                 }
             }
         }
@@ -680,13 +906,12 @@ void main(void) {
         // out of view.  Matches pupil mental model: sprites live in the
         // world, not glued to the camera.
         //
-        // Phase B finale chunk B: when any tagged scene animation
-        // exists, a second copy of the render loop runs where the
-        // tile / attr source can swing between ss_tiles (static) and
-        // anim_<role>_<style>_tiles (animated) per instance.  The
-        // #if / #else keeps the original baseline path byte-identical
-        // when no tagged animation is emitted.
-#if ANIM_ENEMY_WALK_COUNT > 0
+        // Phase B+ round 1c: the render loop now picks an animation
+        // source for enemy+walk, enemy+idle, or pickup+idle per
+        // instance when the pupil has tagged such an animation.  The
+        // `#if BW_HAS_SCENE_ANIM` / `#else` keeps the original
+        // baseline path byte-identical when nothing is tagged.
+#if BW_HAS_SCENE_ANIM
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             const unsigned char *src_tiles;
             const unsigned char *src_attrs;
@@ -695,15 +920,37 @@ void main(void) {
             sh = ss_h[i];
             src_tiles = ss_tiles + off;
             src_attrs = ss_attrs + off;
-            if (ss_role[i] == ROLE_ENEMY
-             && sw == ANIM_ENEMY_WALK_W
-             && sh == ANIM_ENEMY_WALK_H) {
+            if (0) { /* ladder */ }
+#if ANIM_ENEMY_WALK_COUNT > 0
+            else if (ss_role[i] == ROLE_ENEMY
+                  && sw == ANIM_ENEMY_WALK_W
+                  && sh == ANIM_ENEMY_WALK_H) {
                 unsigned int anim_off = (unsigned int)ss_anim_frame[i]
-                                      * ANIM_ENEMY_WALK_W
-                                      * ANIM_ENEMY_WALK_H;
+                    * ANIM_ENEMY_WALK_W * ANIM_ENEMY_WALK_H;
                 src_tiles = anim_enemy_walk_tiles + anim_off;
                 src_attrs = anim_enemy_walk_attrs + anim_off;
             }
+#endif
+#if ANIM_ENEMY_IDLE_COUNT > 0
+            else if (ss_role[i] == ROLE_ENEMY
+                  && sw == ANIM_ENEMY_IDLE_W
+                  && sh == ANIM_ENEMY_IDLE_H) {
+                unsigned int anim_off = (unsigned int)ss_anim_frame[i]
+                    * ANIM_ENEMY_IDLE_W * ANIM_ENEMY_IDLE_H;
+                src_tiles = anim_enemy_idle_tiles + anim_off;
+                src_attrs = anim_enemy_idle_attrs + anim_off;
+            }
+#endif
+#if ANIM_PICKUP_IDLE_COUNT > 0
+            else if (ss_role[i] == ROLE_PICKUP
+                  && sw == ANIM_PICKUP_IDLE_W
+                  && sh == ANIM_PICKUP_IDLE_H) {
+                unsigned int anim_off = (unsigned int)ss_anim_frame[i]
+                    * ANIM_PICKUP_IDLE_W * ANIM_PICKUP_IDLE_H;
+                src_tiles = anim_pickup_idle_tiles + anim_off;
+                src_attrs = anim_pickup_idle_attrs + anim_off;
+            }
+#endif
             for (r = 0; r < sh; r++) {
                 for (c = 0; c < sw; c++) {
 #ifdef SCROLL_BUILD

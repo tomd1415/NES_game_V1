@@ -266,6 +266,27 @@
       return null;
     },
 
+    // V15: Player 2 on + damage on but P2 maxHp == 0.  Same shape
+    // as V10 (hp-zero-with-damage) but for P2.  Warn only — the
+    // game still plays, P2 just can't be hurt; pupils might
+    // intentionally make P2 immortal.
+    function p2HpZeroWithDamage(state) {
+      if (!moduleEnabled(state, 'damage')) return null;
+      if (!moduleEnabled(state, 'players.player2')) return null;
+      const p2 = moduleNode(state, 'players.player2');
+      const maxHp = (p2 && p2.config && p2.config.maxHp) | 0;
+      if (maxHp > 0) return null;
+      return {
+        id: 'p2-hp-zero-with-damage',
+        severity: 'warn',
+        message: 'Damage is on and Player 2 is on, but P2\'s Max HP ' +
+          'is 0 — P2 is invincible.',
+        fix: 'Raise Player 2 → Max HP if you want P2 to take damage ' +
+          'too, or leave it at 0 for an "assist mode" co-op feel.',
+        jumpTo: null,
+      };
+    },
+
     // V10: Damage module on but player has 0 maxHp → emitted macro
     // `PLAYER_HP_ENABLED` never flips on and the emitted damage code
     // does nothing.  Error so the pupil fixes one or the other.
@@ -296,6 +317,64 @@
         fix: 'Tag a sprite as Enemy on the Sprites page so there\'s ' +
           'something to take damage from.',
         jumpTo: 'sprites.html',
+      };
+    },
+
+    // V16: dialogue module ticked but no sprite tagged NPC.  Error —
+    // without an NPC on screen there's nobody for the player to
+    // walk up to, so the trigger can never fire.
+    function dialogueNoNpc(state) {
+      if (!moduleEnabled(state, 'dialogue')) return null;
+      if (countSpritesByRole(state, 'npc') > 0) return null;
+      return {
+        id: 'dialogue-no-npc',
+        severity: 'error',
+        message: 'Dialogue is on but no sprite is tagged NPC.',
+        fix: 'Open the Sprites page and set a sprite\'s role to NPC — ' +
+          'that\'s who the player talks to.',
+        jumpTo: 'sprites.html',
+      };
+    },
+
+    // V17: dialogue on but the text is empty → no point.  Warn only.
+    function dialogueEmptyText(state) {
+      if (!moduleEnabled(state, 'dialogue')) return null;
+      const d = moduleNode(state, 'dialogue');
+      const text = (d && d.config && d.config.text) || '';
+      if (text.trim().length > 0) return null;
+      return {
+        id: 'dialogue-empty-text',
+        severity: 'warn',
+        message: 'Dialogue is on but the text is blank — the NPC ' +
+          'will show an empty box.',
+        fix: 'Type something in the "What the NPC says" field on the ' +
+          'Dialogue module.',
+        jumpTo: null,
+      };
+    },
+
+    // V18: doors with targetBgIdx set beyond the painted
+    // backgrounds → room swap would reference a nonexistent
+    // bg_nametable_<n>[].  Error because the build will actually
+    // fail at emission if this sneaks through; catch it early
+    // with a clear message.
+    function doorsTargetBgOutOfRange(state) {
+      if (!moduleEnabled(state, 'doors')) return null;
+      const d = moduleNode(state, 'doors');
+      const target = (d && d.config && d.config.targetBgIdx);
+      if (target == null || target < 0) return null;  // same-room
+      const bgs = (state && state.backgrounds) || [];
+      if ((target | 0) < bgs.length) return null;
+      return {
+        id: 'doors-target-invalid-bg',
+        severity: 'error',
+        message: 'Doors → Target background is ' + target + ' but ' +
+          'you only have ' + bgs.length + ' background' +
+          (bgs.length === 1 ? '' : 's') + '.',
+        fix: 'Open the Backgrounds page and add more backgrounds, ' +
+          'or drop the Target number down to a valid index (or -1 ' +
+          'for a same-room teleport).',
+        jumpTo: 'index.html',
       };
     },
 

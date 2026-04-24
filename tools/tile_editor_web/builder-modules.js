@@ -229,11 +229,11 @@
       },
       {
         key: 'maxHp',
-        label: 'Max HP (0 = no HP system yet)',
+        label: 'Max HP (0 = P2 never takes damage)',
         type: 'int',
-        min: 0, max: 0,
-        help: 'HP / damage lands in a later chunk.',
-        readOnly: true,
+        min: 0, max: 9,
+        help: '0 = Player 2 is invincible.  Set 1–9 and tick the ' +
+          'Damage module to let enemies hurt Player 2 too.',
       },
     ],
     applyToTemplate(template, node, state) {
@@ -251,6 +251,20 @@
       template = A.replaceRegion(template, 'player2_jump_height', [
         '            jmp_up2 = ' + jumpHeight + ';'
       ]);
+      // Phase B+ round 1a: emit PLAYER2_HP_ENABLED + PLAYER2_MAX_HP
+      // only when P2 is on AND damage module is on AND maxHp > 0.
+      // Keeps the preprocessor gate conservative so single-player
+      // or damage-off games don't pay the P2 HP cost.
+      const maxHp = A.clampInt(c.maxHp, 0, 9, 0);
+      const damage = state && state.builder && state.builder.modules &&
+        state.builder.modules.damage;
+      const damageOn = !!(damage && damage.enabled);
+      if (maxHp > 0 && damageOn) {
+        template = A.appendToSlot(template, 'declarations', [
+          '#define PLAYER2_HP_ENABLED 1',
+          '#define PLAYER2_MAX_HP ' + maxHp,
+        ].join('\n'));
+      }
       return template;
     },
   };
@@ -600,7 +614,7 @@
         '#define INVINCIBILITY_FRAMES ' + iframes,
       ].join('\n'));
       const body = [
-        '        // [builder] damage — enemies hurt the player on touch.',
+        '        // [builder] damage — enemies hurt the player(s) on touch.',
         '#if PLAYER_HP_ENABLED',
         '        if (!player_dead && player_iframes == 0) {',
         '            unsigned char dmg_hit = 0;',
@@ -625,9 +639,45 @@
         '        if (player_dead) {',
         '            jumping = 0; jmp_up = 0; prev_pad = 0xFF;',
         '            walk_speed = 0; climb_speed = 0;',
-        '            // Greyscale + blue emphasis = "defeated" (win uses red).',
-        '            PPU_MASK = 0x1F | 0x80;',
         '        }',
+        '#endif',
+        '#if PLAYER2_HP_ENABLED',
+        '        /* Phase B+ round 1a — Player 2 takes damage too.  Mirrors',
+        '         * the P1 block variable-for-variable. */',
+        '        if (!player2_dead && player2_iframes == 0) {',
+        '            unsigned char dmg2_hit = 0;',
+        '            for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
+        '                if (ss_role[i] != ROLE_ENEMY) continue;',
+        '                if (ss_y[i] >= 240) continue;',
+        '                if (px2 + (PLAYER2_W << 3) <= ss_x[i]) continue;',
+        '                if (px2 >= ss_x[i] + (ss_w[i] << 3)) continue;',
+        '                if (py2 + (PLAYER2_H << 3) <= ss_y[i]) continue;',
+        '                if (py2 >= ss_y[i] + (ss_h[i] << 3)) continue;',
+        '                dmg2_hit = 1; break;',
+        '            }',
+        '            if (dmg2_hit) {',
+        '                player2_hp = (player2_hp > DAMAGE_AMOUNT)',
+        '                           ? (player2_hp - DAMAGE_AMOUNT) : 0;',
+        '                player2_iframes = INVINCIBILITY_FRAMES;',
+        '                if (player2_hp == 0) player2_dead = 1;',
+        '            }',
+        '        } else if (player2_iframes > 0) {',
+        '            player2_iframes--;',
+        '        }',
+        '        if (player2_dead) {',
+        '            jumping2 = 0; jmp_up2 = 0; prev_pad2 = 0xFF;',
+        '            walk_speed2 = 0;',
+        '        }',
+        '#endif',
+        '        /* Game-over tint fires when every HP-enabled player is',
+        '         * dead.  Single-player: P1 dead alone triggers it.  Two-',
+        '         * player: both must be down. */',
+        '#if PLAYER_HP_ENABLED && PLAYER2_HP_ENABLED',
+        '        if (player_dead && player2_dead) PPU_MASK = 0x1F | 0x80;',
+        '#elif PLAYER_HP_ENABLED',
+        '        if (player_dead) PPU_MASK = 0x1F | 0x80;',
+        '#elif PLAYER2_HP_ENABLED',
+        '        if (player2_dead) PPU_MASK = 0x1F | 0x80;',
         '#endif',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame', body);
@@ -665,27 +715,30 @@
   // story slots cleanly on top once pupils ask for it.
   // --------------------------------------------------------------------
   modules['doors'] = {
-    label: 'Doors (teleport)',
+    label: 'Doors',
     description: 'Paint a tile as Door on the Behaviour page.  When ' +
       'the player (or Player 2) walks onto it, they teleport to the ' +
-      'spawn point you set below.  Great for secret passages or a ' +
-      '"respawn point" after falling off the map.',
+      'spawn point below — and if you set a Target background, the ' +
+      'room swaps to that background too.  Leave Target at -1 for a ' +
+      'same-room teleport (secret passages, fall-off-map respawns).',
     detailedHelp: [
       'Doors are a tile-based event: whenever the player\'s centre ' +
       'tile matches a behaviour marked Door, the player is moved to ' +
       'the spawn point you configure here.',
-      'All doors share the same spawn point in this MVP — ' +
-      'per-door spawns are a future upgrade.  Useful patterns today: ' +
-      'paint a single Door tile in a wall for a secret passage, or ' +
-      'paint the row of tiles below your level as Doors to respawn ' +
-      'the player if they fall off the bottom.',
-      'Player 2 (when enabled) uses the same spawn point — either ' +
-      'player stepping onto a Door teleports to the configured ' +
-      'position.',
+      'If Target background is 0 or higher, the room itself swaps ' +
+      'at the same moment — the BG nametable from that background ' +
+      'gets blitted into the PPU while rendering is briefly off.  ' +
+      'Classic room-to-room NES gameplay.',
+      'If Target background is -1, the door is a same-room ' +
+      'teleport — secret passages, fall-off-map respawns, puzzle ' +
+      'shortcuts.',
+      'All doors share the same (spawn, target) in this MVP.  ' +
+      'Per-door config is a future UI upgrade.',
     ],
     defaultConfig: {
       spawnX: 24,
       spawnY: 120,
+      targetBgIdx: -1,
     },
     schema: [
       {
@@ -702,18 +755,41 @@
         min: 16, max: 200, step: 4,
         help: 'Y coordinate of the spawn point.',
       },
+      {
+        key: 'targetBgIdx',
+        label: 'Target background (-1 = same room)',
+        type: 'int',
+        min: -1, max: 9,
+        help: '-1 keeps the same background.  0, 1, 2… swap to that ' +
+          'background index — paint that many backgrounds first.',
+      },
     ],
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
       const spawnX = A.clampInt(c.spawnX, 0, 240, 24);
       const spawnY = A.clampInt(c.spawnY, 16, 200, 120);
-      const body = [
-        '        // [builder] doors — step on a BEHAVIOUR_DOOR tile → teleport.',
+      const bgs = (state && state.backgrounds) || [];
+      const rawTarget = (c.targetBgIdx == null) ? -1 : (c.targetBgIdx | 0);
+      // Valid if in range of backgrounds[]; otherwise same-room.
+      const multiBg = rawTarget >= 0 && rawTarget < bgs.length;
+      if (multiBg) {
+        template = A.appendToSlot(template, 'declarations', [
+          '#define BW_DOORS_MULTIBG_ENABLED 1',
+          '#define BW_DOOR_TARGET_BG ' + rawTarget,
+        ].join('\n'));
+      }
+      const swap = multiBg
+        ? '                if (current_bg != BW_DOOR_TARGET_BG) load_background_n(BW_DOOR_TARGET_BG);'
+        : null;
+      const lines = [
+        '        // [builder] doors — step on a BEHAVIOUR_DOOR tile → teleport' +
+          (multiBg ? ' + room swap.' : '.'),
         '        {',
         '            unsigned char bw_door_pcentre = behaviour_at(',
         '                (unsigned int)((px + ((PLAYER_W << 3) >> 1)) >> 3),',
         '                (unsigned int)((py + ((PLAYER_H << 3) >> 1)) >> 3));',
         '            if (bw_door_pcentre == BEHAVIOUR_DOOR) {',
+        swap,
         '                px = ' + spawnX + ';',
         '                py = ' + spawnY + ';',
         '                jumping = 0; jmp_up = 0;',
@@ -724,6 +800,7 @@
         '                    (unsigned int)((px2 + ((PLAYER2_W << 3) >> 1)) >> 3),',
         '                    (unsigned int)((py2 + ((PLAYER2_H << 3) >> 1)) >> 3));',
         '                if (bw_door_p2centre == BEHAVIOUR_DOOR) {',
+        swap,
         '                    px2 = ' + spawnX + ';',
         '                    py2 = ' + spawnY + ';',
         '                    jumping2 = 0; jmp_up2 = 0;',
@@ -731,8 +808,166 @@
         '            }',
         '#endif',
         '        }',
+      ].filter(l => l !== null);
+      return A.appendToSlot(template, 'per_frame', lines.join('\n'));
+    },
+  };
+
+  // --------------------------------------------------------------------
+  // Dialogue (Phase B+ Round 2).  When the player is near an NPC-
+  // tagged sprite AND presses B, a text box appears at the bottom
+  // of the screen.  A second B press closes it.  Text is rendered
+  // using the pupil's BG tiles interpreted as ASCII — pupils paint
+  // A..Z at tile indices 0x41..0x5A (classic ASCII convention) so
+  // the string literals in the emitted code map directly to the
+  // tiles they painted.
+  // --------------------------------------------------------------------
+  modules['dialogue'] = {
+    label: 'Dialogue (NPC talk)',
+    description: 'Press B near an NPC sprite to pop up a text box.  ' +
+      'Press B again to close it.  You need to paint letter tiles ' +
+      'on the Backgrounds page at the ASCII positions (A = tile 0x41, ' +
+      'B = 0x42, … Z = 0x5A; 0 = 0x30, … 9 = 0x39; space = 0x20).',
+    defaultConfig: {
+      text: 'HELLO',
+      proximity: 2,
+    },
+    schema: [
+      {
+        key: 'text',
+        label: 'What the NPC says (up to 28 characters)',
+        type: 'text',   // renderer handles plain text input
+        help: 'Use UPPERCASE letters and spaces.  Keep it short — ' +
+          'only one row of the screen is used.',
+      },
+      {
+        key: 'proximity',
+        label: 'Talk distance (tiles)',
+        type: 'int',
+        min: 1, max: 6,
+        help: 'How close the player must be (in tile units) before ' +
+          'B opens the dialog.',
+      },
+    ],
+    detailedHelp: [
+      'Dialogue renders text one tile per character using your ' +
+      'BG tile set.  The Builder converts your string to tile ' +
+      'indices using ASCII values — A = 65 = 0x41, Z = 0x5A, ' +
+      'space = 0x20, 0-9 at 0x30-0x39.',
+      'To make dialog readable, paint letter-shaped art at these ' +
+      'indices on the Backgrounds page tile set (one glyph per ' +
+      'tile).  You do not have to paint every letter — characters ' +
+      'whose tile is blank just show as empty.',
+      'The text box sits near the bottom of the screen and stays ' +
+      'until the pupil presses B again.  All NPC-tagged sprites ' +
+      'share the same dialog text in this MVP; per-NPC text is a ' +
+      'future upgrade.',
+    ],
+    applyToTemplate(template, node, state) {
+      const c = (node && node.config) || {};
+      const rawText = (typeof c.text === 'string') ? c.text : 'HELLO';
+      // Clip to 28 chars to keep the line on one row with a 2-col
+      // margin on each side.
+      const text = rawText.slice(0, 28);
+      const proximity = A.clampInt(c.proximity, 1, 6, 2);
+      // Emit bytes as hex so unusual characters (if the pupil typed
+      // lowercase or punctuation outside ASCII-printable) don't
+      // break the cc65 source.  The null terminator comes for free
+      // as the last entry.
+      const bytes = [];
+      for (let i = 0; i < text.length; i++) {
+        bytes.push('0x' + (text.charCodeAt(i) & 0xFF).toString(16).toUpperCase().padStart(2, '0'));
+      }
+      bytes.push('0x00');
+      template = A.appendToSlot(template, 'declarations', [
+        '#define BW_DIALOGUE_ENABLED 1',
+        '#define BW_DIALOG_ROW 25',
+        '#define BW_DIALOG_COL 2',
+        '#define BW_DIALOG_PROXIMITY ' + proximity,
+        '#define BW_DIALOG_WIDTH 28',
+        'static const unsigned char bw_dialogue_text[] = { ' +
+          bytes.join(', ') + ' };',
+      ].join('\n'));
+      // Per-frame: detect the B-edge + NPC proximity, set a
+      // pending-command flag (1 = draw, 2 = clear).  The template's
+      // vblank_writes slot consumes the flag during the main
+      // waitvsync window — doing the PPU writes THERE is essential:
+      // the older version called draw_text() (which itself calls
+      // waitvsync + toggles PPU_MASK) from per_frame, causing a
+      // double-vblank hiccup and visible sprite stutter.
+      const perFrame = [
+        '        // [builder] dialogue — NPC interaction via B press.',
+        '        // Detects the trigger here; the actual PPU text write',
+        '        // happens in the vblank_writes slot below so we update',
+        '        // the nametable inside the same vblank window as the',
+        '        // OAM writes.  No double-waitvsync, no frame skip.',
+        '        {',
+        '            unsigned char b_edge = (pad & 0x40) && !(bw_dialog_prev_b & 0x40);',
+        '            bw_dialog_prev_b = pad;',
+        '            if (bw_dialog_open) {',
+        '                if (b_edge) {',
+        '                    bw_dialog_cmd = 2;   /* clear */',
+        '                    bw_dialog_open = 0;',
+        '                }',
+        '            } else if (b_edge) {',
+        '                unsigned char px_tile = (px + ((PLAYER_W << 3) >> 1)) >> 3;',
+        '                unsigned char py_tile = (py + ((PLAYER_H << 3) >> 1)) >> 3;',
+        '                unsigned char j;',
+        '                for (j = 0; j < NUM_STATIC_SPRITES; j++) {',
+        '                    unsigned char dx, dy;',
+        '                    unsigned char nx, ny;',
+        '                    if (ss_role[j] != ROLE_NPC) continue;',
+        '                    if (ss_y[j] >= 240) continue;',
+        '                    nx = (ss_x[j] + ((ss_w[j] << 3) >> 1)) >> 3;',
+        '                    ny = (ss_y[j] + ((ss_h[j] << 3) >> 1)) >> 3;',
+        '                    dx = (px_tile > nx) ? (px_tile - nx) : (nx - px_tile);',
+        '                    dy = (py_tile > ny) ? (py_tile - ny) : (ny - py_tile);',
+        '                    if (dx + dy <= BW_DIALOG_PROXIMITY) {',
+        '                        bw_dialog_cmd = 1;   /* draw */',
+        '                        bw_dialog_open = 1;',
+        '                        break;',
+        '                    }',
+        '                }',
+        '            }',
+        '        }',
       ].join('\n');
-      return A.appendToSlot(template, 'per_frame', body);
+      template = A.appendToSlot(template, 'per_frame', perFrame);
+      // Vblank writes: consume the pending command inside the main
+      // vblank window.  Rendering is briefly paused (scroll is reset
+      // by the template immediately after this slot) so VRAM writes
+      // are safe.  Using PPU_DATA directly — no waitvsync needed
+      // since we're already in vblank.
+      const vblank = [
+        '        // [builder] dialogue — PPU writes (in vblank).',
+        '        if (bw_dialog_cmd != 0) {',
+        '            unsigned int dlg_addr = 0x2000',
+        '                + ((unsigned int)BW_DIALOG_ROW * 32)',
+        '                + BW_DIALOG_COL;',
+        '            unsigned char dlg_j;',
+        '            PPU_ADDR = (unsigned char)(dlg_addr >> 8);',
+        '            PPU_ADDR = (unsigned char)(dlg_addr & 0xFF);',
+        '            if (bw_dialog_cmd == 1) {',
+        '                /* Draw: tile indices map ASCII → BG tile.  Pupils',
+        '                 * paint A..Z at 0x41..0x5A, 0..9 at 0x30..0x39.',
+        '                 * Writes stop at the null terminator. */',
+        '                for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
+        '                    unsigned char ch = bw_dialogue_text[dlg_j];',
+        '                    if (ch == 0) break;',
+        '                    PPU_DATA = ch;',
+        '                }',
+        '            } else {',
+        '                /* Clear: write spaces across the whole row.  0x20',
+        '                 * is ASCII space; if the pupil painted a blank',
+        '                 * tile at 0x20 (or left it untouched) the row',
+        '                 * visually empties. */',
+        '                for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
+        '                    PPU_DATA = 0x20;',
+        '                }',
+        '            }',
+        '            bw_dialog_cmd = 0;',
+        '        }',
+      ].join('\n');
+      return A.appendToSlot(template, 'vblank_writes', vblank);
     },
   };
 
@@ -932,6 +1167,10 @@
         doors: {
           enabled: false,
           config: Object.assign({}, modules['doors'].defaultConfig),
+        },
+        dialogue: {
+          enabled: false,
+          config: Object.assign({}, modules['dialogue'].defaultConfig),
         },
         behaviour_walls: {
           enabled: true,

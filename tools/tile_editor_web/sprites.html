@@ -2573,12 +2573,12 @@ const ROLE_ORDER = [
 // Sprint-B — animation tagging.  `role` says which kind of sprite
 // uses the animation; `style` says what the animation is for.  Kept
 // in sync with the dropdowns on sprites.html below.
-const ANIM_ROLES = ['player', 'enemy', 'npc', 'pickup', 'any'];
+const ANIM_ROLES = ['player', 'player2', 'enemy', 'npc', 'pickup', 'any'];
 const ANIM_ROLE_VALUES = new Set(ANIM_ROLES);
 const ANIM_STYLES = ['walk', 'jump', 'idle', 'die', 'attack', 'custom'];
 const ANIM_STYLE_VALUES = new Set(ANIM_STYLES);
 const ANIM_ROLE_LABELS = {
-  player: 'Player', enemy: 'Enemy', npc: 'NPC',
+  player: 'Player', player2: 'Player 2', enemy: 'Enemy', npc: 'NPC',
   pickup: 'Pickup', any: 'Any role',
 };
 const ANIM_STYLE_LABELS = {
@@ -2833,7 +2833,19 @@ function migrateBuilderFields(s) {
     mods.hud = { enabled: false, config: {} };
   }
   if (mods && !mods.doors) {
-    mods.doors = { enabled: false, config: { spawnX: 24, spawnY: 120 } };
+    mods.doors = { enabled: false,
+      config: { spawnX: 24, spawnY: 120, targetBgIdx: -1 } };
+  }
+  // Phase B+ round 3 — back-fill targetBgIdx on doors saved before
+  // multi-bg landed.  Defaults to -1 (same-room) so legacy projects
+  // keep their existing teleport-only behaviour.
+  if (mods && mods.doors && mods.doors.config &&
+      mods.doors.config.targetBgIdx === undefined) {
+    mods.doors.config.targetBgIdx = -1;
+  }
+  if (mods && !mods.dialogue) {
+    mods.dialogue = { enabled: false,
+      config: { text: 'HELLO', proximity: 2 } };
   }
 }
 

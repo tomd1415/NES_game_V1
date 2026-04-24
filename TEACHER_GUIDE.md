@@ -410,6 +410,54 @@ It categorises tiles by whether they're referenced by sprites or backgrounds, fi
 
 Once run, the pupil imports the JSON on each editor page (**Import background…** / **Import sprites…**).
 
+### Phase B — Builder page (🧱)
+
+The **🧱 Builder** is the fifth editor tab.  It lets pupils build
+a compilable NES game by ticking modules and filling in typed
+attributes — no C required.  The pipeline is:
+
+```text
+state.builder (JSON)  →  builder-assembler.js  →  main.c
+                         + builder-modules.js        ↓
+                         + builder-validators.js    /play
+                                                     ↓
+                                                   cc65 → .nes
+```
+
+See [BUILDER_GUIDE.md](BUILDER_GUIDE.md) for the full module
+reference.  A few teacher-relevant bits:
+
+- **Modules live in `tools/tile_editor_web/builder-modules.js`.**
+  Each is a plain JS object with `label`, `description`,
+  `defaultConfig`, a typed `schema` and an optional
+  `applyToTemplate(template, node, state)` transform.  Adding a
+  module is usually 30-80 lines of code plus a smoke test.
+- **The template at `tools/tile_editor_web/builder-templates/platformer.c`**
+  is a near-copy of `steps/Step_Playground/src/main.c` with
+  `#if`-gated blocks for HP, HUD, Player 2, multi-background
+  doors, dialogue, runtime animations.  When no Builder modules
+  are enabled the template compiles to a ROM with the same
+  `sha1sum` as the stock Step_Playground ROM — a **byte-identical
+  baseline invariant** that the regression suite enforces.
+- **Font-tile convention for Dialogue.**  Text renders by writing
+  tile indices to the nametable (ASCII values of each character).
+  Pupils paint letter glyphs at `0x41`..`0x5A` (A..Z) and
+  `0x30`..`0x39` (0..9) in their BG tile set.  Unpainted indices
+  show whatever happens to be there (blank for a fresh project).
+
+### Regression tests
+
+Run `node tools/builder-tests/run-all.mjs` from the repo root.
+It syntax-checks every module + inline script, verifies the
+byte-identical baseline invariant, and runs eight smoke-test
+suites covering Player 2, HP+HUD, runtime animations, teleport
+doors, multi-background doors, the polish sweep (P2 HP + P2
+animation + enemy/pickup idle), and dialogue (including a
+regression guard against the old `draw_text()` / `clear_text_row()`
+from-per-frame pattern that caused a one-frame sprite stutter).
+
+The suite should be green before any Builder change ships.
+
 ---
 
 ## Step-based lesson structure
