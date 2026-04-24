@@ -453,6 +453,43 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 .master-cell:active { cursor: grabbing; }
 .master-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
 .master-cell.chosen { outline: 2px solid var(--good); z-index: 2; }
+
+/* Phase 2.2: Recent colours strip above the master grid.  Pupils
+   rarely use more than ~5 colours per project — surfacing the last
+   8 they picked saves hunting through the 64-cell master grid every
+   time.  Persisted in prefs so the strip carries across page reloads. */
+.recent-colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  min-height: 22px;
+}
+.recent-colours:empty::before {
+  content: 'No recent colours yet — pick one below.';
+  color: var(--muted);
+  font-size: 0.78em;
+  font-style: italic;
+  align-self: center;
+}
+.recent-cell {
+  width: 22px; height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+}
+.recent-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
+
+/* Phase 2.2: hover-preview on master-grid cells shows the selected
+   palette slot temporarily recoloured.  .preview is toggled on the
+   selected slot while a master cell is hovered; the `data-preview-rgb`
+   attribute carries the preview colour so the slot's own rendering
+   falls back to its real value the moment the hover ends. */
+.palette-slot.preview {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
 .master-hint {
   color: var(--muted);
   font-size: 0.75em;
@@ -1156,9 +1193,12 @@ kbd {
         <div class="palette-editor-slots" id="palette-editor-slots"
              title="Click a slot, then click a master colour. Or drag a master colour onto any slot."></div>
         <div class="palette-editor-picker">
+          <div class="recent-colours" id="recent-colours"
+               aria-label="Recent colours"
+               title="Colours you have used recently — click to reuse."></div>
           <div class="master-grid" id="master-grid"></div>
           <div class="master-hint">
-            Hover shows hex code. Drag a cell onto any slot to assign.
+            Hover a cell to preview it in the selected slot. Click to assign, or drag onto any slot.
           </div>
         </div>
       </div>
@@ -2903,7 +2943,92 @@ function renderMasterGrid() {
       c.classList.add('dragging');
     });
     c.addEventListener('dragend', () => c.classList.remove('dragging'));
+    // Phase 2.2 hover-preview: while the pupil's mouse is over a
+    // master cell, paint the currently-selected palette slot with that
+    // colour so they can see the effect before committing.  On mouse
+    // leave we restore the real colour so a cancelled hover has no
+    // persistent side-effect.  Clicking commits via the handler above.
+    c.addEventListener('mouseenter', () => previewColourOnSelectedSlot(i));
+    c.addEventListener('mouseleave', clearColourPreview);
     grid.appendChild(c);
+  }
+  // Phase 2.2: render the recent-colours strip whenever we rebuild the
+  // master grid so it stays in sync with the current prefs.
+  renderRecentColours();
+}
+
+// Preview plumbing — keeps the DOM change to just the .palette-slot
+// element the pupil selected.  We deliberately do NOT re-render the
+// tileset / tile editor / nametable on hover; doing so would be a
+// lot of work for a transient preview and could feel laggy.  The
+// slot itself is the right anchor: pupils clicked it to say "I care
+// about this one," so highlighting it with the proposed colour is
+// enough signal.
+function previewColourOnSelectedSlot(nesIdx) {
+  const slot = document.querySelector('.palette-slot.selected');
+  if (!slot) return;
+  if (!slot.dataset.realBg) {
+    slot.dataset.realBg = slot.style.background || '';
+  }
+  slot.style.background = nesRgb(nesIdx);
+  slot.classList.add('preview');
+}
+function clearColourPreview() {
+  const slot = document.querySelector('.palette-slot.selected.preview');
+  if (!slot) return;
+  slot.style.background = slot.dataset.realBg || '';
+  delete slot.dataset.realBg;
+  slot.classList.remove('preview');
+}
+
+// --- Phase 2.2: recent-colours strip ---------------------------------
+// Stored globally in prefs rather than per-project: pupils often want
+// to reuse a palette they developed on another project as a starting
+// point, and the list is just an MRU of 8 colour indices — tiny.
+function getRecentColours() {
+  try {
+    const p = Storage.readPrefs() || {};
+    const arr = Array.isArray(p.recentColours) ? p.recentColours : [];
+    return arr.filter(n => typeof n === 'number' && n >= 0 && n <= 63).slice(0, 8);
+  } catch { return []; }
+}
+function pushRecentColour(nesIdx) {
+  if (typeof nesIdx !== 'number' || nesIdx < 0 || nesIdx > 63) return;
+  try {
+    const p = Storage.readPrefs() || {};
+    const cur = Array.isArray(p.recentColours) ? p.recentColours.slice() : [];
+    // MRU: remove any existing occurrence, unshift to the front, cap at 8.
+    const kept = cur.filter(n => n !== nesIdx);
+    kept.unshift(nesIdx);
+    p.recentColours = kept.slice(0, 8);
+    Storage.writePrefs(p);
+  } catch { /* non-fatal */ }
+}
+function renderRecentColours() {
+  const host = document.getElementById('recent-colours');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const idx of getRecentColours()) {
+    const cell = document.createElement('div');
+    cell.className = 'recent-cell';
+    cell.style.background = nesRgb(idx);
+    cell.title = 'Reuse 0x' +
+      idx.toString(16).padStart(2, '0').toUpperCase() +
+      ' — click to assign, or drag onto a slot.';
+    cell.addEventListener('click', () => assignColour(idx));
+    // Hover-preview + drag-and-drop: recent-cells are interchangeable
+    // with master-cells so the exact same interaction works from the
+    // faster path above the grid.
+    cell.addEventListener('mouseenter', () => previewColourOnSelectedSlot(idx));
+    cell.addEventListener('mouseleave', clearColourPreview);
+    cell.draggable = true;
+    cell.addEventListener('dragstart', (ev) => {
+      if (!ev.dataTransfer) return;
+      ev.dataTransfer.effectAllowed = 'copy';
+      ev.dataTransfer.setData('application/x-nes-colour', String(idx));
+      ev.dataTransfer.setData('application/x-nes-color',  String(idx));
+    });
+    host.appendChild(cell);
   }
 }
 function currentChosenColourIdx() {
@@ -2942,6 +3067,12 @@ function assignColourToSlot(kind, palIdx, slot, nesIdx) {
   } else {
     return;
   }
+  // Phase 2.2: add the picked colour to the MRU so it surfaces in the
+  // recent-colours strip.  Clear the preview state first — the slot
+  // is about to be re-rendered from scratch, but we also reuse its
+  // DOM node if the caller was mid-hover (drag-drop works that way).
+  clearColourPreview();
+  pushRecentColour(nesIdx);
   markDirty();
   renderPalettes();
   renderMasterGrid();

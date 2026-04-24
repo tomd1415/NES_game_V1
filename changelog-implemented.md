@@ -2970,3 +2970,71 @@ step is to inspect nametable / attribute-table contents via
 fceux's PPU viewer while scrolling, which will point at
 whether it's a timing issue (vblank overrun) or a data issue
 (stale attributes / missing nametable content).
+
+### Phase 2.2 — 2026-04-24 palette picker QoL
+
+Pupil ask from 2026-04-20: "select colours for palettes
+easier."  Two additions on both Backgrounds and Sprites pages:
+
+**Hover-to-preview.**  When a palette slot is selected, hovering
+a cell in the master grid (or the new recent-colours strip)
+temporarily paints that slot with the hovered colour.  Pupils
+can scan the 64-cell grid and SEE which colours fit before
+committing.  Implementation stays on the slot DOM node only —
+we don't re-render the tile editor / tileset / nametable per
+hover, because that would feel laggy and the slot is the right
+signal anchor ("you clicked here because you care about this
+slot").  On mouse-leave the slot reverts; on click the hover
+commits via `assignColourToSlot`.
+
+**Recent colours strip.**  Up to eight most-recently-picked
+NES indices, persisted in `prefs.recentColours` (global, not
+per-project — pupils reuse palettes across projects).  Clicking
+a recent swatch assigns it to the selected slot; dragging onto
+a slot works too (same dataTransfer payload as the master grid,
+so the existing drop handlers just work).  Shows a greyed-out
+"No recent colours yet — pick one below." line until the pupil
+makes their first pick.
+
+**Drag-and-drop** from master grid onto palette slots was
+already wired (2026-04-13 work) so no change needed there.
+
+Changes land on
+[index.html](tools/tile_editor_web/index.html) and
+[sprites.html](tools/tile_editor_web/sprites.html) symmetrically
+— the master-grid and palette-slot markup is near-identical
+between the two pages so the helpers are duplicated (kept inline
+for page-local simplicity; not worth extracting to a shared
+module yet).
+
+### Phase 2.3 — 2026-04-24 inline animation strip
+
+Pupil ask from 2026-04-20: "Make the animation section easier
+to find and use."  Promoted the current animation's frames into
+a prominent strip above the composition canvas on the Sprites
+page — frame thumbnails, a **+ Add frame** button, and a
+`full editor →` link that opens the collapsed Animations panel
+below.
+
+Markup + render function (`renderAnimStrip`) added to
+[sprites.html](tools/tile_editor_web/sprites.html).  Hooks into
+the existing `renderAnimations` fan-out so the strip stays in
+sync whenever the animation list, selected animation, or frame
+order changes.  Clicking a thumbnail jumps the preview to that
+frame; the preview canvas in the full editor picks up the
+`animPreview.frameIdx` change automatically on its next tick.
+
+The full Animations editor (fps, reorder, delete frames, rename,
+duplicate, preview-controls) stays inside the collapsible
+`<details>` below — power users keep their existing workflow;
+casual pupils now have the most-used bits surfaced.
+
+### Phase 2 — status after this session
+
+Shipped: 2.2 + 2.3.  Deferred to the next dedicated session:
+**2.1 drawing tools** (Pencil / Fill / Line / Rect / Circle /
+Select with marquee + move + resize).  Per
+[next-steps-plan.md](next-steps-plan.md), 2.1 was always flagged
+as a full-day "L" effort so shipping it alone matches the
+plan's recommended split.  The suite is green (syntax + 5
+invariants + baseline + 9 smoke suites) at every step so far.

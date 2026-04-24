@@ -321,6 +321,80 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 .dim-row input[type=number] { width: 54px; }
 #sprite-name-input { width: 100%; }
 
+/* --- Phase 2.3: inline animation strip ---------------------- */
+/* Sits above the composition canvas so pupils see the current
+   animation's frames while they paint.  Full editor still lives
+   below in the collapsible Animations section. */
+.anim-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  margin: 4px 0 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.anim-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.anim-strip-head .anim-strip-label { color: var(--fg); }
+.anim-strip-head strong { color: var(--accent); }
+.anim-strip-head a {
+  margin-left: auto;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.85em;
+}
+.anim-strip-head a:hover { text-decoration: underline; }
+.anim-strip-head button {
+  padding: 3px 8px;
+  font-size: 0.82em;
+}
+.anim-strip-frames {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 2px 0;
+  min-height: 40px;
+}
+.anim-strip-frame {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 2px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel2);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.anim-strip-frame:hover { border-color: var(--muted); }
+.anim-strip-frame.active { border-color: var(--accent); }
+.anim-strip-frame canvas {
+  display: block;
+  image-rendering: pixelated;
+  background: #000;
+  width: 28px; height: 28px;
+}
+.anim-strip-frame .frame-num {
+  font-size: 0.7em;
+  color: var(--muted);
+  line-height: 1;
+}
+.anim-strip-empty {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-style: italic;
+  padding: 6px 2px;
+}
+
 /* --- Animations panel ------------------------------------- */
 .animations-section {
   margin-top: 18px;
@@ -896,6 +970,36 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
 .master-cell:active { cursor: grabbing; }
 .master-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
 .master-cell.chosen { outline: 2px solid var(--good); z-index: 2; }
+
+/* Phase 2.2: recent-colours strip + hover-preview outline.  Same
+   markup and behaviour as the Backgrounds page so muscle memory
+   carries across. */
+.recent-colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  min-height: 22px;
+}
+.recent-colours:empty::before {
+  content: 'No recent colours yet — pick one below.';
+  color: var(--muted);
+  font-size: 0.78em;
+  font-style: italic;
+  align-self: center;
+}
+.recent-cell {
+  width: 22px; height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+}
+.recent-cell:hover { outline: 2px solid var(--accent); z-index: 2; }
+.palette-slot.preview {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
 .master-hint { color: var(--muted); font-size: 0.75em; margin-top: 6px; line-height: 1.5; }
 
 /* --- Palette editor (active palette + master grid) ----------- */
@@ -1769,7 +1873,7 @@ details.collapsible > summary .sub-count {
     </div>
 
     <!-- ============ Animations sub-panel ============ -->
-    <details class="collapsible animations-section" data-collapse-key="sp-animations" open>
+    <details id="animations-panel" class="collapsible animations-section" data-collapse-key="sp-animations" open>
       <summary><h2 style="display:inline;margin:0">Animations</h2></summary>
       <div class="sprite-list-buttons">
         <button type="button" id="btn-anim-new" title="Create a new empty animation">+ New</button>
@@ -1895,6 +1999,29 @@ details.collapsible > summary .sub-count {
         <input type="checkbox" id="auto-allocate-resize" checked> auto-allocate tiles on resize
       </label>
     </div>
+    <!-- Phase 2.3: inline animation strip above the composition canvas.
+         Pupils reported the Animations section (below the sprite list)
+         is hard to find, so promote the most-used bits here: current
+         animation's frames as thumbnails, + Add frame, and a jump-
+         to-full-editor link.  The full Animations panel stays below
+         for power-user operations (fps, reorder, delete frames, …). -->
+    <div class="anim-strip" id="anim-strip" aria-label="Animation frames for the selected animation">
+      <div class="anim-strip-head">
+        <span class="anim-strip-label"
+              title="What's an animation?  An ordered list of sprites; assign a name to `walk` or `jump` below and the NES plays them in sequence while the player moves.">
+          🎞 <strong id="anim-strip-name">Animation</strong>
+        </span>
+        <button type="button" id="btn-anim-strip-add"
+                title="Append the sprite currently selected in the list as a new frame">+ Add frame</button>
+        <a href="#animations-panel" id="anim-strip-jump"
+           title="Open the full Animations editor (fps, reorder, delete frames, rename, duplicate).">full editor →</a>
+      </div>
+      <div class="anim-strip-frames" id="anim-strip-frames"></div>
+      <div class="anim-strip-empty" id="anim-strip-empty" hidden>
+        No animation selected.  Click <b>+ New</b> in the Animations
+        section below to make one.
+      </div>
+    </div>
     <div class="sprite-canvas-wrap">
       <canvas id="sprite-canvas" width="128" height="128"
               title="Left-click: select / paint a cell. Right-click: open the tile picker to assign a tile to this cell. Shift-click: eyedrop."></canvas>
@@ -1993,9 +2120,13 @@ details.collapsible > summary .sub-count {
             <div class="palette-editor-slots" id="palette-editor-slots"
                  title="Click a slot, then click a master colour. Or drag a master colour onto any slot."></div>
             <div class="palette-editor-picker">
+              <div class="recent-colours" id="recent-colours"
+                   aria-label="Recent colours"
+                   title="Colours you have used recently — click to reuse."></div>
               <div class="master-grid" id="master-grid"></div>
               <div class="master-hint">
-                Drag a cell onto any slot to assign. (Slot 0 is always
+                Hover a cell to preview it in the selected slot. Click
+                to assign, or drag onto any slot.  (Slot 0 is always
                 transparent for sprites.)
               </div>
             </div>
@@ -3586,6 +3717,68 @@ function renderAnimations() {
   renderAnimationList();
   renderAnimationEditor();
   renderAnimationAssignments();
+  renderAnimStrip();
+}
+
+// Phase 2.3: inline strip above the composition canvas.  Shows the
+// current animation's frames as thumbnails so pupils can see + edit
+// without scrolling to the Animations panel below the sprite list.
+function renderAnimStrip() {
+  const head    = document.getElementById('anim-strip-name');
+  const host    = document.getElementById('anim-strip-frames');
+  const empty   = document.getElementById('anim-strip-empty');
+  const addBtn  = document.getElementById('btn-anim-strip-add');
+  if (!head || !host || !empty || !addBtn) return;
+
+  const anim = currentAnim();
+  if (!anim) {
+    head.textContent = '(no animation)';
+    host.innerHTML = '';
+    host.hidden = true;
+    empty.hidden = false;
+    addBtn.disabled = true;
+    return;
+  }
+  head.textContent = anim.name || ('animation #' + anim.id);
+  empty.hidden = true;
+  host.hidden = false;
+  addBtn.disabled = false;
+
+  host.innerHTML = '';
+  const frames = Array.isArray(anim.frames) ? anim.frames : [];
+  if (frames.length === 0) {
+    const hint = document.createElement('span');
+    hint.className = 'anim-strip-empty';
+    hint.style.padding = '0';
+    hint.textContent = 'No frames yet.  Pick a sprite in the list, then click + Add frame.';
+    host.appendChild(hint);
+    return;
+  }
+  frames.forEach((spriteIdx, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'anim-strip-frame' +
+      (i === (animPreview.frameIdx | 0) ? ' active' : '');
+    cell.title = 'Frame ' + (i + 1) + ' of ' + frames.length +
+      ' — click to jump the preview here.';
+    const thumb = document.createElement('canvas');
+    thumb.width = 28; thumb.height = 28;
+    const sp = (state.sprites || [])[spriteIdx];
+    if (sp) drawSpriteIntoCtx(sp, thumb.getContext('2d'), 28, 28);
+    cell.appendChild(thumb);
+    const num = document.createElement('span');
+    num.className = 'frame-num';
+    num.textContent = (i + 1);
+    cell.appendChild(num);
+    cell.addEventListener('click', () => {
+      animPreview.frameIdx = i;
+      renderAnimStrip();
+      const previewCanvas = document.getElementById('anim-preview-canvas');
+      if (previewCanvas && sp) {
+        drawSpriteIntoCtx(sp, previewCanvas.getContext('2d'), 64, 64);
+      }
+    });
+    host.appendChild(cell);
+  });
 }
 
 function renderAnimationList() {
@@ -3871,7 +4064,7 @@ function initAnimationHandlers() {
     renderAnimations();
     if (animPreview.playing) startAnimPreview();
   });
-  document.getElementById('btn-anim-add-frame').addEventListener('click', () => {
+  function appendCurrentSpriteAsFrame() {
     const a = currentAnim();
     if (!a) return;
     if (selectedSpriteIdx < 0 || selectedSpriteIdx >= state.sprites.length) {
@@ -3882,7 +4075,24 @@ function initAnimationHandlers() {
     a.frames.push(selectedSpriteIdx);
     markDirty();
     renderAnimations();
-  });
+  }
+  document.getElementById('btn-anim-add-frame').addEventListener(
+    'click', appendCurrentSpriteAsFrame);
+  // Phase 2.3: inline-strip + Add frame button shares the same handler
+  // so behaviour is identical whichever + Add frame the pupil clicks.
+  const stripAdd = document.getElementById('btn-anim-strip-add');
+  if (stripAdd) {
+    stripAdd.addEventListener('click', appendCurrentSpriteAsFrame);
+  }
+  // Phase 2.3: "full editor →" link opens the collapsed Animations
+  // panel first, then lets the default scroll-into-view happen.
+  const stripJump = document.getElementById('anim-strip-jump');
+  if (stripJump) {
+    stripJump.addEventListener('click', () => {
+      const panel = document.getElementById('animations-panel');
+      if (panel) panel.open = true;
+    });
+  }
   document.getElementById('btn-anim-play').addEventListener('click', () => {
     if (animPreview.playing) stopAnimPreview();
     else startAnimPreview();
@@ -4950,9 +5160,76 @@ function renderMasterGrid() {
       el.classList.add('dragging');
     });
     el.addEventListener('dragend', () => el.classList.remove('dragging'));
+    // Phase 2.2 hover-preview: same UX as Backgrounds — the selected
+    // palette slot previews the hovered colour while the pupil scans
+    // the master grid.
+    el.addEventListener('mouseenter', () => previewColourOnSelectedSlot(i));
+    el.addEventListener('mouseleave', clearColourPreview);
     grid.appendChild(el);
   }
+  renderRecentColours();
 }
+
+// Phase 2.2 helpers (mirror Backgrounds page implementation).
+function previewColourOnSelectedSlot(nesIdx) {
+  const slot = document.querySelector('.palette-slot.selected');
+  if (!slot) return;
+  if (!slot.dataset.realBg) {
+    slot.dataset.realBg = slot.style.background || '';
+  }
+  slot.style.background = nesRgb(nesIdx);
+  slot.classList.add('preview');
+}
+function clearColourPreview() {
+  const slot = document.querySelector('.palette-slot.selected.preview');
+  if (!slot) return;
+  slot.style.background = slot.dataset.realBg || '';
+  delete slot.dataset.realBg;
+  slot.classList.remove('preview');
+}
+function getRecentColours() {
+  try {
+    const p = Storage.readPrefs() || {};
+    const arr = Array.isArray(p.recentColours) ? p.recentColours : [];
+    return arr.filter(n => typeof n === 'number' && n >= 0 && n <= 63).slice(0, 8);
+  } catch { return []; }
+}
+function pushRecentColour(nesIdx) {
+  if (typeof nesIdx !== 'number' || nesIdx < 0 || nesIdx > 63) return;
+  try {
+    const p = Storage.readPrefs() || {};
+    const cur = Array.isArray(p.recentColours) ? p.recentColours.slice() : [];
+    const kept = cur.filter(n => n !== nesIdx);
+    kept.unshift(nesIdx);
+    p.recentColours = kept.slice(0, 8);
+    Storage.writePrefs(p);
+  } catch { /* non-fatal */ }
+}
+function renderRecentColours() {
+  const host = document.getElementById('recent-colours');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const idx of getRecentColours()) {
+    const cell = document.createElement('div');
+    cell.className = 'recent-cell';
+    cell.style.background = nesRgb(idx);
+    cell.title = 'Reuse 0x' +
+      idx.toString(16).padStart(2, '0').toUpperCase() +
+      ' — click to assign, or drag onto a slot.';
+    cell.addEventListener('click', () => assignColour(idx));
+    cell.addEventListener('mouseenter', () => previewColourOnSelectedSlot(idx));
+    cell.addEventListener('mouseleave', clearColourPreview);
+    cell.draggable = true;
+    cell.addEventListener('dragstart', (ev) => {
+      if (!ev.dataTransfer) return;
+      ev.dataTransfer.effectAllowed = 'copy';
+      ev.dataTransfer.setData('application/x-nes-colour', String(idx));
+      ev.dataTransfer.setData('application/x-nes-color',  String(idx));
+    });
+    host.appendChild(cell);
+  }
+}
+
 function currentChosenColourIdx() {
   if (selectedPaletteKind === 'sprite' && selectedPaletteSlot > 0) {
     return state.sprite_palettes[selectedPaletteIdx].slots[selectedPaletteSlot - 1];
@@ -4967,6 +5244,10 @@ function assignColourToSlot(kind, palIdx, slot, nesIdx) {
   if (kind !== 'sprite' || slot === 0) return;
   pushUndo();
   state.sprite_palettes[palIdx].slots[slot - 1] = nesIdx;
+  // Phase 2.2: record in the MRU + clear any live preview (hovered
+  // cell's dataset.realBg goes stale the moment we re-render).
+  clearColourPreview();
+  pushRecentColour(nesIdx);
   markDirty();
   renderPalettes();
   renderMasterGrid();

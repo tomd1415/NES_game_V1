@@ -1,18 +1,18 @@
 # Next-steps plan (post pupil-fix pass)
 
-> **Status stamp (2026-04-24).**  Phase 1 is **complete** — all four
-> items shipped in the session that followed this plan's authoring:
-> scroll-stream one-transfer-per-axis cap (C2, pending manual fceux
-> confirm), shared `help.js` page-tabs + Feedback toggle on every
-> page (1.2), project-dropdown parity on Behaviour / Builder / Code
-> via `Storage.wireBasicProjectActions` (1.3), and the Backgrounds
-> page's prominent paint-with-palette row above the nametable canvas
-> (1.4).  See the "Phase 1" entry in
-> [changelog-implemented.md](changelog-implemented.md) for the full
-> write-up.  Pupil verification still outstanding: scroll flicker
-> gone in fceux, help-tab navigation feels right, paint-palette row
-> is discoverable.  **Next: Phase 2** (drawing tools, palette picker
-> QoL, inline animation strip).
+> **Status stamp (2026-04-24).**  Phase 1 is **complete except 1.1
+> C2** (scroll flicker, parked pending teacher investigation).
+> **Phase 2.2** (palette picker QoL — hover-to-preview + recent
+> colours) and **Phase 2.3** (inline animation strip above the
+> composition canvas) shipped in the same session as the plan
+> authoring; **Phase 2.1 drawing tools** is deferred to its own
+> dedicated session (L effort, per the plan).  All Phase 1 polish
+> items landed: shared `help.js` page-tabs + Feedback toggle (1.2),
+> project-dropdown parity (1.3), Backgrounds paint-with-palette row
+> (1.4).  See the "Phase 1", "Scroll-flicker follow-up", "Phase 2.2"
+> and "Phase 2.3" entries in
+> [changelog-implemented.md](changelog-implemented.md).  **Next:
+> Phase 2.1** (drawing tools), then Phase 3 (content & templates).
 
 Where to go from here, as of 2026-04-24.  Two preceding plan docs
 remain useful history:

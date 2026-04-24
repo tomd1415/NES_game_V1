@@ -48,9 +48,9 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-20 | Gameplay snippets  | NPC dialogue snippet                                              | [done]    |
 | 2026-04-20 | Gameplay snippets  | Follower sprite that tracks the player                            | [done]    |
 | 2026-04-20 | Sprite UX          | More sprite role labels (tools, power-ups) for future snippets    | [done]    |
-| 2026-04-20 | Sprite UX          | Make the Animation panel easier to find and use                   | [new]     |
+| 2026-04-20 | Sprite UX          | Make the Animation panel easier to find and use                   | [done]    |
 | 2026-04-20 | Drawing tools      | Fill, shape select (rect/circle), resize regions, shape delete    | [new]     |
-| 2026-04-20 | Palette UX         | Pick colours for palettes more easily                             | [new]     |
+| 2026-04-20 | Palette UX         | Pick colours for palettes more easily                             | [done]    |
 | 2026-04-20 | Scenes             | Trigger next-scene load (uses existing multi-background support)  | [done]    |
 | 2026-04-20 | Audio              | Import FamiStudio music/SFX files                                 | [new]     |
 | 2026-04-20 | Sharing            | Gallery to upload screenshots / ROMs for others to play           | [new]     |
@@ -232,7 +232,13 @@ Use pupil initials (not full names) for anonymity.
   collapsible master list for power users, but land pupils on the
   strip. Add a one-line "What's an animation?" tooltip that links to
   the matching lesson.
-- **Status / date:** [new] 2026-04-20
+- **Status / date:** [done] 2026-04-24 — shipped as Phase 2.3 of
+  [next-steps-plan.md](next-steps-plan.md).  Strip sits above the
+  composition canvas with frame thumbnails + **+ Add frame** + a
+  `full editor →` link that opens the collapsed Animations panel
+  below.  Full editor stays put for power users.  See the
+  "Phase 2.3" entry in
+  [changelog-implemented.md](changelog-implemented.md).
 
 ---
 
@@ -414,7 +420,17 @@ of a game without writing new C themselves.
   palette slot (native HTML5 drag). Add a **Recent colours** strip of
   the last 8 picks above the master grid so common edits are one
   click.
-- **Status / date:** [new] 2026-04-20
+- **Status / date:** [done] 2026-04-24 — shipped as Phase 2.2 of
+  [next-steps-plan.md](next-steps-plan.md).  Hover-to-preview:
+  hovering a master-grid cell (or a recent-colour swatch) while a
+  palette slot is selected temporarily recolours that slot so
+  pupils see the effect before committing.  Drag-and-drop from the
+  master grid onto any palette slot was already wired in 2026-04-13
+  work.  Recent-colours strip at the top of the palette picker holds
+  the last 8 picks (persisted in `prefs.recentColours`, shared
+  across projects).  Both Backgrounds and Sprites pages.  See the
+  "Phase 2.2" entry in
+  [changelog-implemented.md](changelog-implemented.md).
 
 ---
 
