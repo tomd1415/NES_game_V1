@@ -2783,26 +2783,41 @@ function migrateState(s) {
 }
 
 function migrateBuilderFields(s) {
-  if (s.builder && s.builder.version === 1) return;
-  s.builder = {
-    version: 1,
-    modules: {
-      game: { enabled: true, config: { type: 'platformer' } },
-      players: {
-        enabled: true,
-        config: { count: 1 },
-        submodules: {
-          player1: {
-            enabled: true,
-            config: {
-              startX: 60, startY: 120,
-              walkSpeed: 1, jumpHeight: 20, maxHp: 0,
+  if (!s.builder || s.builder.version !== 1) {
+    s.builder = {
+      version: 1,
+      modules: {
+        game: { enabled: true, config: { type: 'platformer' } },
+        players: {
+          enabled: true,
+          config: { count: 1 },
+          submodules: {
+            player1: {
+              enabled: true,
+              config: {
+                startX: 60, startY: 120,
+                walkSpeed: 1, jumpHeight: 20, maxHp: 0,
+              },
             },
           },
         },
       },
-    },
-  };
+    };
+  }
+  // Non-destructive back-fill: after the initial seed, make sure
+  // newer submodules added in later Builder chunks exist on this
+  // state so the UI has something to render.  Never overwrites a
+  // pupil's own config.
+  const pl = s.builder.modules && s.builder.modules.players;
+  if (pl && pl.submodules && !pl.submodules.player2) {
+    pl.submodules.player2 = {
+      enabled: false,
+      config: {
+        startX: 180, startY: 120,
+        walkSpeed: 1, jumpHeight: 20, maxHp: 0,
+      },
+    };
+  }
 }
 
 function defaultBehaviourTypes() {

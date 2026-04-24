@@ -195,6 +195,28 @@ label { -webkit-user-select: none; user-select: none; }
 }
 
 /* --- Scene module dynamic list (custom renderer) ------------- */
+.scene-preview-wrap {
+  margin: 10px 0 12px;
+  padding: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.scene-preview-canvas {
+  display: block;
+  width: 100%;
+  max-width: 512px;
+  height: auto;
+  image-rendering: pixelated;
+  background: #000;
+  border: 1px solid var(--border);
+  cursor: crosshair;
+}
+.scene-preview-hint {
+  margin-top: 6px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
 .scene-instances {
   display: flex; flex-direction: column;
   gap: 6px; margin: 8px 0;
@@ -428,6 +450,7 @@ label { -webkit-user-select: none; user-select: none; }
 
 <script src="storage.js"></script>
 <script src="feedback.js"></script>
+<script src="sprite-render.js"></script>
 <script src="builder-assembler.js"></script>
 <script src="builder-modules.js"></script>
 <script src="builder-validators.js"></script>
@@ -623,9 +646,11 @@ label { -webkit-user-select: none; user-select: none; }
     }
 
     // Submodules: descend one level and include any modules whose
-    // `parent` field matches dottedId.
-    const subIds = Object.keys(window.BuilderModules).filter(k =>
-      window.BuilderModules[k].parent === dottedId);
+    // `parent` field matches dottedId and aren't marked hidden.
+    const subIds = Object.keys(window.BuilderModules).filter(k => {
+      const d = window.BuilderModules[k];
+      return d.parent === dottedId && !d.hidden;
+    });
     if (subIds.length) {
       const subWrap = document.createElement('div');
       subWrap.className = 'submodule-list';
@@ -731,6 +756,29 @@ label { -webkit-user-select: none; user-select: none; }
     }
     host.appendChild(summary);
 
+    // Preview canvas — shows every instance drawn at its (x, y) on a
+    // scaled-up 256×240 screen.  Click to add; drag to move.  The
+    // number-input rows below still work for precise placement.
+    let preview = null;
+    if (placeable.length > 0) {
+      preview = document.createElement('div');
+      preview.className = 'scene-preview-wrap';
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;       // 256 * 2 — the on-screen pixel size
+      canvas.height = 480;      // 240 * 2
+      canvas.className = 'scene-preview-canvas';
+      canvas.title = 'Click to add a sprite here.  Drag an existing sprite to move it.';
+      preview.appendChild(canvas);
+      const hint = document.createElement('div');
+      hint.className = 'scene-preview-hint';
+      hint.textContent =
+        'Click an empty spot to drop a new sprite. Drag a sprite to move it.';
+      preview.appendChild(hint);
+      host.appendChild(preview);
+      wireScenePreview(canvas, node, placeable, () => { drawPreview(canvas, node); rerender(); });
+      drawPreview(canvas, node);
+    }
+
     const list = document.createElement('div');
     list.className = 'scene-instances';
     host.appendChild(list);
@@ -739,7 +787,7 @@ label { -webkit-user-select: none; user-select: none; }
       list.innerHTML = '';
       instances.forEach((inst, i) => {
         list.appendChild(renderSceneInstanceRow(inst, i, node, placeable,
-          rerender));
+          () => { rerender(); if (preview) drawPreview(preview.querySelector('canvas'), node); }));
       });
     }
     rerender();
@@ -858,11 +906,317 @@ label { -webkit-user-select: none; user-select: none; }
     return row;
   }
 
+  // --- Scene preview canvas ---------------------------------------
+  //
+  // Coordinate system: the NES screen is 256×240 logical pixels; we
+  // draw at 2× so each logical pixel is a 2×2 block.  Everything in
+  // state uses logical pixels, so the UI converts on mouse events.
+  const SCENE_SCALE = 2;
+
+  function drawPreview(canvas, node) {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    // Universal BG colour first, so any transparent pixels in the
+    // nametable read as the real NES backdrop.
+    ctx.fillStyle = window.NesRender.nesRgb(
+      (state && typeof state.universal_bg === 'number') ? state.universal_bg : 0x21);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Paint the selected background's nametable.  The editor stores
+    // per-cell palette (the PPU attribute-block constraint is
+    // enforced at /play time), so we can render cell-by-cell here
+    // using NesRender.bgPaletteFor().  Pupils get a proper backdrop
+    // that matches what the Backgrounds page shows.
+    drawBackgroundBehind(ctx, canvas);
+    // Faint tile grid on top of the backdrop so pupils can still
+    // eyeball tile coordinates when dragging.
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= 256; x += 16) {
+      ctx.beginPath();
+      ctx.moveTo(x * SCENE_SCALE + 0.5, 0);
+      ctx.lineTo(x * SCENE_SCALE + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= 240; y += 16) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * SCENE_SCALE + 0.5);
+      ctx.lineTo(canvas.width, y * SCENE_SCALE + 0.5);
+      ctx.stroke();
+    }
+    // Player start markers — one per enabled player, coloured
+    // differently so pupils can tell them apart at a glance.  P1
+    // stays on the accent yellow it's always used; P2 gets cyan to
+    // match the pupil-feedback scheme elsewhere in the editor.
+    const handles = playerDragHandles();
+    for (const pl of handles) {
+      const pw = pl.sp.width * 8 * SCENE_SCALE;
+      const ph = pl.sp.height * 8 * SCENE_SCALE;
+      const px = pl.x * SCENE_SCALE;
+      const py = pl.y * SCENE_SCALE;
+      ctx.save();
+      ctx.translate(px, py);
+      window.NesRender.drawSpriteIntoCtx(ctx, pl.sp, state, pw, ph);
+      ctx.restore();
+      ctx.strokeStyle = (pl.kind === 'player2') ? '#78dce8' : '#ffd866';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+    }
+    // Each scene instance.
+    const instances = (node && node.config && node.config.instances) || [];
+    for (const inst of instances) {
+      const sp = (state.sprites || [])[inst.spriteIdx];
+      if (!sp) continue;
+      const w = sp.width * 8 * SCENE_SCALE;
+      const h = sp.height * 8 * SCENE_SCALE;
+      const x = (inst.x | 0) * SCENE_SCALE;
+      const y = (inst.y | 0) * SCENE_SCALE;
+      ctx.save();
+      ctx.translate(x, y);
+      window.NesRender.drawSpriteIntoCtx(ctx, sp, state, w, h);
+      ctx.restore();
+      // Outline: colour by role so pupils recognise what's what.
+      ctx.strokeStyle = roleColour(sp.role);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    }
+  }
+
+  // Paint the active background's nametable onto the preview.  Only
+  // draws the first screen (32×30 tiles) — multi-screen worlds show
+  // just their first screen in the placement view, which is where
+  // the scene sprites live anyway.  Each nametable cell carries
+  // `{tile, palette}` on the editor's data model (the attribute-table
+  // quantisation happens at /play time), so we look up the bg tile
+  // and its palette per cell and fill the 8×8 block.
+  function drawBackgroundBehind(ctx, canvas) {
+    const bgs = (state && state.backgrounds) || [];
+    const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0];
+    if (!bg || !Array.isArray(bg.nametable)) return;
+    const tiles = (state && state.bg_tiles) || [];
+    const rows = Math.min(30, bg.nametable.length);
+    const s = SCENE_SCALE;
+    for (let y = 0; y < rows; y++) {
+      const row = bg.nametable[y];
+      if (!Array.isArray(row)) continue;
+      const cols = Math.min(32, row.length);
+      for (let x = 0; x < cols; x++) {
+        const cell = row[x];
+        if (!cell) continue;
+        const tileIdx = cell.tile | 0;
+        const tile = tiles[tileIdx];
+        if (!tile || !Array.isArray(tile.pixels)) continue;
+        const pal = window.NesRender.bgPaletteFor(state, cell.palette | 0);
+        const baseX = x * 8 * s;
+        const baseY = y * 8 * s;
+        for (let py = 0; py < 8; py++) {
+          const pixelRow = tile.pixels[py];
+          if (!pixelRow) continue;
+          for (let px = 0; px < 8; px++) {
+            const v = pixelRow[px] | 0;
+            if (v === 0) continue;   // transparent — universal BG already filled
+            const rgb = window.NesRender.pixelRgb(v, pal);
+            if (!rgb) continue;
+            ctx.fillStyle = rgb;
+            ctx.fillRect(baseX + px * s, baseY + py * s, s, s);
+          }
+        }
+      }
+    }
+  }
+
+  function roleColour(role) {
+    switch (role) {
+      case 'enemy':      return '#ff6188';
+      case 'npc':        return '#78dce8';
+      case 'pickup':     return '#47d16c';
+      case 'projectile': return '#ff9966';
+      default:           return 'rgba(255,255,255,0.25)';
+    }
+  }
+
+  // Build drag handles for every enabled player.  Each handle looks
+  // like a scene instance (x / y / sp getters/setters + a kind tag)
+  // so wireScenePreview can treat it uniformly with scene instances.
+  // Returns [] when no player module is enabled or no Player-role
+  // sprites exist.
+  function playerDragHandles() {
+    const out = [];
+    const playerIdxs = window.BuilderAssembler
+      .findSpritesByRole(state, 'player');
+    const p1 = moduleNode('players.player1');
+    if (p1 && p1.enabled && playerIdxs.length >= 1) {
+      const sp = state.sprites[playerIdxs[0]];
+      if (sp) {
+        const cfg = p1.config || {};
+        out.push({
+          kind: 'player1',
+          sp: sp,
+          get x() { return cfg.startX | 0; },
+          set x(v) { cfg.startX = v | 0; },
+          get y() { return cfg.startY | 0; },
+          set y(v) { cfg.startY = v | 0; },
+        });
+      }
+    }
+    const p2 = moduleNode('players.player2');
+    if (p2 && p2.enabled && playerIdxs.length >= 2) {
+      const sp = state.sprites[playerIdxs[1]];
+      if (sp) {
+        const cfg = p2.config || {};
+        out.push({
+          kind: 'player2',
+          sp: sp,
+          get x() { return cfg.startX | 0; },
+          set x(v) { cfg.startX = v | 0; },
+          get y() { return cfg.startY | 0; },
+          set y(v) { cfg.startY = v | 0; },
+        });
+      }
+    }
+    return out;
+  }
+
+  // Which draggable target (player or instance) is under the given
+  // logical-pixel point?  Scene instances win over the player when
+  // they overlap so pupils can still pick up an instance sitting on
+  // top of the player start marker.
+  function instanceAtPoint(node, lx, ly) {
+    const instances = (node && node.config && node.config.instances) || [];
+    for (let i = instances.length - 1; i >= 0; i--) {
+      const inst = instances[i];
+      const sp = (state.sprites || [])[inst.spriteIdx];
+      if (!sp) continue;
+      const w = sp.width * 8;
+      const h = sp.height * 8;
+      if (lx >= inst.x && lx < inst.x + w &&
+          ly >= inst.y && ly < inst.y + h) {
+        return inst;
+      }
+    }
+    // Player handles come last so scene instances still win when
+    // they overlap the player marker — matches the intuition that
+    // the sprite you can clearly see on top is the one you grab.
+    const handles = playerDragHandles();
+    for (const pl of handles) {
+      const w = pl.sp.width * 8;
+      const h = pl.sp.height * 8;
+      if (lx >= pl.x && lx < pl.x + w &&
+          ly >= pl.y && ly < pl.y + h) {
+        return pl;
+      }
+    }
+    return null;
+  }
+
+  // Clamp a position so the sprite's bounding box stays on screen.
+  function clampSpritePos(sp, x, y) {
+    const w = sp.width * 8;
+    const h = sp.height * 8;
+    const cx = Math.max(0, Math.min(255 - w, x | 0));
+    const cy = Math.max(16, Math.min(232 - h, y | 0));
+    return { x: cx, y: cy };
+  }
+
+  // A draggable is a scene instance (has `spriteIdx`) or the player
+  // handle (has `kind === 'player'`).  Both expose `.sp`, `.x`, `.y`
+  // getters/setters so the drag code treats them uniformly.
+  function draggableSprite(d) {
+    if (!d) return null;
+    if (d.kind === 'player') return d.sp;
+    return (state.sprites || [])[d.spriteIdx] || null;
+  }
+
+  // Wire mouse events on the preview canvas.  Click an empty spot to
+  // add a new instance using the first available sprite.  Drag an
+  // existing sprite to move it (in 1-px increments of logical NES
+  // space).  Released position is clamped to the screen.
+  function wireScenePreview(canvas, node, placeable, onChanged) {
+    let dragging = null;   // instance reference
+    let dragOff = { x: 0, y: 0 };
+    let moved = false;
+
+    function toLogical(e) {
+      const rect = canvas.getBoundingClientRect();
+      const sx = canvas.width / rect.width;
+      const sy = canvas.height / rect.height;
+      return {
+        x: ((e.clientX - rect.left) * sx) / SCENE_SCALE,
+        y: ((e.clientY - rect.top)  * sy) / SCENE_SCALE,
+      };
+    }
+
+    canvas.addEventListener('mousedown', e => {
+      const p = toLogical(e);
+      const hit = instanceAtPoint(node, p.x, p.y);
+      if (hit) {
+        dragging = hit;
+        dragOff = { x: p.x - hit.x, y: p.y - hit.y };
+        moved = false;
+        canvas.style.cursor = 'grabbing';
+      } else {
+        // Click empty area → add a new scene instance here with the
+        // first placeable sprite.  User can change the sprite via
+        // the row dropdown afterwards.  No effect on the player.
+        if (placeable.length === 0) return;
+        const sp = placeable[0].sp;
+        const pos = clampSpritePos(sp, p.x - sp.width * 4, p.y - sp.height * 4);
+        const instances = node.config.instances;
+        instances.push({
+          id: 'i_' + Date.now().toString(36) +
+            Math.random().toString(36).slice(2, 5),
+          spriteIdx: placeable[0].idx,
+          x: pos.x, y: pos.y,
+          ai: 'static',
+        });
+        onChanged();
+        scheduleSave();
+      }
+    });
+
+    canvas.addEventListener('mousemove', e => {
+      if (!dragging) {
+        const p = toLogical(e);
+        canvas.style.cursor = instanceAtPoint(node, p.x, p.y) ? 'grab' : 'crosshair';
+        return;
+      }
+      const p = toLogical(e);
+      const sp = draggableSprite(dragging);
+      if (!sp) return;
+      const next = clampSpritePos(sp, p.x - dragOff.x, p.y - dragOff.y);
+      if (next.x !== dragging.x || next.y !== dragging.y) {
+        dragging.x = next.x;
+        dragging.y = next.y;
+        moved = true;
+        drawPreview(canvas, node);
+      }
+    });
+
+    function endDrag() {
+      if (!dragging) return;
+      const wasPlayer = dragging.kind === 'player1' || dragging.kind === 'player2';
+      dragging = null;
+      canvas.style.cursor = 'crosshair';
+      if (moved) {
+        scheduleSave();
+        // Player drag writes into the players.playerN module config,
+        // so the whole tree needs a re-render to refresh the x/y
+        // number inputs.  Scene-instance drags only need their own
+        // row refreshed, which onChanged() handles.
+        if (wasPlayer) renderTree();
+        else onChanged();
+      }
+    }
+    canvas.addEventListener('mouseup', endDrag);
+    canvas.addEventListener('mouseleave', endDrag);
+  }
+
   function renderTree() {
     const host = document.getElementById('module-tree');
     host.innerHTML = '';
-    const topIds = Object.keys(window.BuilderModules).filter(k =>
-      !window.BuilderModules[k].parent);
+    const topIds = Object.keys(window.BuilderModules).filter(k => {
+      const def = window.BuilderModules[k];
+      return !def.parent && !def.hidden;
+    });
     topIds.forEach(id => {
       const card = renderModule(id);
       if (card) host.appendChild(card);
@@ -953,11 +1307,22 @@ label { -webkit-user-select: none; user-select: none; }
     }
     Storage.saveCurrent(state);
 
-    const playerIdx = window.BuilderAssembler.findSpriteByRole(state, 'player');
+    const playerIdxs = window.BuilderAssembler.findSpritesByRole(state, 'player');
+    const playerIdx = playerIdxs[0] !== undefined ? playerIdxs[0] : -1;
     const p1 = moduleNode('players.player1');
     const playerStart = (p1 && p1.config) ? {
       x: p1.config.startX, y: p1.config.startY,
     } : { x: 60, y: 120 };
+    // Player 2 — only wired through when the module is enabled AND
+    // there's a second Player-tagged sprite.  Either missing, the
+    // ROM builds as single-player and PLAYER2_ENABLED stays 0.
+    const p2 = moduleNode('players.player2');
+    const p2Enabled = !!(p2 && p2.enabled);
+    const playerIdx2 = (p2Enabled && playerIdxs[1] !== undefined)
+      ? playerIdxs[1] : -1;
+    const playerStart2 = (p2 && p2.config) ? {
+      x: p2.config.startX, y: p2.config.startY,
+    } : { x: 180, y: 120 };
 
     // Scene sprites come from one of two sources:
     //   1. Explicit instances[] on the Scene module (pupil-placed,
@@ -1016,6 +1381,10 @@ label { -webkit-user-select: none; user-select: none; }
         mode: 'browser',
         customMainC: customMainC,
       };
+      if (playerIdx2 >= 0) {
+        payload.playerSpriteIdx2 = playerIdx2;
+        payload.playerStart2 = playerStart2;
+      }
       const res = await fetch(PLAYGROUND_SERVER, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

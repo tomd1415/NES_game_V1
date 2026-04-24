@@ -1289,3 +1289,229 @@ player's walk / jump along the way.
   foundation; will likely reuse the same per-instance renderer
   as enemies.
 - **HUD, doors, HP/damage** — still in the Phase B backlog.
+
+---
+
+## Builder — 2026-04-23 Phase B chunk 4 (Scene preview canvas)
+
+Chunk 3's tags were metadata; this chunk is about placement UX.
+Pupils now get a visual preview above the instance list, with
+click-to-add and drag-to-move — answering the *"where to place
+them"* ask from the Phase B scene-editor feedback.
+
+- **New shared module `tools/tile_editor_web/sprite-render.js`.**
+  Exposes `window.NesRender` with the NES palette table, palette
+  helpers (`spritePaletteFor`, `bgPaletteFor`, `pixelRgb`), and
+  `drawSpriteIntoCtx(ctx, sprite, state, destW, destH)`.  Lifted
+  out of sprites.html's ~30-call-site internal helpers so the
+  Builder page can paint sprites without a copy-paste.  sprites.html
+  continues to work unchanged — it has its own versions of the
+  same helpers that stay in place; a future chunk will swap them
+  to call `NesRender.*` and delete the duplicates.
+- **Preview canvas in the Scene module.**  512×480 css canvas
+  (256×240 NES pixels at 2×), renders:
+  - A faint 16-pixel grid so pupils can eyeball tile coordinates.
+  - The Player 1 sprite at its start position, outlined in the
+    editor accent colour so it's unmistakable.
+  - Every scene instance, drawn via `NesRender.drawSpriteIntoCtx`
+    at its logical (x, y) and outlined in a role-specific colour
+    (enemies pink, npcs cyan, pickups green, projectiles orange,
+    other grey).
+- **Mouse events.**  Click an empty area → adds a new instance at
+  the cursor using the first available non-player sprite (same
+  defaults as the "+ Add instance" button).  Mouse-over an
+  instance switches the cursor to `grab`; mousedown + drag moves
+  it in 1-px NES steps, clamped so the sprite stays on screen
+  (x ∈ [0, 255-w], y ∈ [16, 232-h]).  Release saves the final
+  position and re-renders the instance rows so the x/y inputs
+  update.  No artificial debouncing — the Storage layer's
+  existing scheduleSave already throttles localStorage writes.
+- **Role-coloured outlines** pair with the role badge on each
+  instance row, so clicking an outlined sprite on the canvas and
+  finding its row in the list below is one eye-track away.
+- **CSS.**  The canvas is responsive (max-width: 512px, height
+  auto) with `image-rendering: pixelated` so the NES-size pixels
+  stay crisp, and `cursor: crosshair` by default to hint that
+  clicking is meaningful.
+
+### Verification — Phase B chunk 4
+
+- `node --check` clean on sprite-render.js and on the extracted
+  inline script of builder.html.
+- `/tmp/builder-preview-smoke.mjs` runs three checks:
+  1. `NesRender` loads headlessly (no DOM required) and exposes
+     the expected API surface.
+  2. Default-state Builder output still compiles through real
+     cc65 in ~70 ms (no regression from the preview additions).
+  3. A scene with two instances pointing at the *same* sprite
+     (`spriteIdx: 1` twice) compiles cleanly — guards the "use
+     the same sprite more than once" promise.
+- Manual: preview canvas renders correctly in the browser,
+  click adds an instance, drag moves it, both the canvas and
+  the x/y inputs below stay in sync.
+
+### Deliberately out of chunk 4 — continuing chunks
+
+- **Runtime playback of tagged animations on scene sprites.**
+  Still deferred — enemies currently render their static
+  sprite layout.  Next candidate for a bigger chunk because it
+  touches `playground_server.py`.
+- **Background-nametable rendering inside the preview.**  Only
+  the grid is drawn today; showing the pupil's painted background
+  tiles would require a nametable-to-canvas renderer (CHR +
+  palette + attribute-table lookups).  Clean follow-up; not
+  blocking for placement UX.
+- **sprites.html migration.**  The duplicate helpers on
+  sprites.html work fine; swapping its internal calls to
+  `NesRender.*` is a low-risk cleanup for a later session.
+- **Multi-select / copy-paste of instances, undo on the canvas.**
+  Not needed for chunk 4's placement core; easy additions once
+  pupil feedback arrives.
+
+### Chunk 4 polish — 2026-04-23 background + player drag + legacy hide
+
+Three pupil-driven follow-ups shipped the same day:
+
+- **Background now renders behind the instances.**  The preview
+  canvas reads the active background's nametable (32×30 cells
+  each carrying `{tile, palette}`) and paints each cell's 8×8
+  tile using `NesRender.bgPaletteFor(state, cell.palette)`.  The
+  universal BG colour is filled first so transparent pixels show
+  the correct backdrop.  The faint tile grid still overlays on
+  top for coordinate eyeballing.  Multi-screen worlds render
+  only the first screen in the placement view — scene sprites
+  live on screen 1 anyway, and a pan-across preview is a bigger
+  feature for a later chunk.
+- **Player 1 is now draggable.**  The hit-test grew a
+  `playerDragHandle()` that exposes the player's start
+  position via getters/setters on `players.player1.config.startX/Y`
+  — so the drag code treats the player exactly like a scene
+  instance.  Scene instances still win when they overlap the
+  player handle so pupils can pick up an instance on top of the
+  start marker.  Releasing a player drag re-renders the module
+  tree so the Player 1 number inputs update to the new
+  position (scene-instance drags only refresh their own row,
+  which is cheaper).
+- **Enemies module hidden.**  The Scene module now supersedes
+  it — per-instance AI strictly expresses everything the global
+  Walker / Chaser switch did.  Added a `hidden: true` flag to
+  the Enemies module definition plus support for it in
+  `renderTree()` / `renderModule()`.  Legacy projects with
+  `enemies.walker.enabled` and an empty Scene list still get
+  their walker code emitted (the applyToTemplate is unchanged,
+  just un-rendered).  Scene's description updated to mention
+  dragging the player too.
+
+---
+
+## Builder — 2026-04-24 Phase B chunk 5 (Player 2)
+
+First chunk to touch all three layers — client, template, server —
+since chunk 1 of Phase A.  Plan lives in
+[builder-plan-player2.md](builder-plan-player2.md); implementation
+followed the ten-step order in §7 of that plan.
+
+- **Server (`playground_server.py`).**  `build_scene_inc` gained
+  three optional kwargs (`player_idx2`, `start_x2`, `start_y2`).
+  When `playerSpriteIdx2` is a valid index in the /play payload
+  the server emits `#define PLAYER2_ENABLED 1` plus
+  `PLAYER2_W / H / X / Y` and the `player2_tiles[]` /
+  `player2_attrs[]` arrays drawn from the second Player-tagged
+  sprite.  When P2 is off, it still emits `#define PLAYER2_ENABLED
+  0` so the template's `#if` gates evaluate cleanly without relying
+  on the undefined-macro-is-zero convention.
+- **Template (`builder-templates/platformer.c`).**  Everything new
+  is behind `#if PLAYER2_ENABLED` so a P1-only ROM compiles
+  byte-for-byte the same as before (verified by sha1sum).  Adds:
+  - `JOYPAD2` define + `read_both_controllers()` helper that
+    latches once and shifts both pads in parallel.
+  - Module-scope P2 state (`px2`, `py2`, `pad2`, `prev_pad2`,
+    `jumping2`, `jmp_up2`, `plrdir2`, `walk_speed2`) with a
+    `//>> player2_walk_speed` region.
+  - P2 init inside `main()` (behind a `//>> player2_start`
+    region so guided-mode pupils can override), plus a jump-height
+    region `//>> player2_jump_height` inside the jump branch.
+  - P2 movement block mirroring P1's walk + jump + gravity with
+    wall / platform detection.  Deliberate MVP omissions
+    (documented in the plan): no ladder support, no ceiling-bonk
+    on jump.
+  - P2 render loop after P1's OAM writes, using `player2_tiles` /
+    `player2_attrs` from scene.inc.  No animation cycling for P2
+    in this chunk; P2 uses its static layout.
+- **Builder client.**
+  - New `modules['players.player2']` submodule with the same
+    schema as P1 (startX/Y, walkSpeed, jumpHeight, maxHp).
+    `applyToTemplate` replaces the two new `//>>` regions with
+    typed values; start position flows through scene.inc as
+    `PLAYER2_X/Y` instead.
+  - `BuilderDefaults()` seeds P2 disabled; non-destructive
+    back-fill in `migrateBuilderFields` on both sprites.html and
+    index.html adds the P2 submodule to older saves without
+    touching any existing fields.
+  - `builder-assembler.js` gains `findSpritesByRole(state, role)`
+    (returns every index) alongside `findSpriteByRole` so the
+    second player is the second element of the player list.
+  - `pickups.applyToTemplate` now emits an `#if PLAYER2_ENABLED`
+    block alongside its P1 AABB collision check so either player
+    can collect pickups.
+  - `win_condition.applyToTemplate` extends the reach-tile branch
+    with a second player check and zeros P2's movement state in
+    the freeze block when the screen tints red.  All-pickups win
+    type already works for both players because the counter itself
+    is shared.
+- **Validator `player2-needs-second-sprite`** (error) fires when
+  Player 2 is enabled but fewer than two sprites are tagged Player.
+  Blocks Play until the pupil either tags a second Player sprite
+  or turns P2 off.
+- **Preview canvas.**  `playerDragHandle()` became
+  `playerDragHandles()` — an array holding one handle per enabled
+  player.  Each handle carries a `kind` tag (`player1` / `player2`)
+  so the drag code still knows who to save back to.  P1 outlined
+  accent-yellow; P2 outlined cyan so pupils can tell them apart.
+  Both are draggable, both respect the screen-bounds clamp.
+- **Play payload.**  When `p2.enabled && playerIdxs[1]` exists,
+  the Builder sends `playerSpriteIdx2` + `playerStart2` in the
+  /play POST.  Otherwise neither field is included and the ROM
+  builds as single-player.
+
+### Verification — Phase B chunk 5
+
+`/tmp/builder-player2-smoke.mjs` spawns a throwaway Playground
+Server on port 18768 and runs five assertions:
+
+1. Default (P2 off, one player sprite) has no errors.
+2. P2 enabled + only one Player sprite → `player2-needs-second-sprite`
+   error fires at `severity: error`.
+3. P2 enabled + two Player sprites → output contains the expected
+   template markers (walk_speed2 = 2, jmp_up2 = 25, init block,
+   P2 render loop, dual-player pickup branch, dual-player win
+   check `bw_tl2`).
+4. P1-only `/play` build compiles via real cc65 (49168 bytes, 44 ms).
+5. P2-enabled `/play` build compiles via real cc65 (49168 bytes,
+   51 ms).  Same ROM size as P1-only because the template's
+   `#if PLAYER2_ENABLED` gates kick in at preprocess time — the
+   P1-only path elides every P2 byte.
+
+Also manually verified that swapping the updated template into
+Step_Playground's `main.c` and building with P2 undefined
+produces a ROM with an identical sha1sum to the pre-chunk-5
+baseline — no silent regression for projects that never enable
+P2.
+
+### Deliberately out of chunk 5
+
+- **Per-player animations.**  P2 draws static tiles only; cycling
+  `walk` frames for P2 needs either shared-with-P1 (wrong art
+  when P2 is a different sprite) or per-player anim tables (a
+  bigger server-side change).  Deferred.
+- **Ladder + ceiling-bonk for P2.**  Adds ~25 lines of gated
+  code mirroring P1; not needed for a "two-player platformer"
+  feel.  Easy follow-up.
+- **HP / damage.**  P2's `maxHp` field is in state for forward
+  compatibility but unwired.
+- **Camera follow when scrolling.**  In `SCROLL_BUILD` the camera
+  tracks P1 only; P2 scrolls off-screen when far apart.  A
+  "midpoint camera" + soft zoom is a neat future chunk once
+  scrolling lands for real levels.
+- **Player-vs-player collision.**  Not implemented.  The two
+  characters pass through each other for now.

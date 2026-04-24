@@ -100,6 +100,19 @@
     return -1;
   }
 
+  // Return every sprite index whose role matches.  Used by the Player
+  // 2 wiring — findSpritesByRole(state, 'player')[1] is the second
+  // Player-tagged sprite, i.e. P2's art.  Preserves list order so the
+  // pupil's intent (tag order on the Sprites page) survives.
+  function findSpritesByRole(state, role) {
+    const sprites = (state && state.sprites) || [];
+    const out = [];
+    for (let i = 0; i < sprites.length; i++) {
+      if (sprites[i] && sprites[i].role === role) out.push(i);
+    }
+    return out;
+  }
+
   // Clamp an integer into a sensible range.  Used to paper over config
   // values that survived validation but are still outside the hardware
   // comfort zone (e.g. walk_speed = 0 would freeze the player, so the
@@ -175,6 +188,7 @@
     appendToSlot,
     stripSlotMarkers,
     findSpriteByRole,
+    findSpritesByRole,
     clampInt,
   };
 })();

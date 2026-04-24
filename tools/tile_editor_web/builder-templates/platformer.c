@@ -47,6 +47,7 @@
 #define PPU_ADDR      *((unsigned char*)0x2006)
 #define PPU_DATA      *((unsigned char*)0x2007)
 #define JOYPAD1       *((unsigned char*)0x4016)
+#define JOYPAD2       *((unsigned char*)0x4017)
 
 #define PLAYER_TILES_PER_FRAME (PLAYER_W * PLAYER_H)
 
@@ -86,6 +87,24 @@ unsigned char sy;
 unsigned char tile;
 unsigned char attr;
 
+#if PLAYER2_ENABLED
+/* Phase B chunk 5 — Player 2 state.  Inlined alongside P1 globals so
+ * reading them side-by-side makes the "same thing, second name"
+ * pattern obvious to pupils who eject to the Code page.  Gated
+ * entirely behind PLAYER2_ENABLED so a single-player build's RAM
+ * / zero-page footprint is unchanged. */
+pxcoord_t px2;
+pxcoord_t py2;
+unsigned char pad2;
+unsigned char prev_pad2;
+unsigned char jumping2;
+unsigned char jmp_up2;
+unsigned char plrdir2;
+//>> player2_walk_speed: How many pixels Player 2 moves each frame.
+unsigned char walk_speed2 = 1;
+//<<
+#endif
+
 //@ insert: declarations
 
 // Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
@@ -113,6 +132,25 @@ unsigned char read_controller(void) {
     }
     return result;
 }
+
+#if PLAYER2_ENABLED
+/* Read both controllers in a single strobe.  Writing 1→0 to JOYPAD1
+ * latches both pads; subsequent reads of JOYPAD1 / JOYPAD2 shift out
+ * bit 7 first through bit 0.  Doing both in one strobe (instead of
+ * two separate reads) is the standard NES idiom — avoids edge
+ * cases where a rapidly-pressed input changes between strobes. */
+void read_both_controllers(void) {
+    unsigned char j;
+    JOYPAD1 = 1;
+    JOYPAD1 = 0;
+    pad = 0;
+    pad2 = 0;
+    for (j = 0; j < 8; j++) {
+        pad  = (pad  << 1) | (JOYPAD1 & 1);
+        pad2 = (pad2 << 1) | (JOYPAD2 & 1);
+    }
+}
+#endif
 
 void write_palettes(void) {
     PPU_ADDR = 0x3F;
@@ -194,10 +232,25 @@ void main(void) {
     anim_frame = 0;
     anim_tick = 0;
 
+#if PLAYER2_ENABLED
+//>> player2_start: Where Player 2 begins. The Builder fills this in; tweak it here if you'd rather hard-code.
+    px2 = PLAYER2_X;
+    py2 = PLAYER2_Y;
+//<<
+    jumping2 = 0;
+    jmp_up2 = 0;
+    prev_pad2 = 0;
+    plrdir2 = 0x00;
+#endif
+
     //@ insert: init
 
     while (1) {
+#if PLAYER2_ENABLED
+        read_both_controllers();
+#else
         pad = read_controller();
+#endif
 
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
         // tiles painted on the Behaviour page block the player from walking
@@ -390,6 +443,85 @@ void main(void) {
         }
 //<<
 
+#if PLAYER2_ENABLED
+        /* ----------------------------------------------------------
+         * Phase B chunk 5 — Player 2 movement.
+         *
+         * Mirrors P1's walk / jump / gravity block with px2, py2,
+         * pad2, walk_speed2, etc.  Deliberately omits ladder and
+         * jump-ceiling checks to keep the duplicate code manageable;
+         * that's a known MVP limitation from builder-plan-player2.md
+         * §1 and an easy follow-up chunk if pupils ask.
+         * ---------------------------------------------------------- */
+        /* Horizontal walk with wall block. */
+        if (pad2 & 0x01) {                    /* RIGHT */
+            if (px2 < (WORLD_W_PX - PLAYER2_W * 8)) {
+                unsigned char ahead2 = (px2 + (PLAYER2_W << 3) + walk_speed2 - 1) >> 3;
+                unsigned char top2   = py2 >> 3;
+                unsigned char bot2   = (py2 + (PLAYER2_H << 3) - 1) >> 3;
+                unsigned char blk2   = 0;
+                unsigned char rr, bb;
+                for (rr = top2; rr <= bot2; rr++) {
+                    bb = behaviour_at((unsigned int)ahead2, (unsigned int)rr);
+                    if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) {
+                        blk2 = 1; break;
+                    }
+                }
+                if (!blk2) px2 += walk_speed2;
+            }
+            plrdir2 = 0x00;
+        }
+        if (pad2 & 0x02) {                    /* LEFT */
+            if (px2 >= walk_speed2) {
+                unsigned char ahead2 = (px2 - walk_speed2) >> 3;
+                unsigned char top2   = py2 >> 3;
+                unsigned char bot2   = (py2 + (PLAYER2_H << 3) - 1) >> 3;
+                unsigned char blk2   = 0;
+                unsigned char rr, bb;
+                for (rr = top2; rr <= bot2; rr++) {
+                    bb = behaviour_at((unsigned int)ahead2, (unsigned int)rr);
+                    if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) {
+                        blk2 = 1; break;
+                    }
+                }
+                if (!blk2) px2 -= walk_speed2;
+            }
+            plrdir2 = 0x40;
+        }
+
+        /* Edge-triggered jump (no ceiling bonk in the MVP). */
+        if ((pad2 & 0x08) && !(prev_pad2 & 0x08) && !jumping2) {
+            jumping2 = 1;
+//>> player2_jump_height: How high Player 2 jumps. Bigger number = higher.
+            jmp_up2 = 20;
+//<<
+        }
+        prev_pad2 = pad2;
+
+        /* Jump ascent + gravity for P2. */
+        if (jumping2 && jmp_up2 > 0) {
+            if (py2 >= 18) py2 -= 2; else py2 = 16;
+            jmp_up2--;
+        } else {
+            unsigned char foot_row2 = (py2 + (PLAYER2_H << 3)) >> 3;
+            unsigned char fl2 = behaviour_at((unsigned int)(px2 >> 3),
+                                             (unsigned int)foot_row2);
+            unsigned char fr2 = behaviour_at(
+                (unsigned int)((px2 + (PLAYER2_W << 3) - 1) >> 3),
+                (unsigned int)foot_row2);
+            if (fl2 == BEHAVIOUR_SOLID_GROUND || fl2 == BEHAVIOUR_WALL
+             || fl2 == BEHAVIOUR_PLATFORM
+             || fr2 == BEHAVIOUR_SOLID_GROUND || fr2 == BEHAVIOUR_WALL
+             || fr2 == BEHAVIOUR_PLATFORM) {
+                py2 = (unsigned char)((foot_row2 << 3) - (PLAYER2_H << 3));
+                jumping2 = 0;
+            } else {
+                if (py2 < (WORLD_H_PX - 8)) py2 += 2;
+                jumping2 = 1;
+            }
+        }
+#endif  /* PLAYER2_ENABLED */
+
         //@ insert: per_frame
 
 #ifdef SCROLL_BUILD
@@ -444,6 +576,40 @@ void main(void) {
                 OAM_DATA = sx;
             }
         }
+
+#if PLAYER2_ENABLED
+        /* --- Player 2 ---------------------------------------------
+         * Uses player2_tiles / player2_attrs emitted by scene.inc
+         * when a second Player-tagged sprite is present.  No
+         * animation in the MVP — static layout only; walk / jump
+         * animations for P2 are a later chunk. */
+        for (r = 0; r < PLAYER2_H; r++) {
+            for (c = 0; c < PLAYER2_W; c++) {
+#ifdef SCROLL_BUILD
+                sy = world_to_screen_y((unsigned int)py2 + (r << 3));
+                if (plrdir2 == 0x40) {
+                    sx = world_to_screen_x((unsigned int)px2 +
+                         ((PLAYER2_W - 1 - c) << 3));
+                } else {
+                    sx = world_to_screen_x((unsigned int)px2 + (c << 3));
+                }
+#else
+                sy = py2 + (r << 3);
+                if (plrdir2 == 0x40) {
+                    sx = px2 + (unsigned char)((PLAYER2_W - 1 - c) << 3);
+                } else {
+                    sx = px2 + (c << 3);
+                }
+#endif
+                tile = player2_tiles[r * PLAYER2_W + c];
+                attr = player2_attrs[r * PLAYER2_W + c] ^ plrdir2;
+                OAM_DATA = sy;
+                OAM_DATA = tile;
+                OAM_DATA = attr;
+                OAM_DATA = sx;
+            }
+        }
+#endif
 
         // --- Static scene sprites ---------------------------------------
         // Scene sprites stay u8 world-space (inside screen 1) — as the

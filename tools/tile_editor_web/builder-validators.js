@@ -266,6 +266,24 @@
       return null;
     },
 
+    // V9: Player 2 is enabled but fewer than 2 sprites are tagged
+    // Player on the Sprites page.  Error — the server would fall back
+    // to single-player, but the pupil's intent was 2-player so we
+    // block instead of silently ignoring.
+    function player2NeedsSecondSprite(state) {
+      if (!moduleEnabled(state, 'players.player2')) return null;
+      if (countSpritesByRole(state, 'player') >= 2) return null;
+      return {
+        id: 'player2-needs-second-sprite',
+        severity: 'error',
+        message: 'Player 2 is on, but fewer than 2 sprites are tagged Player.',
+        fix: 'Open the Sprites page and set a second sprite\'s role to ' +
+          'Player.  The first tagged sprite drives Player 1, the second ' +
+          'drives Player 2.',
+        jumpTo: 'sprites.html',
+      };
+    },
+
     // V8: all_pickups_collected win, pickups module on, but no sprite
     // is actually tagged ROLE_PICKUP.  Error — the game can never end.
     function allPickupsWinNoSprites(state) {

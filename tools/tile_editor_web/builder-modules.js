@@ -71,18 +71,15 @@
   // --------------------------------------------------------------------
   modules['players'] = {
     label: 'Players',
-    description: 'Who controls a sprite with the arrow keys?',
+    description: 'Who controls a sprite?  Tick Player 2 below to add ' +
+      'a second character driven by Controller 2 — you\'ll need a ' +
+      'second sprite tagged Player on the Sprites page for it to have ' +
+      'art to draw.',
+    // `count` is legacy; the per-player submodule enabled flags are
+    // the real source of truth now.  Left in state so old saves
+    // round-trip without migrations.
     defaultConfig: { count: 1 },
-    schema: [
-      {
-        key: 'count',
-        label: 'How many players?',
-        type: 'int',
-        min: 1,
-        max: 1,     // raised to 2 when Phase B lands player2
-        help: 'Two-player mode ships in Phase B.',
-      },
-    ],
+    schema: [],
   };
 
   modules['players.player1'] = {
@@ -166,6 +163,85 @@
   };
 
   // --------------------------------------------------------------------
+  // Player 2 — opt-in second character, driven by the second NES
+  // controller.  Uses the second sprite tagged Player on the Sprites
+  // page (findSpritesByRole[1]).  See builder-plan-player2.md for the
+  // full plan, especially the "MVP omissions" list (no ladder, no
+  // ceiling-bonk, no per-player animation).
+  // --------------------------------------------------------------------
+  modules['players.player2'] = {
+    parent: 'players',
+    label: 'Player 2',
+    description: 'A second character controlled by Controller 2.  ' +
+      'Needs a second sprite tagged Player on the Sprites page so it ' +
+      'has art to draw.  Walks + jumps with the same controls as ' +
+      'Player 1; no ladder support in this first version.',
+    defaultConfig: {
+      startX: 180,
+      startY: 120,
+      walkSpeed: 1,
+      jumpHeight: 20,
+      maxHp: 0,
+    },
+    schema: [
+      {
+        key: 'startX',
+        label: 'Start X (0 = left, 240 = right)',
+        type: 'int',
+        min: 0, max: 240, step: 4,
+        help: 'Where Player 2 spawns horizontally.',
+      },
+      {
+        key: 'startY',
+        label: 'Start Y (16 = top, 200 = bottom)',
+        type: 'int',
+        min: 16, max: 200, step: 4,
+        help: 'Where Player 2 spawns vertically. Paint a floor tile ' +
+          'below or Player 2 will drop.',
+      },
+      {
+        key: 'walkSpeed',
+        label: 'Walk speed (px/frame)',
+        type: 'int',
+        min: 1, max: 4,
+        help: '1 = slow, 2 = normal, 3 = fast.',
+      },
+      {
+        key: 'jumpHeight',
+        label: 'Jump height',
+        type: 'int',
+        min: 8, max: 40,
+        help: 'Bigger number = higher jump.',
+      },
+      {
+        key: 'maxHp',
+        label: 'Max HP (0 = no HP system yet)',
+        type: 'int',
+        min: 0, max: 0,
+        help: 'HP / damage lands in a later chunk.',
+        readOnly: true,
+      },
+    ],
+    applyToTemplate(template, node, state) {
+      const c = (node && node.config) || {};
+      const walkSpeed  = A.clampInt(c.walkSpeed, 1, 8, 1);
+      const jumpHeight = A.clampInt(c.jumpHeight, 1, 60, 20);
+      // P2's start position comes through scene.inc as PLAYER2_X / Y
+      // (emitted by the server from the /play payload's playerStart2),
+      // so we don't replace `player2_start` here — it already reads
+      // the right symbols.  Only the speed + jump regions need
+      // injection.
+      template = A.replaceRegion(template, 'player2_walk_speed', [
+        'unsigned char walk_speed2 = ' + walkSpeed + ';'
+      ]);
+      template = A.replaceRegion(template, 'player2_jump_height', [
+        '            jmp_up2 = ' + jumpHeight + ';'
+      ]);
+      return template;
+    },
+  };
+
+  // --------------------------------------------------------------------
   // Scene — explicit placement of sprite instances.  When empty, the
   // Builder auto-places every non-player sprite and the walker/chaser
   // modules apply to every ROLE_ENEMY sprite.  When the pupil adds
@@ -176,10 +252,12 @@
   modules['scene'] = {
     label: 'Scene',
     description: 'Choose exactly which sprites appear in the game, ' +
-      'where, and what each one does.  Click + Add instance to place ' +
-      'a sprite — you can use the same sprite more than once.  Leave ' +
-      'the list empty and the Builder will auto-place one of each ' +
-      'non-player sprite for you.',
+      'where, and what each one does.  Click an empty spot on the ' +
+      'preview to drop a sprite, or use the + Add instance button.  ' +
+      'Drag any sprite (including the player) to move it.  You can ' +
+      'place the same sprite more than once — handy for three ' +
+      'identical goombas.  Leave the list empty and the Builder ' +
+      'will auto-place one of each non-player sprite for you.',
     defaultConfig: {
       instances: [],   // [{ id, spriteIdx, x, y, ai }]
     },
@@ -247,9 +325,18 @@
   // (walker), more land in Phase B (chaser, shooter, …).
   // --------------------------------------------------------------------
   modules['enemies'] = {
-    label: 'Enemies',
-    description: 'Sprites tagged Enemy on the Sprites page become bad ' +
-      'guys the player has to dodge.  Pick a movement pattern for each.',
+    label: 'Enemies (legacy)',
+    // Hidden from the UI since chunk-4 scene-editor work — the Scene
+    // module now lets pupils pick per-instance AI (Walker / Chaser /
+    // Static) for each placed sprite, which is strictly more
+    // expressive than the global Walker-or-Chaser switch this module
+    // used to provide.  The module definition is kept in place so
+    // existing saves with enemies.walker.enabled still emit code
+    // when the Scene list is empty (auto-place case).  Hide once,
+    // stop confusing new pupils; legacy projects keep working.
+    hidden: true,
+    description: 'Legacy auto-AI for every Enemy sprite.  The Scene ' +
+      'module has taken over for per-instance control.',
     defaultConfig: {},
     schema: [],
   };
@@ -388,18 +475,31 @@
         '    }',
       ].join('\n'));
       const body = [
-        '        // [builder] pickups — AABB collide player vs every',
+        '        // [builder] pickups — AABB collide each player vs every',
         '        // ROLE_PICKUP sprite.  Collected pickups fly off-screen',
         '        // (y = 0xFF) and stay there; bw_pickup_count ticks up.',
+        '        // Under PLAYER2_ENABLED the same check runs for P2 so',
+        '        // either player can pick things up.',
         '        for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
         '            if (ss_role[i] != ROLE_PICKUP) continue;',
         '            if (ss_y[i] >= 240) continue;       // already collected',
-        '            if (px + (PLAYER_W << 3) <= ss_x[i]) continue;',
-        '            if (px >= ss_x[i] + (ss_w[i] << 3)) continue;',
-        '            if (py + (PLAYER_H << 3) <= ss_y[i]) continue;',
-        '            if (py >= ss_y[i] + (ss_h[i] << 3)) continue;',
-        '            ss_y[i] = 0xFF;',
-        '            bw_pickup_count++;',
+        '            if (!(px + (PLAYER_W << 3) <= ss_x[i] ||',
+        '                  px >= ss_x[i] + (ss_w[i] << 3) ||',
+        '                  py + (PLAYER_H << 3) <= ss_y[i] ||',
+        '                  py >= ss_y[i] + (ss_h[i] << 3))) {',
+        '                ss_y[i] = 0xFF;',
+        '                bw_pickup_count++;',
+        '                continue;',
+        '            }',
+        '#if PLAYER2_ENABLED',
+        '            if (!(px2 + (PLAYER2_W << 3) <= ss_x[i] ||',
+        '                  px2 >= ss_x[i] + (ss_w[i] << 3) ||',
+        '                  py2 + (PLAYER2_H << 3) <= ss_y[i] ||',
+        '                  py2 >= ss_y[i] + (ss_h[i] << 3))) {',
+        '                ss_y[i] = 0xFF;',
+        '                bw_pickup_count++;',
+        '            }',
+        '#endif',
         '        }',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame', body);
@@ -500,8 +600,10 @@
         ].join('\n');
       } else {
         detectBlock = [
-          '        // [builder] win_condition — freeze the player on a ' +
+          '        // [builder] win_condition — freeze the players on a ' +
             typeToken + ' tile and tint the screen as a "you win" cue.',
+          '        // Either player stepping onto a ' + typeToken +
+            ' tile ends the game.',
           '        if (!bw_won) {',
           '            unsigned char bw_tl = behaviour_at(',
           '                (unsigned int)((px + ((PLAYER_W << 3) >> 1)) >> 3),',
@@ -511,6 +613,19 @@
           '                walk_speed = 0;',
           '                climb_speed = 0;',
           '            }',
+          '#if PLAYER2_ENABLED',
+          '            if (!bw_won) {',
+          '                unsigned char bw_tl2 = behaviour_at(',
+          '                    (unsigned int)((px2 + ((PLAYER2_W << 3) >> 1)) >> 3),',
+          '                    (unsigned int)((py2 + ((PLAYER2_H << 3) >> 1)) >> 3));',
+          '                if (bw_tl2 == BEHAVIOUR_' + typeToken + ') {',
+          '                    bw_won = 1;',
+          '                    walk_speed = 0;',
+          '                    walk_speed2 = 0;',
+          '                    climb_speed = 0;',
+          '                }',
+          '            }',
+          '#endif',
           '        }',
         ].join('\n');
       }
@@ -522,6 +637,12 @@
         '            jumping = 0;',
         '            jmp_up = 0;',
         '            prev_pad = 0xFF;',
+        '#if PLAYER2_ENABLED',
+        '            walk_speed2 = 0;',
+        '            jumping2 = 0;',
+        '            jmp_up2 = 0;',
+        '            prev_pad2 = 0xFF;',
+        '#endif',
         '            // Greyscale + red emphasis via PPU_MASK: the scene',
         '            // desaturates and tints pale red so the pupil can',
         '            // see the game has ended.  Needs no extra art; works',
@@ -553,6 +674,10 @@
             player1: {
               enabled: true,
               config: Object.assign({}, modules['players.player1'].defaultConfig),
+            },
+            player2: {
+              enabled: false,
+              config: Object.assign({}, modules['players.player2'].defaultConfig),
             },
           },
         },
