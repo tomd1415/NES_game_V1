@@ -2429,3 +2429,152 @@ place — syntax checks, byte-identical ROM baseline, and the 8
 smoke suites all pass.  A scratch script builds a
 no-enemy-sprite project end-to-end via `/play`; the ROM links
 and runs without the legacy walker loop.
+
+### Batch A — 2026-04-24 unified Play pipeline (items 1, 2, 8, 10)
+
+Pupil-feedback follow-up: every editor page now drives the same
+"assemble + build + launch" code path, with sensible defaults so
+even a brand-new empty project plays.  Also adds a Download-ROM
+button and a browser-vs-local-fceux selector everywhere.
+
+**New shared module —
+[play-pipeline.js](tools/tile_editor_web/play-pipeline.js).**
+Single source of truth for the Play flow.  Public surface:
+
+- `PlayPipeline.capabilities()` — cached probe of `/capabilities`
+  (currently just `{ fceux: bool }`).
+- `PlayPipeline.buildPlayRequest(state, templateText, opts)` —
+  pure function returning the POST body for `/play`.  Handles
+  state fortification, player / scene derivation, and the
+  optional `customMainC` / `customMainAsm` override that lets the
+  Code page keep sending pupil-written source.
+- `PlayPipeline.play(state, opts)` — full flow: loads the
+  template lazily, assembles, POSTs, dispatches the response.
+  `opts.download` triggers a .nes save-as; `opts.mode` switches
+  browser / native; `opts.onStatus` + `opts.onRom` are the page's
+  hooks into status updates and the emulator.
+
+**Robust defaults.**  `PlayPipeline._fortifyState` injects a stub
+Player-role sprite when `state.sprites` is empty, and fills in a
+`BuilderDefaults()` tree when `state.builder` is missing, without
+mutating the caller's state.  The empty-state regression —
+"project with only a background should still play" — builds a
+49168-byte ROM via `/play`, verified by the new
+`shared-play.mjs` suite.
+
+**Per-page migration.**
+
+- **Builder** (`builder.html`): the 120-line inline `play()` was
+  cut to a 30-line wrapper that runs validators, saves, then
+  delegates to `PlayPipeline.play`.  Gained a `⬇ ROM` download
+  button and a `play-mode` selector; the Local-fceux option is
+  auto-disabled when the server reports no `fceux` binary.
+- **Sprites** (`sprites.html`): kept its Playground-dialog scene
+  placer but now mirrors the pupil's pg-state into a transient
+  `state.builder.modules.scene.config.instances` clone before
+  handing off to the pipeline.  No persistence impact.
+- **Code** (`code.html`): still sends raw `customMainC` /
+  `customMainAsm`, but the POST + download + mode-selector logic
+  is now the shared code path.
+- **Backgrounds** (`index.html`) + **Behaviour** (`behaviour.html`):
+  gained a Play button (item 10) that triggers a ROM download in
+  browser mode, or launches fceux server-side in native mode.
+  These pages have no embedded jsnes, so in-browser Play = save
+  the .nes and run it in any external emulator (item 2).
+
+**Native-emulator selector (item 8).**  Every page that can
+produce a ROM now shows a `<select>` labelled "In browser" /
+"Local (fceux)".  `PlayPipeline.capabilities()` probes
+`/capabilities` once per page load; if the server has no fceux
+the Local option greys out with an explanatory label.
+
+**Tests — new
+[tools/builder-tests/shared-play.mjs](tools/builder-tests/shared-play.mjs):**
+
+- P1: empty state (no sprites, no Builder tree) → payload has a
+  stub player at idx 0, empty sceneSprites, non-trivial
+  customMainC.
+- P2: legacy state (no state.builder) → migrated to BuilderDefaults
+  non-destructively (caller's state untouched).
+- P3: `opts.customMainC` / `opts.customMainAsm` bypass the
+  assembler (Code-page contract).
+- P4: end-to-end `/play` build of the empty-state payload returns
+  a working ROM.
+- P5: identical state → identical payload regardless of which
+  page shape constructed it (proves items 1 + 10 together).
+
+Full `run-all.mjs` — 13 syntax checks, byte-identical baseline,
+and 9 smoke suites (the 8 existing ones plus the new shared-play
+suite) — all green.
+
+**Deliberately deferred.**  Backgrounds and Behaviour do not
+ship an embedded jsnes dialog yet; Play there downloads the ROM
+or uses fceux.  Promoting a popup emulator window is a
+follow-up — the architecture is ready for it because every page
+now funnels through the same pipeline.
+
+### Batch C1 — 2026-04-24 ladder climbs stop at solid ground (item 6)
+
+Pupil bug report: if you painted a ladder right next to a solid
+ground row and held UP, the player climbed straight through the
+floor into the sky.  Root cause: the on-ladder branch decremented
+`py` unconditionally, with no check on what tile the player was
+climbing into.
+
+Fix in both
+[tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+**and** [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+(symmetric so the byte-identical-baseline invariant still holds):
+the climb-up / climb-down blocks now probe the target tile row
+the same way the gravity loop probes `foot_row`.  The step is
+blocked when both the left and right halves of the player's
+bounding box hit SOLID_GROUND or WALL — **unless** either side is
+a LADDER cell, in which case the ladder wins the tie and the
+climb proceeds.
+
+This keeps the intended "ladder punched through a floor" puzzle
+working (pupil paints one column of LADDER cells replacing the
+SOLID_GROUND cells at that column, player climbs through) while
+blocking the unintended "ladder next to a wall lets you climb
+into the wall" escape.
+
+Full `run-all.mjs` green — baseline byte-identical (both
+templates got the identical fix, so the stock-vs-swapped hash
+compare still matches), all 9 smoke suites pass.
+
+**Future:** a dedicated `ladder-solid.mjs` regression would
+sanity-check the fix via jsnes frame capture; not needed for
+merge, but planned in
+[plan-batches.md](plan-batches.md) under C1.
+
+### Batch B4 — 2026-04-24 Builder scene-instance row layout (item 9)
+
+Pupil complaint: the delete-sprite button on the Builder page
+was very wide and the whole add/remove area looked
+misaligned.  Root cause: the `.scene-instance` grid had six
+columns for seven children, so the delete button wrapped onto
+its own line with a full-width cell — the red outline then read
+as a giant bar.  On top of that, the first column was `1.4fr`
+with only a 24×24 thumbnail inside, leaving a visible gap to
+the left of every row.
+
+Fix in [builder.html](tools/tile_editor_web/builder.html):
+
+- Grid template now has exactly seven columns, one per child:
+  `28px  minmax(0,1fr)  auto  64px  64px  auto  28px`.  Thumb
+  sits flush, the sprite-picker select flexes to fill the row,
+  x/y spinners line up between rows, delete button is a tight
+  28×28 square.
+- Delete button restyled as an icon-only square
+  (`width:28 height:28 padding:0`, flex-centred 🗑).
+- Row gains a hover state that shifts the border colour to the
+  accent so pupils can see which row is live before clicking.
+- Numeric inputs right-align so the digits line up vertically
+  across rows.
+- Empty-state placeholder: when no instances exist, the list
+  now shows a dashed-outline hint ("No sprites placed yet.
+  Click an empty spot on the preview above to drop one, or use
+  + Add instance below.") instead of an empty container.
+
+Full `run-all.mjs` green.  Baseline byte-identical (CSS +
+render changes don't touch any emitted C).

@@ -459,12 +459,46 @@ void main(void) {
 
         if (on_ladder) {
             // Climb: UP/DOWN move the player along the ladder; no jump
-            // or gravity while on the rungs.
+            // or gravity while on the rungs.  Block the step when the
+            // target tile row is SOLID_GROUND or WALL, UNLESS the same
+            // row also contains a LADDER column anywhere under the
+            // player's bounding box — a ladder punched straight through
+            // a floor is the useful case, and the ladder cell wins the
+            // collision tie so pupils can build "rope through the ceiling"
+            // puzzles.  Mirrors the tie-break used by the on_ladder probe.
             if (pad & 0x08) {                 // UP
-                if (py >= climb_speed) py -= climb_speed; else py = 0;
+                unsigned char new_top = (py >= climb_speed) ? (py - climb_speed) : 0;
+                unsigned char up_row  = new_top >> 3;
+                unsigned char up_l = behaviour_at((unsigned int)(px >> 3),
+                                                  (unsigned int)up_row);
+                unsigned char up_r = behaviour_at(
+                    (unsigned int)((px + (PLAYER_W << 3) - 1) >> 3),
+                    (unsigned int)up_row);
+                unsigned char up_ladder = (up_l == BEHAVIOUR_LADDER) ||
+                                          (up_r == BEHAVIOUR_LADDER);
+                unsigned char up_solid  = (up_l == BEHAVIOUR_SOLID_GROUND) ||
+                                          (up_l == BEHAVIOUR_WALL) ||
+                                          (up_r == BEHAVIOUR_SOLID_GROUND) ||
+                                          (up_r == BEHAVIOUR_WALL);
+                if (up_ladder || !up_solid) py = new_top;
             }
             if (pad & 0x04) {                 // DOWN
-                if (py < (WORLD_H_PX - 8)) py += climb_speed;
+                unsigned char new_foot = py + climb_speed + (PLAYER_H << 3);
+                unsigned char dn_row   = new_foot >> 3;
+                unsigned char dn_l = behaviour_at((unsigned int)(px >> 3),
+                                                  (unsigned int)dn_row);
+                unsigned char dn_r = behaviour_at(
+                    (unsigned int)((px + (PLAYER_W << 3) - 1) >> 3),
+                    (unsigned int)dn_row);
+                unsigned char dn_ladder = (dn_l == BEHAVIOUR_LADDER) ||
+                                          (dn_r == BEHAVIOUR_LADDER);
+                unsigned char dn_solid  = (dn_l == BEHAVIOUR_SOLID_GROUND) ||
+                                          (dn_l == BEHAVIOUR_WALL) ||
+                                          (dn_r == BEHAVIOUR_SOLID_GROUND) ||
+                                          (dn_r == BEHAVIOUR_WALL);
+                if ((dn_ladder || !dn_solid) && py < (WORLD_H_PX - 8)) {
+                    py += climb_speed;
+                }
             }
             jumping = 0;
             jmp_up = 0;

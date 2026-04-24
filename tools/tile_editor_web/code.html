@@ -22,6 +22,14 @@
 <!-- Shared localStorage layer (v2 projects catalog) -->
 <script src="storage.js"></script>
 <script src="feedback.js"></script>
+<!-- PlayPipeline + its deps.  The Code page doesn't use BuilderAssembler
+     output (pupils write their own code) but the pipeline still handles
+     state fortification, POST, download, and the mode selector. -->
+<script src="sprite-render.js"></script>
+<script src="builder-assembler.js"></script>
+<script src="builder-modules.js"></script>
+<script src="builder-validators.js"></script>
+<script src="play-pipeline.js"></script>
 
 <style>
 :root {
@@ -1562,9 +1570,11 @@ async function pgProbeServer() {
 // ================================================================
 // Play
 // ================================================================
-async function play() {
+async function play(opts) {
+  opts = opts || {};
   const btn = document.getElementById('btn-play');
-  const mode = (document.getElementById('pg-runon')?.value) || 'browser';
+  const mode = opts.mode ||
+    (document.getElementById('pg-runon')?.value) || 'browser';
   // Flush any pending debounced save first so the server sees this keystroke.
   const src = cm.getValue();
   if (codeLang === 'asm') state.customMainAsm = src;
@@ -1576,27 +1586,28 @@ async function play() {
   setBuildSummary('');
   renderBuildLog('(building)');
 
-  // playerSpriteIdx etc. come from whatever the pupil last set on the
-  // Sprites page; the Code page sends sensible defaults so first-time
-  // pupils don't have to visit every tab before a single press works.
-  const payload = {
-    state: state,
-    playerSpriteIdx: 0,
-    playerStart: { x: 60, y: 155 },
-    sceneSprites: [],
-    mode,
-  };
-  if (codeLang === 'asm') payload.customMainAsm = src;
-  else                    payload.customMainC   = src;
-
   try {
-    const res = await fetch(PLAYGROUND_PLAY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    let body;
-    try { body = await res.json(); } catch { body = { ok: false, log: 'server returned non-JSON' }; }
+    const pipelineOpts = {
+      mode: mode,
+      download: !!opts.download,
+      onStatus(cls, msg) {
+        if (cls === 'error') {
+          setBuildPill('err', 'failed');
+          renderBuildLog(msg);
+        }
+      },
+      // The Code page receives a Uint8Array directly (pipeline decoded
+      // it) whereas the existing openEmulator() takes a base64 string;
+      // re-encode to keep the emulator untouched.
+      onRom(rom) {
+        const b64 = romToB64(rom);
+        openEmulator(b64);
+      },
+    };
+    if (codeLang === 'asm') pipelineOpts.customMainAsm = src;
+    else                    pipelineOpts.customMainC   = src;
+
+    const body = await window.PlayPipeline.play(state, pipelineOpts);
     renderBuildLog(body.log || '');
     const { errs, warns } = parseErrorCounts(body.log || '');
     if (body.ok) {
@@ -1613,17 +1624,21 @@ async function play() {
       setBuildSummary((warns ? warns + ' warning' + (warns===1?'':'s') : 'clean')
         + (body.warning ? ' — ' + body.warning : '')
         + stamp);
-      if (body.rom_b64) openEmulator(decodeRomBase64(body.rom_b64));
     } else {
       setBuildPill('err', body.stage || 'failed');
       setBuildSummary(errs + ' error' + (errs===1?'':'s'));
     }
-  } catch (e) {
-    setBuildPill('err', 'unreachable');
-    renderBuildLog('Could not reach the playground server at ' + PLAYGROUND_PLAY + '.\n\n' + e.message);
   } finally {
     btn.disabled = false;
   }
+}
+
+// openEmulator on this page takes a base64 ROM string; the pipeline
+// gives us the decoded Uint8Array, so re-encode.
+function romToB64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
 }
 
 // Click a "file(line)" span in the log to jump to that line.

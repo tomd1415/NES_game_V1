@@ -22,7 +22,8 @@
       "Bash(emerge --search nes)",
       "Bash(eix -S \"nes emulator\")",
       "Bash(xxd -s 0x800A -l 6 game.nes)",
-      "Bash(cc65 -t nes -o /tmp/main_check.s src/main.c)"
+      "Bash(cc65 -t nes -o /tmp/main_check.s src/main.c)",
+      "Bash(*)"
     ],
     "additionalDirectories": [
       "/home/duguid/projects/nesgame/attempt1"

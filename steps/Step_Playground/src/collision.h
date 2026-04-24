@@ -3,8 +3,8 @@
 #ifndef COLLISION_H
 #define COLLISION_H
 
-/* Behaviour type ids (0..7). Slot 7 is custom — if the pupil named
-   it, their chosen name appears here. */
+/* Behaviour type ids (0..7). Slot 7 is custom — if the pupil
+   named it, their chosen name appears here. */
 #define BEHAVIOUR_NONE             0
 #define BEHAVIOUR_SOLID_GROUND     1
 #define BEHAVIOUR_WALL             2
@@ -27,7 +27,7 @@
    grid so the same data works when scrolling is added later. */
 #define WORLD_COLS   32
 #define WORLD_ROWS   30
-#define NUM_BEHAVIOUR_SPRITES 0
+#define NUM_BEHAVIOUR_SPRITES 8
 
 /* Look up the behaviour id at a given world tile (8x8 grid).
    Returns BEHAVIOUR_NONE (0) for out-of-range coordinates. */

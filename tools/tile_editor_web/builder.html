@@ -222,15 +222,36 @@ label { -webkit-user-select: none; user-select: none; }
   gap: 6px; margin: 8px 0;
 }
 .scene-instance {
+  /* 7 columns, one per child — sprite select flexes, everything else
+     sizes to content.  Previous grid had 6 columns for 7 children, so
+     the delete button wrapped onto its own row with the wide leftover
+     cell making it look like a giant red bar. */
   display: grid;
-  grid-template-columns: 1.4fr auto 70px 70px auto auto;
+  grid-template-columns:
+    28px      /* thumb        */
+    minmax(0, 1fr)   /* sprite picker */
+    auto      /* role badge   */
+    64px      /* x input      */
+    64px      /* y input      */
+    auto      /* ai picker    */
+    28px;     /* delete       */
   gap: 6px; align-items: center;
   padding: 6px 8px;
   background: var(--panel); border: 1px solid var(--border);
   border-radius: 4px;
 }
+.scene-instance:hover {
+  border-color: var(--accent);
+}
 .scene-instance select, .scene-instance input {
   max-width: none; min-width: 0;
+  /* Numeric inputs want to be right-aligned so the digits line up
+     vertically across rows; selects look better left-aligned. */
+  box-sizing: border-box;
+}
+.scene-instance input[type="number"] {
+  text-align: right;
+  padding: 4px 6px;
 }
 .scene-instance .label-xy {
   font-size: 0.82em; color: var(--muted); text-align: right;
@@ -241,11 +262,26 @@ label { -webkit-user-select: none; user-select: none; }
   background: var(--panel2); border: 1px solid var(--border);
   white-space: nowrap;
 }
+/* Delete button: square 28px icon only.  Previous padding made it a
+   lozenge that crowded the rest of the row. */
 .scene-instance button.del {
-  background: var(--panel2); border-color: var(--warn); color: var(--warn);
-  padding: 4px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  width: 28px; height: 28px;
+  padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
 }
 .scene-instance button.del:hover { background: #3a2840; }
+.scene-instances-empty {
+  color: var(--muted); font-style: italic; font-size: 0.9em;
+  padding: 10px 12px;
+  background: var(--panel); border: 1px dashed var(--border);
+  border-radius: 4px;
+  text-align: center;
+}
 .scene-add-row {
   display: flex; gap: 8px; align-items: center;
   margin-top: 8px;
@@ -464,8 +500,13 @@ body.emu-single-player #emu-p2-controls { display: none; }
     <div class="tb-group" role="group" aria-label="Edit">
       <button type="button" id="btn-reset-modules" title="Reset every module back to its default settings (your sprites and backgrounds are untouched)">↻ Reset modules</button>
     </div>
-    <div class="tb-group" role="group" aria-label="Run">
+    <div class="tb-group play-controls" role="group" aria-label="Run">
       <button type="button" id="btn-play" class="primary" title="Assemble main.c from your module selections, compile it and run it in the browser emulator">▶ Play in NES</button>
+      <button type="button" id="btn-download-rom" title="Build the ROM and download it as a .nes file you can run in any emulator">⬇ ROM</button>
+      <select id="play-mode" title="Where to run the ROM.  Local (fceux) only works if fceux is installed on the machine running the playground server.">
+        <option value="browser">In browser</option>
+        <option value="native">Local (fceux)</option>
+      </select>
       <button type="button" id="btn-help" title="Show help">?</button>
     </div>
     <input id="file-input-all" type="file" accept=".json" style="display:none">
@@ -581,6 +622,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
 <script src="builder-assembler.js"></script>
 <script src="builder-modules.js"></script>
 <script src="builder-validators.js"></script>
+<script src="play-pipeline.js"></script>
 <script>
 /* ===================================================================
    Builder page — chunk 1.
@@ -955,6 +997,15 @@ body.emu-single-player #emu-p2-controls { display: none; }
 
     function rerender() {
       list.innerHTML = '';
+      if (instances.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'scene-instances-empty';
+        empty.textContent =
+          'No sprites placed yet.  Click an empty spot on the preview ' +
+          'above to drop one, or use + Add instance below.';
+        list.appendChild(empty);
+        return;
+      }
       instances.forEach((inst, i) => {
         list.appendChild(renderSceneInstanceRow(inst, i, node, placeable,
           () => { rerender(); if (preview) drawPreview(preview.querySelector('canvas'), node); }));
@@ -1482,12 +1533,13 @@ body.emu-single-player #emu-p2-controls { display: none; }
       state.name || 'untitled';
   }
 
-  // --- Play — assemble main.c and POST /play ---------------------
-  async function play() {
-    if (!templateText) {
-      setStatus('error', '⚠ Template not loaded yet');
-      return;
-    }
+  // --- Play — delegates to PlayPipeline -------------------------------
+  // All the assemble / derive-players / derive-scene / POST plumbing
+  // lives in play-pipeline.js now (shared across every editor page).
+  // This wrapper only does the Builder-specific bits: run validators,
+  // save, then hand the ROM bytes to the in-page jsnes emulator.
+  async function play(opts) {
+    opts = opts || {};
     const problems = window.BuilderValidators.validate(state);
     if (window.BuilderValidators.hasErrors(problems)) {
       setStatus('error', '⚠ Fix the problems listed on the right first');
@@ -1495,111 +1547,41 @@ body.emu-single-player #emu-p2-controls { display: none; }
     }
     Storage.saveCurrent(state);
 
-    const playerIdxs = window.BuilderAssembler.findSpritesByRole(state, 'player');
-    const playerIdx = playerIdxs[0] !== undefined ? playerIdxs[0] : -1;
-    const p1 = moduleNode('players.player1');
-    const playerStart = (p1 && p1.config) ? {
-      x: p1.config.startX, y: p1.config.startY,
-    } : { x: 60, y: 120 };
-    // Player 2 — only wired through when the module is enabled AND
-    // there's a second Player-tagged sprite.  Either missing, the
-    // ROM builds as single-player and PLAYER2_ENABLED stays 0.
-    const p2 = moduleNode('players.player2');
-    const p2Enabled = !!(p2 && p2.enabled);
-    const playerIdx2 = (p2Enabled && playerIdxs[1] !== undefined)
-      ? playerIdxs[1] : -1;
-    const playerStart2 = (p2 && p2.config) ? {
-      x: p2.config.startX, y: p2.config.startY,
-    } : { x: 180, y: 120 };
-
-    // Scene sprites come from one of two sources:
-    //   1. Explicit instances[] on the Scene module (pupil-placed,
-    //      per-instance AI, sprite reuse allowed).
-    //   2. Auto-placement of every non-player sprite tagged with a
-    //      gameplay role (original MVP behaviour — kicks in when the
-    //      pupil has not added any instances yet).
-    // Slot order of sceneSprites matters: the assembler's per-instance
-    // AI references ss_x[i] by its index in the payload, so we keep
-    // instance ordering 1:1 with the list in state.builder.
-    let sceneSprites;
-    const sceneModule = moduleNode('scene');
-    const instances = (sceneModule && sceneModule.config &&
-      Array.isArray(sceneModule.config.instances))
-      ? sceneModule.config.instances : [];
-    if (instances.length > 0) {
-      sceneSprites = [];
-      for (const inst of instances) {
-        const sp = state.sprites[inst.spriteIdx];
-        if (!sp) continue;
-        sceneSprites.push({
-          spriteIdx: inst.spriteIdx | 0,
-          x: inst.x | 0,
-          y: inst.y | 0,
-        });
-      }
-    } else {
-      sceneSprites = [];
-      let cursorX = 96;
-      const includedRoles = new Set(['enemy', 'npc', 'pickup',
-        'powerup', 'item', 'tool', 'projectile', 'decoration']);
-      for (let i = 0; i < (state.sprites || []).length; i++) {
-        if (i === playerIdx) continue;
-        const sp = state.sprites[i];
-        if (!sp || !includedRoles.has(sp.role)) continue;
-        const w = (sp.width || 2) * 8;
-        const x = Math.min(240 - w, cursorX);
-        sceneSprites.push({ spriteIdx: i, x: x, y: 120 });
-        cursorX += w + 24;
-        if (cursorX > 240) break;
-      }
-    }
-
-    const customMainC = window.BuilderAssembler.assemble(state, templateText);
-
     const btn = document.getElementById('btn-play');
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     showBuildStatus('Compiling…', null);
 
     try {
-      const payload = {
-        state: state,
-        playerSpriteIdx: playerIdx >= 0 ? playerIdx : 0,
-        playerStart: playerStart,
-        sceneSprites: sceneSprites,
-        mode: 'browser',
-        customMainC: customMainC,
-      };
-      if (playerIdx2 >= 0) {
-        payload.playerSpriteIdx2 = playerIdx2;
-        payload.playerStart2 = playerStart2;
-      }
-      const res = await fetch(PLAYGROUND_SERVER, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      let body;
-      try { body = await res.json(); } catch { body = { ok: false, log: 'non-JSON response' }; }
-      if (body.ok) {
-        showBuildStatus('✓ Build OK — launching emulator…',
-          (body.log || '').split('\n').slice(-8).join('\n'));
-        if (body.rom_b64) {
-          const rom = decodeRomBase64(body.rom_b64);
-          // Show or hide the Player 2 control hint based on whether
-          // this build actually wired P2 in.  Single-player games
-          // shouldn't advertise keys that do nothing.
-          document.body.classList.toggle('emu-single-player', playerIdx2 < 0);
+      const body = await window.PlayPipeline.play(state, {
+        mode: opts.mode || 'browser',
+        download: !!opts.download,
+        onStatus(cls, msg) {
+          showBuildStatus(msg, null, cls === 'error');
+        },
+        onRom(rom) {
+          // Scene module derivation mirrors the pipeline's logic —
+          // we read playerIdxs here only to set the single-player
+          // class on <body>, which the emulator uses to hide the P2
+          // control hint.
+          const idxs = window.BuilderAssembler.findSpritesByRole(
+            state, 'player');
+          const p2 = moduleNode('players.player2');
+          const p2Enabled = !!(p2 && p2.enabled);
+          const hasP2 = p2Enabled && idxs[1] !== undefined;
+          document.body.classList.toggle('emu-single-player', !hasP2);
           openEmulator(rom);
-        }
-      } else {
+        },
+      });
+      if (body && body.ok && body.log) {
+        showBuildStatus(
+          (opts.download ? '✓ Downloaded ROM' : '✓ Build OK'),
+          (body.log || '').split('\n').slice(-8).join('\n'));
+      } else if (body && !body.ok) {
         showBuildStatus('✗ ' + (body.stage ? '[' + body.stage + '] ' : '') +
           'build failed', body.log || 'no details', true);
       }
-    } catch (err) {
-      showBuildStatus('✗ Could not reach the playground server.',
-        'Start it with the "Start Playground Server" VSCode task.', true);
     } finally {
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -1748,7 +1730,22 @@ body.emu-single-player #emu-p2-controls { display: none; }
     renderAll();
     setStatus('saved', '● Ready');
 
-    document.getElementById('btn-play').addEventListener('click', play);
+    const modeSelect = document.getElementById('play-mode');
+    document.getElementById('btn-play').addEventListener('click', () => {
+      play({ mode: modeSelect.value });
+    });
+    document.getElementById('btn-download-rom').addEventListener('click', () => {
+      play({ mode: 'browser', download: true });
+    });
+    // Disable the Local option if fceux isn't installed on the server.
+    window.PlayPipeline.capabilities().then(caps => {
+      const nativeOpt = modeSelect.querySelector('option[value="native"]');
+      if (nativeOpt) {
+        nativeOpt.disabled = !caps.fceux;
+        nativeOpt.textContent = caps.fceux ? 'Local (fceux)' : 'Local (fceux — not installed)';
+      }
+      if (modeSelect.value === 'native' && !caps.fceux) modeSelect.value = 'browser';
+    }).catch(() => {});
     document.getElementById('btn-help').addEventListener('click', () => {
       document.getElementById('help-dialog').showModal();
     });

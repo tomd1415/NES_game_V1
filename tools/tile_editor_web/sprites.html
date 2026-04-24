@@ -2396,6 +2396,15 @@ details.collapsible > summary .sub-count {
 <script src="storage.js"></script>
 <script src="tour.js"></script>
 <script src="feedback.js"></script>
+<!-- PlayPipeline depends on these three.  They are pulled in even
+     though the Sprites page does not expose the Builder tree UI —
+     the point is to use the same assembler that the Builder uses so
+     every page's ROM is built from identical settings. -->
+<script src="sprite-render.js"></script>
+<script src="builder-assembler.js"></script>
+<script src="builder-modules.js"></script>
+<script src="builder-validators.js"></script>
+<script src="play-pipeline.js"></script>
 <script>
 'use strict';
 
@@ -7200,7 +7209,49 @@ function onPgPreviewClick(e) {
   renderPlaygroundPreview();
 }
 
-async function sendPlayToServer() {
+// Build a transient copy of `state` whose Builder tree mirrors the
+// Playground dialog's placement state (pgState).  The Sprites page lets
+// pupils position sprites + pick which sprite is the player on a
+// miniature preview; that placement has to flow through
+// state.builder.modules.scene + players so PlayPipeline.play (shared
+// across pages) produces the same ROM the pupil was previewing.  The
+// override is non-persistent — we never write this clone back to
+// Storage, so the Builder page's own scene layout is untouched.
+function stateWithPgOverrides() {
+  const clone = Object.assign({}, state);
+  // Role-tag the chosen sprite as the player so the assembler picks it
+  // up.  Do NOT mutate the original sprite array (a shallow map is fine
+  // — the assembler only reads role/name/width/height/cells).
+  clone.sprites = (state.sprites || []).map((sp, i) => {
+    if (i === pgState.playerIdx && sp && sp.role !== 'player') {
+      return Object.assign({}, sp, { role: 'player' });
+    }
+    return sp;
+  });
+  // Inject pg placement into the Builder's Scene + Player modules.
+  const b = (clone.builder && clone.builder.version === 1)
+    ? JSON.parse(JSON.stringify(clone.builder))
+    : window.BuilderDefaults();
+  if (b.modules && b.modules.scene && b.modules.scene.config) {
+    b.modules.scene.config.instances = pgState.scene.map((e, i) => ({
+      id: 'pg-' + i,
+      spriteIdx: e.spriteIdx,
+      x: e.x, y: e.y,
+      ai: 'static',
+    }));
+  }
+  const p1 = b.modules && b.modules.players && b.modules.players.submodules
+    && b.modules.players.submodules.player1;
+  if (p1 && p1.config) {
+    p1.config.startX = pgState.playerStart.x;
+    p1.config.startY = pgState.playerStart.y;
+  }
+  clone.builder = b;
+  return clone;
+}
+
+async function sendPlayToServer(opts) {
+  opts = opts || {};
   const btn = document.getElementById('btn-pg-play');
   if (pgState.playerIdx < 0) {
     pgSetStatus('Choose which sprite is the player first.', 'err');
@@ -7211,48 +7262,31 @@ async function sendPlayToServer() {
 
   btn.disabled = true;
   pgSetStatus('Compiling your scene...', null);
-  const mode = (document.getElementById('pg-runon')?.value) || 'browser';
+  const mode = opts.mode ||
+    (document.getElementById('pg-runon')?.value) || 'browser';
   try {
-    const payload = {
-      state: state,
-      playerSpriteIdx: pgState.playerIdx,
-      playerStart: pgState.playerStart,
-      sceneSprites: pgState.scene.map(e => ({ spriteIdx: e.spriteIdx, x: e.x, y: e.y })),
-      mode,
-    };
-    const res = await fetch(PLAYGROUND_SERVER, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    let body;
-    try { body = await res.json(); } catch { body = { ok: false, log: 'server returned non-JSON' }; }
-    if (body.ok) {
-      const tail = (body.log || '').split('\n').slice(-6).join('\n');
-      const stampBits = [];
-      if (body.built_iso) stampBits.push('built ' + (body.built_iso.split('T')[1] || body.built_iso));
-      if (typeof body.build_time_ms === 'number') stampBits.push(body.build_time_ms + ' ms');
-      const stamp = stampBits.length ? '  (' + stampBits.join(' · ') + ')' : '';
-      if (body.rom_b64) {
-        const rom = decodeRomBase64(body.rom_b64);
-        const note = body.warning ? '\n\n⚠ ' + body.warning : '';
+    const playState = stateWithPgOverrides();
+    const body = await window.PlayPipeline.play(playState, {
+      mode: mode,
+      download: !!opts.download,
+      onStatus(cls, msg) {
+        pgSetStatus(msg, cls === 'error' ? 'err' : (cls === 'ok' ? 'ok' : null));
+      },
+      onRom(rom, resp) {
+        const tail = (resp.log || '').split('\n').slice(-6).join('\n');
+        const stampBits = [];
+        if (resp.built_iso) stampBits.push('built ' + (resp.built_iso.split('T')[1] || resp.built_iso));
+        if (typeof resp.build_time_ms === 'number') stampBits.push(resp.build_time_ms + ' ms');
+        const stamp = stampBits.length ? '  (' + stampBits.join(' · ') + ')' : '';
+        const note = resp.warning ? '\n\n⚠ ' + resp.warning : '';
         pgSetStatus('✓ Scene compiled' + stamp + ' — launching in-browser emulator…' + note + '\n\n' + tail, 'ok');
         openEmulator(rom);
-      } else {
-        pgSetStatus('✓ Scene compiled' + stamp + ' — FCEUX window should appear. Use the D-pad to move!\n\n' + tail, 'ok');
-      }
-    } else {
+      },
+    });
+    if (body && !body.ok) {
       const stage = body.stage ? `[${body.stage}] ` : '';
       pgSetStatus('✗ ' + stage + 'build failed.\n\n' + (body.log || 'no details'), 'err');
     }
-  } catch (err) {
-    pgSetStatus(
-      '✗ Could not reach the playground server at ' + PLAYGROUND_SERVER + '.\n\n' +
-      'Start it with the "Start Playground Server" VSCode task (or run\n' +
-      '  python3 tools/playground_server.py\n' +
-      'from the project root) and try again.',
-      'err'
-    );
   } finally {
     btn.disabled = false;
   }

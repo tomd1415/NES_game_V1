@@ -1001,7 +1001,13 @@ kbd {
       <button type="button" id="btn-redo" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
       <button type="button" id="btn-new" title="Clear this project back to defaults (use File ▾ to create a new project)">🗑 Clear project</button>
     </div>
-    <div class="tb-group" role="group" aria-label="Run">
+    <div class="tb-group play-controls" role="group" aria-label="Run">
+      <button type="button" id="btn-play" class="primary" title="Build the ROM from your project — Backgrounds page downloads the .nes so you can open it in any emulator.  For an embedded emulator use the Sprites, Builder or Code pages.">▶ Play</button>
+      <button type="button" id="btn-download-rom" title="Build the ROM and save it as a .nes file">⬇ ROM</button>
+      <select id="play-mode" title="Where to run the ROM.  Local (fceux) only works if fceux is installed on the machine running the playground server.">
+        <option value="browser">Download ROM</option>
+        <option value="native">Local (fceux)</option>
+      </select>
       <button type="button" id="btn-help" title="Show help (?)">?</button>
     </div>
     <input id="file-input" type="file" accept=".json" style="display:none">
@@ -1436,6 +1442,15 @@ kbd {
 <script src="storage.js"></script>
 <script src="tour.js"></script>
 <script src="feedback.js"></script>
+<!-- PlayPipeline + deps.  Backgrounds has no embedded emulator, so
+     in-browser Play here triggers a .nes download; the Local option
+     launches fceux via the server.  Same shared pipeline as every
+     other page, same assembler output, same defaults. -->
+<script src="sprite-render.js"></script>
+<script src="builder-assembler.js"></script>
+<script src="builder-modules.js"></script>
+<script src="builder-validators.js"></script>
+<script src="play-pipeline.js"></script>
 <script>
 'use strict';
 
@@ -3461,6 +3476,50 @@ function init() {
   document.getElementById('btn-recovery-cancel').addEventListener('click', () => {
     document.getElementById('recovery-dialog').close();
   });
+  // --- Play controls (shared pipeline) ---------------------------------
+  // Backgrounds has no embedded jsnes, so the browser-mode callback
+  // triggers a download.  Native mode passes through to the server,
+  // which launches fceux.
+  (function wirePlayControls() {
+    const btnPlay = document.getElementById('btn-play');
+    const btnDl   = document.getElementById('btn-download-rom');
+    const sel     = document.getElementById('play-mode');
+    if (!btnPlay || !window.PlayPipeline) return;
+    async function run(extra) {
+      const mode = sel ? sel.value : 'browser';
+      btnPlay.disabled = true;
+      try {
+        await window.PlayPipeline.play(state, Object.assign({
+          mode: mode,
+          // Browser mode on this page = download the ROM (no jsnes here).
+          download: mode === 'browser',
+          onStatus(cls, msg) {
+            const statusEl = document.getElementById('save-status');
+            if (statusEl) {
+              statusEl.textContent = msg;
+              statusEl.className = (cls === 'error') ? 'error' : 'saved';
+            }
+          },
+        }, extra || {}));
+      } finally {
+        btnPlay.disabled = false;
+      }
+    }
+    btnPlay.addEventListener('click', () => run({}));
+    if (btnDl) btnDl.addEventListener('click', () =>
+      run({ mode: 'browser', download: true }));
+    if (sel) {
+      window.PlayPipeline.capabilities().then(caps => {
+        const nativeOpt = sel.querySelector('option[value="native"]');
+        if (nativeOpt) {
+          nativeOpt.disabled = !caps.fceux;
+          if (!caps.fceux) nativeOpt.textContent = 'Local (not installed)';
+        }
+        if (sel.value === 'native' && !caps.fceux) sel.value = 'browser';
+      }).catch(() => {});
+    }
+  })();
+
   document.getElementById('btn-help').addEventListener('click', () => {
     openHelp('tutorial');
   });
