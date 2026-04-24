@@ -525,6 +525,15 @@ void main(void) {
 
         // --- Vblank window ----------------------------------------------
         waitvsync();
+        // OAM DMA first — canonical NES pattern.  Run it before any
+        // PPU_ADDR / PPU_DATA writes so (a) the sprite table is fresh
+        // the moment rendering resumes, (b) if anything ELSE in vblank
+        // overruns its budget, the visible cost is background tearing
+        // rather than sprite drop-outs, which pupils notice more.
+        // OAM_ADDR = 0 must be set first; some PPU boot states already
+        // have it clear, but do not rely on it.
+        OAM_ADDR = 0x00;
+        OAM_DMA  = 0x02;
 #ifdef SCROLL_BUILD
         // Stream off-screen tile columns / rows for any 8-px boundary
         // the camera has crossed since last frame — has to happen while
@@ -534,12 +543,6 @@ void main(void) {
         PPU_SCROLL = 0;
         PPU_SCROLL = 0;
 #endif
-        // Sprite DMA: copy the 256-byte shadow from $0200 to OAM in one
-        // ~513-cycle burst.  Must set OAM_ADDR = 0 first so the DMA
-        // starts at sprite 0 (some boot-state PPUs already have OAM_ADDR
-        // clear, but do not rely on it).
-        OAM_ADDR = 0x00;
-        OAM_DMA  = 0x02;
 
 #ifdef SCROLL_BUILD
         // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR

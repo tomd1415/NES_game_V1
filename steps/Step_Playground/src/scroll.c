@@ -175,6 +175,16 @@ void scroll_stream(void) {
         }
     }
 #endif
+    /* Leave PPU_CTRL in the default +1-stride state regardless of which
+     * branch ran.  The horizontal block above switches the stride to
+     * +32 for its column burst, and nothing inside scroll_stream
+     * resets it afterwards on that path alone.  scroll_apply_ppu
+     * further down the vblank would reset it too, but any PPU_DATA
+     * write between here and there (the dialogue module's
+     * vblank_writes, for instance) would land with the wrong stride
+     * and corrupt rows further down the nametable.  Cheap to do here,
+     * removes the latent footgun. */
+    PPU_CTRL = PPU_CTRL_BASE;
 }
 
 void load_world_bg(void) {

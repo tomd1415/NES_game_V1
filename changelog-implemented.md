@@ -2910,3 +2910,63 @@ error — scroll.c has no legitimate loops that would need one.
 This catches the specific shape of the breakage in a way the
 existing ROM-hash baseline can't (the baseline doesn't compile
 the streaming blocks).
+
+### Scroll-flicker follow-up — 2026-04-24 OAM DMA first in vblank
+
+Pupil report after the scroll-stream cap shipped: "less screen
+disruption but the bottom of the level is flickering near the
+top of the screen until the screen stops moving."  Same on
+browser and fceux.
+
+Vblank ordering was non-canonical — OAM DMA ran *after*
+dialogue writes + `scroll_stream` + PPU_ADDR manipulation.
+That's risky in three ways:
+
+1. If anything in vblank overruns its cycle budget, the
+   latest writes spill past vblank.  When OAM DMA is last,
+   sprites drop out — pupils notice immediately.  When OAM
+   DMA is first, a spill just tears a background tile update
+   (far less visible).
+2. Dialogue + scroll_stream both leave the PPU's internal V
+   register pointing somewhere via PPU_ADDR.  Running OAM DMA
+   before any of that happens keeps V in a known state
+   between vblanks.
+3. On real hardware, OAM retention during vblank is delicate
+   (the PPU partially decays sprite 0 + OAM at the end of
+   vblank if not refreshed soon enough).  DMA-first
+   guarantees the refresh happens early.
+
+Reordered both
+[steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+and
+[tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+so the vblank sequence is now:
+
+```c
+waitvsync();
+OAM_ADDR = 0x00;                 // <- first now
+OAM_DMA  = 0x02;
+//@ insert: vblank_writes         // dialogue
+scroll_stream();                  // or PPU_SCROLL reset (non-scroll builds)
+scroll_apply_ppu();               // last PPU register write, as before
+```
+
+Byte-identical baseline held because the change is symmetric
+across both templates.
+
+**Known limitation surfaced by this investigation.**  The
+project uses horizontal nametable mirroring
+(`NES_MIRRORING: 1` in `nes.cfg`) — correct for horizontal
+scrolling (NT0 / NT1 are unique, pair at $2000 / $2400) but
+limiting for tall worlds, because $2800 is a mirror of $2000.
+Vertical scrolling past screen height shows the same content
+wrapping rather than a new nametable.  Documented in
+[BUILDER_GUIDE.md](BUILDER_GUIDE.md) §8 limitations.
+
+**Action for the teacher:** try the scrolling project again
+(browser or Local).  If the top-of-screen flicker is gone,
+this closes C2 properly.  If it persists, the next debugging
+step is to inspect nametable / attribute-table contents via
+fceux's PPU viewer while scrolling, which will point at
+whether it's a timing issue (vblank overrun) or a data issue
+(stale attributes / missing nametable content).

@@ -1069,6 +1069,15 @@ void main(void) {
 
         // --- Vblank window ----------------------------------------------
         waitvsync();
+        // OAM DMA first — canonical NES pattern.  Run it before any
+        // PPU_ADDR / PPU_DATA writes (dialogue, scroll stream) so (a)
+        // the sprite table is fresh the moment rendering resumes, and
+        // (b) if anything else in vblank overruns budget, the visible
+        // cost is a background tile tear rather than dropped sprites.
+        // This also puts the PPU's internal V register in a known
+        // state when scroll_apply_ppu runs at the end.
+        OAM_ADDR = 0x00;
+        OAM_DMA  = 0x02;
 
         //@ insert: vblank_writes
 
@@ -1081,11 +1090,6 @@ void main(void) {
         PPU_SCROLL = 0;
         PPU_SCROLL = 0;
 #endif
-        // Sprite DMA: copy the 256-byte shadow from $0200 to the PPU's
-        // OAM in ~513 cycles.  Must set OAM_ADDR = 0 first so DMA
-        // starts at sprite 0.
-        OAM_ADDR = 0x00;
-        OAM_DMA  = 0x02;
 
 #ifdef SCROLL_BUILD
         // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR
