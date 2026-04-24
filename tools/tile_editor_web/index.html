@@ -2655,6 +2655,7 @@ function renderPaletteEditor() {
       renderTileset();
       renderTileEditor();
       renderNametable();
+      refreshColourButtons();   // paint-colour swatches follow the new palette
     });
     picker.appendChild(b);
   }
@@ -2731,6 +2732,13 @@ function selectPalette(kind, idx) {
   renderTileset();
   renderTileEditor();
   renderNametable();
+  // The 1/2/3 paint-colour buttons above the tile editor read their
+  // background from activePreviewPalette(), so switching the active
+  // palette has to re-skin them too — otherwise they keep showing
+  // the old palette's colours while the tile preview (which also
+  // reads activePreviewPalette) has already switched.  Pupils read
+  // the mismatch as "the palette didn't actually change".
+  refreshColourButtons();
 }
 
 function renderBgColourSwatch() {
@@ -2916,6 +2924,9 @@ function initPaletteEditor() {
       renderTileset();
       renderTileEditor();
       renderNametable();
+      // Same reason as selectPalette(): the paint-colour buttons sample
+      // activePreviewPalette() and need a refresh when the kind flips.
+      refreshColourButtons();
     });
   });
   // Restore last-used palette selection from prefs.  The Backgrounds
