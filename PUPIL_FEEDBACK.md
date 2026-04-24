@@ -42,7 +42,7 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-13 | Grid               | Thicker/darker grid lines, with coarser and finer grid options    | [new]     |
 | 2026-04-13 | Sprite UX          | New sprite should auto-pick next empty tiles; easier replace flow | [done]    |
 | 2026-04-13 | Modes              | Distinct modes (paint tile / set palette) on both pages           | [new]     |
-| 2026-04-13 | Emulator           | Offline FCEUX sometimes runs a stale build; browser one is fresh  | [new]     |
+| 2026-04-13 | Emulator           | Offline FCEUX sometimes runs a stale build; browser one is fresh  | [done]    |
 | 2026-04-13 | Help               | Getting-started videos and animations                             | [new]     |
 | 2026-04-20 | Gameplay snippets  | Enemy sprite that moves around as a bad guy                       | [done]    |
 | 2026-04-20 | Gameplay snippets  | NPC dialogue snippet                                              | [done]    |
@@ -325,7 +325,18 @@ Use pupil initials (not full names) for anonymity.
   include file changes. Add a hash check + "force clean rebuild" task. As
   a safety net, show the ROM's build timestamp on the first frame of the
   game (HUD) so the pupil can tell if they're playing old code.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-24 — a second wave of this
+  complaint after Local (fceux) mode was re-enabled on every page
+  led to the real root cause: `/play`'s `customMainC` path builds
+  in a throwaway tempdir and returns the bytes, but the native
+  branch used to launch fceux against the stale `steps/Step_Playground/game.nes`
+  instead.  Fixed by writing the just-built ROM to a dedicated
+  `steps/Step_Playground/_play_latest.nes` and pointing fceux at
+  that.  See the "native fceux now runs the SAME ROM as the browser"
+  entry in [changelog-implemented.md](changelog-implemented.md).
+  Sprint-6 also added `built_iso` / `build_time_ms` stamps on
+  every `/play` response so pupils can tell which build they're
+  looking at regardless of emulator.
 
 ---
 
@@ -694,3 +705,24 @@ sub-item so a half-baked piece never blocks a pupil session.
   triggers (now delivered via multi-background doors), and added
   three new `[done]` rows covering the Phase B+ additions
   (co-op, in-Builder NPC dialogue, room transitions).
+- 2026-04-24 (later) — post-pupil-session fix pass captured in
+  [plan-batches.md](plan-batches.md).  Shipped: unified Play
+  pipeline across every editor page (one helper, one set of
+  controls, sensible fallbacks so empty projects still build);
+  ▶ Play + ⬇ ROM + In-browser/Local-fceux dropdown now on
+  Backgrounds / Sprites / Behaviour / Builder / Code; shared
+  embedded jsnes dialog on every page; ladder tiles now block
+  climbing through solid ground unless the target row is also
+  LADDER; Builder scene-instance row layout tidied (proper
+  7-column grid, square delete button, empty-state placeholder);
+  legacy `enemies` module removed (per-instance Scene AI
+  superseded it); sprite palettes hidden from the Backgrounds
+  page (they were confusing pupils); paint-colour swatches now
+  update live when a palette is selected or recoloured; native
+  fceux now loads the same ROM as the browser (stale-`game.nes`
+  bug fixed via `_play_latest.nes`); OAM DMA pipeline replaces
+  per-byte OAM_DATA writes so complex scenes stop glitching on
+  real hardware / fceux.  Flipped this file's "Offline FCEUX
+  runs a stale build" entry to `[done]`.  Remaining Batch-B
+  polish items (help-popover tabs, project-dropdown parity,
+  Backgrounds palette selector facelift) still on the list.

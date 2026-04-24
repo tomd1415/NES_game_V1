@@ -56,8 +56,15 @@ The project ships a self-contained web-based tile editor in `tools/tile_editor_w
 
 - **`index.html`** — the Backgrounds page (tileset, palettes, nametable, multi-background management).
 - **`sprites.html`** — the Sprites page (composite sprite builder, Play-in-NES dialog).
+- **`behaviour.html`** — the Behaviour page (per-tile behaviour map: ground / wall / platform / ladder / door / trigger).
+- **`builder.html`** — the Builder page (tick modules to build a game without writing C).
+- **`code.html`** — the Code page (free-form C or asm main).
+- **Shared modules**:
+  - **`play-pipeline.js`** — one "assemble + build + launch" helper every page calls.  Handles state fortification (stub player when the project has none), `customMainC` / `customMainAsm` overrides for the Code page, the native-vs-browser mode selector, and the Download-ROM flow.
+  - **`emulator.js`** — the embedded jsnes dialog + keyboard mapping.  Injects its own `<dialog>` + CSS on first call, idempotent when a host page already has one.
+  - **`storage.js`**, **`feedback.js`**, **`sprite-render.js`**, **`builder-assembler.js`**, **`builder-modules.js`**, **`builder-validators.js`**, **`tour.js`** — as before.
 
-Both pages are plain HTML with inline CSS and JS, no build step. They share one project blob in `localStorage` under the key `nes_tile_editor.current.v1`, so edits on either page save into the same state.
+All pages are plain HTML with inline CSS and JS, no build step. They share one project blob in `localStorage` under the key `nes_tile_editor.current.v1`, so edits on any page save into the same state — and the same Play pipeline reads it, so "▶ Play" from any page produces the same ROM.
 
 ### State shape
 
@@ -378,6 +385,8 @@ POST body:
 
 `mode` is `"browser"` (default) or `"native"`. Native auto-falls-back to browser (with a warning in the response) if `fceux` isn't on PATH. When `customMainC` is present and non-empty, the build runs in a per-request tempdir so concurrent pupil edits don't race; without it, the shared `steps/Step_Playground/` build path is used (serialised through `BUILD_LOCK`).
 
+Native mode writes the just-built ROM to `steps/Step_Playground/_play_latest.nes` and launches `fceux` against **that** file, not the shared `game.nes`.  The tempdir build path never updates `game.nes`, so an earlier bug had fceux loading whatever stale ROM the last offline `make` had left there; the dedicated `_play_latest.nes` keeps the offline workflow's stock `game.nes` authoritative while giving `/play` a predictable launch target.  `*.nes` is already in `.gitignore`, so nothing new to ignore.
+
 Response on success:
 
 ```json
@@ -390,7 +399,7 @@ Response on success:
 }
 ```
 
-Browser mode decodes `rom_b64` and hands it to `jsnes.NES.loadROM()` in [tools/tile_editor_web/sprites.html](tools/tile_editor_web/sprites.html). Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load.
+Browser mode decodes `rom_b64` and hands it either to the page's embedded `jsnes.NES.loadROM()` (Builder / Sprites / Code / Backgrounds / Behaviour — all now share [tools/tile_editor_web/emulator.js](tools/tile_editor_web/emulator.js)) or to a blob URL for the Download-ROM flow. Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load — [play-pipeline.js](tools/tile_editor_web/play-pipeline.js)'s `capabilities()` caches the probe for the page's lifetime.
 
 **Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, `ss_*` arrays (extra static sprites), and the animation tables **`walk_tiles` / `walk_attrs` / `WALK_FRAME_COUNT` / `WALK_FRAME_TICKS`** (and the `jump_*` equivalents). If you rename any of these symbols, update `build_scene_inc()` in the server to match.
 

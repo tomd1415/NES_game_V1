@@ -121,12 +121,21 @@ current work first, so it's never lost).
 
 ### ▶ Play your scene in the NES
 
-On the **Sprites** page, click **▶ Play in NES**. Pick a Player sprite,
-optionally drop a few extras onto the background, and the editor will
-compile your tiles into a real NES ROM and open it in FCEUX so you can
-walk the player around.
+Every editor page — Backgrounds, Sprites, Behaviour, Builder, Code —
+has a **▶ Play in NES** button in the top-right.  Click it and the
+editor compiles your project into a real NES ROM and runs it in the
+embedded emulator.
 
-This needs the **Playground Server** running — the
+Alongside Play, two other controls:
+
+- **⬇ ROM** — downloads the compiled `.nes` file so you can open it
+  in any external NES emulator (or email it to a friend).
+- **In browser / Local (fceux)** dropdown — picks where the ROM
+  runs.  *In browser* uses the page's embedded jsnes.  *Local
+  (fceux)* launches fceux on the machine running the playground
+  server; the option is greyed out when fceux isn't installed there.
+
+Play needs the **Playground Server** running — the
 "Open Editor via Playground Server" task starts it for you. If you see
 "is the server running?" in the status bar, run the task again.
 

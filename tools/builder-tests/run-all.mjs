@@ -102,7 +102,103 @@ check('syntax tools/playground_server.py', () => {
 
 console.log('');
 
-// --- Step 2: byte-identical ROM invariant ------------------------------
+// --- Step 2: fix-specific regression guards ---------------------------
+//
+// Cheap regex assertions on the templates + server so pupil-reported
+// bugs we've already fixed don't silently regress in a later refactor.
+// Each check explains the bug it guards against — if you touch one of
+// the call-outs, update (or remove) the guard deliberately.
+
+function readTwoTemplates() {
+  return [
+    { name: 'Step_Playground main.c',
+      body: fs.readFileSync(path.join(STEP, 'src', 'main.c'), 'utf8') },
+    { name: 'builder platformer.c template',
+      body: fs.readFileSync(TEMPLATE, 'utf8') },
+  ];
+}
+
+// Guard: OAM DMA is still the sprite-render path.  Regressing to the
+// old per-byte `OAM_DATA = x;` writes inside vblank causes mid-screen
+// corruption on real hardware / fceux because the writes overrun the
+// ~2273-cycle NTSC vblank budget for complex scenes.  See the
+// "Sprite pipeline — OAM DMA" entry in changelog-implemented.md.
+check('invariant: both templates use OAM DMA (not per-byte OAM_DATA writes)', () => {
+  for (const t of readTwoTemplates()) {
+    if (!/oam_buf\[oam_idx\+\+\]\s*=/.test(t.body)) {
+      throw new Error(t.name + ': missing oam_buf shadow writes (DMA pipeline reverted?)');
+    }
+    if (!/OAM_DMA\s*=\s*0x02/.test(t.body)) {
+      throw new Error(t.name + ': missing `OAM_DMA = 0x02` inside vblank');
+    }
+    // No bare `OAM_DATA = ...;` assignments outside the #define line
+    // (the macro definition uses spaces, writes use `=`).
+    const badOamData = t.body.match(/OAM_DATA\s*=\s*[a-zA-Z0-9_]/g) || [];
+    // The #define keeps `OAM_DATA` in the source but doesn't have
+    // `OAM_DATA = <identifier>` syntax — this regex only matches
+    // assignments.  Any match = a real write snuck back in.
+    if (badOamData.length) {
+      throw new Error(t.name + ': ' + badOamData.length +
+        ' raw OAM_DATA write(s) — should be oam_buf writes');
+    }
+  }
+}) || (anyFail = true);
+
+// Guard: climbing blocks on solid ground / walls unless the target
+// cell is also a LADDER.  Before the 2026-04-24 fix, climbing UP
+// decremented py unconditionally and pupils could walk through floors.
+check('invariant: ladder climb checks target-cell behaviour in both templates', () => {
+  for (const t of readTwoTemplates()) {
+    // Both up and down branches should probe behaviour_at on their
+    // target row and honour a LADDER / SOLID_GROUND tie-break.
+    if (!/up_ladder\s*=.*BEHAVIOUR_LADDER/s.test(t.body)) {
+      throw new Error(t.name + ': ladder climb-up guard missing (up_ladder LADDER check)');
+    }
+    if (!/dn_ladder\s*=.*BEHAVIOUR_LADDER/s.test(t.body)) {
+      throw new Error(t.name + ': ladder climb-down guard missing (dn_ladder LADDER check)');
+    }
+    if (!/if \(up_ladder \|\| !up_solid\)/.test(t.body)) {
+      throw new Error(t.name + ': up-climb tie-break `up_ladder || !up_solid` missing');
+    }
+  }
+}) || (anyFail = true);
+
+// Guard: the native-fceux branch launches the just-built ROM via
+// a dedicated file, not the stale shared game.nes.  Before the fix,
+// tempdir-built ROMs were discarded and fceux loaded whatever an
+// earlier `make` had left on disk.
+check('invariant: playground_server.py native launch uses _play_latest.nes', () => {
+  const body = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'),
+                               'utf8');
+  if (!/_play_latest\.nes/.test(body)) {
+    throw new Error('native launch path must write to _play_latest.nes');
+  }
+  // The pre-fix bug was `Popen([FCEUX_PATH, STEP_DIR / "game.nes"])`.
+  // After the fix, Popen is given `latest_rom`.  Catch the regression
+  // by requiring the current shape.
+  if (!/Popen\(\s*\[\s*FCEUX_PATH\s*,\s*str\(latest_rom\)/s.test(body)) {
+    throw new Error('native launch should Popen FCEUX_PATH with latest_rom, not a stale path');
+  }
+}) || (anyFail = true);
+
+// Guard: PlayPipeline.capabilities() probes /health, not /capabilities.
+// The wrong endpoint (/capabilities) 404'd silently and disabled the
+// Local-fceux option on every page — fixed 2026-04-24.
+check("invariant: play-pipeline.js capabilities() probes /health", () => {
+  const body = fs.readFileSync(path.join(WEB, 'play-pipeline.js'), 'utf8');
+  if (!/fetch\('\/health'/.test(body)) {
+    throw new Error("capabilities() must fetch '/health' (was '/capabilities', " +
+      'which 404s and disables Local mode everywhere)');
+  }
+  if (/fetch\('\/capabilities'/.test(body)) {
+    throw new Error("capabilities() must not fetch '/capabilities' " +
+      '(wrong endpoint — use /health)');
+  }
+}) || (anyFail = true);
+
+console.log('');
+
+// --- Step 3: byte-identical ROM invariant ------------------------------
 //
 // Step_Playground's stock main.c compiles to a baseline ROM.  Swapping
 // in the Builder's platformer.c (with no modules ticked because no
@@ -132,7 +228,7 @@ check('invariant: Step_Playground ROM byte-identical after template swap', () =>
 
 console.log('');
 
-// --- Step 3: run each smoke suite -------------------------------------
+// --- Step 4: run each smoke suite -------------------------------------
 //
 // Each `.mjs` file in tools/builder-tests (excluding this runner)
 // spawns its own server on a unique port and exits 0 on success.

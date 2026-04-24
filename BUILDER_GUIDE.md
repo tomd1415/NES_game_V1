@@ -28,13 +28,34 @@ Pressing **▶ Play** triggers the following pipeline:
    module in a deterministic order, asking each to contribute
    either a named-region substitution (`//>> id … //<<`) or an
    appendage into a named insertion slot (`//@ insert: <slot>`).
-2. The assembled `main.c` goes into the `/play` payload as
-   `customMainC`, alongside the usual scene data.
+2. The shared **Play pipeline**
+   ([play-pipeline.js](tools/tile_editor_web/play-pipeline.js))
+   takes the assembler output, derives player / scene sprites
+   from the Builder state, injects sensible fallbacks (a stub
+   player sprite when the project has none, a default Builder
+   tree when the project was created before the Builder shipped)
+   so brand-new / empty projects still compile, then POSTs the
+   whole payload to `/play`.  Every editor page calls the same
+   helper, so clicking Play on Backgrounds / Sprites / Behaviour /
+   Builder / Code all produce the same ROM from the same state.
 3. [playground_server.py](tools/playground_server.py) emits the
    scene include files (`scene.inc`, `palettes.inc`, etc.), swaps
    `main.c` for the Builder's version, runs `cc65`, and hands
-   back the ROM.
-4. jsnes plays the ROM in the browser.
+   back the ROM bytes.
+4. One of three things happens depending on the pupil's chosen
+   run mode:
+   - **In browser** — the shared
+     [emulator.js](tools/tile_editor_web/emulator.js) opens a
+     `<dialog>` hosting jsnes and runs the ROM in-page.  Same
+     dialog + keyboard mapping on every page.
+   - **Download** — the `⬇ ROM` button saves the `.nes` bytes
+     to disk so the pupil can open them in any external
+     emulator.
+   - **Local (fceux)** — the server writes the just-built ROM
+     to `_play_latest.nes` and launches fceux against that
+     file.  Requires fceux on the playground-server host; the
+     option is greyed out when `/health` reports fceux is
+     unavailable.
 
 There's a **Problems panel** on the right of the Builder page that
 lists validator failures (errors block ▶ Play; warnings don't).
@@ -308,28 +329,52 @@ node tools/builder-tests/run-all.mjs
 
 What it does:
 
-1. `node --check` on every JS module (standalone + inline
-   `<script>` blocks inside builder.html / sprites.html /
-   index.html / behaviour.html / code.html) + `py_compile` on
-   playground_server.py.
-2. **Byte-identical-baseline invariant** — the stock
+1. `node --check` on every JS module (standalone files —
+   `storage.js`, `feedback.js`, `sprite-render.js`,
+   `builder-assembler.js`, `builder-modules.js`,
+   `builder-validators.js`, `play-pipeline.js`, `emulator.js`,
+   `tour.js` — plus the inline `<script>` blocks inside
+   builder.html / sprites.html / index.html / behaviour.html /
+   code.html) + `py_compile` on playground_server.py.
+2. **Fix-specific regression guards** — cheap regex
+   assertions so pupil-reported bugs we've already fixed don't
+   silently come back:
+   - OAM DMA pipeline still in use (both templates write to
+     `oam_buf[oam_idx++]` and issue a single `OAM_DMA = 0x02`
+     inside vblank — no per-byte `OAM_DATA = x` assignments).
+   - Ladder climb probes the target cell's behaviour and lets
+     LADDER override SOLID_GROUND in both the climb-up and
+     climb-down branches.
+   - `playground_server.py` native-fceux launch uses
+     `_play_latest.nes` (the ROM the current `/play` just
+     built) rather than the stale shared `game.nes`.
+   - `play-pipeline.js` `capabilities()` probes `/health`, not
+     `/capabilities` (the wrong endpoint silently 404'd and
+     disabled the Local-fceux option everywhere).
+3. **Byte-identical-baseline invariant** — the stock
    `steps/Step_Playground/src/main.c` ROM hash must match after
    swapping in the Builder's template with no modules ticked.
    Guards the "Builder additions are strictly gated" rule.
-3. Each smoke-test file in `tools/builder-tests/*.mjs`:
+4. Each smoke-test file in `tools/builder-tests/*.mjs`:
    - `preview.mjs` — sprite-render + same-sprite-reuse.
    - `player2.mjs` — Player 2 end-to-end.
    - `chunk-a-hp-hud.mjs` — HP + damage + HUD.
    - `chunk-b-anim.mjs` — runtime animations.
    - `chunk-c-doors.mjs` — teleport doors.
    - `round1-polish.mjs` — P2 HP + P2 anim + enemy/pickup idle.
-   - `round2-dialogue.mjs` — dialogue (incl. regression guard
-     against the pre-fix `draw_text` pattern).
+   - `round2-dialogue.mjs` — dialogue (with regression guards
+     against the `draw_text` pattern, space-fill clear, and
+     VRAM-read snapshot — all three earlier bugs).
    - `round3-multi-bg.mjs` — multi-background doors.
+   - `shared-play.mjs` — the `play-pipeline.js` helper: empty
+     state produces a valid ROM, missing Builder tree is
+     migrated non-destructively, `customMainC` / `customMainAsm`
+     overrides bypass the assembler, and identical state from
+     any page yields an identical payload.
 
 Each smoke file can also run on its own (`node
 tools/builder-tests/round2-dialogue.mjs`).  They launch their
-own throwaway Playground Server on a unique port (18768-18776)
+own throwaway Playground Server on a unique port (18768-18792)
 and exit 0 on success, non-zero on any failed assertion.
 
 **All suites must pass before any Builder change ships** —

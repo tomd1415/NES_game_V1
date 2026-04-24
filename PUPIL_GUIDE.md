@@ -286,7 +286,7 @@ backgrounds. You don't need to download anything extra.
 - **Copy a tile's pixels** with **C** and paste into another slot with **V** — the fastest way to make variants of an existing shape.
 - **Multi-tile sprites** (up to 8×8 tiles each) with flip-H / flip-V and per-sprite palettes.
 - **Multiple named backgrounds** per project — click **+ New** above the background grid to start a second scene.
-- **▶ Play in NES** — the sprites page has a Play button that compiles your tileset + background + sprites into a real `.nes` ROM and opens it in FCEUX so you can walk around in your scene.
+- **▶ Play in NES** — every editor page (Backgrounds, Sprites, Behaviour, Builder, Code) has a Play button that compiles your project into a real `.nes` ROM and runs it in the embedded emulator.  Next to it: **⬇ ROM** saves the `.nes` to disk for any other emulator, and the **In browser / Local (fceux)** dropdown picks where the ROM runs (Local mode launches fceux on the playground server — only works when fceux is installed there).
 
 ### Moving graphics into the step code
 
