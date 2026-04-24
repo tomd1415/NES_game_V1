@@ -112,11 +112,6 @@ to drop a new instance, drag an existing one to move it, drag the
 Player 1 / 2 markers (yellow / cyan outline) to set their start
 position.
 
-### `enemies.walker` / `enemies.chaser`
-Legacy global AI — only effective when `scene.instances` is empty.
-When the Scene module has explicit instances, per-instance AI
-takes over and these become no-ops.
-
 ### `damage`
 Enemies with `role = 'enemy'` hurt the player(s) on touch (AABB
 collision).  Config: `amount` (HP lost per touch) and
@@ -243,7 +238,25 @@ Originally the dialogue module called the template's
 internally calls `waitvsync()` + toggles `PPU_MASK`, and because
 `per_frame` runs mid-frame, the main loop's later `waitvsync()`
 then waited a *second* time — producing a one-frame sprite
-hiccup.
+hiccup.  A second bug followed the fix: the clear path stamped
+tile `0x20` (space) across the row, which permanently erased the
+background that sat behind the text (you saw a "transparent"
+stripe that grew every time the box opened).  A short-lived
+attempt read the nametable back out of VRAM via `PPU_DATA` and
+stashed it in RAM, but the buffered-read semantics + cc65
+quirks around the required dummy read made the restore
+unreliable in practice.
+
+The current clear path restores every cell from
+`bg_nametable_0[row * 32 + col]` — the ROM-resident copy of the
+first background that `scene.inc` already ships in every
+Builder build.  No PPU reads, no saved buffer in RAM, no
+vblank-cycle budget concerns.  The caveat is multi-background
+games: the restore always uses bg 0, so if a pupil leaves
+dialogue open while walking through a door the cleared row will
+show tiles from the starting background instead of the current
+one.  Default settings (`pauseOnOpen = true`) make that
+impossible because the player can't move while the box is up.
 
 The current implementation splits the work:
 

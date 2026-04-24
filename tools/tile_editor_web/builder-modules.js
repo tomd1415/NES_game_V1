@@ -351,142 +351,13 @@
     },
   };
 
-  // Helper — are there any manually-placed scene instances?  Used by
-  // walker / chaser to decide whether to stay out of the way.
-  function sceneHasInstances(state) {
-    const s = state && state.builder && state.builder.modules &&
-      state.builder.modules.scene;
-    return !!(s && s.enabled !== false && s.config &&
-      Array.isArray(s.config.instances) && s.config.instances.length > 0);
-  }
-
-  // --------------------------------------------------------------------
-  // Enemies — container module.  Chunk 2 ships a single submodule
-  // (walker), more land in Phase B (chaser, shooter, …).
-  // --------------------------------------------------------------------
-  modules['enemies'] = {
-    label: 'Enemies (legacy)',
-    // Hidden from the UI since chunk-4 scene-editor work — the Scene
-    // module now lets pupils pick per-instance AI (Walker / Chaser /
-    // Static) for each placed sprite, which is strictly more
-    // expressive than the global Walker-or-Chaser switch this module
-    // used to provide.  The module definition is kept in place so
-    // existing saves with enemies.walker.enabled still emit code
-    // when the Scene list is empty (auto-place case).  Hide once,
-    // stop confusing new pupils; legacy projects keep working.
-    hidden: true,
-    description: 'Legacy auto-AI for every Enemy sprite.  The Scene ' +
-      'module has taken over for per-instance control.',
-    defaultConfig: {},
-    schema: [],
-  };
-
-  modules['enemies.walker'] = {
-    parent: 'enemies',
-    label: 'Walkers',
-    description: 'Every Enemy-tagged sprite walks side to side, ' +
-      'bouncing off the edges of the screen.  Uses the same pattern ' +
-      'as the ready-made “enemy-walker” snippet on the Code page.',
-    defaultConfig: {
-      speed: 1,
-      damagesPlayer: false,   // Phase B wires HP — the flag is stored
-                              // now so the module's config shape stays
-                              // stable across phases.
-    },
-    schema: [
-      {
-        key: 'speed',
-        label: 'Walk speed (px/frame)',
-        type: 'int',
-        min: 1,
-        max: 4,
-        help: '1 = slow, 4 = very fast.',
-      },
-      {
-        key: 'damagesPlayer',
-        label: 'Hurts the player on touch (Phase B)',
-        type: 'bool',
-        readOnly: true,
-        help: 'Checked off for now — HP and damage ship in Phase B.',
-      },
-    ],
-    applyToTemplate(template, node, state) {
-      // If the Scene module has manually-placed instances, the
-      // per-instance AI emitted there takes over entirely — this
-      // role-wide loop would fight it for ss_x control.
-      if (sceneHasInstances(state)) return template;
-      const c = (node && node.config) || {};
-      const speed = A.clampInt(c.speed, 1, 8, 1);
-      // Emit a block that reuses the existing enemy-walker snippet
-      // pattern: one static direction array per enemy slot, then step
-      // each enemy by `speed` pixels per frame and flip when they hit
-      // the screen edge.  Matches snippets/enemy-walker.c almost
-      // verbatim so the generated code reads familiar to anyone who
-      // peeks at the preview.
-      const body = [
-        '        // [builder] enemies.walker — paces every ROLE_ENEMY sprite left/right.',
-        '        {',
-        '            static signed char bw_enemy_dir[16] = {',
-        '                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1',
-        '            };',
-        '            unsigned char bw_ew;',
-        '            for (i = 0; i < NUM_STATIC_SPRITES && i < 16; i++) {',
-        '                if (ss_role[i] != ROLE_ENEMY) continue;',
-        '                bw_ew = ss_w[i] << 3;',
-        '                if (bw_enemy_dir[i] > 0) {',
-        '                    if (ss_x[i] + bw_ew + ' + speed + ' < 255) ss_x[i] += ' + speed + ';',
-        '                    else bw_enemy_dir[i] = -1;',
-        '                } else {',
-        '                    if (ss_x[i] > ' + speed + ') ss_x[i] -= ' + speed + ';',
-        '                    else bw_enemy_dir[i] = 1;',
-        '                }',
-        '            }',
-        '        }',
-      ].join('\n');
-      return A.appendToSlot(template, 'per_frame', body);
-    },
-  };
-
-  modules['enemies.chaser'] = {
-    parent: 'enemies',
-    label: 'Chasers',
-    description: 'Every Enemy-tagged sprite steps one pixel per frame ' +
-      'towards the player.  Slow-but-scary — the player has to keep ' +
-      'moving to stay ahead.  Mirrors the ready-made "enemy-chaser" ' +
-      'snippet on the Code page.  Tick this OR Walkers, not both.',
-    defaultConfig: {
-      speed: 1,
-    },
-    schema: [
-      {
-        key: 'speed',
-        label: 'Chase speed (px/frame)',
-        type: 'int',
-        min: 1,
-        max: 3,
-        help: '1 = sluggish chase, 3 = quick.  Over 3 tends to overshoot.',
-      },
-    ],
-    applyToTemplate(template, node, state) {
-      // Same reasoning as walker: if Scene has instances, the
-      // per-instance AI owns every enemy's ss_x/ss_y.
-      if (sceneHasInstances(state)) return template;
-      const c = (node && node.config) || {};
-      const speed = A.clampInt(c.speed, 1, 4, 1);
-      const body = [
-        '        // [builder] enemies.chaser — nudges every ROLE_ENEMY ' +
-          'sprite toward the player.',
-        '        for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
-        '            if (ss_role[i] != ROLE_ENEMY) continue;',
-        '            if (ss_x[i] + ' + speed + ' <= px) ss_x[i] += ' + speed + ';',
-        '            else if (ss_x[i] >= px + ' + speed + ') ss_x[i] -= ' + speed + ';',
-        '            if (ss_y[i] + ' + speed + ' <= py) ss_y[i] += ' + speed + ';',
-        '            else if (ss_y[i] >= py + ' + speed + ') ss_y[i] -= ' + speed + ';',
-        '        }',
-      ].join('\n');
-      return A.appendToSlot(template, 'per_frame', body);
-    },
-  };
+  // Note: the legacy `enemies` / `enemies.walker` / `enemies.chaser`
+  // modules lived here until 2026-04-24.  They emitted a global per-
+  // frame loop over every ROLE_ENEMY sprite, but the Scene module's
+  // per-instance AI dropdown (Static / Walker / Chaser on each placed
+  // enemy) is strictly more expressive and no pupil was using the old
+  // modules.  Removing them avoids the "Walkers are on, but no sprite
+  // is tagged Enemy" noise on fresh projects with no enemy sprite.
 
   // --------------------------------------------------------------------
   // Pickups — sprites tagged ROLE_PICKUP vanish on touch and add to
@@ -1028,29 +899,53 @@
       // since we're already in vblank.
       const vblank = [
         '        // [builder] dialogue — PPU writes (in vblank).',
+        '        //',
+        '        // Restoring the row on close used to be trickier than',
+        '        // this: earlier versions wrote tile 0x20 (space) which',
+        '        // baked a visible stripe into the background, and the',
+        '        // attempted fix tried to read the existing nametable out',
+        '        // of VRAM via PPU_DATA — which broke in practice because',
+        '        // of the buffered-read semantics (first read returns',
+        '        // stale data; subsequent reads are one address behind)',
+        '        // interacting badly with cc65 optimisations around the',
+        '        // required dummy read.',
+        '        //',
+        '        // Current approach: read back from bg_nametable_0[], the',
+        '        // ROM-resident 1024-byte copy of the Backgrounds-page',
+        '        // nametable that scene.inc already ships in every Builder',
+        '        // build.  No PPU reads, no saved buffer in RAM, no vblank',
+        '        // cycle budget pressure, no cc65 quirks.  In a multi-bg',
+        '        // game the restore pulls tiles from bg 0 rather than the',
+        '        // current room — an acceptable caveat given pupils rarely',
+        '        // keep dialogue open while walking through a door (and',
+        '        // pauseOnOpen makes it impossible by default).',
         '        if (bw_dialog_cmd != 0) {',
         '            unsigned int dlg_addr = 0x2000',
         '                + ((unsigned int)BW_DIALOG_ROW * 32)',
         '                + BW_DIALOG_COL;',
+        '            unsigned int dlg_src = (unsigned int)BW_DIALOG_ROW',
+        '                * 32 + BW_DIALOG_COL;',
         '            unsigned char dlg_j;',
         '            PPU_ADDR = (unsigned char)(dlg_addr >> 8);',
         '            PPU_ADDR = (unsigned char)(dlg_addr & 0xFF);',
         '            if (bw_dialog_cmd == 1) {',
-        '                /* Draw: tile indices map ASCII → BG tile.  Pupils',
-        '                 * paint A..Z at 0x41..0x5A, 0..9 at 0x30..0x39.',
-        '                 * Writes stop at the null terminator. */',
+        '                /* Draw: stamp text across the row.  Cells past',
+        '                 * the null terminator are left alone — the tile',
+        '                 * already in VRAM at those positions is correct',
+        '                 * (load_background() wrote bg_nametable_0 there',
+        '                 * at boot, and a prior clear restored them). */',
         '                for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
         '                    unsigned char ch = bw_dialogue_text[dlg_j];',
         '                    if (ch == 0) break;',
         '                    PPU_DATA = ch;',
         '                }',
         '            } else {',
-        '                /* Clear: write spaces across the whole row.  0x20',
-        '                 * is ASCII space; if the pupil painted a blank',
-        '                 * tile at 0x20 (or left it untouched) the row',
-        '                 * visually empties. */',
+        '                /* Clear: restore every cell from bg_nametable_0.',
+        '                 * Writing all BW_DIALOG_WIDTH is wasteful when',
+        '                 * the text was short, but cheap enough in vblank',
+        '                 * and keeps the loop dead simple. */',
         '                for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
-        '                    PPU_DATA = 0x20;',
+        '                    PPU_DATA = bg_nametable_0[dlg_src + dlg_j];',
         '                }',
         '            }',
         '            bw_dialog_cmd = 0;',
@@ -1226,20 +1121,6 @@
         scene: {
           enabled: true,
           config: { instances: [] },
-        },
-        enemies: {
-          enabled: true,
-          config: {},
-          submodules: {
-            walker: {
-              enabled: true,
-              config: Object.assign({}, modules['enemies.walker'].defaultConfig),
-            },
-            chaser: {
-              enabled: false,
-              config: Object.assign({}, modules['enemies.chaser'].defaultConfig),
-            },
-          },
         },
         pickups: {
           enabled: false,

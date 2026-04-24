@@ -121,23 +121,6 @@
       };
     },
 
-    // V3: enemies.walker is on but no sprite is tagged Enemy.  Warn
-    // only — the build still works, there are just no enemies to
-    // walk around.
-    function walkerButNoEnemies(state) {
-      if (!moduleEnabled(state, 'enemies.walker')) return null;
-      if (countSpritesByRole(state, 'enemy') > 0) return null;
-      return {
-        id: 'walker-no-enemies',
-        severity: 'warn',
-        message: 'Walkers are on, but no sprite is tagged Enemy.',
-        fix: 'Open the Sprites page and set a sprite\'s role dropdown ' +
-          'to Enemy.  (Leave the walker off if you want a no-enemy ' +
-          'level.)',
-        jumpTo: 'sprites.html',
-      };
-    },
-
     // V4: behaviour_walls is on but the active background has no
     // wall / solid_ground tiles painted.  Warn — the player will
     // fall off the bottom of the screen with nothing to stand on.
@@ -176,24 +159,6 @@
           'type list, and paint at least one tile where the player ' +
           'should end up to win.  (Or switch the win condition off.)',
         jumpTo: 'behaviour.html',
-      };
-    },
-
-    // V6: walker AND chaser both ticked — the per-frame loops will
-    // fight for each enemy's ss_x.  Error because the result is
-    // visually confusing (enemies wobble in place).
-    function walkerAndChaser(state) {
-      const walker = moduleEnabled(state, 'enemies.walker');
-      const chaser = moduleEnabled(state, 'enemies.chaser');
-      if (!walker || !chaser) return null;
-      return {
-        id: 'walker-and-chaser',
-        severity: 'error',
-        message: 'Walkers and Chasers are both on — enemies will fight ' +
-          'themselves and wobble in place.',
-        fix: 'Tick one enemy style, not both.  Walkers pace side-to-side; ' +
-          'Chasers follow the player.',
-        jumpTo: null,   // both controls live on this page
       };
     },
 

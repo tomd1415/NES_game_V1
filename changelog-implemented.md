@@ -2260,3 +2260,172 @@ cases rolled in.
 **Docs.**  [BUILDER_GUIDE.md](BUILDER_GUIDE.md) §2 gains an
 "Extra config" subsection under `dialogue` that spells out both
 fields, their defaults, and the macros that gate them.
+
+### Dialogue — 2026-04-24 snapshot/restore the row under the text
+
+Reported from pupil testing: the text appeared fine, but after
+closing, the row it used came back as a flat "transparent"
+stripe that extended a little further every time the box
+reopened.  Root cause: the clear path wrote tile `0x20` (ASCII
+space) across the whole 28-cell row.  Whatever the pupil had
+under the text (ground, sky, the bottom of a tree, letters from
+a bigger nametable, …) was overwritten permanently, and each
+re-open snapshotted *the space row itself*, then on close we
+again stamped spaces — the damaged area never got a chance to
+recover.
+
+Fix in the vblank_writes block of the dialogue module:
+
+- Declare `bw_dialog_saved_row[BW_DIALOG_WIDTH]` in RAM so we
+  have somewhere to stash 28 bytes.
+- On **draw**: read the 28 nametable bytes currently under the
+  text via `PPU_DATA` reads (first read is stale-buffer — it
+  lands in `saved_row[0]` and is harmlessly overwritten by the
+  first real byte next iteration), then rewind `PPU_ADDR` and
+  stamp the text.
+- On **clear**: write `bw_dialog_saved_row` straight back, so
+  every cell returns to exactly the tile index that was there
+  before the text appeared.
+
+Works while rendering is off (we are already inside the main
+`waitvsync()` window), so the VRAM reads and subsequent writes
+are both safe.  Known limitation: if `pauseOnOpen` is disabled
+AND the camera scrolls between open and close, the snapshot
+may no longer match the world row currently displayed at
+screen row 25, so the restore will paint stale tiles.  The
+default (pause on) keeps the camera still and avoids this
+entirely.
+
+**Tests.**  `round2-dialogue.mjs` gains three new assertions
+(A7–A9): the clear path MUST NOT contain `PPU_DATA = 0x20;`
+(the original bug), the draw path MUST contain
+`bw_dialog_saved_row[dlg_j] = PPU_DATA;`, and the clear path
+MUST contain `PPU_DATA = bw_dialog_saved_row[dlg_j];`.  Full
+`run-all.mjs` stays green (13 syntax checks + baseline +
+8 suites).
+
+**Docs.**  [BUILDER_GUIDE.md](BUILDER_GUIDE.md) §4's "How the
+dialog PPU writes work" subsection gets a short history paragraph
+covering both bugs (double-vblank then space-baking) and the
+snapshot/restore design that replaced the space-fill clear.
+
+### Dialogue — 2026-04-24 restore from bg_nametable_0 (VRAM-read rewrite)
+
+Pupil retest showed the VRAM-read snapshot/restore from the
+previous fix still didn't restore the background: text no longer
+appeared, and the row kept widening into a "transparent" stripe
+on each open/close cycle.  Two things were going wrong:
+
+- The required dummy PPU_DATA read (first read after setting
+  PPU_ADDR returns stale buffer data) was written as a plain
+  assignment to `bw_dialog_saved_row[0]`, overwritten on the
+  next loop iteration.  Under cc65 dead-store elimination this
+  can be elided, shifting every subsequent read by one cell —
+  the snapshot ends up being a column-shifted version of VRAM
+  plus one byte of uninitialised garbage, and the restore
+  stamps garbage over the row.
+- The snapshot also used the full 28-cell vblank budget twice
+  (once for reads, once for writes), which stacked awkwardly
+  with the existing OAM writes in vblank_writes.
+
+Rather than work around these by adding `volatile` casts,
+hand-tuned loops, and cycle-counting, we dropped the VRAM-read
+approach entirely.  The server already emits the painted
+Backgrounds-page nametable as
+`static const unsigned char bg_nametable_0[1024]` in
+`scene.inc` (used by the existing `load_background()` helper),
+so the clear path now just reads from there:
+
+```c
+for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {
+    PPU_DATA = bg_nametable_0[BW_DIALOG_ROW * 32
+                              + BW_DIALOG_COL + dlg_j];
+}
+```
+
+No VRAM reads.  No dummy-read gotcha.  No saved buffer in RAM.
+No vblank-cycle pressure.  The `bw_dialog_saved_row[28]` global
+is removed.
+
+**Caveat.**  In a multi-background game the restore always
+pulls from bg 0, so if a pupil walks through a door while the
+dialog is open the cleared row shows the starting room's tiles.
+The default `pauseOnOpen = true` freezes the player and makes
+this impossible; it only surfaces if the pupil unticks the
+pause option AND walks through a door AND the text closes while
+in the new room.  Documented as a future upgrade.
+
+**Tests.**  `round2-dialogue.mjs` swaps A8/A9's assertions to
+match the new pattern — A8 now fails if *any* `= PPU_DATA;`
+appears in the emitted code (catching a regression to the
+read-VRAM approach), and A9 requires
+`PPU_DATA = bg_nametable_0[dlg_src + dlg_j];`.  Full
+`run-all.mjs` green — baseline byte-identical, all 8 suites.
+
+**Docs.**  [BUILDER_GUIDE.md](BUILDER_GUIDE.md) §4 gets the
+full three-stage history (double-vblank → space-baking → failed
+VRAM-read → bg_nametable_0 restore) so future readers
+understand why the module deliberately avoids VRAM reads.
+
+### Builder — 2026-04-24 remove legacy enemies module + clean the Backgrounds-page palette picker
+
+Two pupil-reported gaps, both rooted in UI that predated newer
+features and was still hanging around:
+
+- **Legacy `enemies` module removed.**  The old `enemies` /
+  `enemies.walker` / `enemies.chaser` modules emitted a global
+  per-frame loop over every `ROLE_ENEMY` sprite.  They were
+  hidden from the Builder tree back when the Scene module's
+  per-instance AI dropdown (Static / Walker / Chaser per placed
+  enemy) landed, but the submodules were still in
+  `BuilderDefaults()` with `walker.enabled = true`, so fresh
+  projects triggered the V3 "Walkers are on, but no sprite is
+  tagged Enemy" warning and in some configurations produced a
+  build-blocking problem.  No pupils used the legacy module —
+  confirmed — so it was cut entirely:
+  - `modules['enemies']`, `modules['enemies.walker']`,
+    `modules['enemies.chaser']` definitions removed from
+    [builder-modules.js](tools/tile_editor_web/builder-modules.js).
+  - `'enemies'` dropped from `MODULE_ORDER` in
+    [builder-assembler.js](tools/tile_editor_web/builder-assembler.js).
+  - The `enemies:` entry (with its walker/chaser submodules)
+    removed from the default state in `BuilderDefaults()`.
+  - Validators V3 (`walker-no-enemies`) and V6
+    (`walker-and-chaser`) deleted from
+    [builder-validators.js](tools/tile_editor_web/builder-validators.js).
+  - `sceneHasInstances()` helper removed — its only callers
+    were the deleted modules.
+  - BUILDER_GUIDE.md §2's "enemies.walker / enemies.chaser"
+    subsection removed.
+
+  Legacy saves that still have `state.builder.modules.enemies`
+  are silently ignored — the assembler skips modules that
+  aren't in `MODULE_ORDER`, so no migration is needed.
+
+- **Backgrounds page: BG palettes only.**  The palette toolbar,
+  all-palettes overview, and the "Preview palette" dropdown
+  used to offer sprite palettes alongside BG ones.  Pupils were
+  clicking a sprite-palette row to edit it, then painting
+  nametable cells — which visually looked right in the editor
+  but showed through a BG palette at runtime (nametable cells
+  can only reference BG palettes).  Three edits fix this on
+  [index.html](tools/tile_editor_web/index.html):
+  - Palette-kind toggle: Sprite button removed; only BG
+    remains.
+  - "All palettes" overview: `groups` array trimmed to the BG
+    entry, so the SP row no longer renders.
+  - "Preview palette" dropdown: BG0–BG3 only; stale `sprite:N`
+    selections from prefs fall through to `bg:N`.
+  - Cross-page prefs restore (`initPaletteEditor`): if the
+    Sprites page had persisted `paletteEditor.kind = 'sprite'`,
+    the Backgrounds page now forces it back to `bg` on load
+    so pupils can't re-enter sprite mode by page-hopping.
+
+  Sprite palettes remain fully editable on the Sprites page —
+  nothing was removed from there.
+
+**Tests.**  `run-all.mjs` stays green with all changes in
+place — syntax checks, byte-identical ROM baseline, and the 8
+smoke suites all pass.  A scratch script builds a
+no-enemy-sprite project end-to-end via `/play`; the ROM links
+and runs without the legacy walker loop.

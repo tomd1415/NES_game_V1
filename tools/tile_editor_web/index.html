@@ -1085,10 +1085,13 @@ kbd {
     <div class="palette-editor" id="palette-editor">
       <div class="palette-editor-toolbar">
         <div class="palette-kind-toggle" role="tablist" aria-label="Palette kind">
+          <!-- Backgrounds page: BG palettes only.  Sprite palettes live
+               on the Sprites page — pupils were selecting them here and
+               then assigning sprite-palette tile IDs to nametable cells,
+               which does not do what they expect (BG tiles only see the
+               BG palettes). -->
           <button type="button" class="pe-kind-btn" data-kind="bg"
                   title="Edit the four background palettes">BG</button>
-          <button type="button" class="pe-kind-btn" data-kind="sprite"
-                  title="Edit the four sprite palettes">Sprite</button>
         </div>
         <div class="palette-p-picker" id="palette-p-picker" role="tablist"
              aria-label="Which palette"></div>
@@ -2665,9 +2668,12 @@ function renderPaletteOverview() {
   const host = document.getElementById('palette-overview');
   host.innerHTML = '';
   const selKindForUI = selectedPaletteKind === 'universal' ? 'bg' : selectedPaletteKind;
+  // Backgrounds page shows BG palettes only.  The SP row used to be
+  // here too but pupils were selecting it and then using a sprite-
+  // palette tile index as a nametable cell, which visually does
+  // nothing useful (nametable cells can only reference BG palettes).
   const groups = [
-    { kind: 'bg',     label: 'BG', data: state.bg_palettes,     slot0: () => state.universal_bg, slot0Transparent: false },
-    { kind: 'sprite', label: 'SP', data: state.sprite_palettes, slot0: () => -1,                  slot0Transparent: true  },
+    { kind: 'bg', label: 'BG', data: state.bg_palettes, slot0: () => state.universal_bg, slot0Transparent: false },
   ];
   for (const grp of groups) {
     grp.data.forEach((p, i) => {
@@ -2886,16 +2892,20 @@ function initPaletteEditor() {
       renderNametable();
     });
   });
-  // Restore last-used palette selection from prefs.
+  // Restore last-used palette selection from prefs.  The Backgrounds
+  // page only edits BG palettes (sprite rows were removed because
+  // pupils were selecting them and assigning sprite-palette tile IDs
+  // to BG cells), so a cross-page `sprite` pref value is forced back
+  // to `bg` here.
   try {
     const p = Storage.readPrefs() || {};
     const pe = p.paletteEditor;
     if (pe && (pe.kind === 'bg' || pe.kind === 'sprite')
         && pe.row >= 0 && pe.row <= 3
         && pe.slot >= 0 && pe.slot <= 3) {
-      selectedPaletteKind = pe.kind;
+      selectedPaletteKind = 'bg';
       selectedPaletteIdx = pe.row;
-      selectedPaletteSlot = (pe.kind === 'sprite' && pe.slot === 0) ? 1 : pe.slot;
+      selectedPaletteSlot = pe.slot;
     }
   } catch (_) { /* non-fatal */ }
 }
@@ -2904,20 +2914,21 @@ function updatePreviewPaletteSelect() {
   const sel = document.getElementById('preview-palette');
   const keep = sel.value;
   sel.innerHTML = '';
+  // BG palettes only — Sprite options used to appear here but picking
+  // one flipped selectedPaletteKind to 'sprite', which then made the
+  // master-grid assign colours to a sprite palette instead of the BG
+  // palette the pupil thought they were editing.
   for (let i = 0; i < 4; i++) {
     const o = document.createElement('option');
     o.value = 'bg:' + i; o.textContent = 'BG' + i;
     sel.appendChild(o);
   }
-  for (let i = 0; i < 4; i++) {
-    const o = document.createElement('option');
-    o.value = 'sprite:' + i; o.textContent = 'Sprite' + i;
-    sel.appendChild(o);
-  }
-  const want = selectedPaletteKind === 'universal'
-    ? 'bg:0'
-    : selectedPaletteKind + ':' + selectedPaletteIdx;
-  sel.value = keep || want;
+  const want = 'bg:' + (selectedPaletteKind === 'universal'
+    ? 0 : selectedPaletteIdx);
+  // If the saved `keep` value points at a sprite option (from before
+  // this restriction), fall through to `want` instead of selecting a
+  // non-existent <option>.
+  sel.value = (keep && keep.startsWith('bg:')) ? keep : want;
 }
 function updateNtPaletteSelect() {
   const sel = document.getElementById('nt-palette');

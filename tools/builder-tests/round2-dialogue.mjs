@@ -106,7 +106,26 @@ function mkState({ withNpc = true, dialogueOn = false, text = 'HELLO' } = {}) {
   if (!/bw_dialog_cmd = 2;\s*\/\* clear \*\//.test(out)) {
     console.error('FAIL A6: per_frame pending-clear marker missing'); process.exit(1);
   }
-  console.log('✓ A dialogue assembler: HELLO → bytes emit, vblank-writes pattern used');
+  // Regression guard: the clear path MUST NOT stamp 0x20 across the row.
+  // That was the original "transparent row gets baked in" bug — the
+  // fix restores each cell from bg_world_tiles (the ROM source-of-truth
+  // copy of the Backgrounds-page data).  Reading VRAM via PPU_DATA is
+  // NOT used — the buffered-read semantics + cc65 quirks around the
+  // required dummy read broke the restore in practice.
+  if (/PPU_DATA = 0x20;/.test(out)) {
+    console.error('FAIL A7: dialogue regressed to writing 0x20 on clear.');
+    process.exit(1);
+  }
+  if (/= PPU_DATA;/.test(out)) {
+    console.error('FAIL A8: dialogue should not read VRAM via PPU_DATA ' +
+      '— restore from bg_world_tiles instead.');
+    process.exit(1);
+  }
+  if (!/PPU_DATA = bg_nametable_0\[dlg_src \+ dlg_j\];/.test(out)) {
+    console.error('FAIL A9: dialogue clear should write bg_nametable_0[] ' +
+      'back, not spaces or stale data.'); process.exit(1);
+  }
+  console.log('✓ A dialogue assembler: HELLO → bytes emit, bg_nametable_0 restore used');
 }
 
 // ----- autoClose + pauseOnOpen combinations -----------------------------
