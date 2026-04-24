@@ -1,16 +1,18 @@
 # Pupil-feedback batches — implementation plan
 
-> **Status (2026-04-24).**  Shipped: Batch A (unified Play pipeline
-> with stub-player fallback, Download-ROM button, fceux selector), C1
-> (ladders no longer climb through solid ground), B4 (Builder
-> scene-instance row layout), and the Play-experience follow-up —
-> `capabilities()` now probes `/health` so Local (fceux) works on
-> every page, and the Builder's embedded NES emulator is extracted to
-> a shared `emulator.js` module that Backgrounds + Behaviour now use
-> too (so "Play in NES" gives the same in-page dialog everywhere).
-> Remaining: Batch B items 3 (help popover tabs), 4 (project-menu
-> consistency), 5 (Backgrounds palette selector), and C2 (scroll
-> flicker).  See `changelog-implemented.md` for the full write-ups.
+> **Status (2026-04-24).**  **All ten items closed.**  Shipped: Batch A
+> (unified Play pipeline with stub-player fallback, Download-ROM
+> button, fceux selector), B3 (shared help popover with page tabs +
+> Feedback), B4 (Builder scene-instance row layout), B4-also
+> (project-dropdown parity across every page — see item 4 below), B5
+> (Backgrounds palette-picker row above the canvas), C1 (ladders no
+> longer climb through solid ground), C2 (scroll_stream capped to one
+> transfer per axis per vblank — defensive fix, manual fceux check
+> pending); plus the Play-experience follow-up — `capabilities()` now
+> probes `/health` so Local (fceux) works on every page, shared
+> embedded NES emulator on every page, OAM DMA to kill vblank-overrun
+> flicker.  See `changelog-implemented.md` for the full write-ups.
+> Next work lives in [next-steps-plan.md](next-steps-plan.md).
 
 Follow-up to the 2026-04-24 pupil testing round. The ten outstanding
 items from that list are grouped into three batches that each fit into

@@ -397,6 +397,9 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
           <div class="tb-rename-row">
             <input id="project-name" type="text" value="untitled" title="Rename this project (shared with other pages)" aria-label="Project name" placeholder="untitled">
           </div>
+          <button type="button" id="btn-project-new">+ New project…</button>
+          <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
+          <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
           <hr class="tb-inline-divider">
           <div class="tb-section-label">Save &amp; restore</div>
           <button type="button" id="btn-save-all"  class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
@@ -525,6 +528,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 
 <script src="storage.js"></script>
 <script src="feedback.js"></script>
+<script src="help.js"></script>
 <!-- Shared Play pipeline + its BuilderAssembler deps.  Behaviour has
      no embedded emulator; in-browser Play here downloads the .nes. -->
 <script src="sprite-render.js"></script>
@@ -1590,9 +1594,14 @@ function init() {
     }
   })();
 
-  document.getElementById('btn-help').addEventListener('click', () => {
-    document.getElementById('help-dialog').showModal();
-  });
+  function showHelp() {
+    const dlg = document.getElementById('help-dialog');
+    if (window.HelpPopover) window.HelpPopover.attachPageTabs(dlg, 'behaviour');
+    dlg.showModal();
+  }
+  document.getElementById('btn-help').addEventListener('click', showHelp);
+  // Auto-open if we arrived via another page's help tab (#help in URL).
+  if (window.HelpPopover) window.HelpPopover.maybeAutoOpen(showHelp);
   document.getElementById('btn-help-close').addEventListener('click', () => {
     document.getElementById('help-dialog').close();
   });
@@ -1738,6 +1747,13 @@ function init() {
 
   // Custom slot editors ----------------------------------------
   wireCustomSlotInputs();
+
+  // Wire the shared New / Duplicate / Delete buttons (Phase 1.3).
+  // Reloads on success; in-place replacement isn't worth the extra
+  // plumbing on pages where pupils swap projects rarely.
+  Storage.wireBasicProjectActions({
+    makeFreshState: () => createDefaultState(),
+  });
 
   // First render -----------------------------------------------
   renderProjectsMenu();

@@ -91,13 +91,19 @@ void scroll_apply_ppu(void) {
    horizontal travel and one 32-tile row per 8 px of vertical travel —
    well inside the VBlank budget for normal walk speeds (1-3 px/frame).
 
-   Large target-jumps (e.g. a teleport) may iterate the while loop
-   several times; for slice 3c we accept this.  Slice 3d can cap it
-   and defer the tail until the next VBlank. */
+   Large target-jumps (e.g. a teleport) would previously iterate the
+   while loop several times in the same vblank, stacking 62-byte
+   transfers with OAM DMA + dialogue writes + scroll_apply_ppu and
+   occasionally blowing past the ~2273-cycle NTSC budget (fceux-
+   visible glitch, jsnes clean).  We now break after one transfer
+   per axis per vblank; the backlog is caught up on subsequent
+   frames (imperceptible at any realistic walk speed, ~1 second
+   catch-up window for a 256-px teleport at 1 tile per frame). */
 void scroll_stream(void) {
 #if (BG_WORLD_COLS > 32)
-    /* Horizontal tile streaming: one new column per 8 px of travel. */
-    while ((cam_x >> 3) != (prev_cam_x >> 3)) {
+    /* Horizontal tile streaming: one new column per 8 px of travel.
+       Capped at one column per vblank. */
+    if ((cam_x >> 3) != (prev_cam_x >> 3)) {
         unsigned int col;
         unsigned int addr;
         unsigned char rr;
@@ -130,8 +136,9 @@ void scroll_stream(void) {
     }
 #endif
 #if (BG_WORLD_ROWS > 30)
-    /* Vertical tile streaming: one new row per 8 px of travel. */
-    while ((cam_y >> 3) != (prev_cam_y >> 3)) {
+    /* Vertical tile streaming: one new row per 8 px of travel.
+       Same one-per-vblank cap as the horizontal block above. */
+    if ((cam_y >> 3) != (prev_cam_y >> 3)) {
         unsigned int row;
         unsigned int addr;
         unsigned char cc;

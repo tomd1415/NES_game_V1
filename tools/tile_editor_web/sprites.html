@@ -2396,6 +2396,7 @@ details.collapsible > summary .sub-count {
 <script src="storage.js"></script>
 <script src="tour.js"></script>
 <script src="feedback.js"></script>
+<script src="help.js"></script>
 <!-- PlayPipeline depends on these three.  They are pulled in even
      though the Sprites page does not expose the Builder tree UI —
      the point is to use the same assembler that the Builder uses so
@@ -7461,9 +7462,13 @@ function init() {
   document.getElementById('btn-recovery-cancel').addEventListener('click', () => {
     document.getElementById('recovery-dialog').close();
   });
-  document.getElementById('btn-help').addEventListener('click', () => {
-    document.getElementById('help-dialog').showModal();
-  });
+  function showHelp() {
+    const dlg = document.getElementById('help-dialog');
+    if (window.HelpPopover) window.HelpPopover.attachPageTabs(dlg, 'sprites');
+    dlg.showModal();
+  }
+  document.getElementById('btn-help').addEventListener('click', showHelp);
+  if (window.HelpPopover) window.HelpPopover.maybeAutoOpen(showHelp);
   document.getElementById('btn-help-replay').addEventListener('click', () => {
     localStorage.removeItem('sprites-help-seen');
     setStatus('saved', '● Help will reopen the next time this page loads');
@@ -8155,7 +8160,7 @@ function init() {
     }
     // View
     if (e.key === 'f') { togglePreview(); return; }
-    if (e.key === '?') { document.getElementById('help-dialog').showModal(); return; }
+    if (e.key === '?') { showHelp(); return; }
   });
 
   // Auto-save timers

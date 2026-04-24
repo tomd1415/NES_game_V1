@@ -2796,3 +2796,91 @@ P4 confirms an end-to-end `/play` build still produces a valid
 in fceux via the Local option and confirm the glitches are
 gone.  Will need a server restart to pick up the Python server
 changes and a fresh build to produce the DMA-powered ROM.
+
+### Phase 1 — 2026-04-24 close the pupil-feedback backlog
+
+Executes Phase 1 of
+[next-steps-plan.md](next-steps-plan.md) — four items that close
+out the last of the ten pupil-feedback entries from
+[plan-batches.md](plan-batches.md).
+
+**1.1 — Scroll streaming cap (defensive pre-emptive, pending
+pupil fceux verification).**  `scroll_stream()` in
+[steps/Step_Playground/src/scroll.c](steps/Step_Playground/src/scroll.c)
+now caps itself to **one column + one row transfer per vblank**
+(the `while` loops became `if`s, with the remainder caught up
+on subsequent frames).  The previous code could stack multiple
+30–32-byte transfers in one vblank when the camera teleported
+or moved fast, which — even after the OAM DMA fix — could edge
+past the ~2273-cycle NTSC budget.  At realistic walk speeds
+(1–3 px/frame) the loop only runs once per vblank anyway, so
+nothing changes for pupils.  The file's own pre-existing TODO
+("slice 3d can cap it and defer the tail until the next VBlank")
+is now done.  Manual fceux verification by the user still
+required to confirm scroll flicker is gone.
+
+**1.2 — Shared help popover with page tabs + Feedback (items 3
+from the pupil-fix list).**  New module
+[tools/tile_editor_web/help.js](tools/tile_editor_web/help.js)
+exposing `HelpPopover.attachPageTabs(dialog, currentPageId)` +
+`HelpPopover.maybeAutoOpen(openFn)`.  Every page's existing
+`<dialog id="help-dialog">` keeps its owned content; the helper
+prepends a strip with links to every other page's help
+(navigation with `#help` in the URL so the target page auto-
+opens its help on load) plus a `💬 Feedback` toggle that
+mounts `Feedback.mountInto(...)` inline on first expand.  All
+five pages (Backgrounds, Sprites, Behaviour, Builder, Code)
+now share the same help-tab UX without having to port each
+other's help HTML.
+
+**1.3 — Project-dropdown parity (item 4).**  `storage.js` gains
+`Storage.wireBasicProjectActions({ makeFreshState })` — a
+reload-on-success handler bundle for the `btn-project-new` /
+`btn-project-duplicate` / `btn-project-delete` buttons.
+Behaviour / Builder / Code pages all gain a `projects-list`
+switcher + Duplicate + Delete.  Behaviour gets the full New /
+Duplicate / Delete set (it has a `createDefaultState`);
+Builder and Code get Duplicate + Delete + a menu-hint pointing
+pupils at the Sprites page for New (those pages don't own a
+fresh-state factory — a blank Builder or Code project without
+sprites / tiles / a background isn't usable anyway).
+
+**1.4 — Backgrounds palette picker (item 5).**  The "Use
+palette" `<select>` in the nametable toolbar was hard to find;
+pupils asked for it to look more like the swatch pickers on
+Sprites.  Added a prominent `.nt-palette-picker` row between
+the toolbar and the canvas: four big BG-palette buttons, each
+showing the universal-BG slot 0 plus that palette's three
+colours, active one outlined in accent.  The hidden
+`<select id="nt-palette">` stays as the value store (all
+existing paint logic still reads from it) and now has a change
+listener that keeps the picker in sync when pupils use the
+keyboard.  `assignColourToSlot` fan-out adds `renderNtPalettePicker()`
+so palette edits update the picker live.
+
+**Tests.**  `run-all.mjs` green:
+
+- 15 syntax checks (now including `help.js`).
+- 4 fix-specific regression guards (OAM DMA, ladder, native
+  fceux launch, `/health` probe) — unchanged.
+- Byte-identical ROM baseline still holds (template changes are
+  symmetric between `main.c` and `platformer.c`; scroll.c's cap
+  doesn't affect 1x1 builds because `BG_WORLD_COLS/ROWS` gates
+  compile the blocks out).
+- All 9 smoke suites pass.
+
+**Manual verification still required from the teacher:**
+
+1. Open the Builder in fceux via Local mode with a scrolling
+   scene + several sprites, compare against pre-2026-04-24
+   behaviour to confirm scroll flicker is cleared (C2 status).
+2. Click `?` on each page; confirm the page-tabs strip appears,
+   clicking another page's tab lands on it with help already
+   open, `💬 Feedback` opens + submits successfully.
+3. Switch projects from Behaviour / Builder / Code via the
+   projects-list buttons; confirm the page reloads into the
+   chosen project.
+4. On Backgrounds, click the new "Paint with palette" row;
+   confirm clicks update what palette subsequent paint strokes
+   use; edit a colour slot and confirm the picker row updates
+   live.

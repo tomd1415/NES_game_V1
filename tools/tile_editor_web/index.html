@@ -593,6 +593,56 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   border: 1px solid var(--border);
   background: #000;
 }
+/* Phase 1.4: big, obvious "which palette am I painting with?" row.
+   Sits above the nametable canvas so pupils stop missing it. */
+.nt-palette-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.nt-palette-picker:empty { display: none; }
+.nt-palette-picker-label {
+  font-size: 0.8em;
+  color: var(--muted);
+  align-self: center;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.nt-palette-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel2);
+  cursor: pointer;
+  font-size: 0.82em;
+  color: var(--fg);
+  line-height: 1;
+}
+.nt-palette-pick:hover { border-color: var(--muted); }
+.nt-palette-pick.active {
+  border-color: var(--accent);
+  background: rgba(139, 113, 232, 0.15);
+  font-weight: 600;
+}
+.nt-palette-pick .swatch {
+  width: 14px; height: 14px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  display: inline-block;
+  image-rendering: pixelated;
+}
+.nt-palette-pick .swatch.transparent {
+  background-image: repeating-linear-gradient(
+    45deg, #222 0 3px, #444 3px 6px);
+}
 .nt-resize-handle {
   height: 10px;
   margin: 14px 12px 0;
@@ -1211,6 +1261,17 @@ kbd {
     <button type="button" id="btn-popout-tileset" title="Show a floating tileset window so you can pick tiles while painting the background">📌 Pop-out tileset</button>
     <button type="button" id="btn-fullscreen-preview" title="Preview the background in full screen at the correct NES aspect ratio — press F to toggle, Esc to close.">🖥 Full preview</button>
   </div>
+  <div class="nt-palette-picker" id="nt-palette-picker"
+       role="radiogroup"
+       aria-label="Paint with palette (shared with the Use-palette dropdown above)">
+    <!-- Phase 1.4: prominent row of the four BG palettes right above
+         the nametable canvas — mirrors the Sprites page's active-
+         palette strip so pupils can find + switch the paint palette
+         at a glance instead of hunting in the toolbar dropdown.
+         Clicking a cell sets the `nt-palette` <select>'s value so the
+         existing paint-tile / paint-palette logic continues to read
+         it unchanged. -->
+  </div>
   <div class="nt-canvas-wrap" data-mode="paint">
     <canvas id="nt-canvas"></canvas>
   </div>
@@ -1442,6 +1503,7 @@ kbd {
 <script src="storage.js"></script>
 <script src="tour.js"></script>
 <script src="feedback.js"></script>
+<script src="help.js"></script>
 <!-- PlayPipeline + deps.  Backgrounds has no embedded emulator, so
      in-browser Play here triggers a .nes download; the Local option
      launches fceux via the server.  Same shared pipeline as every
@@ -2584,6 +2646,7 @@ function togglePreview() {
 
 function openHelp(tabName) {
   const dlg = document.getElementById('help-dialog');
+  if (window.HelpPopover) window.HelpPopover.attachPageTabs(dlg, 'backgrounds');
   if (tabName) {
     const tab = document.querySelector('.help-tab[data-tab="' + tabName + '"]');
     if (tab) tab.click();
@@ -2890,6 +2953,9 @@ function assignColourToSlot(kind, palIdx, slot, nesIdx) {
   // the stale colour until the pupil clicked one of them, which looked
   // like the palette change hadn't taken effect.
   refreshColourButtons();
+  // Phase 1.4: the "paint with palette" row above the nametable canvas
+  // also samples bg_palettes + universal_bg — keep it in sync.
+  renderNtPalettePicker();
   // Universal BG also drives the big swatch next to the BG-colour
   // button — keep it in sync when slot 0 moves.
   if (kind === 'universal' || (kind === 'bg' && slot === 0)) {
@@ -2967,6 +3033,7 @@ function updatePreviewPaletteSelect() {
   // non-existent <option>.
   sel.value = (keep && keep.startsWith('bg:')) ? keep : want;
 }
+let _ntPaletteChangeListenerAttached = false;
 function updateNtPaletteSelect() {
   const sel = document.getElementById('nt-palette');
   const keep = sel.value;
@@ -2977,6 +3044,71 @@ function updateNtPaletteSelect() {
     sel.appendChild(o);
   }
   sel.value = keep || '0';
+  // Keep the new picker row's highlight in sync when pupils use the
+  // keyboard / dropdown instead of clicking the swatches.
+  if (!_ntPaletteChangeListenerAttached) {
+    sel.addEventListener('change', renderNtPalettePicker);
+    _ntPaletteChangeListenerAttached = true;
+  }
+  renderNtPalettePicker();
+}
+
+// Phase 1.4: renders the big "paint with palette" row above the
+// nametable canvas.  Sources its colours from `state.bg_palettes`
+// and the `universal_bg` (slot 0), stays in sync with the hidden
+// `nt-palette` <select> (the existing paint logic still reads from
+// that select so nothing else needs to change).
+function renderNtPalettePicker() {
+  const host = document.getElementById('nt-palette-picker');
+  if (!host) return;
+  const sel = document.getElementById('nt-palette');
+  const active = sel ? parseInt(sel.value, 10) || 0 : 0;
+  host.innerHTML = '';
+
+  const lbl = document.createElement('span');
+  lbl.className = 'nt-palette-picker-label';
+  lbl.textContent = 'Paint with palette:';
+  host.appendChild(lbl);
+
+  for (let i = 0; i < 4; i++) {
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'nt-palette-pick' + (i === active ? ' active' : '');
+    pick.dataset.p = String(i);
+    pick.setAttribute('role', 'radio');
+    pick.setAttribute('aria-checked', i === active ? 'true' : 'false');
+    pick.title = 'Click to paint with BG' + i;
+
+    const tag = document.createElement('span');
+    tag.textContent = 'BG' + i;
+    pick.appendChild(tag);
+
+    // Slot 0 (shared universal BG) shown dimmed-transparent-style so
+    // pupils remember it's the same across every palette.
+    const slot0 = document.createElement('span');
+    slot0.className = 'swatch';
+    slot0.style.background = nesRgb(state.universal_bg);
+    slot0.title = 'slot 0 — universal BG (shared)';
+    pick.appendChild(slot0);
+
+    const p = state.bg_palettes[i];
+    for (let s = 0; s < 3; s++) {
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = nesRgb(p.slots[s]);
+      sw.title = 'BG' + i + ' slot ' + (s + 1) + ' — 0x' +
+        p.slots[s].toString(16).padStart(2, '0').toUpperCase();
+      pick.appendChild(sw);
+    }
+
+    pick.addEventListener('click', () => {
+      if (!sel) return;
+      sel.value = String(i);
+      sel.dispatchEvent(new Event('change'));
+      renderNtPalettePicker();
+    });
+    host.appendChild(pick);
+  }
 }
 
 // --- Nametable editor -------------------------------------------
@@ -3550,6 +3682,8 @@ function init() {
   document.getElementById('btn-help').addEventListener('click', () => {
     openHelp('tutorial');
   });
+  // Auto-open if the pupil arrived via another page's help tab.
+  if (window.HelpPopover) window.HelpPopover.maybeAutoOpen(() => openHelp('tutorial'));
   document.getElementById('btn-help-close').addEventListener('click', () => {
     document.getElementById('help-dialog').close();
     localStorage.setItem('help-seen', '1');
@@ -4143,7 +4277,7 @@ function init() {
       return;
     }
     if (e.key === '?') {
-      document.getElementById('help-dialog').showModal();
+      openHelp();
     }
   });
 

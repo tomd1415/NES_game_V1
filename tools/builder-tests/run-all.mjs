@@ -52,7 +52,7 @@ let anyFail = false;
 const standalone = [
   'storage.js', 'feedback.js', 'sprite-render.js',
   'builder-assembler.js', 'builder-modules.js', 'builder-validators.js',
-  'play-pipeline.js', 'emulator.js',
+  'play-pipeline.js', 'emulator.js', 'help.js',
   'tour.js',
 ];
 for (const f of standalone) {

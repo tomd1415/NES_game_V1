@@ -380,6 +380,61 @@
       getPreMigrationBackup() { return preMigrationBackup; },
       clearPreMigrationBackup() { preMigrationBackup = null; },
 
+      // Project-menu shared action wiring --------------------------------
+      // Phase 1.3: wire the New / Duplicate / Delete buttons on pages
+      // that don't have bespoke handlers (behaviour / builder / code).
+      // The index.html + sprites.html handlers do in-place state
+      // replacement for a smoother UX; this reload-based fallback is
+      // simpler and good enough for pages where project-level actions
+      // are rare.  Caller passes a factory that makes a fresh blank
+      // state when the pupil clicks New.  Silently no-ops if a button
+      // is missing — pages stay free to ship a subset.
+      wireBasicProjectActions(opts) {
+        opts = opts || {};
+        const factory = typeof opts.makeFreshState === 'function'
+          ? opts.makeFreshState : () => null;
+
+        const byId = (id) => document.getElementById(id);
+        const btnNew = byId('btn-project-new');
+        const btnDup = byId('btn-project-duplicate');
+        const btnDel = byId('btn-project-delete');
+
+        if (btnNew) {
+          btnNew.addEventListener('click', () => {
+            const raw = window.prompt('Name for the new project:',
+                                      'untitled');
+            if (raw == null) return;
+            const name = (raw || '').trim() || 'untitled';
+            try {
+              this.createProject(name, factory());
+              window.location.reload();
+            } catch (e) {
+              alert('Could not create project: ' + e.message);
+            }
+          });
+        }
+        if (btnDup) {
+          btnDup.addEventListener('click', () => {
+            const id = this.duplicateProject(this.getActiveProjectId());
+            if (id) window.location.reload();
+          });
+        }
+        if (btnDel) {
+          btnDel.addEventListener('click', () => {
+            if (this.listProjects().length <= 1) {
+              alert('Cannot delete the only project — create another first.');
+              return;
+            }
+            const active = this.getActiveProject();
+            const label = active && active.name || 'this project';
+            if (!confirm('Delete "' + label + '"? This cannot be undone.')) return;
+            if (this.deleteProject(this.getActiveProjectId())) {
+              window.location.reload();
+            }
+          });
+        }
+      },
+
       // Internal: force catalog to resolve now. Callers shouldn't need this.
       _ensureCatalog: refresh,
     };
