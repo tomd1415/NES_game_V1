@@ -196,6 +196,34 @@ check("invariant: play-pipeline.js capabilities() probes /health", () => {
   }
 }) || (anyFail = true);
 
+// Guard: scroll.c's streaming blocks must not contain bare `continue`
+// statements.  When the one-per-vblank cap turned the outer `while`s
+// into `if`s, the leftover `continue`s became a compile error for any
+// pupil project that actually scrolls (BG_WORLD_COLS > 32 or
+// BG_WORLD_ROWS > 30) — but the byte-identical baseline tests the
+// 32x30 no-scroll path where those blocks are compiled out by `#if`,
+// so the error didn't surface here until a pupil hit /play on a wide
+// project.  This guard checks the literal source text.
+check('invariant: scroll.c has no bare `continue` in streaming blocks', () => {
+  // Strip block + line comments before the check so "continue;" inside
+  // the explanatory comment (describing the bug this guard exists for)
+  // doesn't trigger a false positive.
+  const raw = fs.readFileSync(path.join(STEP, 'src', 'scroll.c'), 'utf8');
+  const src = raw
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g,       ' ');
+  // Exception: `continue` is legal inside `for`/`while` bodies.  The
+  // ones that bit us were at the top level of the `if ((cam_x >> 3)
+  // != (prev_cam_x >> 3)) { ... }` blocks, i.e. outside any loop in
+  // this file.  scroll.c has no legitimate `continue` in its current
+  // form, so the guard treats any occurrence as a regression.
+  const m = /\bcontinue\s*;/.exec(src);
+  if (m) {
+    throw new Error('scroll.c contains a bare `continue` near offset ' +
+      m.index + ' — remove it or wrap the surrounding code in a real loop');
+  }
+}) || (anyFail = true);
+
 console.log('');
 
 // --- Step 3: byte-identical ROM invariant ------------------------------

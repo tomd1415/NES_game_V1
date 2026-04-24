@@ -105,8 +105,6 @@ void scroll_stream(void) {
        Capped at one column per vblank. */
     if ((cam_x >> 3) != (prev_cam_x >> 3)) {
         unsigned int col;
-        unsigned int addr;
-        unsigned char rr;
 
         if (cam_x > prev_cam_x) {
             prev_cam_x += 8;
@@ -117,21 +115,32 @@ void scroll_stream(void) {
             /* Column that just became visible on the left edge. */
             col = prev_cam_x >> 3;
         }
-        if (col >= BG_WORLD_COLS) continue;
+        /* Only stream when the column lies inside the painted world —
+           outside that the camera can be panned (clamped by
+           scroll_follow) but there is no source data.  Used to be
+           `if (col >= BG_WORLD_COLS) continue;` when the enclosing
+           structure was a `while` loop; after the one-per-vblank cap
+           turned that into an `if`, the guard had to flip to a
+           positive range check so cc65 stops complaining about a
+           `continue` outside a loop. */
+        if (col < BG_WORLD_COLS) {
+            unsigned int addr;
+            unsigned char rr;
 
-        /* Bit 5 of the column id picks which nametable to write into —
-           V-mirror aliases $2800/$2C00 to $2000/$2400 so this walks
-           cleanly across arbitrarily wide worlds. */
-        addr = ((col & 0x20) ? 0x2400 : 0x2000) + (col & 0x1F);
+            /* Bit 5 of the column id picks which nametable to write into —
+               V-mirror aliases $2800/$2C00 to $2000/$2400 so this walks
+               cleanly across arbitrarily wide worlds. */
+            addr = ((col & 0x20) ? 0x2400 : 0x2000) + (col & 0x1F);
 
-        /* +32 stride so successive PPU_DATA writes walk down the
-           column rather than across the row. */
-        PPU_CTRL = PPU_CTRL_BASE | PPU_CTRL_STRIDE_COL;
-        PPU_ADDR = (unsigned char)(addr >> 8);
-        PPU_ADDR = (unsigned char)(addr & 0xFF);
-        for (rr = 0; rr < 30; rr++) {
-            PPU_DATA = bg_world_tiles[(unsigned int)rr *
-                                      BG_WORLD_COLS + col];
+            /* +32 stride so successive PPU_DATA writes walk down the
+               column rather than across the row. */
+            PPU_CTRL = PPU_CTRL_BASE | PPU_CTRL_STRIDE_COL;
+            PPU_ADDR = (unsigned char)(addr >> 8);
+            PPU_ADDR = (unsigned char)(addr & 0xFF);
+            for (rr = 0; rr < 30; rr++) {
+                PPU_DATA = bg_world_tiles[(unsigned int)rr *
+                                          BG_WORLD_COLS + col];
+            }
         }
     }
 #endif
@@ -140,8 +149,6 @@ void scroll_stream(void) {
        Same one-per-vblank cap as the horizontal block above. */
     if ((cam_y >> 3) != (prev_cam_y >> 3)) {
         unsigned int row;
-        unsigned int addr;
-        unsigned char cc;
 
         if (cam_y > prev_cam_y) {
             prev_cam_y += 8;
@@ -150,17 +157,21 @@ void scroll_stream(void) {
             prev_cam_y -= 8;
             row = prev_cam_y >> 3;
         }
-        if (row >= BG_WORLD_ROWS) continue;
+        /* Same positive-range guard as the horizontal block above. */
+        if (row < BG_WORLD_ROWS) {
+            unsigned int addr;
+            unsigned char cc;
 
-        /* Bit 5 of the row id picks vertical nametable via H-mirror. */
-        addr = ((row & 0x20) ? 0x2800 : 0x2000) +
-               (unsigned int)(row & 0x1F) * 32;
-        /* +1 stride (default) so the 32-byte burst walks across the row. */
-        PPU_CTRL = PPU_CTRL_BASE;
-        PPU_ADDR = (unsigned char)(addr >> 8);
-        PPU_ADDR = (unsigned char)(addr & 0xFF);
-        for (cc = 0; cc < 32; cc++) {
-            PPU_DATA = bg_world_tiles[row * BG_WORLD_COLS + cc];
+            /* Bit 5 of the row id picks vertical nametable via H-mirror. */
+            addr = ((row & 0x20) ? 0x2800 : 0x2000) +
+                   (unsigned int)(row & 0x1F) * 32;
+            /* +1 stride (default) so the 32-byte burst walks across the row. */
+            PPU_CTRL = PPU_CTRL_BASE;
+            PPU_ADDR = (unsigned char)(addr >> 8);
+            PPU_ADDR = (unsigned char)(addr & 0xFF);
+            for (cc = 0; cc < 32; cc++) {
+                PPU_DATA = bg_world_tiles[row * BG_WORLD_COLS + cc];
+            }
         }
     }
 #endif

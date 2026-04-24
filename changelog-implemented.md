@@ -2884,3 +2884,29 @@ so palette edits update the picker live.
    confirm clicks update what palette subsequent paint strokes
    use; edit a colour slot and confirm the picker row updates
    live.
+
+### Scroll-stream hotfix — 2026-04-24 follow-up
+
+The Phase 1.1 cap turned the `while` loops in
+[scroll.c](steps/Step_Playground/src/scroll.c) into `if`s, but
+kept the internal `if (col >= BG_WORLD_COLS) continue;` guards
+— which are only legal inside a real loop.  Cc65 rejects
+`continue` outside a loop.  The byte-identical-baseline
+regression test builds with `BG_WORLD_COLS=32` /
+`BG_WORLD_ROWS=30`, so the streaming blocks are compiled out by
+the `#if` gates — the error didn't surface until a pupil hit
+/play on a genuinely scrolling project.
+
+Fix: inverted each guard from "skip on out-of-range" to
+"proceed on in-range" — `if (col < BG_WORLD_COLS) { ... write
+block ... }`.  Same behaviour, no `continue`, compiles cleanly
+for scrolling and non-scrolling builds alike.
+
+New regression guard in
+[tools/builder-tests/run-all.mjs](tools/builder-tests/run-all.mjs)
+greps scroll.c (with comments stripped to avoid false
+positives) for bare `continue;` statements.  Any match is an
+error — scroll.c has no legitimate loops that would need one.
+This catches the specific shape of the breakage in a way the
+existing ROM-hash baseline can't (the baseline doesn't compile
+the streaming blocks).
