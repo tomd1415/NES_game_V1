@@ -1002,10 +1002,10 @@ kbd {
       <button type="button" id="btn-new" title="Clear this project back to defaults (use File ▾ to create a new project)">🗑 Clear project</button>
     </div>
     <div class="tb-group play-controls" role="group" aria-label="Run">
-      <button type="button" id="btn-play" class="primary" title="Build the ROM from your project — Backgrounds page downloads the .nes so you can open it in any emulator.  For an embedded emulator use the Sprites, Builder or Code pages.">▶ Play</button>
-      <button type="button" id="btn-download-rom" title="Build the ROM and save it as a .nes file">⬇ ROM</button>
+      <button type="button" id="btn-play" class="primary" title="Build the ROM from your project and run it in the embedded NES emulator">▶ Play in NES</button>
+      <button type="button" id="btn-download-rom" title="Build the ROM and save it as a .nes file you can run in any emulator">⬇ ROM</button>
       <select id="play-mode" title="Where to run the ROM.  Local (fceux) only works if fceux is installed on the machine running the playground server.">
-        <option value="browser">Download ROM</option>
+        <option value="browser">In browser</option>
         <option value="native">Local (fceux)</option>
       </select>
       <button type="button" id="btn-help" title="Show help (?)">?</button>
@@ -1451,6 +1451,7 @@ kbd {
 <script src="builder-modules.js"></script>
 <script src="builder-validators.js"></script>
 <script src="play-pipeline.js"></script>
+<script src="emulator.js"></script>
 <script>
 'use strict';
 
@@ -3476,28 +3477,42 @@ function init() {
   document.getElementById('btn-recovery-cancel').addEventListener('click', () => {
     document.getElementById('recovery-dialog').close();
   });
-  // --- Play controls (shared pipeline) ---------------------------------
-  // Backgrounds has no embedded jsnes, so the browser-mode callback
-  // triggers a download.  Native mode passes through to the server,
-  // which launches fceux.
+  // --- Play controls (shared pipeline + shared emulator) --------------
+  // Browser mode opens the shared in-page NES emulator; native mode
+  // launches fceux via the playground server.  Download button always
+  // triggers a .nes save regardless of mode.
   (function wirePlayControls() {
     const btnPlay = document.getElementById('btn-play');
     const btnDl   = document.getElementById('btn-download-rom');
     const sel     = document.getElementById('play-mode');
     if (!btnPlay || !window.PlayPipeline) return;
+    function hasP2Hint() {
+      // Best-effort P2 detection so the emulator status bar doesn't
+      // advertise keys that do nothing.
+      if (!state || !state.builder || !state.builder.modules) return false;
+      const p2 = state.builder.modules.players &&
+        state.builder.modules.players.submodules &&
+        state.builder.modules.players.submodules.player2;
+      if (!p2 || p2.enabled === false) return false;
+      const playerSprites = (state.sprites || []).filter(s => s && s.role === 'player');
+      return playerSprites.length >= 2;
+    }
     async function run(extra) {
       const mode = sel ? sel.value : 'browser';
       btnPlay.disabled = true;
       try {
         await window.PlayPipeline.play(state, Object.assign({
           mode: mode,
-          // Browser mode on this page = download the ROM (no jsnes here).
-          download: mode === 'browser',
           onStatus(cls, msg) {
             const statusEl = document.getElementById('save-status');
             if (statusEl) {
               statusEl.textContent = msg;
               statusEl.className = (cls === 'error') ? 'error' : 'saved';
+            }
+          },
+          onRom(rom) {
+            if (window.NesEmulator) {
+              window.NesEmulator.open(rom, { hasP2: hasP2Hint() });
             }
           },
         }, extra || {}));
@@ -3513,7 +3528,8 @@ function init() {
         const nativeOpt = sel.querySelector('option[value="native"]');
         if (nativeOpt) {
           nativeOpt.disabled = !caps.fceux;
-          if (!caps.fceux) nativeOpt.textContent = 'Local (not installed)';
+          nativeOpt.textContent = caps.fceux ? 'Local (fceux)' :
+            'Local (fceux — not installed)';
         }
         if (sel.value === 'native' && !caps.fceux) sel.value = 'browser';
       }).catch(() => {});

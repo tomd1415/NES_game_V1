@@ -46,7 +46,25 @@
 #define PPU_SCROLL    *((unsigned char*)0x2005)
 #define PPU_ADDR      *((unsigned char*)0x2006)
 #define PPU_DATA      *((unsigned char*)0x2007)
+#define OAM_DMA       *((unsigned char*)0x4014)
 #define JOYPAD1       *((unsigned char*)0x4016)
+
+/* OAM shadow buffer — 256 bytes at $0200 (page-aligned by the linker's
+ * OAM segment, see cfg/nes.cfg).  Every frame we build the sprite list
+ * in here during the active render period (cheap: just RAM writes),
+ * then kick off a single $4014 DMA during vblank to copy all 256 bytes
+ * to the PPU's OAM in ~513 cycles.  The previous per-byte OAM_DATA
+ * writes from inside vblank worked in jsnes (which doesn't accurately
+ * simulate the ~2273-cycle NTSC vblank budget) but caused mid-screen
+ * corruption on real hardware / fceux when the scene had many sprites,
+ * because the writes spilled past vblank into the active render. */
+#pragma bss-name(push, "OAM")
+unsigned char oam_buf[256];
+#pragma bss-name(pop)
+/* Write index as we fill the buffer each frame.  unsigned int (not
+ * unsigned char) so `oam_idx < 256` is a real bound rather than a
+ * constant-true wrap — cc65 correctly warned when this was u8. */
+unsigned int oam_idx;
 
 #define PLAYER_TILES_PER_FRAME (PLAYER_W * PLAYER_H)
 
@@ -428,24 +446,18 @@ void main(void) {
                       (unsigned int)py + ((PLAYER_H << 3) >> 1));
 #endif
 
-        waitvsync();
-#ifdef SCROLL_BUILD
-        // Stream off-screen tile columns / rows for any 8-px boundary
-        // the camera has crossed since last frame — has to happen while
-        // rendering is still disabled.  scroll_apply_ppu() is called
-        // LAST so the final PPU_CTRL/PPU_SCROLL values hold when
-        // rendering resumes.
-        scroll_stream();
-#else
-        PPU_SCROLL = 0;
-        PPU_SCROLL = 0;
-#endif
-        OAM_ADDR = 0x00;
+        // --- Build OAM shadow buffer (PRE-VBLANK) -----------------------
+        // Writing to the $0200 shadow buffer is just RAM, no PPU
+        // interaction, so this is safe to do while the PPU is still
+        // rendering the previous frame.  Every OAM slot we want visible
+        // is filled in order; the trailing slots get Y = 0xFF so they
+        // land off-screen.  The single DMA copy inside vblank below is
+        // then ~513 cycles regardless of how many sprites the scene has.
+        oam_idx = 0;
 
-        // --- Player -------------------------------------------------------
-        // When facing left, flip every tile horizontally AND draw the
-        // columns in reverse order so the two-wide-or-wider sprite mirrors
-        // correctly as a whole.
+        // Player.  Facing left flips every tile horizontally AND draws
+        // the columns in reverse order so the two-wide-or-wider sprite
+        // mirrors correctly as a whole.
         for (r = 0; r < PLAYER_H; r++) {
             for (c = 0; c < PLAYER_W; c++) {
 #ifdef SCROLL_BUILD
@@ -466,20 +478,18 @@ void main(void) {
 #endif
                 tile = anim_tiles[anim_base + r * PLAYER_W + c];
                 attr = anim_attrs[anim_base + r * PLAYER_W + c] ^ plrdir;
-                OAM_DATA = sy;
-                OAM_DATA = tile;
-                OAM_DATA = attr;
-                OAM_DATA = sx;
+                oam_buf[oam_idx++] = sy;
+                oam_buf[oam_idx++] = tile;
+                oam_buf[oam_idx++] = attr;
+                oam_buf[oam_idx++] = sx;
             }
         }
 
-        // --- Static scene sprites ---------------------------------------
-        // Scene sprites stay u8 world-space (inside screen 1) — as the
-        // camera scrolls away from screen 1 the world_to_screen helpers
-        // return 0xFF, which hides the sprite by writing y = 0xFF (the
-        // NES OAM "off-screen" sentinel) and the sprite simply scrolls
-        // out of view.  Matches pupil mental model: sprites live in the
-        // world, not glued to the camera.
+        // Static scene sprites.  Scene sprites stay u8 world-space
+        // (inside screen 1) — as the camera scrolls away from screen 1
+        // the world_to_screen helpers return 0xFF, which hides the
+        // sprite by writing y = 0xFF (the NES OAM "off-screen" sentinel)
+        // and the sprite simply scrolls out of view.
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             off = ss_offset[i];
             sw = ss_w[i];
@@ -487,21 +497,49 @@ void main(void) {
             for (r = 0; r < sh; r++) {
                 for (c = 0; c < sw; c++) {
 #ifdef SCROLL_BUILD
-                    OAM_DATA = world_to_screen_y(
+                    oam_buf[oam_idx++] = world_to_screen_y(
                         (unsigned int)ss_y[i] + (r << 3));
-                    OAM_DATA = ss_tiles[off + r * sw + c];
-                    OAM_DATA = ss_attrs[off + r * sw + c];
-                    OAM_DATA = world_to_screen_x(
+                    oam_buf[oam_idx++] = ss_tiles[off + r * sw + c];
+                    oam_buf[oam_idx++] = ss_attrs[off + r * sw + c];
+                    oam_buf[oam_idx++] = world_to_screen_x(
                         (unsigned int)ss_x[i] + (c << 3));
 #else
-                    OAM_DATA = ss_y[i] + (r << 3);
-                    OAM_DATA = ss_tiles[off + r * sw + c];
-                    OAM_DATA = ss_attrs[off + r * sw + c];
-                    OAM_DATA = ss_x[i] + (c << 3);
+                    oam_buf[oam_idx++] = ss_y[i] + (r << 3);
+                    oam_buf[oam_idx++] = ss_tiles[off + r * sw + c];
+                    oam_buf[oam_idx++] = ss_attrs[off + r * sw + c];
+                    oam_buf[oam_idx++] = ss_x[i] + (c << 3);
 #endif
                 }
             }
         }
+
+        // Hide every slot we didn't touch this frame by parking its Y
+        // byte at 0xFF — on NES that's off-screen, so a sprite whose
+        // Y is 0xFF draws nothing even if its other three bytes are
+        // stale.  Only touch the Y byte (every fourth slot) so the
+        // loop is tight: 64 OAM entries × 1 write = 64 writes max.
+        while (oam_idx < 256) {
+            oam_buf[oam_idx] = 0xFF;
+            oam_idx += 4;
+        }
+
+        // --- Vblank window ----------------------------------------------
+        waitvsync();
+#ifdef SCROLL_BUILD
+        // Stream off-screen tile columns / rows for any 8-px boundary
+        // the camera has crossed since last frame — has to happen while
+        // rendering is still disabled.
+        scroll_stream();
+#else
+        PPU_SCROLL = 0;
+        PPU_SCROLL = 0;
+#endif
+        // Sprite DMA: copy the 256-byte shadow from $0200 to OAM in one
+        // ~513-cycle burst.  Must set OAM_ADDR = 0 first so the DMA
+        // starts at sprite 0 (some boot-state PPUs already have OAM_ADDR
+        // clear, but do not rely on it).
+        OAM_ADDR = 0x00;
+        OAM_DMA  = 0x02;
 
 #ifdef SCROLL_BUILD
         // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR

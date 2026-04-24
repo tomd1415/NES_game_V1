@@ -410,10 +410,10 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
       <button type="button" id="btn-clear-all" title="Clear the behaviour map for the current background (undoable)">🗑 Clear map</button>
     </div>
     <div class="tb-group play-controls" role="group" aria-label="Run">
-      <button type="button" id="btn-play" class="primary" title="Build the ROM from your project — Behaviour page downloads the .nes so you can open it in any emulator.  For an embedded emulator use the Sprites, Builder or Code pages.">▶ Play</button>
-      <button type="button" id="btn-download-rom" title="Build the ROM and save it as a .nes file">⬇ ROM</button>
+      <button type="button" id="btn-play" class="primary" title="Build the ROM from your project and run it in the embedded NES emulator">▶ Play in NES</button>
+      <button type="button" id="btn-download-rom" title="Build the ROM and save it as a .nes file you can run in any emulator">⬇ ROM</button>
       <select id="play-mode" title="Where to run the ROM.  Local (fceux) only works if fceux is installed on the machine running the playground server.">
-        <option value="browser">Download ROM</option>
+        <option value="browser">In browser</option>
         <option value="native">Local (fceux)</option>
       </select>
       <button type="button" id="btn-help" title="Show help (?)">?</button>
@@ -532,6 +532,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 <script src="builder-modules.js"></script>
 <script src="builder-validators.js"></script>
 <script src="play-pipeline.js"></script>
+<script src="emulator.js"></script>
 <script>
 'use strict';
 
@@ -1535,24 +1536,37 @@ function init() {
     renderBehaviourCanvas();
     showAutoToast('🗑 Cleared behaviour map');
   });
-  // --- Play controls (shared pipeline; this page downloads ROM) -------
+  // --- Play controls (shared pipeline + shared emulator) --------------
   (function wirePlayControls() {
     const btnPlay = document.getElementById('btn-play');
     const btnDl   = document.getElementById('btn-download-rom');
     const sel     = document.getElementById('play-mode');
     if (!btnPlay || !window.PlayPipeline) return;
+    function hasP2Hint() {
+      if (!state || !state.builder || !state.builder.modules) return false;
+      const p2 = state.builder.modules.players &&
+        state.builder.modules.players.submodules &&
+        state.builder.modules.players.submodules.player2;
+      if (!p2 || p2.enabled === false) return false;
+      const playerSprites = (state.sprites || []).filter(s => s && s.role === 'player');
+      return playerSprites.length >= 2;
+    }
     async function run(extra) {
       const mode = sel ? sel.value : 'browser';
       btnPlay.disabled = true;
       try {
         await window.PlayPipeline.play(state, Object.assign({
           mode: mode,
-          download: mode === 'browser',
           onStatus(cls, msg) {
             const statusEl = document.getElementById('save-status');
             if (statusEl) {
               statusEl.textContent = msg;
               statusEl.className = (cls === 'error') ? 'error' : 'saved';
+            }
+          },
+          onRom(rom) {
+            if (window.NesEmulator) {
+              window.NesEmulator.open(rom, { hasP2: hasP2Hint() });
             }
           },
         }, extra || {}));
@@ -1568,7 +1582,8 @@ function init() {
         const nativeOpt = sel.querySelector('option[value="native"]');
         if (nativeOpt) {
           nativeOpt.disabled = !caps.fceux;
-          if (!caps.fceux) nativeOpt.textContent = 'Local (not installed)';
+          nativeOpt.textContent = caps.fceux ? 'Local (fceux)' :
+            'Local (fceux — not installed)';
         }
         if (sel.value === 'native' && !caps.fceux) sel.value = 'browser';
       }).catch(() => {});

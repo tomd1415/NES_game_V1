@@ -1907,9 +1907,24 @@ def run_play(body):
             result["warning"] = "fceux is not installed on the server; returning ROM for in-browser play instead."
             result["rom_b64"] = base64.b64encode(rom_bytes).decode("ascii")
             return result
+        # Write the just-built ROM to a dedicated path before launching
+        # fceux.  The customMainC / customMainAsm paths above build in a
+        # throwaway tempdir and return bytes — they do NOT update
+        # STEP_DIR / "game.nes", so earlier revisions of this branch
+        # launched fceux against whatever stale ROM `make` happened to
+        # leave there (usually the stock build without the pupil's
+        # changes).  Using a dedicated "_play_latest.nes" avoids
+        # clobbering any stock game.nes the pupil may rely on for
+        # offline work.
+        latest_rom = STEP_DIR / "_play_latest.nes"
+        try:
+            latest_rom.write_bytes(rom_bytes)
+        except Exception as e:
+            return {"ok": False, "stage": "launch",
+                    "log": build_log + f"\nfailed to stage ROM for fceux: {e}"}
         try:
             subprocess.Popen(
-                [FCEUX_PATH, str(STEP_DIR / "game.nes")],
+                [FCEUX_PATH, str(latest_rom)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,

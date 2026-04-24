@@ -46,10 +46,27 @@
 #define PPU_SCROLL    *((unsigned char*)0x2005)
 #define PPU_ADDR      *((unsigned char*)0x2006)
 #define PPU_DATA      *((unsigned char*)0x2007)
+#define OAM_DMA       *((unsigned char*)0x4014)
 #define JOYPAD1       *((unsigned char*)0x4016)
 #define JOYPAD2       *((unsigned char*)0x4017)
 
 #define PLAYER_TILES_PER_FRAME (PLAYER_W * PLAYER_H)
+
+/* OAM shadow buffer — 256 bytes at $0200 (page-aligned by the linker's
+ * OAM segment, see cfg/nes.cfg).  Every frame we build the sprite list
+ * in here during the active render period (cheap: just RAM writes),
+ * then kick off a single $4014 DMA during vblank to copy all 256 bytes
+ * to the PPU's OAM in ~513 cycles.  The previous per-byte OAM_DATA
+ * writes from inside vblank worked in jsnes (which doesn't accurately
+ * simulate the ~2273-cycle NTSC vblank budget) but caused mid-screen
+ * corruption on real hardware / fceux when the scene had many sprites,
+ * because the writes spilled past vblank into the active render. */
+#pragma bss-name(push, "OAM")
+unsigned char oam_buf[256];
+#pragma bss-name(pop)
+/* Write index as we fill the buffer each frame.  unsigned int so
+ * `oam_idx < 256` is a real bound rather than a constant-true wrap. */
+unsigned int oam_idx;
 
 extern void load_background(void);
 
@@ -708,22 +725,15 @@ void main(void) {
                       (unsigned int)py + ((PLAYER_H << 3) >> 1));
 #endif
 
-        waitvsync();
-
-        //@ insert: vblank_writes
-
-#ifdef SCROLL_BUILD
-        // Stream off-screen tile columns / rows for any 8-px boundary
-        // the camera has crossed since last frame — has to happen while
-        // rendering is still disabled.  scroll_apply_ppu() is called
-        // LAST so the final PPU_CTRL/PPU_SCROLL values hold when
-        // rendering resumes.
-        scroll_stream();
-#else
-        PPU_SCROLL = 0;
-        PPU_SCROLL = 0;
-#endif
-        OAM_ADDR = 0x00;
+        // --- Build OAM shadow buffer (PRE-VBLANK) -----------------------
+        // Writing to the $0200 shadow buffer is just RAM, no PPU
+        // interaction, so this runs while the PPU is still rendering
+        // the previous frame.  The loops below used to write directly
+        // to OAM_DATA inside the vblank window, which overran the
+        // ~2273-cycle NTSC budget on complex scenes and produced
+        // mid-screen corruption on real hardware / fceux (jsnes let
+        // us get away with it because it doesn't enforce timing).
+        oam_idx = 0;
 
         // --- Player -------------------------------------------------------
         // When facing left, flip every tile horizontally AND draw the
@@ -749,10 +759,10 @@ void main(void) {
 #endif
                 tile = anim_tiles[anim_base + r * PLAYER_W + c];
                 attr = anim_attrs[anim_base + r * PLAYER_W + c] ^ plrdir;
-                OAM_DATA = sy;
-                OAM_DATA = tile;
-                OAM_DATA = attr;
-                OAM_DATA = sx;
+                oam_buf[oam_idx++] =sy;
+                oam_buf[oam_idx++] =tile;
+                oam_buf[oam_idx++] =attr;
+                oam_buf[oam_idx++] =sx;
             }
         }
 
@@ -812,10 +822,10 @@ void main(void) {
 #endif
                     tile = p2_src_tiles[r * PLAYER2_W + c];
                     attr = p2_src_attrs[r * PLAYER2_W + c] ^ plrdir2;
-                    OAM_DATA = sy;
-                    OAM_DATA = tile;
-                    OAM_DATA = attr;
-                    OAM_DATA = sx;
+                    oam_buf[oam_idx++] =sy;
+                    oam_buf[oam_idx++] =tile;
+                    oam_buf[oam_idx++] =attr;
+                    oam_buf[oam_idx++] =sx;
                 }
             }
         }
@@ -840,10 +850,10 @@ void main(void) {
 #endif
                 tile = player2_tiles[r * PLAYER2_W + c];
                 attr = player2_attrs[r * PLAYER2_W + c] ^ plrdir2;
-                OAM_DATA = sy;
-                OAM_DATA = tile;
-                OAM_DATA = attr;
-                OAM_DATA = sx;
+                oam_buf[oam_idx++] =sy;
+                oam_buf[oam_idx++] =tile;
+                oam_buf[oam_idx++] =attr;
+                oam_buf[oam_idx++] =sx;
             }
         }
 #endif
@@ -862,10 +872,10 @@ void main(void) {
             for (hud_h = 0; hud_h < player_hp; hud_h++) {
                 for (hud_r = 0; hud_r < HUD_H; hud_r++) {
                     for (hud_c = 0; hud_c < HUD_W; hud_c++) {
-                        OAM_DATA = hud_y + (hud_r << 3);
-                        OAM_DATA = hud_tiles[hud_r * HUD_W + hud_c];
-                        OAM_DATA = hud_attrs[hud_r * HUD_W + hud_c];
-                        OAM_DATA = hud_x + (hud_c << 3);
+                        oam_buf[oam_idx++] =hud_y + (hud_r << 3);
+                        oam_buf[oam_idx++] =hud_tiles[hud_r * HUD_W + hud_c];
+                        oam_buf[oam_idx++] =hud_attrs[hud_r * HUD_W + hud_c];
+                        oam_buf[oam_idx++] =hud_x + (hud_c << 3);
                     }
                 }
                 hud_x += (HUD_W << 3) + 4;
@@ -887,10 +897,10 @@ void main(void) {
             for (hud_h = 0; hud_h < player2_hp; hud_h++) {
                 for (hud_r = 0; hud_r < HUD_H; hud_r++) {
                     for (hud_c = 0; hud_c < HUD_W; hud_c++) {
-                        OAM_DATA = hud_y + (hud_r << 3);
-                        OAM_DATA = hud_tiles[hud_r * HUD_W + hud_c];
-                        OAM_DATA = hud_attrs[hud_r * HUD_W + hud_c];
-                        OAM_DATA = hud_x + (hud_c << 3);
+                        oam_buf[oam_idx++] =hud_y + (hud_r << 3);
+                        oam_buf[oam_idx++] =hud_tiles[hud_r * HUD_W + hud_c];
+                        oam_buf[oam_idx++] =hud_attrs[hud_r * HUD_W + hud_c];
+                        oam_buf[oam_idx++] =hud_x + (hud_c << 3);
                     }
                 }
                 if (hud_x >= step) hud_x -= step; else hud_x = 0;
@@ -1009,17 +1019,17 @@ void main(void) {
             for (r = 0; r < sh; r++) {
                 for (c = 0; c < sw; c++) {
 #ifdef SCROLL_BUILD
-                    OAM_DATA = world_to_screen_y(
+                    oam_buf[oam_idx++] =world_to_screen_y(
                         (unsigned int)ss_y[i] + (r << 3));
-                    OAM_DATA = src_tiles[r * sw + c];
-                    OAM_DATA = src_attrs[r * sw + c];
-                    OAM_DATA = world_to_screen_x(
+                    oam_buf[oam_idx++] =src_tiles[r * sw + c];
+                    oam_buf[oam_idx++] =src_attrs[r * sw + c];
+                    oam_buf[oam_idx++] =world_to_screen_x(
                         (unsigned int)ss_x[i] + (c << 3));
 #else
-                    OAM_DATA = ss_y[i] + (r << 3);
-                    OAM_DATA = src_tiles[r * sw + c];
-                    OAM_DATA = src_attrs[r * sw + c];
-                    OAM_DATA = ss_x[i] + (c << 3);
+                    oam_buf[oam_idx++] =ss_y[i] + (r << 3);
+                    oam_buf[oam_idx++] =src_tiles[r * sw + c];
+                    oam_buf[oam_idx++] =src_attrs[r * sw + c];
+                    oam_buf[oam_idx++] =ss_x[i] + (c << 3);
 #endif
                 }
             }
@@ -1032,22 +1042,50 @@ void main(void) {
             for (r = 0; r < sh; r++) {
                 for (c = 0; c < sw; c++) {
 #ifdef SCROLL_BUILD
-                    OAM_DATA = world_to_screen_y(
+                    oam_buf[oam_idx++] =world_to_screen_y(
                         (unsigned int)ss_y[i] + (r << 3));
-                    OAM_DATA = ss_tiles[off + r * sw + c];
-                    OAM_DATA = ss_attrs[off + r * sw + c];
-                    OAM_DATA = world_to_screen_x(
+                    oam_buf[oam_idx++] =ss_tiles[off + r * sw + c];
+                    oam_buf[oam_idx++] =ss_attrs[off + r * sw + c];
+                    oam_buf[oam_idx++] =world_to_screen_x(
                         (unsigned int)ss_x[i] + (c << 3));
 #else
-                    OAM_DATA = ss_y[i] + (r << 3);
-                    OAM_DATA = ss_tiles[off + r * sw + c];
-                    OAM_DATA = ss_attrs[off + r * sw + c];
-                    OAM_DATA = ss_x[i] + (c << 3);
+                    oam_buf[oam_idx++] =ss_y[i] + (r << 3);
+                    oam_buf[oam_idx++] =ss_tiles[off + r * sw + c];
+                    oam_buf[oam_idx++] =ss_attrs[off + r * sw + c];
+                    oam_buf[oam_idx++] =ss_x[i] + (c << 3);
 #endif
                 }
             }
         }
 #endif
+
+        // Hide every slot we didn't touch this frame by parking its Y
+        // byte at 0xFF (off-screen on NES).  Only the Y byte matters,
+        // so we stride by 4 — 64 OAM entries × 1 write max.
+        while (oam_idx < 256) {
+            oam_buf[oam_idx] = 0xFF;
+            oam_idx += 4;
+        }
+
+        // --- Vblank window ----------------------------------------------
+        waitvsync();
+
+        //@ insert: vblank_writes
+
+#ifdef SCROLL_BUILD
+        // Stream off-screen tile columns / rows for any 8-px boundary
+        // the camera has crossed since last frame — has to happen while
+        // rendering is still disabled.
+        scroll_stream();
+#else
+        PPU_SCROLL = 0;
+        PPU_SCROLL = 0;
+#endif
+        // Sprite DMA: copy the 256-byte shadow from $0200 to the PPU's
+        // OAM in ~513 cycles.  Must set OAM_ADDR = 0 first so DMA
+        // starts at sprite 0.
+        OAM_ADDR = 0x00;
+        OAM_DMA  = 0x02;
 
 #ifdef SCROLL_BUILD
         // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR

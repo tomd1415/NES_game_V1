@@ -623,6 +623,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
 <script src="builder-modules.js"></script>
 <script src="builder-validators.js"></script>
 <script src="play-pipeline.js"></script>
+<script src="emulator.js"></script>
 <script>
 /* ===================================================================
    Builder page — chunk 1.
@@ -1559,17 +1560,14 @@ body.emu-single-player #emu-p2-controls { display: none; }
           showBuildStatus(msg, null, cls === 'error');
         },
         onRom(rom) {
-          // Scene module derivation mirrors the pipeline's logic —
-          // we read playerIdxs here only to set the single-player
-          // class on <body>, which the emulator uses to hide the P2
-          // control hint.
+          // Tell the shared emulator whether this ROM wired P2 in, so
+          // the status bar doesn't advertise keys that do nothing.
           const idxs = window.BuilderAssembler.findSpritesByRole(
             state, 'player');
           const p2 = moduleNode('players.player2');
           const p2Enabled = !!(p2 && p2.enabled);
           const hasP2 = p2Enabled && idxs[1] !== undefined;
-          document.body.classList.toggle('emu-single-player', !hasP2);
-          openEmulator(rom);
+          window.NesEmulator.open(rom, { hasP2: hasP2 });
         },
       });
       if (body && body.ok && body.log) {
@@ -1593,97 +1591,12 @@ body.emu-single-player #emu-p2-controls { display: none; }
     logEl.className = isErr ? 'err' : '';
   }
 
-  function decodeRomBase64(b64) {
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  }
-
-  // --- Emulator (uses jsnes if present on the page — we load it
-  // on demand the first time Play runs, so projects that never play
-  // pay no cost) ------------------------------------------------------
-  function ensureJsnes() {
-    if (window.jsnes) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'jsnes.min.js';
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('jsnes.min.js failed to load'));
-      document.head.appendChild(s);
-    });
-  }
-
-  async function openEmulator(rom) {
-    await ensureJsnes();
-    const dlg = document.getElementById('emu-dialog');
-    const canvas = document.getElementById('emu-canvas');
-    const ctx = canvas.getContext('2d');
-    const img = ctx.createImageData(256, 240);
-    const frame = new Uint32Array(img.data.buffer);
-
-    const nes = new jsnes.NES({
-      onFrame(buf) {
-        for (let i = 0; i < buf.length; i++) frame[i] = 0xff000000 | buf[i];
-        ctx.putImageData(img, 0, 0);
-      },
-      onAudioSample() {},
-    });
-    let romStr = '';
-    for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
-    nes.loadROM(romStr);
-
-    // Keyboard → NES pad mapping.  Player 1 keeps the arrow-keys +
-    // F / D layout pupils have built muscle memory for.  Player 2
-    // uses the I / J / K / L cluster with U (B) + O (A) — the
-    // classic "player 2" layout on NES emulators, and specifically
-    // chosen to avoid every Player 1 key so two pupils can share
-    // one keyboard without a chord war.
-    function map(code) {
-      switch (code) {
-        // --- Player 1 (pad index 1 in jsnes) ---
-        case 'ArrowUp':    return { pad: 1, button: jsnes.Controller.BUTTON_UP };
-        case 'ArrowDown':  return { pad: 1, button: jsnes.Controller.BUTTON_DOWN };
-        case 'ArrowLeft':  return { pad: 1, button: jsnes.Controller.BUTTON_LEFT };
-        case 'ArrowRight': return { pad: 1, button: jsnes.Controller.BUTTON_RIGHT };
-        case 'KeyF':       return { pad: 1, button: jsnes.Controller.BUTTON_A };
-        case 'KeyD':       return { pad: 1, button: jsnes.Controller.BUTTON_B };
-        case 'Enter':      return { pad: 1, button: jsnes.Controller.BUTTON_START };
-        case 'ShiftRight': return { pad: 1, button: jsnes.Controller.BUTTON_SELECT };
-        // --- Player 2 (pad index 2 in jsnes) ---
-        case 'KeyI':       return { pad: 2, button: jsnes.Controller.BUTTON_UP };
-        case 'KeyK':       return { pad: 2, button: jsnes.Controller.BUTTON_DOWN };
-        case 'KeyJ':       return { pad: 2, button: jsnes.Controller.BUTTON_LEFT };
-        case 'KeyL':       return { pad: 2, button: jsnes.Controller.BUTTON_RIGHT };
-        case 'KeyO':       return { pad: 2, button: jsnes.Controller.BUTTON_A };
-        case 'KeyU':       return { pad: 2, button: jsnes.Controller.BUTTON_B };
-        case 'Digit1':     return { pad: 2, button: jsnes.Controller.BUTTON_START };
-        case 'Digit2':     return { pad: 2, button: jsnes.Controller.BUTTON_SELECT };
-      }
-      return null;
-    }
-    const kd = (e) => { const m = map(e.code); if (m) nes.buttonDown(m.pad, m.button); };
-    const ku = (e) => { const m = map(e.code); if (m) nes.buttonUp(m.pad, m.button); };
-    window.addEventListener('keydown', kd);
-    window.addEventListener('keyup', ku);
-
-    let raf = null;
-    function tick() {
-      nes.frame();
-      raf = requestAnimationFrame(tick);
-    }
-    raf = requestAnimationFrame(tick);
-
-    dlg.showModal();
-    const close = () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener('keydown', kd);
-      window.removeEventListener('keyup', ku);
-      dlg.close();
-    };
-    document.getElementById('emu-close').onclick = close;
-    dlg.addEventListener('close', close, { once: true });
-  }
+  // Embedded jsnes emulator + keyboard mapping live in emulator.js
+  // now, shared with every other page.  The Builder's existing
+  // <dialog id="emu-dialog"> markup + CSS stay in the page because
+  // pupils expect the P1/P2 hint styling we ship here; the shared
+  // module creates the same dialog lazily on pages that don't have
+  // one yet.
 
   // --- Init -------------------------------------------------------
   // True if the loaded state has the shape every other editor page

@@ -1,15 +1,16 @@
 # Pupil-feedback batches — implementation plan
 
-> **Status (2026-04-24, autonomous session).**  Shipped: Batch A
-> (unified Play pipeline across every page + stub-player fallback +
-> Download-ROM button + fceux selector), C1 (ladders no longer climb
-> through solid ground), B4 (Builder scene-instance row layout — no
-> more wrapping delete button, proper 7-column grid, hover highlight,
-> empty-state placeholder).  Remaining: Batch B items 3 (help popover
-> tabs), 4 (project-menu consistency), 5 (Backgrounds palette
-> selector), and C2 (scroll flicker).  See the "Batch A",
-> "Batch C1", and "Batch B4" sections of `changelog-implemented.md`
-> for full write-ups.
+> **Status (2026-04-24).**  Shipped: Batch A (unified Play pipeline
+> with stub-player fallback, Download-ROM button, fceux selector), C1
+> (ladders no longer climb through solid ground), B4 (Builder
+> scene-instance row layout), and the Play-experience follow-up —
+> `capabilities()` now probes `/health` so Local (fceux) works on
+> every page, and the Builder's embedded NES emulator is extracted to
+> a shared `emulator.js` module that Backgrounds + Behaviour now use
+> too (so "Play in NES" gives the same in-page dialog everywhere).
+> Remaining: Batch B items 3 (help popover tabs), 4 (project-menu
+> consistency), 5 (Backgrounds palette selector), and C2 (scroll
+> flicker).  See `changelog-implemented.md` for the full write-ups.
 
 Follow-up to the 2026-04-24 pupil testing round. The ten outstanding
 items from that list are grouped into three batches that each fit into

@@ -2578,3 +2578,221 @@ Fix in [builder.html](tools/tile_editor_web/builder.html):
 
 Full `run-all.mjs` green.  Baseline byte-identical (CSS +
 render changes don't touch any emitted C).
+
+### Play experience — 2026-04-24 Local-fceux fix + embedded emulator on every page
+
+Two related pupil-facing fixes that landed together:
+
+**1. Local (fceux) option stopped working on every page.**
+
+Root cause: the shared `PlayPipeline.capabilities()` helper I
+added in the Batch A migration probed `/capabilities`, but the
+playground server exposes `/health` (the probe path hasn't
+changed since before the migration — I just wired up the wrong
+URL).  The fetch 404'd, `caps.fceux` was always falsy, and every
+page disabled the Local option.
+
+Fix in [play-pipeline.js](tools/tile_editor_web/play-pipeline.js):
+probe `/health` instead.  Live confirmation on this machine:
+`curl /health` returns `{ok: true, fceux: true, modes:
+["browser","native"]}`; the mode-selector dropdown on every
+page now enables the Local option when fceux is installed.
+
+**2. Same embedded NES emulator on every page.**
+
+Pupil ask: Backgrounds and Behaviour pages should have the full
+"play-in-browser" experience the Builder has, not just a
+Download-ROM button as they had after Batch A.
+
+Extracted the Builder's embedded jsnes dialog +
+`openEmulator()` + `ensureJsnes()` into a new shared module
+[emulator.js](tools/tile_editor_web/emulator.js), exposing
+`window.NesEmulator.open(rom, { hasP2 })`.  The module:
+
+- Lazy-loads `jsnes.min.js` only on the first Play (zero cost
+  for pupils who never Play on a given page).
+- Injects a `<dialog id="emu-dialog">` + scoped CSS into the
+  page on first call, so host pages don't need any boilerplate
+  HTML.  If a page already has its own `#emu-dialog` (Builder
+  does), the injection is skipped — no duplicate markup.
+- Sets both a dialog class and a `body.emu-single-player`
+  class so either the new `.single-player .emu-p2-controls`
+  CSS selector or the Builder's pre-existing
+  `body.emu-single-player #emu-p2-controls` rule hides the
+  P2 hint when the ROM is single-player.
+- Same keyboard mapping as before: arrow keys + F/D/Enter/RShift
+  for P1; I/J/K/L + O/U/1/2 for P2.
+
+**Per-page wiring:**
+
+- **Builder** ([builder.html](tools/tile_editor_web/builder.html)):
+  deleted the inline `ensureJsnes` + `openEmulator` +
+  `decodeRomBase64` (≈80 lines).  `onRom` now calls
+  `NesEmulator.open(rom, { hasP2 })` — same behaviour, one
+  source of truth.
+- **Backgrounds** ([index.html](tools/tile_editor_web/index.html)):
+  added `<script src="emulator.js">`, changed Play mode labels
+  from "Download ROM / Local" to "In browser / Local (fceux)",
+  and replaced the download-on-play callback with
+  `NesEmulator.open`.  The `⬇ ROM` button still downloads
+  explicitly — pupils who want the .nes for an external
+  emulator get it with one click.
+- **Behaviour** ([behaviour.html](tools/tile_editor_web/behaviour.html)):
+  same treatment as Backgrounds.
+- **Sprites** + **Code** pages intentionally untouched — they
+  already ship richer emulators with pause / reset / fullscreen
+  controls; swapping them for the minimal shared version would
+  lose features pupils use.
+
+**Tests.**  `run-all.mjs` green (13 syntax checks now include
+`emulator.js`, byte-identical baseline holds, all 9 smoke suites
+pass).  Manual: `curl /health` from the running playground
+server confirms fceux detection.
+
+### Play experience — 2026-04-24 native fceux now runs the SAME ROM as the browser
+
+Pupil report: "When I choose Play in Local I do not appear to get
+the same game I get in the browser.  The game in the browser is
+the correct one."
+
+Root cause in
+[tools/playground_server.py](tools/playground_server.py)
+`run_play()`.  The customMainC / customMainAsm build paths
+compile in a throwaway temp directory and return `rom_bytes` —
+they deliberately do not touch the shared `STEP_DIR / "game.nes"`
+(so two pupils clicking Play simultaneously don't corrupt each
+other's builds).  The native branch, however, launched fceux
+against `STEP_DIR / "game.nes"`, which was whatever the *last*
+stock `make` happened to leave on disk — usually the pupil's
+Step-playground sandbox build, or a stale build from hours /
+days ago.  Browser mode worked because it streamed back the
+correct `rom_bytes` the server had just built.
+
+Fix: the native branch now writes the just-built `rom_bytes` to
+a dedicated file `STEP_DIR / "_play_latest.nes"` and launches
+fceux against that file.  Two design choices:
+
+- **Dedicated filename** (not overwriting `game.nes`) so the
+  pupil's offline `make` workflow keeps working — the stock
+  build at `game.nes` stays authoritative.
+- **Leading underscore** to signal "transient, regenerated
+  every /play native call"; the top-level `.gitignore` already
+  matches `*.nes` so nothing new needs gitignoring.
+
+The write happens inside the BUILD_LOCK-scoped critical section
+implicit in `_build_rom`, so concurrent /play calls still
+serialise — the last Native click wins whichever ROM fceux
+opens, matching pupils' expectation that the emulator reflects
+the most recent build.
+
+**Behaviour after this fix:**
+
+- Browser mode: unchanged.
+- Native mode: fceux now loads the freshly-built ROM with every
+  Builder-tree change applied, on every page.  The browser
+  embedded emulator and fceux show byte-identical gameplay
+  (same ROM file, both paths going through the same
+  `_build_rom`).
+- Stock `game.nes` for the offline / non-/play flow:
+  untouched.
+
+**Action for the user:** restart any playground server that was
+running before this fix — the server reads the updated code on
+startup only.  Browser mode worked throughout the bad-state
+window, so pupils weren't blocked; they just couldn't trust the
+Local option to show their latest changes.
+
+**Tests.**  `run-all.mjs` green.  No test covers the native
+fceux launch path directly (would need to mock `subprocess.Popen`
+— disproportionate for this one fix), but the browser path is
+exercised end-to-end by `shared-play.mjs` P4, which compiles the
+empty-state ROM via `_build_rom` and asserts the returned bytes
+are a valid NES ROM — and `run_play()` now feeds those same
+bytes to both branches.
+
+### Sprite pipeline — 2026-04-24 OAM DMA to stop vblank overrun on fceux
+
+Pupil report after the Local fceux fix landed: "There were lots
+of sprites and movement on the screen, but graphic glitches all
+over the screen, even in places with very little to them."
+
+Root cause: the sprite-render path had always done per-byte
+`OAM_DATA = x;` writes inside vblank, one byte per `STA $2004`.
+For complex scenes (player + P2 + HUD hearts + several scene
+sprites, each up to `ss_w × ss_h` tiles) that easily exceeds
+300 OAM writes × ~10 cycles ≈ 3000+ cycles — well over the
+~2273-cycle NTSC vblank budget.  Writes that spill past vblank
+land while the PPU is actively rendering, which produces the
+exact symptom pupils saw: corruption "all over the screen" that
+isn't tied to what's in that region, because the corruption
+comes from partial OAM / nametable updates leaking into the
+active frame.
+
+jsnes doesn't accurately simulate the vblank budget — it just
+accepts writes whenever — so the bug was hidden in the browser
+emulator.  fceux enforces timing correctly and surfaced it the
+moment the Local mode started working.
+
+**Fix: switch to OAM DMA.**  Standard NES homebrew pattern.
+
+1. Carve a page-aligned 256-byte region at `$0200` via a new
+   `OAM` memory + segment in
+   [steps/Step_Playground/cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg).
+   (The comment in the file always claimed the page was
+   reserved "for ppu memory write buffer" but nothing was
+   actually using it.)
+2. Declare the shadow buffer in C via
+   `#pragma bss-name(push, "OAM"); unsigned char oam_buf[256];
+   #pragma bss-name(pop)` so it lands on the page boundary
+   that $4014 DMA requires.
+3. Move the whole sprite-build block (player, P2, HUD,
+   animation tick, scene sprites) to **before** `waitvsync()`
+   — the buffer-population loops now run during the active
+   render period where there are plenty of spare cycles.  Each
+   `OAM_DATA = x` is now `oam_buf[oam_idx++] = x` — a RAM
+   write, no PPU hit.
+4. After building, stride over any untouched OAM slots and
+   write `0xFF` into the Y byte of each so stale sprites from
+   the previous frame don't linger (NES convention: Y ≥ 240
+   hides the sprite).
+5. Inside vblank, the only OAM work is
+   `OAM_ADDR = 0; OAM_DMA = 0x02;` — one register write that
+   copies the 256-byte shadow to OAM in 513 cycles.  Combined
+   with the dialogue vblank_writes (~300), scroll_stream
+   (~600), and scroll_apply_ppu, total vblank load is now
+   ~1450 cycles, comfortably inside budget.
+
+Applied symmetrically to both
+[steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+and
+[tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+so the byte-identical-baseline invariant still holds — the
+regression test compiles the stock main.c and the Builder
+template, compares SHA-1 hashes, and they match because the
+identical OAM-DMA code lands in both.
+
+**Behaviour changes pupils may notice:**
+
+- On fceux / real hardware: glitches in complex scenes should
+  be gone.  Heavy scenes that would previously corrupt the top
+  of the screen now render cleanly.
+- On jsnes (browser embedded emulator): no visible change.  It
+  was already over-permissive.
+- Sprite flicker when more than 8 sprites line up horizontally
+  on one scanline is a real NES hardware limit, NOT a bug —
+  classic NES games mitigate it with "OAM cycling" (rotating
+  which sprite is first each frame so flicker distributes
+  across all sprites).  That's a nice-to-have for a future
+  sprint; out of scope for this fix.
+
+**Tests.**  Full `run-all.mjs` green.  The
+byte-identical-baseline invariant still passes (both templates
+ship the same OAM-DMA code, so their post-`make` hashes match).
+All 9 smoke suites build / parse successfully.  `shared-play.mjs`
+P4 confirms an end-to-end `/play` build still produces a valid
+49168-byte ROM.
+
+**Still to verify manually (user-side):** load a complex scene
+in fceux via the Local option and confirm the glitches are
+gone.  Will need a server restart to pick up the Python server
+changes and a fresh build to produce the DMA-powered ROM.

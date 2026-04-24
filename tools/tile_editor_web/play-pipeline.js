@@ -34,7 +34,12 @@
   let _capsPromise = null;
   async function capabilities() {
     if (_capsPromise) return _capsPromise;
-    _capsPromise = fetch('/capabilities', { cache: 'no-store' })
+    // The server exposes /health, not /capabilities — an earlier version
+    // of this helper probed the wrong path, which left the native-fceux
+    // option permanently disabled on every page even when fceux was
+    // installed.  Two-argument shape of the response is
+    //   { fceux: bool, modes: ['browser', ...] }.
+    _capsPromise = fetch('/health', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : { fceux: false })
       .catch(() => ({ fceux: false }));
     return _capsPromise;
