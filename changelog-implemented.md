@@ -3094,3 +3094,46 @@ pupils ask for it.
 all shipped.  Next: Phase 3 (content & templates — RPG
 top-down preset, multi-line dialogue, per-NPC dialogue text,
 P2 jump animation).
+
+### Sprites page polish — 2026-04-25 strip & tools
+
+Two pupil-feedback follow-ups on the Sprites page, both
+[sprites.html](tools/tile_editor_web/sprites.html)-only.
+
+**Animation strip is now context-sensitive.**  The inline strip
+above the composition canvas was always visible after Phase 2.3,
+even on sprites that aren't part of any animation — wasting
+prime real-estate.  Now:
+
+- Strip enters **frames mode** only when the currently-selected
+  sprite is part of some animation.  Frame thumbnails show the
+  sprite's own animation, with the active sprite highlighted.
+  Clicking a thumbnail jumps the sprite selection (so the
+  composition canvas + tile editor follow), not just the
+  preview index — pupils editing a walk-cycle can flip between
+  frames without leaving the editor.
+- Strip enters **offer mode** when the selected sprite isn't
+  in any animation.  A single button ▶ Start an animation with
+  this sprite seeds a fresh animation containing this sprite as
+  frame 0, switches the strip to frames mode, and writes a
+  status-bar confirmation so the pupil knows what just happened.
+- New helper `animationContainingSprite(spriteIdx)` resolves
+  which animation to show: prefers `selectedAnimId` if it
+  contains the sprite (so navigating frames inside one anim
+  doesn't keep flipping to a different one); otherwise picks
+  the first animation that contains the sprite.
+
+**Tools popover replaced by an inline horizontal toolbar.**  The
+🛠 Tools ▾ trigger button + hidden popover is gone.  All eight
+tool buttons (Pencil / Fill / Line / Rect / Rect fill / Circle /
+Circle fill / Select) now sit inline inside `.sprite-controls`
+in a `.tools-bar` flex row.  The toolbar wraps to a second line
+on narrow viewports.  Active tool is communicated by the
+`.active` class on the matching button — no separate label
+needed.  `setCurrentTool` and `initSpriteTools` lost their
+popover open/close logic (all click + outside-dismiss + label
+update code went with it).
+
+Tests green: 15 syntax checks, 5 invariants, byte-identical ROM
+baseline, 9 smoke suites.  Sprites-only changes — no template
+or emitted-C touched.

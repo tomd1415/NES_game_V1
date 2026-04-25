@@ -394,6 +394,27 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   font-style: italic;
   padding: 6px 2px;
 }
+/* Phase 2.3 update: offer-mode shows a single "Start animation with
+   this sprite" button when the current sprite isn't in any animation.
+   Same visual footprint as the frames-mode head row so swapping
+   between modes doesn't shift the page layout. */
+.anim-strip-offer-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.anim-strip-offer-mode button {
+  padding: 4px 10px;
+  font-size: 0.9em;
+}
+.anim-strip-offer-hint {
+  color: var(--muted);
+  font-size: 0.8em;
+  font-style: italic;
+  flex: 1 1 200px;
+  min-width: 0;
+}
 
 /* --- Animations panel ------------------------------------- */
 .animations-section {
@@ -1105,53 +1126,38 @@ body.browse-mode #tile-canvas  { cursor: not-allowed; opacity: 0.7; }
   box-shadow: 0 0 0 2px rgba(120, 220, 180, 0.45);
 }
 
-/* --- Drawing tools popover ---------------------------------- */
-.tools-btn {
-  background: var(--panel2);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  padding: 4px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9em;
-}
-.tools-btn:hover { background: var(--panel); }
-.tools-btn[aria-expanded="true"] {
-  background: var(--accent);
-  color: #000;
-  border-color: var(--accent);
-}
-.tools-popover {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px;
+/* --- Drawing tools (inline toolbar) -------------------------
+   Replaced the old popover with a flat horizontal row of tool
+   buttons.  Sits inside .sprite-controls and inherits its
+   `flex-wrap: wrap` so on narrow screens the bar spills onto a
+   second line.  Tools-btn / tools-popover styles are gone — see
+   git history for the popover incarnation if the inline route
+   ever needs reverting. */
+.tools-bar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 2px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-  min-width: 150px;
 }
-.tools-popover[hidden] { display: none; }
 .tool-opt {
-  text-align: left;
-  background: transparent;
+  background: var(--panel2);
   color: var(--fg);
-  border: 1px solid transparent;
-  padding: 5px 8px;
+  border: 1px solid var(--border);
+  padding: 4px 8px;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: 0.85em;
+  white-space: nowrap;
 }
-.tool-opt:hover { background: var(--panel2); }
+.tool-opt:hover { background: var(--panel); border-color: var(--muted); }
 .tool-opt.active {
   background: var(--accent);
   color: #000;
   font-weight: 600;
+  border-color: var(--accent);
 }
 
 /* --- Selection-actions strip (shows when Select tool has a marquee) --- */
@@ -1971,21 +1977,21 @@ details.collapsible > summary .sub-count {
       <button type="button" id="btn-popout-tileset" title="Show a floating tileset window so you can pick tiles while painting">📌 Pop-out tileset</button>
       <button type="button" id="btn-popout-palette" title="Show a floating palette window — shows the four colours of the selected cell's sprite palette, click one to paint with it">🎨 Pop-out palette</button>
       <button type="button" id="btn-fullscreen-preview" title="Preview all sprites at NES pixel size (F)">🖥 Full preview</button>
-      <span class="tools-picker" style="position:relative">
-        <button type="button" id="btn-tools" class="tools-btn"
-                aria-haspopup="true" aria-expanded="false"
-                title="Drawing tools: pencil, fill, line, rect, circle, select. Shapes work across tile boundaries.">🛠 Tools <span id="tools-active-label">Pencil</span> ▾</button>
-        <div id="tools-popover" class="tools-popover" hidden>
-          <button type="button" class="tool-opt active" data-tool="pencil"  title="Pencil — paint one pixel at a time (default).  Shortcut: Alt+P">✏️ Pencil</button>
-          <button type="button" class="tool-opt" data-tool="fill"           title="Fill — flood-fill the connected region of the starting pixel (crosses cell boundaries).  Shortcut: Alt+F">🪣 Fill</button>
-          <button type="button" class="tool-opt" data-tool="line"           title="Line — drag to draw a straight line. Hold Shift for 45° steps.  Shortcut: Alt+L">📏 Line</button>
-          <button type="button" class="tool-opt" data-tool="rect"           title="Rectangle outline — drag to draw. Hold Shift for a square.  Shortcut: Alt+R">▭ Rect</button>
-          <button type="button" class="tool-opt" data-tool="rect_fill"      title="Filled rectangle — every cell inside gets the current colour. Hold Shift for a square.  Shortcut: Alt+Shift+R">■ Rect fill</button>
-          <button type="button" class="tool-opt" data-tool="circle"         title="Circle/ellipse outline — drag to draw. Hold Shift for a circle.  Shortcut: Alt+C">○ Circle</button>
-          <button type="button" class="tool-opt" data-tool="circle_fill"    title="Filled circle/ellipse — every cell inside gets the current colour. Hold Shift for a circle.  Shortcut: Alt+Shift+C">● Circle fill</button>
-          <button type="button" class="tool-opt" data-tool="select"         title="Select — drag a marquee. Press Delete to zero pixels inside; drag the selection to move it.  Shortcut: Alt+S">⬚ Select</button>
-        </div>
-      </span>
+      <!-- Phase 2 polish: drawing-tools live inline on the toolbar
+           rather than behind a popover, since the toolbar wraps and
+           there's natural horizontal space here.  Active state is
+           shown via the .active class on whichever button matches
+           currentTool — no separate label needed. -->
+      <div class="tools-bar" role="toolbar" aria-label="Drawing tools">
+        <button type="button" class="tool-opt active" data-tool="pencil"      title="Pencil — paint one pixel at a time (default).  Shortcut: Alt+P">✏️ Pencil</button>
+        <button type="button" class="tool-opt"        data-tool="fill"        title="Fill — flood-fill the connected region of the starting pixel (crosses cell boundaries).  Shortcut: Alt+F">🪣 Fill</button>
+        <button type="button" class="tool-opt"        data-tool="line"        title="Line — drag to draw a straight line. Hold Shift for 45° steps.  Shortcut: Alt+L">📏 Line</button>
+        <button type="button" class="tool-opt"        data-tool="rect"        title="Rectangle outline — drag to draw. Hold Shift for a square.  Shortcut: Alt+R">▭ Rect</button>
+        <button type="button" class="tool-opt"        data-tool="rect_fill"   title="Filled rectangle — every cell inside gets the current colour. Hold Shift for a square.  Shortcut: Alt+Shift+R">■ Rect fill</button>
+        <button type="button" class="tool-opt"        data-tool="circle"      title="Circle/ellipse outline — drag to draw. Hold Shift for a circle.  Shortcut: Alt+C">○ Circle</button>
+        <button type="button" class="tool-opt"        data-tool="circle_fill" title="Filled circle/ellipse — every cell inside gets the current colour. Hold Shift for a circle.  Shortcut: Alt+Shift+C">● Circle fill</button>
+        <button type="button" class="tool-opt"        data-tool="select"      title="Select — drag a marquee. Press Delete to zero pixels inside; drag the selection to move it.  Shortcut: Alt+S">⬚ Select</button>
+      </div>
     </div>
     <div class="sprite-side-controls" id="sprite-side-controls">
       <div class="side-group" title="Paint colour — same as the pixel-editor swatches">
@@ -2002,26 +2008,38 @@ details.collapsible > summary .sub-count {
       </label>
     </div>
     <!-- Phase 2.3: inline animation strip above the composition canvas.
-         Pupils reported the Animations section (below the sprite list)
-         is hard to find, so promote the most-used bits here: current
-         animation's frames as thumbnails, + Add frame, and a jump-
-         to-full-editor link.  The full Animations panel stays below
-         for power-user operations (fps, reorder, delete frames, …). -->
+         Visible only when the currently-selected sprite is part of an
+         animation (frames-mode).  Otherwise the strip collapses to a
+         single "Start animation with this sprite" button so the area
+         doesn't waste space on every sprite that isn't animated.
+         Full Animations editor remains below for power-user
+         operations (fps, reorder, delete frames, …). -->
     <div class="anim-strip" id="anim-strip" aria-label="Animation frames for the selected animation">
-      <div class="anim-strip-head">
-        <span class="anim-strip-label"
-              title="What's an animation?  An ordered list of sprites; assign a name to `walk` or `jump` below and the NES plays them in sequence while the player moves.">
-          🎞 <strong id="anim-strip-name">Animation</strong>
-        </span>
-        <button type="button" id="btn-anim-strip-add"
-                title="Append the sprite currently selected in the list as a new frame">+ Add frame</button>
-        <a href="#animations-panel" id="anim-strip-jump"
-           title="Open the full Animations editor (fps, reorder, delete frames, rename, duplicate).">full editor →</a>
+      <!-- Mode 1: this sprite is part of an animation. -->
+      <div class="anim-strip-frames-mode" id="anim-strip-frames-mode" hidden>
+        <div class="anim-strip-head">
+          <span class="anim-strip-label"
+                title="What's an animation?  An ordered list of sprites; assign a name to `walk` or `jump` below and the NES plays them in sequence while the player moves.">
+            🎞 <strong id="anim-strip-name">Animation</strong>
+          </span>
+          <button type="button" id="btn-anim-strip-add"
+                  title="Append the sprite currently selected in the list as a new frame">+ Add frame</button>
+          <a href="#animations-panel" id="anim-strip-jump"
+             title="Open the full Animations editor (fps, reorder, delete frames, rename, duplicate).">full editor →</a>
+        </div>
+        <div class="anim-strip-frames" id="anim-strip-frames"></div>
       </div>
-      <div class="anim-strip-frames" id="anim-strip-frames"></div>
-      <div class="anim-strip-empty" id="anim-strip-empty" hidden>
-        No animation selected.  Click <b>+ New</b> in the Animations
-        section below to make one.
+      <!-- Mode 2: this sprite isn't in any animation yet. -->
+      <div class="anim-strip-offer-mode" id="anim-strip-offer-mode" hidden>
+        <button type="button" id="btn-anim-start-with-sprite"
+                title="Make a new animation that starts with this sprite as frame 1.  You can add more frames afterwards from the strip or the Animations editor below.">
+          ▶ Start an animation with this sprite
+        </button>
+        <span class="anim-strip-offer-hint">
+          (Animations let the same sprite walk, jump, or idle with
+          different art. Tag this animation Player + Walk in the
+          editor below to wire it up to the NES game.)
+        </span>
       </div>
     </div>
     <div class="sprite-canvas-wrap">
@@ -3725,30 +3743,75 @@ function renderAnimations() {
 // Phase 2.3: inline strip above the composition canvas.  Shows the
 // current animation's frames as thumbnails so pupils can see + edit
 // without scrolling to the Animations panel below the sprite list.
-function renderAnimStrip() {
-  const head    = document.getElementById('anim-strip-name');
-  const host    = document.getElementById('anim-strip-frames');
-  const empty   = document.getElementById('anim-strip-empty');
-  const addBtn  = document.getElementById('btn-anim-strip-add');
-  if (!head || !host || !empty || !addBtn) return;
+// Find any animation that contains the given sprite index — used by
+// the strip's context logic to decide whether to show frames or the
+// "Start animation with this sprite" offer.  Prefers the currently-
+// selected animation if it contains the sprite, so navigating sprites
+// inside one animation (frames 0, 1, 2, …) doesn't keep flipping the
+// strip's identity.
+function animationContainingSprite(spriteIdx) {
+  if (spriteIdx < 0) return null;
+  if (selectedAnimId != null) {
+    const sel = state.animations.find(a => a.id === selectedAnimId);
+    if (sel && Array.isArray(sel.frames) &&
+        sel.frames.indexOf(spriteIdx) >= 0) {
+      return sel;
+    }
+  }
+  for (const a of state.animations || []) {
+    if (Array.isArray(a.frames) && a.frames.indexOf(spriteIdx) >= 0) {
+      return a;
+    }
+  }
+  return null;
+}
 
-  const anim = currentAnim();
-  if (!anim) {
-    head.textContent = '(no animation)';
-    host.innerHTML = '';
-    host.hidden = true;
-    empty.hidden = false;
-    addBtn.disabled = true;
+function renderAnimStrip() {
+  const stripRoot   = document.getElementById('anim-strip');
+  const framesMode  = document.getElementById('anim-strip-frames-mode');
+  const offerMode   = document.getElementById('anim-strip-offer-mode');
+  const head        = document.getElementById('anim-strip-name');
+  const host        = document.getElementById('anim-strip-frames');
+  const addBtn      = document.getElementById('btn-anim-strip-add');
+  if (!stripRoot || !framesMode || !offerMode || !head || !host || !addBtn) return;
+
+  // Decide which mode to show.  The strip is for "I'm editing a sprite
+  // that's part of an animation, so I want to see + tweak the
+  // animation here."  Any other case (no sprite, sprite not animated)
+  // collapses to the offer button so the screen real estate is free.
+  const sp = currentSprite();
+  if (!sp) {
+    framesMode.hidden = true;
+    offerMode.hidden  = true;
     return;
   }
+  const anim = animationContainingSprite(selectedSpriteIdx);
+  if (!anim) {
+    framesMode.hidden = true;
+    offerMode.hidden  = false;
+    return;
+  }
+
+  // Frames mode: the active animation is the one containing this
+  // sprite.  Sync selectedAnimId so the full editor below picks up
+  // the same animation when the pupil opens it.
+  if (selectedAnimId !== anim.id) {
+    selectedAnimId = anim.id;
+    // Also refresh the full panel's selection highlight on next paint;
+    // renderAnimationList already runs from renderAnimations().
+  }
+  framesMode.hidden = false;
+  offerMode.hidden  = true;
+
   head.textContent = anim.name || ('animation #' + anim.id);
-  empty.hidden = true;
-  host.hidden = false;
   addBtn.disabled = false;
 
   host.innerHTML = '';
   const frames = Array.isArray(anim.frames) ? anim.frames : [];
   if (frames.length === 0) {
+    // Defensive — animationContainingSprite returns the sprite's
+    // animation, so frames can't be empty here in practice.  Keep the
+    // empty hint as a fallback.
     const hint = document.createElement('span');
     hint.className = 'anim-strip-empty';
     hint.style.padding = '0';
@@ -3759,28 +3822,60 @@ function renderAnimStrip() {
   frames.forEach((spriteIdx, i) => {
     const cell = document.createElement('div');
     cell.className = 'anim-strip-frame' +
-      (i === (animPreview.frameIdx | 0) ? ' active' : '');
+      (spriteIdx === selectedSpriteIdx ? ' active' : '');
     cell.title = 'Frame ' + (i + 1) + ' of ' + frames.length +
-      ' — click to jump the preview here.';
+      ' — click to jump to this sprite.';
     const thumb = document.createElement('canvas');
     thumb.width = 28; thumb.height = 28;
-    const sp = (state.sprites || [])[spriteIdx];
-    if (sp) drawSpriteIntoCtx(sp, thumb.getContext('2d'), 28, 28);
+    const fsp = (state.sprites || [])[spriteIdx];
+    if (fsp) drawSpriteIntoCtx(fsp, thumb.getContext('2d'), 28, 28);
     cell.appendChild(thumb);
     const num = document.createElement('span');
     num.className = 'frame-num';
     num.textContent = (i + 1);
     cell.appendChild(num);
     cell.addEventListener('click', () => {
+      // Jump the SPRITE selection to this frame's sprite — the
+      // composition canvas, tile editor, and animation strip all
+      // re-render via renderAll() in selectSprite().  Pupils get a
+      // fast inter-frame switcher without leaving the editor.
+      if (typeof selectSprite === 'function') selectSprite(spriteIdx);
       animPreview.frameIdx = i;
-      renderAnimStrip();
       const previewCanvas = document.getElementById('anim-preview-canvas');
-      if (previewCanvas && sp) {
-        drawSpriteIntoCtx(sp, previewCanvas.getContext('2d'), 64, 64);
+      if (previewCanvas && fsp) {
+        drawSpriteIntoCtx(fsp, previewCanvas.getContext('2d'), 64, 64);
       }
     });
     host.appendChild(cell);
   });
+}
+
+// Phase 2.3 update: handler for the "Start animation with this sprite"
+// button — creates a fresh animation seeded with the current sprite as
+// frame 0, selects it, and renders.  Keeps the seeded sprite as the
+// pupil's selection so the strip immediately flips to frames mode.
+function startAnimationWithCurrentSprite() {
+  if (selectedSpriteIdx < 0 ||
+      selectedSpriteIdx >= (state.sprites || []).length) {
+    setStatus('warn', '● Select a sprite in the list first');
+    return;
+  }
+  const sp = state.sprites[selectedSpriteIdx];
+  pushUndo();
+  const id = allocAnimId();
+  const baseName = (sp && sp.name) ? (sp.name + ' anim') : 'animation';
+  state.animations.push({
+    id,
+    name: baseName,
+    fps: 8,
+    frames: [selectedSpriteIdx],
+    role: '', style: '',
+  });
+  selectedAnimId = id;
+  markDirty();
+  renderAnimations();
+  setStatus('saved', '● New animation "' + baseName +
+    '" started with frame 1 = ' + (sp.name || 'sprite ' + selectedSpriteIdx));
 }
 
 function renderAnimationList() {
@@ -4094,6 +4189,12 @@ function initAnimationHandlers() {
       const panel = document.getElementById('animations-panel');
       if (panel) panel.open = true;
     });
+  }
+  // Phase 2.3 update: offer-mode button — seeds a new animation with
+  // the current sprite and immediately flips the strip to frames mode.
+  const startAnimBtn = document.getElementById('btn-anim-start-with-sprite');
+  if (startAnimBtn) {
+    startAnimBtn.addEventListener('click', startAnimationWithCurrentSprite);
   }
   document.getElementById('btn-anim-play').addEventListener('click', () => {
     if (animPreview.playing) stopAnimPreview();
@@ -5351,11 +5452,13 @@ let floatingSelection = null;   // { w, h, pixels, rgb, offsetX, offsetY,
 
 function setCurrentTool(tool) {
   currentTool = tool;
-  document.querySelectorAll('#tools-popover .tool-opt').forEach(b => {
+  // Highlight the active button on the inline .tools-bar — the
+  // popover-trigger label is gone, so the active class is the whole
+  // story now.  Also still write the preference so reloading lands
+  // back on the same tool.
+  document.querySelectorAll('.tools-bar .tool-opt').forEach(b => {
     b.classList.toggle('active', b.dataset.tool === tool);
   });
-  const lab = document.getElementById('tools-active-label');
-  if (lab) lab.textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
   try {
     const p = Storage.readPrefs() || {};
     p.spriteTool = tool;
@@ -5370,27 +5473,12 @@ function setCurrentTool(tool) {
 }
 
 function initSpriteTools() {
-  const btn = document.getElementById('btn-tools');
-  const pop = document.getElementById('tools-popover');
-  if (!btn || !pop) return;
-  btn.addEventListener('click', (ev) => {
-    ev.stopPropagation();
-    const open = !pop.hidden;
-    pop.hidden = open;
-    btn.setAttribute('aria-expanded', String(!open));
-  });
-  document.addEventListener('click', (ev) => {
-    if (pop.hidden) return;
-    if (pop.contains(ev.target) || btn.contains(ev.target)) return;
-    pop.hidden = true;
-    btn.setAttribute('aria-expanded', 'false');
-  });
-  pop.querySelectorAll('.tool-opt').forEach(opt => {
-    opt.addEventListener('click', () => {
-      setCurrentTool(opt.dataset.tool);
-      pop.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
-    });
+  // The inline .tools-bar lives directly inside .sprite-controls; no
+  // open/close popover state to manage.  Click any button to activate.
+  const bar = document.querySelector('.tools-bar');
+  if (!bar) return;
+  bar.querySelectorAll('.tool-opt').forEach(opt => {
+    opt.addEventListener('click', () => setCurrentTool(opt.dataset.tool));
   });
   try {
     const p = Storage.readPrefs() || {};
