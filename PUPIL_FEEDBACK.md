@@ -59,6 +59,8 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-24 | Builder            | Two-player co-op (P2 controller, HP, walk animation)              | [done]    |
 | 2026-04-24 | Builder            | NPC dialogue boxes from inside the Builder (module, no C)         | [done]    |
 | 2026-04-24 | Builder            | Multi-background doors / room transitions                         | [done]    |
+| 2026-04-25 | Play pipeline      | Arrow keys move the player AND scroll the tileset on Backgrounds  | [done]    |
+| 2026-04-25 | Play pipeline      | Code-page ▶ Play stops working after first edit; Backgrounds OK   | [new]     |
 
 ---
 
@@ -566,6 +568,44 @@ of a game without writing new C themselves.
 
 ---
 
+### Play pipeline
+
+- **Said:** "I am sure this bug is already known about but when I run
+  the game from 'Backgrounds' the movement keys also navigate through
+  the tileset. I think this is what's causing my game to not run
+  smoothly." (15:30, 25 April 2026.)
+- **Mitigation:** Each editor page's window-level `keydown` handler
+  and the shared `emulator.js` listener were both attached to `window`,
+  so arrow keys drove the NES pad *and* nudged the tile picker (or
+  fired Ctrl-S, undo, etc.) at the same time — risking accidental edits
+  to the project mid-play. Fixed by gating the page-level handlers on
+  Backgrounds, Sprites, Behaviour and Code with an early
+  `if (document.getElementById('emu-dialog')?.open) return;` so the
+  keyboard belongs to the game while the shared emulator dialog is
+  modal-open.
+- **Status / date:** [done] 2026-04-25.
+
+- **Said:** "When I first opened my project from my files I could use
+  'Play in NES' from code section and all was well. Once I changed the
+  value of `jmp_up` (line 278, value changed to 35 and I left the
+  semicolon at the end of the line), I could only use Play in NES from
+  'Backgrounds' section. The only change I made after opening project
+  was changing jmp_up." (15:30, 25 April 2026.)
+- **Mitigation:** Suggests the Code page's Play handler diverges from
+  the shared `play-pipeline.js` flow after the first CodeMirror edit
+  — the Backgrounds page rebuilds via `BuilderAssembler.assemble()` and
+  still works, so the issue is specific to the Code-page custom-`main.c`
+  branch. Probably the page caches a `customMainC` payload that becomes
+  stale or malformed once CodeMirror's doc state mutates. Plan:
+  reproduce by opening pupil's project, hitting Play (works), editing
+  one constant on the Code page, hitting Play again; capture the
+  request body sent to `/play` and the server's `stage`/`log` response.
+  Likely fix is to re-read CodeMirror's current doc text on every Play
+  click rather than reusing a snapshot.
+- **Status / date:** [new] 2026-04-25.
+
+---
+
 ## Additional ideas (teacher / Claude)
 
 Things no pupil has raised yet, but worth having on the list:
@@ -764,3 +804,13 @@ sub-item so a half-baked piece never blocks a pupil session.
   runs a stale build" entry to `[done]`.  Remaining Batch-B
   polish items (help-popover tabs, project-dropdown parity,
   Backgrounds palette selector facelift) still on the list.
+- 2026-04-25 — logged two new bugs from the 15:30 in-editor review
+  session under a new *Play pipeline* theme: arrow keys driving the
+  tileset *and* the player when the embedded emulator runs from the
+  Backgrounds page, and the Code-page ▶ Play breaking after the first
+  CodeMirror edit (Backgrounds-page Play still works on the same
+  project). Fixed the keyboard-bleed bug the same day — every editor
+  page now early-returns from its window-level `keydown` handler while
+  the shared `<dialog id="emu-dialog">` is open, so arrow keys / Ctrl-S
+  / undo / hotkeys can no longer mutate the project mid-play. The
+  Code-page Play regression is still `[new]` pending repro.

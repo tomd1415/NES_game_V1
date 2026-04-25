@@ -1718,6 +1718,8 @@ function init() {
 
   // Keyboard ----------------------------------------------------
   window.addEventListener('keydown', e => {
+    // Hand the keyboard to the game while the emulator dialog is open.
+    if (document.getElementById('emu-dialog')?.open) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
     const k = e.key;
     if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) {

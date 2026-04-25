@@ -8393,6 +8393,8 @@ function init() {
 
   // Keyboard
   window.addEventListener('keydown', e => {
+    // Hand the keyboard to the game while the emulator dialog is open.
+    if (document.getElementById('emu-dialog')?.open) return;
     if (e.target.matches('input, textarea, select')) return;
     // Phase 2.1: tool-switch shortcuts.  Alt+letter because raw P/F/L/
     // R/C/S already have existing meanings on this page (full preview,

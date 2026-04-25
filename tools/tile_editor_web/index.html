@@ -4333,6 +4333,10 @@ function init() {
 
   // --- Keyboard ---
   window.addEventListener('keydown', e => {
+    // While the shared emulator dialog is open the keyboard belongs to
+    // the game — otherwise arrow keys would also nudge the tile picker
+    // and `s` / Ctrl-S would mutate the project mid-play.
+    if (document.getElementById('emu-dialog')?.open) return;
     if (e.target.matches('input, textarea, select')) return;
     // Undo / redo / save.
     if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }

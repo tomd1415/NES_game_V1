@@ -1882,6 +1882,8 @@ if (window.HelpPopover) window.HelpPopover.maybeAutoOpen(showHelp);
 })();
 document.addEventListener('keydown', (e) => {
   if (e.key !== '?' || e.repeat) return;
+  // Hand the keyboard to the game while the emulator dialog is open.
+  if (document.getElementById('emu-dialog')?.open) return;
   const t = e.target;
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t.isContentEditable))) return;
   // CodeMirror's textarea is hidden — check for the CodeMirror wrapper.
