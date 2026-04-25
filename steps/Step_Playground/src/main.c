@@ -581,8 +581,29 @@ void main(void) {
             oam_idx += 4;
         }
 
+#ifdef SCROLL_BUILD
+        /* Resolve which column/row the scroll engine wants to stream
+           BEFORE entering the vblank window.  The slow array indexing
+           (`bg_world_tiles[rr * BG_WORLD_COLS + col]` × 30) happens
+           here, where time is plentiful, so the in-vblank write loop
+           stays a tight `*buf -> PPU_DATA`. */
+        scroll_stream_prepare();
+#endif
+
         // --- Vblank window ----------------------------------------------
         waitvsync();
+#ifdef SCROLL_BUILD
+        /* Disable rendering for the duration of the vblank work.  Even
+           with the prepare-phase optimisation the column burst still
+           advances the PPU's internal V register by +32 per write, and
+           any write that spilled past vblank would pollute the
+           rendering pointer mid-screen.  Holding PPU_MASK at 0 makes
+           that impossible — even a hypothetical late write can't reach
+           the screen.  Cost: at most a thin black band at the very
+           top of scrolled frames; with prepare() in place that band
+           should be zero scanlines tall in practice. */
+        PPU_MASK = 0;
+#endif
         // OAM DMA first — canonical NES pattern.  Run it before any
         // PPU_ADDR / PPU_DATA writes so (a) the sprite table is fresh
         // the moment rendering resumes, (b) if anything ELSE in vblank
@@ -607,6 +628,9 @@ void main(void) {
         // writes in scroll_stream() have settled.  Must be the last
         // PPU register write of the VBlank window or the camera jitters.
         scroll_apply_ppu();
+        /* Re-enable rendering well before the pre-render T→V copy
+           window so the next frame's scroll position lands. */
+        PPU_MASK = 0x1E;
 #endif
     }
 }

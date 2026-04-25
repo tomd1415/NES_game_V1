@@ -54,11 +54,24 @@ void scroll_follow(unsigned int target_world_x, unsigned int target_world_y);
    beyond-256-px scrolling. */
 void scroll_apply_ppu(void);
 
-/* Stream one off-screen column (H-scroll) or row (V-scroll) per 8 px
-   of camera travel since the last call.  Must be called during
-   VBlank, before scroll_apply_ppu() so the final scroll registers
-   stick.  No-op on frames where the camera hasn't crossed a tile
-   boundary. */
+/* Two-phase column/row streaming.
+ *
+ *   scroll_stream_prepare() — call BEFORE waitvsync().  Detects 8-px
+ *     boundary crossings since the last call, picks the column/row
+ *     that needs streaming, and copies its 30 (or 32) bytes from
+ *     bg_world_tiles into a small static buffer in scroll.c.  Also
+ *     updates prev_cam_x / prev_cam_y.  Cheap operations stay outside
+ *     vblank so the vblank-side write loop is just *buf -> PPU_DATA.
+ *
+ *   scroll_stream() — call inside VBlank, before scroll_apply_ppu().
+ *     Blasts the prepared buffer into PPU_DATA.  No-op on frames where
+ *     prepare() didn't queue anything.
+ *
+ * Splitting the work this way is what keeps the vblank window short
+ * enough that PPU_MASK can be toggled around the critical writes
+ * without bleeding visible scanlines into the start of the next
+ * frame — see the rendering-disable wrap in main.c / platformer.c. */
+void scroll_stream_prepare(void);
 void scroll_stream(void);
 
 /* One-shot: copy the first 1..2 screens of painted world into the

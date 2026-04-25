@@ -96,21 +96,42 @@ void scroll_apply_ppu(void) {
     PPU_SCROLL = (unsigned char)(cam_y & 0xFF);
 }
 
-/* Column / row streaming.  Called by main.c during VBlank (rendering
-   off, PPU safe to write).  Writes one 30-tile column per 8 px of
-   horizontal travel and one 32-tile row per 8 px of vertical travel —
-   well inside the VBlank budget for normal walk speeds (1-3 px/frame).
+/* Column / row streaming — split into a prepare phase (runs outside
+   vblank, where slow array indexing is fine) and a write phase (runs
+   inside vblank, where every cycle counts).
 
-   Large target-jumps (e.g. a teleport) would previously iterate the
-   while loop several times in the same vblank, stacking 62-byte
-   transfers with OAM DMA + dialogue writes + scroll_apply_ppu and
-   occasionally blowing past the ~2273-cycle NTSC budget (fceux-
-   visible glitch, jsnes clean).  We now break after one transfer
-   per axis per vblank; the backlog is caught up on subsequent
-   frames (imperceptible at any realistic walk speed, ~1 second
-   catch-up window for a 256-px teleport at 1 tile per frame). */
-void scroll_stream(void) {
+   Streams one 30-tile column per 8 px of horizontal travel and one
+   32-tile row per 8 px of vertical travel — capped at one transfer
+   per axis per vblank so a fast teleport spreads its catch-up over
+   subsequent frames instead of stacking 62-byte bursts on top of OAM
+   DMA + dialogue + scroll_apply_ppu in a single vblank.
+
+   Why split prepare/stream:  the original combined loop computed
+   `bg_world_tiles[rr * BG_WORLD_COLS + col]` *inside* vblank.  cc65
+   does not optimise that into a constant-stride pointer walk, so
+   each iteration paid ~30+ cycles for the multiplication, the 16-bit
+   index, the array load, plus the PPU_DATA write — close to 1000
+   cycles for a 30-tile column.  Combined with OAM DMA's 513 cycles
+   and any dialogue writes, the late tail of the burst could spill
+   past line 261's T->V copy (~cycle 2358) into the visible frame,
+   producing a "ghost copy a few tiles below" flash.  Precomputing
+   into col_buf / row_buf outside vblank trims the in-vblank loop to
+   roughly *buf -> PPU_DATA, halving its cycle cost. */
+
 #if (BG_WORLD_COLS > 32)
+static unsigned char col_buf[30];
+static unsigned int  col_addr;
+static unsigned char col_pending;  /* 1 = col_buf has a column ready */
+#endif
+#if (BG_WORLD_ROWS > 30)
+static unsigned char row_buf[32];
+static unsigned int  row_addr;
+static unsigned char row_pending;
+#endif
+
+void scroll_stream_prepare(void) {
+#if (BG_WORLD_COLS > 32)
+    col_pending = 0;
     /* Horizontal tile streaming: one new column per 8 px of travel.
        Capped at one column per vblank. */
     if ((cam_x >> 3) != (prev_cam_x >> 3)) {
@@ -125,38 +146,25 @@ void scroll_stream(void) {
             /* Column that just became visible on the left edge. */
             col = prev_cam_x >> 3;
         }
-        /* Only stream when the column lies inside the painted world —
-           outside that the camera can be panned (clamped by
-           scroll_follow) but there is no source data.  Used to be
-           `if (col >= BG_WORLD_COLS) continue;` when the enclosing
-           structure was a `while` loop; after the one-per-vblank cap
-           turned that into an `if`, the guard had to flip to a
-           positive range check so cc65 stops complaining about a
-           `continue` outside a loop. */
+        /* Only stream when the column lies inside the painted world. */
         if (col < BG_WORLD_COLS) {
-            unsigned int addr;
             unsigned char rr;
 
+            for (rr = 0; rr < 30; rr++) {
+                col_buf[rr] = bg_world_tiles[(unsigned int)rr *
+                                             BG_WORLD_COLS + col];
+            }
             /* Bit 5 of the column id picks which nametable to write into —
                V-mirror aliases $2800/$2C00 to $2000/$2400 so this walks
                cleanly across arbitrarily wide worlds. */
-            addr = ((col & 0x20) ? 0x2400 : 0x2000) + (col & 0x1F);
-
-            /* +32 stride so successive PPU_DATA writes walk down the
-               column rather than across the row. */
-            PPU_CTRL = PPU_CTRL_BASE | PPU_CTRL_STRIDE_COL;
-            PPU_ADDR = (unsigned char)(addr >> 8);
-            PPU_ADDR = (unsigned char)(addr & 0xFF);
-            for (rr = 0; rr < 30; rr++) {
-                PPU_DATA = bg_world_tiles[(unsigned int)rr *
-                                          BG_WORLD_COLS + col];
-            }
+            col_addr = ((col & 0x20) ? 0x2400 : 0x2000) + (col & 0x1F);
+            col_pending = 1;
         }
     }
 #endif
 #if (BG_WORLD_ROWS > 30)
-    /* Vertical tile streaming: one new row per 8 px of travel.
-       Same one-per-vblank cap as the horizontal block above. */
+    row_pending = 0;
+    /* Vertical tile streaming: one new row per 8 px of travel. */
     if ((cam_y >> 3) != (prev_cam_y >> 3)) {
         unsigned int row;
 
@@ -167,33 +175,56 @@ void scroll_stream(void) {
             prev_cam_y -= 8;
             row = prev_cam_y >> 3;
         }
-        /* Same positive-range guard as the horizontal block above. */
         if (row < BG_WORLD_ROWS) {
-            unsigned int addr;
             unsigned char cc;
 
-            /* Bit 5 of the row id picks vertical nametable via H-mirror. */
-            addr = ((row & 0x20) ? 0x2800 : 0x2000) +
-                   (unsigned int)(row & 0x1F) * 32;
-            /* +1 stride (default) so the 32-byte burst walks across the row. */
-            PPU_CTRL = PPU_CTRL_BASE;
-            PPU_ADDR = (unsigned char)(addr >> 8);
-            PPU_ADDR = (unsigned char)(addr & 0xFF);
             for (cc = 0; cc < 32; cc++) {
-                PPU_DATA = bg_world_tiles[row * BG_WORLD_COLS + cc];
+                row_buf[cc] = bg_world_tiles[row * BG_WORLD_COLS + cc];
             }
+            /* Bit 5 of the row id picks vertical nametable via H-mirror. */
+            row_addr = ((row & 0x20) ? 0x2800 : 0x2000) +
+                       (unsigned int)(row & 0x1F) * 32;
+            row_pending = 1;
         }
     }
 #endif
-    /* Leave PPU_CTRL in the default +1-stride state regardless of which
-     * branch ran.  The horizontal block above switches the stride to
-     * +32 for its column burst, and nothing inside scroll_stream
-     * resets it afterwards on that path alone.  scroll_apply_ppu
-     * further down the vblank would reset it too, but any PPU_DATA
-     * write between here and there (the dialogue module's
-     * vblank_writes, for instance) would land with the wrong stride
-     * and corrupt rows further down the nametable.  Cheap to do here,
-     * removes the latent footgun. */
+}
+
+void scroll_stream(void) {
+#if (BG_WORLD_COLS > 32)
+    if (col_pending) {
+        unsigned char rr;
+
+        /* +32 stride so successive PPU_DATA writes walk down the
+           column rather than across the row. */
+        PPU_CTRL = PPU_CTRL_BASE | PPU_CTRL_STRIDE_COL;
+        PPU_ADDR = (unsigned char)(col_addr >> 8);
+        PPU_ADDR = (unsigned char)(col_addr & 0xFF);
+        for (rr = 0; rr < 30; rr++) {
+            PPU_DATA = col_buf[rr];
+        }
+        col_pending = 0;
+    }
+#endif
+#if (BG_WORLD_ROWS > 30)
+    if (row_pending) {
+        unsigned char cc;
+
+        /* +1 stride (default) so the 32-byte burst walks across the row. */
+        PPU_CTRL = PPU_CTRL_BASE;
+        PPU_ADDR = (unsigned char)(row_addr >> 8);
+        PPU_ADDR = (unsigned char)(row_addr & 0xFF);
+        for (cc = 0; cc < 32; cc++) {
+            PPU_DATA = row_buf[cc];
+        }
+        row_pending = 0;
+    }
+#endif
+    /* Leave PPU_CTRL in the default +1-stride state.  The horizontal
+       block above flips it to +32; nothing inside scroll_stream resets
+       it afterwards on that path, and a later PPU_DATA write (e.g.
+       the dialogue module's vblank_writes) would otherwise land with
+       the wrong stride and corrupt rows further down the nametable. */
     PPU_CTRL = PPU_CTRL_BASE;
 }
 
