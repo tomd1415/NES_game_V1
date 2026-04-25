@@ -1976,12 +1976,14 @@ details.collapsible > summary .sub-count {
                 aria-haspopup="true" aria-expanded="false"
                 title="Drawing tools: pencil, fill, line, rect, circle, select. Shapes work across tile boundaries.">🛠 Tools <span id="tools-active-label">Pencil</span> ▾</button>
         <div id="tools-popover" class="tools-popover" hidden>
-          <button type="button" class="tool-opt active" data-tool="pencil" title="Pencil — paint one pixel at a time (default)">✏️ Pencil</button>
-          <button type="button" class="tool-opt" data-tool="fill"   title="Fill — flood-fill the connected region of the starting pixel (crosses cell boundaries)">🪣 Fill</button>
-          <button type="button" class="tool-opt" data-tool="line"   title="Line — drag to draw a straight line. Hold Shift for 45° steps.">📏 Line</button>
-          <button type="button" class="tool-opt" data-tool="rect"   title="Rectangle — drag to draw an outlined rectangle. Hold Shift for a square.">▭ Rect</button>
-          <button type="button" class="tool-opt" data-tool="circle" title="Circle — drag to draw a circle/ellipse. Hold Shift for a circle.">○ Circle</button>
-          <button type="button" class="tool-opt" data-tool="select" title="Select — drag a marquee. Press Delete to zero pixels inside.">⬚ Select</button>
+          <button type="button" class="tool-opt active" data-tool="pencil"  title="Pencil — paint one pixel at a time (default).  Shortcut: Alt+P">✏️ Pencil</button>
+          <button type="button" class="tool-opt" data-tool="fill"           title="Fill — flood-fill the connected region of the starting pixel (crosses cell boundaries).  Shortcut: Alt+F">🪣 Fill</button>
+          <button type="button" class="tool-opt" data-tool="line"           title="Line — drag to draw a straight line. Hold Shift for 45° steps.  Shortcut: Alt+L">📏 Line</button>
+          <button type="button" class="tool-opt" data-tool="rect"           title="Rectangle outline — drag to draw. Hold Shift for a square.  Shortcut: Alt+R">▭ Rect</button>
+          <button type="button" class="tool-opt" data-tool="rect_fill"      title="Filled rectangle — every cell inside gets the current colour. Hold Shift for a square.  Shortcut: Alt+Shift+R">■ Rect fill</button>
+          <button type="button" class="tool-opt" data-tool="circle"         title="Circle/ellipse outline — drag to draw. Hold Shift for a circle.  Shortcut: Alt+C">○ Circle</button>
+          <button type="button" class="tool-opt" data-tool="circle_fill"    title="Filled circle/ellipse — every cell inside gets the current colour. Hold Shift for a circle.  Shortcut: Alt+Shift+C">● Circle fill</button>
+          <button type="button" class="tool-opt" data-tool="select"         title="Select — drag a marquee. Press Delete to zero pixels inside; drag the selection to move it.  Shortcut: Alt+S">⬚ Select</button>
         </div>
       </span>
     </div>
@@ -5392,7 +5394,7 @@ function initSpriteTools() {
   });
   try {
     const p = Storage.readPrefs() || {};
-    if (p.spriteTool && ['pencil','fill','line','rect','circle','select'].includes(p.spriteTool)) {
+    if (p.spriteTool && ['pencil','fill','line','rect','rect_fill','circle','circle_fill','select'].includes(p.spriteTool)) {
       setCurrentTool(p.spriteTool);
     }
   } catch (_) {}
@@ -5482,6 +5484,19 @@ function rectOutlinePixels(sx, sy, ex, ey) {
   return out;
 }
 
+// Phase 2.1: filled rect — every cell inside the bounding box.  Pupils
+// asked for a single-click way to stamp solid blocks (ground, walls,
+// large colour fields) without dragging the pencil back-and-forth.
+function rectFilledPixels(sx, sy, ex, ey) {
+  const x0 = Math.min(sx, ex), x1 = Math.max(sx, ex);
+  const y0 = Math.min(sy, ey), y1 = Math.max(sy, ey);
+  const out = [];
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) out.push([x, y]);
+  }
+  return out;
+}
+
 function circleOutlinePixels(sx, sy, ex, ey) {
   // Midpoint ellipse covering the bounding box defined by the drag.
   const cx = (sx + ex) / 2, cy = (sy + ey) / 2;
@@ -5496,6 +5511,26 @@ function circleOutlinePixels(sx, sy, ex, ey) {
     const y = Math.round(cy + Math.sin(t) * ry);
     const key = x + ',' + y;
     if (!seen.has(key)) { seen.add(key); out.push([x, y]); }
+  }
+  return out;
+}
+
+// Phase 2.1: filled ellipse — every cell inside the outline disk.
+// Uses the standard bounding-box test rather than scanline fill so
+// the code stays trivial + matches the outline above.
+function circleFilledPixels(sx, sy, ex, ey) {
+  const cx = (sx + ex) / 2, cy = (sy + ey) / 2;
+  const rx = Math.max(1, Math.abs(ex - sx) / 2);
+  const ry = Math.max(1, Math.abs(ey - sy) / 2);
+  const x0 = Math.min(sx, ex), x1 = Math.max(sx, ex);
+  const y0 = Math.min(sy, ey), y1 = Math.max(sy, ey);
+  const out = [];
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = (x - cx) / rx;
+      const dy = (y - cy) / ry;
+      if (dx * dx + dy * dy <= 1) out.push([x, y]);
+    }
   }
   return out;
 }
@@ -5534,16 +5569,19 @@ function commitShape(pixels) {
 function shapePreviewPixels(sp) {
   if (!toolDrag) return [];
   const { startX, startY, endX, endY } = toolDrag;
-  if (currentTool === 'line')   return linePixels(startX, startY, endX, endY);
-  if (currentTool === 'rect')   return rectOutlinePixels(startX, startY, endX, endY);
-  if (currentTool === 'circle') return circleOutlinePixels(startX, startY, endX, endY);
+  if (currentTool === 'line')        return linePixels(startX, startY, endX, endY);
+  if (currentTool === 'rect')        return rectOutlinePixels(startX, startY, endX, endY);
+  if (currentTool === 'rect_fill')   return rectFilledPixels(startX, startY, endX, endY);
+  if (currentTool === 'circle')      return circleOutlinePixels(startX, startY, endX, endY);
+  if (currentTool === 'circle_fill') return circleFilledPixels(startX, startY, endX, endY);
   return [];
 }
+const SHAPE_DRAG_TOOLS = new Set(['line', 'rect', 'rect_fill', 'circle', 'circle_fill']);
 
 function drawToolPreview(ctx, sp, px) {
   // In-flight drag: ghost the shape so the pupil can see where it will
   // land before committing.
-  if (toolDrag && (currentTool === 'line' || currentTool === 'rect' || currentTool === 'circle')) {
+  if (toolDrag && SHAPE_DRAG_TOOLS.has(currentTool)) {
     ctx.save();
     ctx.fillStyle = 'rgba(255, 216, 102, 0.75)';
     for (const [x, y] of shapePreviewPixels(sp)) {
@@ -5615,7 +5653,7 @@ function toolPointerDown(evt) {
     else afterToolMutation(true);
     return;
   }
-  if (currentTool === 'line' || currentTool === 'rect' || currentTool === 'circle') {
+  if (SHAPE_DRAG_TOOLS.has(currentTool)) {
     toolDrag = { startX: px.x, startY: px.y, endX: px.x, endY: px.y };
     renderSpriteCanvas();
     return;
@@ -5660,8 +5698,12 @@ function toolPointerUp() {
     commitShape(linePixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
   else if (currentTool === 'rect')
     commitShape(rectOutlinePixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
+  else if (currentTool === 'rect_fill')
+    commitShape(rectFilledPixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
   else if (currentTool === 'circle')
     commitShape(circleOutlinePixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
+  else if (currentTool === 'circle_fill')
+    commitShape(circleFilledPixels(toolDrag.startX, toolDrag.startY, toolDrag.endX, toolDrag.endY));
   else if (currentTool === 'select') {
     const d = toolDrag;
     selectedRegion = {
@@ -8264,6 +8306,30 @@ function init() {
   // Keyboard
   window.addEventListener('keydown', e => {
     if (e.target.matches('input, textarea, select')) return;
+    // Phase 2.1: tool-switch shortcuts.  Alt+letter because raw P/F/L/
+    // R/C/S already have existing meanings on this page (full preview,
+    // copy tile, rotate region, …) and Alt is a reliable free namespace.
+    // Alt+Shift+R / Alt+Shift+C pick the filled variants of the shape
+    // tools; without Shift you get the outline.
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      const toolKey = e.code;
+      const filled = e.shiftKey;
+      let target = null;
+      if      (toolKey === 'KeyP') target = 'pencil';
+      else if (toolKey === 'KeyF') target = 'fill';
+      else if (toolKey === 'KeyL') target = 'line';
+      else if (toolKey === 'KeyR') target = filled ? 'rect_fill'   : 'rect';
+      else if (toolKey === 'KeyC') target = filled ? 'circle_fill' : 'circle';
+      else if (toolKey === 'KeyS') target = 'select';
+      if (target) {
+        e.preventDefault();
+        setCurrentTool(target);
+        setStatus('saved', '● Tool: ' +
+          target.charAt(0).toUpperCase() + target.slice(1).replace('_', ' '));
+        return;
+      }
+    }
+
     // Undo / redo / save
     if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if (e.ctrlKey && (e.key === 'Z' || e.key.toLowerCase() === 'y')) { e.preventDefault(); redo(); return; }

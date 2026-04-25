@@ -1,18 +1,22 @@
 # Next-steps plan (post pupil-fix pass)
 
-> **Status stamp (2026-04-24).**  Phase 1 is **complete except 1.1
-> C2** (scroll flicker, parked pending teacher investigation).
-> **Phase 2.2** (palette picker QoL — hover-to-preview + recent
-> colours) and **Phase 2.3** (inline animation strip above the
-> composition canvas) shipped in the same session as the plan
-> authoring; **Phase 2.1 drawing tools** is deferred to its own
-> dedicated session (L effort, per the plan).  All Phase 1 polish
-> items landed: shared `help.js` page-tabs + Feedback toggle (1.2),
-> project-dropdown parity (1.3), Backgrounds paint-with-palette row
-> (1.4).  See the "Phase 1", "Scroll-flicker follow-up", "Phase 2.2"
-> and "Phase 2.3" entries in
+> **Status stamp (2026-04-25).**  Phase 1 complete except 1.1 C2
+> (parked pending teacher investigation).  **Phase 2 is done** —
+> 2.2 (palette picker QoL: hover-to-preview + recent colours),
+> 2.3 (inline animation strip above the composition canvas) and
+> 2.1 (drawing tools) all shipped.  2.1 was mostly already in place
+> from Sprint 9; this session closed the remaining gaps (filled
+> Rect + filled Circle tool variants, Alt-letter keyboard shortcuts
+> for tool switching, centralised tool-type check).  Still deferred
+> from 2.1's spec: Select → resize drag handles, shelved as a
+> self-contained follow-up.  All Phase 1 polish items landed:
+> shared `help.js` page-tabs + Feedback toggle (1.2), project-
+> dropdown parity (1.3), Backgrounds paint-with-palette row (1.4).
+> See the "Phase 1", "Scroll-flicker follow-up", and "Phase 2.1 /
+> 2.2 / 2.3" entries in
 > [changelog-implemented.md](changelog-implemented.md).  **Next:
-> Phase 2.1** (drawing tools), then Phase 3 (content & templates).
+> Phase 3** (content & templates — RPG top-down preset, multi-line
+> dialogue, per-NPC dialogue, P2 jump animation).
 
 Where to go from here, as of 2026-04-24.  Two preceding plan docs
 remain useful history:

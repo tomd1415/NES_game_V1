@@ -3038,3 +3038,59 @@ Select with marquee + move + resize).  Per
 as a full-day "L" effort so shipping it alone matches the
 plan's recommended split.  The suite is green (syntax + 5
 invariants + baseline + 9 smoke suites) at every step so far.
+
+### Phase 2.1 — 2026-04-25 drawing tools close-out
+
+The previous stamp said Phase 2.1 would get a dedicated session
+because it was scoped as a full-day "L" effort.  Turns out most
+of it was **already shipped in Sprint 9** (see
+[PUPIL_FEEDBACK.md](PUPIL_FEEDBACK.md) Sprint 8.1): Pencil,
+Fill (flood-fill), Line (Bresenham), Rect (outline), Circle
+(ellipse outline), and Select (marquee → Delete / drag-to-move
+with a floating-selection overlay + clipboard copy/paste).
+This session closed the remaining gaps from the plan spec:
+
+- **Filled Rect** (`rect_fill`, ■ icon) and **Filled Circle**
+  (`circle_fill`, ● icon) as separate tools in the Tools
+  popover.  New pixel-producer functions `rectFilledPixels` +
+  `circleFilledPixels` route through the same
+  `shapePreviewPixels` / `commitShape` / Shift-constrain /
+  auto-assign pipeline as their outlined counterparts — pupils
+  get a ghost preview while dragging, one undo step per commit,
+  correct behaviour when the shape crosses cell boundaries or
+  sits on an empty cell.
+- **Keyboard shortcuts** — Alt+P / F / L / R / C / S for the
+  six base tools.  Alt+Shift+R / Alt+Shift+C pick the filled
+  variants.  Alt-namespace was chosen because the raw letters
+  already mean something on this page (F = full preview,
+  C = copy tile pixels, R = rotate selected region).  Tooltips
+  on the tool buttons document the shortcut.  Status bar
+  announces the switch ("● Tool: Fill") so pupils have
+  feedback even without a mouse.
+- **Centralised tool-type check** — the inline
+  `currentTool === 'line' || currentTool === 'rect' ||
+  currentTool === 'circle'` at the two preview + click-start
+  sites became `SHAPE_DRAG_TOOLS.has(currentTool)` with a
+  single Set constant.  Keeps future tool additions to one
+  edit site.
+- **Persisted-prefs tool list** extended to include the two
+  new ids so reloading the Sprites page preserves the pupil's
+  filled-variant choice.
+
+All tool changes are confined to
+[sprites.html](tools/tile_editor_web/sprites.html); no template
+or emitted-C touched, so the byte-identical baseline is
+unaffected.  `run-all.mjs` green — 15 syntax checks, 5
+invariants, ROM baseline, 9 smoke suites.
+
+**Still deferred from the plan spec:** Select → **resize drag
+handles** (currently Select only supports marquee + delete +
+drag-to-move + copy/paste).  Resize requires eight corner/edge
+handles, per-handle drag math, and scaling clipped pixels — a
+self-contained follow-up that the teacher can request when
+pupils ask for it.
+
+**Phase 2 definition of done reached** — 2.1, 2.2, and 2.3
+all shipped.  Next: Phase 3 (content & templates — RPG
+top-down preset, multi-line dialogue, per-NPC dialogue text,
+P2 jump animation).

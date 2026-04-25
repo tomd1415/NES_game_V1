@@ -49,7 +49,7 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-20 | Gameplay snippets  | Follower sprite that tracks the player                            | [done]    |
 | 2026-04-20 | Sprite UX          | More sprite role labels (tools, power-ups) for future snippets    | [done]    |
 | 2026-04-20 | Sprite UX          | Make the Animation panel easier to find and use                   | [done]    |
-| 2026-04-20 | Drawing tools      | Fill, shape select (rect/circle), resize regions, shape delete    | [new]     |
+| 2026-04-20 | Drawing tools      | Fill, shape select (rect/circle), resize regions, shape delete    | [done]    |
 | 2026-04-20 | Palette UX         | Pick colours for palettes more easily                             | [done]    |
 | 2026-04-20 | Scenes             | Trigger next-scene load (uses existing multi-background support)  | [done]    |
 | 2026-04-20 | Audio              | Import FamiStudio music/SFX files                                 | [new]     |
@@ -404,7 +404,19 @@ of a game without writing new C themselves.
   paint + undo path. "Change the size of parts" maps to the **Select →
   resize** flow: marquee a region, drag a handle to scale — one stroke,
   no menus. Shift-constrains to the same palette.
-- **Status / date:** [new] 2026-04-20
+- **Status / date:** [done] 2026-04-25 — most of this shipped in
+  Sprint 9 (Pencil, Fill, Line, Rect outline, Circle outline,
+  Select with marquee + Delete + drag-to-move + clipboard copy/
+  paste).  Phase 2.1 of
+  [next-steps-plan.md](next-steps-plan.md) closed the rest:
+  **Rect fill** + **Circle fill** as dedicated tools (■ / ● icons
+  in the Tools popover) + Alt+P/F/L/R/C/S keyboard shortcuts
+  (Alt+Shift+R / Alt+Shift+C for the filled variants).  See the
+  "Phase 2.1" entry in
+  [changelog-implemented.md](changelog-implemented.md).  **Still
+  deferred:** Select → resize drag handles — filed as a separate
+  follow-up for when a pupil specifically asks; the rest of the
+  workflow (marquee, delete, move, copy/paste) is in place.
 
 ---
 
