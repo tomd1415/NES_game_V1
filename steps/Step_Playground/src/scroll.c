@@ -190,33 +190,58 @@ void scroll_stream_prepare(void) {
 #endif
 }
 
+/* Fully unrolled column / row burst.  cc65 is invoked without `-O`, so
+   a `for (i = 0; i < N; i++) PPU_DATA = buf[i];` loop costs roughly
+   50–65 CPU cycles per iteration once you count the index promotion,
+   the comparison, and cc65's stack-machine register juggling.  Thirty
+   iterations like that come close to ~1700 cycles by themselves —
+   enough that the tail of the burst can spill past line 261's T->V
+   copy at cycle 2358 into the visible frame, advancing the rendering
+   V register by +32 per spilled write and producing the 12-tile-below
+   ghost flash pupils were seeing.
+
+   Unrolling collapses each write to `lda col_buf+N; sta $2007` (8
+   cycles) since the index is a compile-time constant — under 250
+   cycles for the whole burst, well inside the vblank budget.  The
+   `EMIT_*` macros are the most readable form of "this is purposely
+   one statement per byte"; the loop they replace is preserved in
+   the comment above scroll_stream_prepare for context. */
+#define SCROLL_EMIT(N)  PPU_DATA = col_buf[N]
+#define SCROLL_EMIT_ROW(N)  PPU_DATA = row_buf[N]
+
 void scroll_stream(void) {
 #if (BG_WORLD_COLS > 32)
     if (col_pending) {
-        unsigned char rr;
-
         /* +32 stride so successive PPU_DATA writes walk down the
            column rather than across the row. */
         PPU_CTRL = PPU_CTRL_BASE | PPU_CTRL_STRIDE_COL;
         PPU_ADDR = (unsigned char)(col_addr >> 8);
         PPU_ADDR = (unsigned char)(col_addr & 0xFF);
-        for (rr = 0; rr < 30; rr++) {
-            PPU_DATA = col_buf[rr];
-        }
+        SCROLL_EMIT( 0); SCROLL_EMIT( 1); SCROLL_EMIT( 2); SCROLL_EMIT( 3);
+        SCROLL_EMIT( 4); SCROLL_EMIT( 5); SCROLL_EMIT( 6); SCROLL_EMIT( 7);
+        SCROLL_EMIT( 8); SCROLL_EMIT( 9); SCROLL_EMIT(10); SCROLL_EMIT(11);
+        SCROLL_EMIT(12); SCROLL_EMIT(13); SCROLL_EMIT(14); SCROLL_EMIT(15);
+        SCROLL_EMIT(16); SCROLL_EMIT(17); SCROLL_EMIT(18); SCROLL_EMIT(19);
+        SCROLL_EMIT(20); SCROLL_EMIT(21); SCROLL_EMIT(22); SCROLL_EMIT(23);
+        SCROLL_EMIT(24); SCROLL_EMIT(25); SCROLL_EMIT(26); SCROLL_EMIT(27);
+        SCROLL_EMIT(28); SCROLL_EMIT(29);
         col_pending = 0;
     }
 #endif
 #if (BG_WORLD_ROWS > 30)
     if (row_pending) {
-        unsigned char cc;
-
         /* +1 stride (default) so the 32-byte burst walks across the row. */
         PPU_CTRL = PPU_CTRL_BASE;
         PPU_ADDR = (unsigned char)(row_addr >> 8);
         PPU_ADDR = (unsigned char)(row_addr & 0xFF);
-        for (cc = 0; cc < 32; cc++) {
-            PPU_DATA = row_buf[cc];
-        }
+        SCROLL_EMIT_ROW( 0); SCROLL_EMIT_ROW( 1); SCROLL_EMIT_ROW( 2); SCROLL_EMIT_ROW( 3);
+        SCROLL_EMIT_ROW( 4); SCROLL_EMIT_ROW( 5); SCROLL_EMIT_ROW( 6); SCROLL_EMIT_ROW( 7);
+        SCROLL_EMIT_ROW( 8); SCROLL_EMIT_ROW( 9); SCROLL_EMIT_ROW(10); SCROLL_EMIT_ROW(11);
+        SCROLL_EMIT_ROW(12); SCROLL_EMIT_ROW(13); SCROLL_EMIT_ROW(14); SCROLL_EMIT_ROW(15);
+        SCROLL_EMIT_ROW(16); SCROLL_EMIT_ROW(17); SCROLL_EMIT_ROW(18); SCROLL_EMIT_ROW(19);
+        SCROLL_EMIT_ROW(20); SCROLL_EMIT_ROW(21); SCROLL_EMIT_ROW(22); SCROLL_EMIT_ROW(23);
+        SCROLL_EMIT_ROW(24); SCROLL_EMIT_ROW(25); SCROLL_EMIT_ROW(26); SCROLL_EMIT_ROW(27);
+        SCROLL_EMIT_ROW(28); SCROLL_EMIT_ROW(29); SCROLL_EMIT_ROW(30); SCROLL_EMIT_ROW(31);
         row_pending = 0;
     }
 #endif
@@ -227,6 +252,9 @@ void scroll_stream(void) {
        the wrong stride and corrupt rows further down the nametable. */
     PPU_CTRL = PPU_CTRL_BASE;
 }
+
+#undef SCROLL_EMIT
+#undef SCROLL_EMIT_ROW
 
 void load_world_bg(void) {
     /* Number of screens to load on each axis: 1 for non-scrolling
