@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Gallery</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+/* ===========================================================
+   NES GALLERY — published projects live here.  Pupils click ▶ to
+   play a ROM in the shared embedded emulator, ⬇ to grab the .nes
+   file, or ⬇ JSON to remix the project in their own editor.
+   Phase 4.2.
+   =========================================================== */
+:root {
+  --bg:        #14121f;
+  --panel:     #1f1b30;
+  --panel2:    #2a2440;
+  --border:    #3a3352;
+  --fg:        #f4f4f4;
+  --muted:     #9a97ad;
+  --accent:    #ffd866;
+  --good:      #47d16c;
+  --warn:      #ff6188;
+  --info:      #78dce8;
+  --shadow:    0 4px 16px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--fg);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+}
+h1, h2, h3 { margin: 0; }
+h1 { font-size: 1.15em; color: var(--accent); }
+h2 { font-size: 1.0em;  color: var(--accent); margin-bottom: 6px; }
+button {
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 10px; font-size: 0.9em;
+  cursor: pointer; font-family: inherit;
+}
+button:hover { background: #3a3560; }
+button.primary { background: #3a2f50; border-color: var(--accent); color: var(--accent); }
+a.button-link {
+  display: inline-block; text-decoration: none;
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 10px; font-size: 0.9em;
+}
+a.button-link:hover { background: #3a3560; }
+
+/* --- Header / nav (mirrors other pages) --------------------- */
+.app-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.page-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.page-link {
+  padding: 4px 10px; border-radius: 4px;
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border);
+  text-decoration: none; font-size: 0.9em;
+}
+.page-link:hover { background: #3a3560; }
+.page-link.active {
+  background: #3a2f50; border-color: var(--accent); color: var(--accent);
+}
+
+/* --- Card grid --------------------------------------------- */
+main { padding: 16px; }
+.gallery-empty {
+  padding: 40px 20px; text-align: center; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 8px;
+  max-width: 540px; margin: 40px auto;
+}
+.gallery-empty h2 { color: var(--info); margin-bottom: 10px; }
+.gallery-empty code { background: var(--panel); padding: 1px 5px; border-radius: 3px; }
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.gallery-card {
+  background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: var(--shadow);
+}
+.gallery-card .preview {
+  width: 100%; aspect-ratio: 256 / 240;
+  background: #000;
+  image-rendering: pixelated;
+  display: block;
+  border-bottom: 1px solid var(--border);
+}
+.gallery-card .body {
+  padding: 12px 14px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  flex: 1;
+}
+.gallery-card h3 {
+  font-size: 1.05em; color: var(--accent); margin: 0;
+  word-break: break-word;
+}
+.gallery-card .meta {
+  font-size: 0.85em; color: var(--muted);
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.gallery-card .meta .handle::before { content: '@'; opacity: 0.6; }
+.gallery-card .desc {
+  font-size: 0.92em; line-height: 1.4;
+  white-space: pre-wrap; word-break: break-word;
+  flex: 1;
+}
+.gallery-card .actions {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-top: 10px;
+}
+.gallery-card .actions .danger {
+  margin-left: auto;
+  border-color: var(--warn); color: var(--warn);
+}
+.gallery-card .actions .danger:hover {
+  background: rgba(255, 97, 136, 0.18);
+}
+
+#status-bar {
+  padding: 8px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9em; color: var(--muted);
+  min-height: 22px;
+}
+#status-bar.ok    { color: var(--good); }
+#status-bar.warn  { color: var(--warn); }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🖼 NES Gallery</h1>
+  <nav class="page-nav" aria-label="Editor pages">
+    <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
+    <a class="page-link" href="sprites.html" title="Design sprites from the shared tileset">🦸 Sprites</a>
+    <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
+    <a class="page-link" href="builder.html" title="Build the game by ticking modules — no C required">🧱 Builder</a>
+    <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
+    <a class="page-link active" href="gallery.html" title="You are here — published projects from across the class">🖼 Gallery</a>
+  </nav>
+</header>
+
+<div id="status-bar">Loading gallery…</div>
+
+<main>
+  <div id="gallery-grid" class="gallery-grid"></div>
+  <div id="gallery-empty" class="gallery-empty" hidden>
+    <h2>No published projects yet</h2>
+    <p>Open the <a href="builder.html">Builder</a> page, finish a project, hit the
+       <strong>📤 Publish to gallery</strong> button, and it will appear here for the rest of the class.</p>
+  </div>
+</main>
+
+<script src="storage.js"></script>
+<script src="a11y.js"></script>
+<script src="emulator.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const grid       = document.getElementById('gallery-grid');
+  const emptyState = document.getElementById('gallery-empty');
+  const statusBar  = document.getElementById('status-bar');
+
+  function setStatus(text, kind) {
+    statusBar.textContent = text;
+    statusBar.className = kind || '';
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function makeCard(entry) {
+    const card = document.createElement('article');
+    card.className = 'gallery-card';
+    card.dataset.slug = entry.slug;
+
+    const img = document.createElement('img');
+    img.className = 'preview';
+    img.alt = `${entry.title} preview`;
+    img.src = `/gallery/${encodeURIComponent(entry.slug)}/preview.png`;
+    img.loading = 'lazy';
+    card.appendChild(img);
+
+    const body = document.createElement('div');
+    body.className = 'body';
+    card.appendChild(body);
+
+    const h = document.createElement('h3');
+    h.textContent = entry.title || '(untitled)';
+    body.appendChild(h);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    if (entry.pupil_handle) {
+      const handle = document.createElement('span');
+      handle.className = 'handle';
+      handle.textContent = entry.pupil_handle;
+      meta.appendChild(handle);
+    }
+    if (entry.ts) {
+      const when = document.createElement('span');
+      when.textContent = fmtDate(entry.ts);
+      meta.appendChild(when);
+    }
+    body.appendChild(meta);
+
+    if (entry.description) {
+      const desc = document.createElement('p');
+      desc.className = 'desc';
+      desc.textContent = entry.description;
+      body.appendChild(desc);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const playBtn = document.createElement('button');
+    playBtn.className = 'primary';
+    playBtn.textContent = '▶ Play';
+    playBtn.addEventListener('click', () => playEntry(entry));
+    actions.appendChild(playBtn);
+
+    const romLink = document.createElement('a');
+    romLink.className = 'button-link';
+    romLink.href = `/gallery/${encodeURIComponent(entry.slug)}/rom.nes`;
+    romLink.textContent = '⬇ ROM';
+    romLink.setAttribute('download', `${entry.slug}.nes`);
+    actions.appendChild(romLink);
+
+    const jsonLink = document.createElement('a');
+    jsonLink.className = 'button-link';
+    jsonLink.href = `/gallery/${encodeURIComponent(entry.slug)}/project.json`;
+    jsonLink.textContent = '⬇ Project';
+    jsonLink.title = 'Download the project JSON to remix in your own editor';
+    jsonLink.setAttribute('download', `${entry.slug}-project.json`);
+    actions.appendChild(jsonLink);
+
+    const remove = document.createElement('button');
+    remove.className = 'danger';
+    remove.textContent = '🗑 Remove';
+    remove.title = 'Remove this entry from the gallery (no undo)';
+    remove.addEventListener('click', () => removeEntry(entry));
+    actions.appendChild(remove);
+
+    body.appendChild(actions);
+    return card;
+  }
+
+  async function playEntry(entry) {
+    setStatus(`Loading ${entry.title}…`);
+    try {
+      const res = await fetch(`/gallery/${encodeURIComponent(entry.slug)}/rom.nes`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = new Uint8Array(await res.arrayBuffer());
+      setStatus(`Playing ${entry.title} — close the dialog when done.`, 'ok');
+      if (window.NesEmulator && typeof window.NesEmulator.open === 'function') {
+        await window.NesEmulator.open(buf, { hasP2: false });
+      } else {
+        setStatus('Embedded emulator unavailable on this page.', 'warn');
+      }
+    } catch (e) {
+      setStatus(`Failed to play: ${e.message || e}`, 'warn');
+    }
+  }
+
+  async function removeEntry(entry) {
+    if (!confirm(`Remove "${entry.title}" from the gallery? This cannot be undone.`)) return;
+    setStatus(`Removing ${entry.title}…`);
+    try {
+      const res = await fetch('/gallery/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: entry.slug }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'remove failed');
+      setStatus(`Removed ${entry.title}.`, 'ok');
+      await refresh();
+    } catch (e) {
+      setStatus(`Failed to remove: ${e.message || e}`, 'warn');
+    }
+  }
+
+  async function refresh() {
+    setStatus('Loading gallery…');
+    grid.replaceChildren();
+    try {
+      const res = await fetch('/gallery/list');
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'list failed');
+      const entries = data.entries || [];
+      if (entries.length === 0) {
+        emptyState.hidden = false;
+        setStatus('Gallery is empty.', 'ok');
+        return;
+      }
+      emptyState.hidden = true;
+      for (const entry of entries) grid.appendChild(makeCard(entry));
+      setStatus(`Showing ${entries.length} project${entries.length === 1 ? '' : 's'}.`, 'ok');
+    } catch (e) {
+      setStatus(`Could not load gallery: ${e.message || e}.  Is the playground server running?`, 'warn');
+    }
+  }
+
+  refresh();
+})();
+</script>
+</body>
+</html>

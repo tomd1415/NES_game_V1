@@ -21,6 +21,8 @@
 
 <!-- Shared localStorage layer (v2 projects catalog) -->
 <script src="storage.js"></script>
+<script src="a11y.js"></script>
+<script src="project-menu.js"></script>
 <script src="feedback.js"></script>
 <script src="help.js"></script>
 <!-- PlayPipeline + its deps.  The Code page doesn't use BuilderAssembler
@@ -418,6 +420,7 @@ li.CodeMirror-hint-active {
     <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
     <a class="page-link" href="builder.html" title="Build the game by ticking modules — no C required">🧱 Builder</a>
     <a class="page-link active" href="code.html" title="You are here — edit the C code that drives the NES game">📝 Code</a>
+    <a class="page-link" href="gallery.html" title="Browse projects published from across the class">🖼 Gallery</a>
   </nav>
   <div class="toolbar">
     <span id="save-status" class="saved" title="Loading…">●</span>
@@ -432,6 +435,7 @@ li.CodeMirror-hint-active {
           </div>
           <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
           <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
+          <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
           <p class="menu-hint">
             New projects start on the <a href="sprites.html">Sprites page</a> so a starter hero gets seeded for you.
           </p>
@@ -439,6 +443,7 @@ li.CodeMirror-hint-active {
           <div class="tb-section-label">Save &amp; restore</div>
           <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
           <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+          <button type="button" id="btn-recover" title="Recover from a snapshot or backup">♻ Recover from snapshot…</button>
         </div>
       </details>
     </div>
@@ -1797,6 +1802,9 @@ if (codeFileMenu) {
   });
 }
 Storage.wireBasicProjectActions({ makeFreshState: () => null });
+// Shared Recover-from-snapshot + Migration-backup buttons.
+// No-op on any button missing or already wired.
+if (window.ProjectMenu) window.ProjectMenu.wire();
 document.getElementById('btn-restore').addEventListener('click', restoreDefault);
 document.getElementById('btn-symbols').addEventListener('click', () => document.getElementById('symbols-dialog').showModal());
 

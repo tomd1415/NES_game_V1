@@ -378,6 +378,37 @@ label { -webkit-user-select: none; user-select: none; }
 #build-log.err  { color: var(--warn); }
 #build-status { color: var(--muted); margin-top: 6px; font-size: 0.88em; }
 
+/* --- Publish-to-gallery dialog ------------------------------ */
+.publish-dialog {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 18px 20px; width: min(480px, 94vw);
+}
+.publish-dialog::backdrop { background: rgba(0,0,0,0.7); }
+.publish-dialog h2 { margin: 0 0 10px; color: var(--accent); }
+.publish-help {
+  color: var(--muted); font-size: 0.9em; line-height: 1.4;
+  margin: 0 0 12px;
+}
+.publish-help.warn { color: var(--warn); }
+.publish-help.ok   { color: var(--good); }
+.publish-field {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-bottom: 10px;
+}
+.publish-field span { font-size: 0.85em; color: var(--muted); }
+.publish-field input,
+.publish-field textarea {
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 8px; font: inherit; font-size: 0.95em;
+  resize: vertical;
+}
+.publish-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 12px;
+}
+
 /* --- Emulator dialog (reused pattern) ------------------------ */
 .emu-dialog {
   background: var(--bg); color: var(--fg);
@@ -504,6 +535,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
     <a class="page-link" href="behaviour.html" title="Mark what each tile does and how sprites react">🚧 Behaviour</a>
     <a class="page-link active" href="builder.html" title="You are here — build the game by ticking modules">🧱 Builder</a>
     <a class="page-link" href="code.html?stay=1" title="Hand-edit the generated C — use this once you're comfortable reading code">📝 Code</a>
+    <a class="page-link" href="gallery.html" title="Browse projects published from across the class">🖼 Gallery</a>
   </nav>
   <div class="toolbar">
     <span id="save-status" class="saved" title="Loading…">●</span>
@@ -518,6 +550,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
           </div>
           <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
           <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
+          <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
           <p class="menu-hint">
             New projects start on the <a href="sprites.html">Sprites page</a> so a starter hero gets seeded for you.
           </p>
@@ -525,6 +558,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
           <div class="tb-section-label">Save &amp; restore</div>
           <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code, builder selections. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
           <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+          <button type="button" id="btn-recover" title="Recover from a snapshot or backup">♻ Recover from snapshot…</button>
           <hr class="tb-inline-divider">
           <div class="tb-section-label">Advanced</div>
           <button type="button" id="btn-eject-to-code" title="Copy the Builder's generated main.c to the Code page so you can hand-edit it. After ejecting, the Builder's settings stop affecting your game — the Code page owns it.">📝 Open as Code (advanced)</button>
@@ -537,6 +571,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
     <div class="tb-group play-controls" role="group" aria-label="Run">
       <button type="button" id="btn-play" class="primary" title="Assemble main.c from your module selections, compile it and run it in the browser emulator">▶ Play in NES</button>
       <button type="button" id="btn-download-rom" title="Build the ROM and download it as a .nes file you can run in any emulator">⬇ ROM</button>
+      <button type="button" id="btn-publish-gallery" title="Build the ROM, capture a preview image, and publish your project to the shared gallery so the rest of the class can play (and download the project to remix)">📤 Publish to gallery</button>
       <select id="play-mode" title="Where to run the ROM.  Local (fceux) only works if fceux is installed on the machine running the playground server.">
         <option value="browser">In browser</option>
         <option value="native">Local (fceux)</option>
@@ -546,6 +581,41 @@ body.emu-single-player #emu-p2-controls { display: none; }
     <input id="file-input-all" type="file" accept=".json" style="display:none">
   </div>
 </header>
+
+<!-- Phase 4.2 — publish-to-gallery dialog.  Lazily populated by
+     the publish flow.  `pupil_handle` is optional today; once
+     accounts ship (next-steps-plan.md §4.6) it'll auto-fill from
+     the signed-in handle. -->
+<dialog id="publish-dialog" class="publish-dialog">
+  <form id="publish-form" method="dialog">
+    <h2>📤 Publish to gallery</h2>
+    <p class="publish-help">
+      Your project will be added to the shared gallery so the rest of
+      the class can play it.  The ROM and the project file will both be
+      downloadable from the gallery page.
+    </p>
+    <label class="publish-field">
+      <span>Title</span>
+      <input id="publish-title" type="text" maxlength="80" required
+             placeholder="My platformer">
+    </label>
+    <label class="publish-field">
+      <span>Description (optional)</span>
+      <textarea id="publish-description" rows="3" maxlength="500"
+                placeholder="What should other pupils try first?"></textarea>
+    </label>
+    <label class="publish-field">
+      <span>Your handle (optional)</span>
+      <input id="publish-handle" type="text" maxlength="40"
+             placeholder="pixel-cactus-42">
+    </label>
+    <p class="publish-help" id="publish-status" aria-live="polite"></p>
+    <div class="publish-actions">
+      <button type="button" id="publish-cancel">Cancel</button>
+      <button type="submit" id="publish-submit" class="primary">Publish</button>
+    </div>
+  </form>
+</dialog>
 
 <main class="app-main">
   <section class="panel module-tree-panel">
@@ -651,6 +721,8 @@ body.emu-single-player #emu-p2-controls { display: none; }
 </dialog>
 
 <script src="storage.js"></script>
+<script src="a11y.js"></script>
+<script src="project-menu.js"></script>
 <script src="feedback.js"></script>
 <script src="sprite-render.js"></script>
 <script src="builder-assembler.js"></script>
@@ -1607,6 +1679,138 @@ body.emu-single-player #emu-p2-controls { display: none; }
   // lives in play-pipeline.js now (shared across every editor page).
   // This wrapper only does the Builder-specific bits: run validators,
   // save, then hand the ROM bytes to the in-page jsnes emulator.
+  // -- Publish to gallery (Phase 4.2) ----------------------------
+  // Lazily uses the existing PlayPipeline build path to fetch the
+  // freshest ROM, runs ~30 frames in a hidden jsnes instance to grab
+  // a preview PNG, then POSTs everything (state, ROM, preview, title,
+  // optional pupil handle) to /gallery/publish.  No auth today —
+  // accounts arrive in Phase 4.6.
+  function openPublishDialog() {
+    const problems = window.BuilderValidators.validate(state);
+    if (window.BuilderValidators.hasErrors(problems)) {
+      setStatus('error', '⚠ Fix the problems listed on the right first');
+      return;
+    }
+    const dlg = document.getElementById('publish-dialog');
+    document.getElementById('publish-status').textContent = '';
+    document.getElementById('publish-status').className = 'publish-help';
+    document.getElementById('publish-submit').disabled = false;
+    // Pre-fill the title with the project's name on first open;
+    // subsequent opens keep whatever the pupil typed.
+    const titleInput = document.getElementById('publish-title');
+    if (!titleInput.value) titleInput.value = state.name || '';
+    dlg.showModal();
+  }
+
+  async function captureRomPreview(rom, frames) {
+    if (window.NesEmulator && typeof window.NesEmulator.ensureJsnes === 'function') {
+      await window.NesEmulator.ensureJsnes();
+    }
+    if (!window.jsnes) throw new Error('jsnes did not load');
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 240;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(256, 240);
+    const fb  = new Uint32Array(img.data.buffer);
+    const nes = new jsnes.NES({
+      onFrame(buf) {
+        for (let i = 0; i < buf.length; i++) fb[i] = 0xff000000 | buf[i];
+      },
+      onAudioSample() {},
+    });
+    let romStr = '';
+    for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
+    nes.loadROM(romStr);
+    for (let i = 0; i < frames; i++) nes.frame();
+    ctx.putImageData(img, 0, 0);
+    return canvas.toDataURL('image/png');
+  }
+
+  function bytesToBase64(bytes) {
+    // btoa(String.fromCharCode(...big)) blows the call-stack on a
+    // 32 kB ROM — chunk the conversion.
+    const CHUNK = 0x8000;
+    let out = '';
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(out);
+  }
+
+  async function doPublish() {
+    const titleEl = document.getElementById('publish-title');
+    const descEl  = document.getElementById('publish-description');
+    const handleEl = document.getElementById('publish-handle');
+    const statusEl = document.getElementById('publish-status');
+    const submitBtn = document.getElementById('publish-submit');
+
+    const title = (titleEl.value || '').trim();
+    if (!title) {
+      statusEl.textContent = 'Title is required.';
+      statusEl.className = 'publish-help warn';
+      titleEl.focus();
+      return;
+    }
+    submitBtn.disabled = true;
+    statusEl.textContent = 'Building ROM…';
+    statusEl.className = 'publish-help';
+
+    try {
+      let rom = null;
+      const result = await window.PlayPipeline.play(state, {
+        mode: 'browser',
+        download: false,
+        onStatus(_cls, msg) { statusEl.textContent = msg; },
+        onRom(romBytes) { rom = romBytes; /* don't auto-open emulator */ },
+      });
+      if (!rom || !result || !result.ok) {
+        statusEl.textContent = (result && result.log)
+          ? '✗ Build failed — see the build log on the page.'
+          : '✗ Build failed.';
+        statusEl.className = 'publish-help warn';
+        submitBtn.disabled = false;
+        return;
+      }
+
+      statusEl.textContent = 'Capturing preview…';
+      const dataUrl = await captureRomPreview(rom, 30);
+      const previewB64 = dataUrl.split(',')[1];
+      const romB64 = bytesToBase64(rom);
+
+      statusEl.textContent = 'Uploading…';
+      const res = await fetch('/gallery/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description: (descEl.value || '').trim(),
+          pupil_handle: (handleEl.value || '').trim(),
+          project: state,
+          rom_b64: romB64,
+          preview_b64: previewB64,
+          source_page: 'builder',
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        statusEl.textContent = '✗ ' + (data.error || 'Publish failed');
+        statusEl.className = 'publish-help warn';
+        submitBtn.disabled = false;
+        return;
+      }
+      statusEl.innerHTML =
+        '✓ Published — <a href="gallery.html" target="_blank">open the gallery</a>.';
+      statusEl.className = 'publish-help ok';
+      // Leave the dialog open so the pupil sees the success + link.
+      submitBtn.disabled = false;
+    } catch (e) {
+      console.error('[builder] publish failed:', e);
+      statusEl.textContent = '✗ ' + (e.message || 'Publish failed');
+      statusEl.className = 'publish-help warn';
+      submitBtn.disabled = false;
+    }
+  }
+
   async function play(opts) {
     opts = opts || {};
     const problems = window.BuilderValidators.validate(state);
@@ -1718,6 +1922,14 @@ body.emu-single-player #emu-p2-controls { display: none; }
     document.getElementById('btn-download-rom').addEventListener('click', () => {
       play({ mode: 'browser', download: true });
     });
+    document.getElementById('btn-publish-gallery').addEventListener('click', openPublishDialog);
+    document.getElementById('publish-cancel').addEventListener('click', () => {
+      document.getElementById('publish-dialog').close();
+    });
+    document.getElementById('publish-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      doPublish();
+    });
     // Disable the Local option if fceux isn't installed on the server.
     window.PlayPipeline.capabilities().then(caps => {
       const nativeOpt = modeSelect.querySelector('option[value="native"]');
@@ -1788,6 +2000,9 @@ body.emu-single-player #emu-p2-controls { display: none; }
     Storage.wireBasicProjectActions({
       makeFreshState: () => null,   // no fresh-state path here (see hint)
     });
+    // Shared Recover-from-snapshot + Migration-backup buttons.
+    // No-op on any button missing or already wired.
+    if (window.ProjectMenu) window.ProjectMenu.wire();
 
     document.getElementById('btn-save-all').addEventListener('click', () => {
       Storage.saveCurrent(state);

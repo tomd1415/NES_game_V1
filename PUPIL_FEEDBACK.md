@@ -53,8 +53,8 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-20 | Palette UX         | Pick colours for palettes more easily                             | [done]    |
 | 2026-04-20 | Scenes             | Trigger next-scene load (uses existing multi-background support)  | [done]    |
 | 2026-04-20 | Audio              | Import FamiStudio music/SFX files                                 | [new]     |
-| 2026-04-20 | Sharing            | Gallery to upload screenshots / ROMs for others to play           | [new]     |
-| 2026-04-20 | Accessibility      | Make text size configurable / bigger                              | [new]     |
+| 2026-04-20 | Sharing            | Gallery to upload screenshots / ROMs for others to play           | [done]    |
+| 2026-04-20 | Accessibility      | Make text size configurable / bigger                              | [done]    |
 | 2026-04-23 | Code page          | Simpler, no-C "module builder" alternative to the Code page       | [done]    |
 | 2026-04-24 | Builder            | Two-player co-op (P2 controller, HP, walk animation)              | [done]    |
 | 2026-04-24 | Builder            | NPC dialogue boxes from inside the Builder (module, no C)         | [done]    |
@@ -62,6 +62,8 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-25 | Play pipeline      | Arrow keys move the player AND scroll the tileset on Backgrounds  | [done]    |
 | 2026-04-25 | Play pipeline      | Code-page ▶ Play stops working after first edit; Backgrounds OK   | [new]     |
 | 2026-04-25 | Scrolling          | C2 scroll flicker — column-burst stride elided by cc65 optimiser  | [done]    |
+| 2026-04-25 | Scrolling          | 2×2 background draws wrong section in top-down (4-screen unsupp.) | [planned] |
+| 2026-04-25 | Scrolling          | 1×2 vertical scroll has the same V-mirror corruption as 2×2       | [planned] |
 
 ---
 
@@ -505,16 +507,31 @@ of a game without writing new C themselves.
 
 - **Said:** "Have a gallery section where you can upload your
   screenshots and games for others to play." *(MH, 2026-04-20)*
-- **Mitigation:** an in-browser gallery index served by
-  `tools/playground_server.py`: each pupil project can **Publish to
-  gallery** which copies the current `game.nes`, a thumbnail PNG
-  (grabbed from the preview canvas) and the project metadata to
-  `tools/gallery/<slug>/`. The gallery page lists them; clicking a
-  card loads the ROM into the in-browser emulator read-only. No
-  account system — gallery entries are per-machine, teacher curates.
-  Stretch: **Export gallery bundle** zips the folder for sharing
-  across machines.
-- **Status / date:** [new] 2026-04-20
+- **Mitigation:** Shipped 2026-04-25 as Phase 4.2.  Builder page
+  gained a **📤 Publish to gallery** button that re-uses the existing
+  `PlayPipeline.play()` build path, runs the freshly built ROM in a
+  hidden jsnes instance for ~30 frames to capture a preview PNG,
+  and POSTs `{ title, description, pupil_handle, project, rom_b64,
+  preview_b64 }` to a new `/gallery/publish` endpoint.  Server writes
+  `tools/gallery/<slug>/` with rom.nes, preview.png, project.json,
+  and metadata.json.  New
+  [gallery.html](tools/tile_editor_web/gallery.html) page renders a
+  card grid with per-card ▶ Play (loads into the shared emulator
+  dialog), ⬇ ROM, ⬇ Project (the JSON, so other pupils can remix
+  in their own editor), and 🗑 Remove.  Gallery nav link added to
+  every editor page so pupils can find it without typing the URL.
+  No accounts yet — gallery is per-machine and the Remove button is
+  ungated; the metadata schema reserves an `owner` slot (currently
+  `null`) so the future-accounts work (queued as Phase 4.6) is
+  purely additive: signing in will auto-fill the handle, populate
+  `owner`, and gate Remove on the teacher of the owning handle's
+  group.  Privacy: pupil_handle is pseudonymous and free-text today
+  (`pixel-cactus-42` is fine), no real names or personal info ever
+  collected.  New
+  [gallery.mjs](tools/builder-tests/gallery.mjs) regression suite
+  covers publish → list → fetch each artefact → path-traversal
+  rejection → remove round-trip; full Builder regression green.
+- **Status / date:** [done] 2026-04-25
 
 ---
 
@@ -523,13 +540,23 @@ of a game without writing new C themselves.
 #### Bigger / configurable text size
 
 - **Said:** "Ability to set the text size bigger." *(MH, 2026-04-20)*
-- **Mitigation:** add a `--ui-scale` CSS custom property set via a
-  header dropdown (`100% / 125% / 150% / 175%`). Apply it to `body`
-  font-size + canvas scaling so both text *and* the 8×8 tile-editor
-  zoom enlarge together. Persist in `prefs.uiScale`. Pair with a
-  high-contrast theme toggle later. Note: the existing `bgTheme`
-  (dark/mid/light) already helps low-contrast vision.
-- **Status / date:** [new] 2026-04-20
+- **Mitigation:** Shipped 2026-04-25 as Phase 4.1 — new shared
+  [a11y.js](tools/tile_editor_web/a11y.js) module auto-injects
+  two controls into every editor page's header on load: a Text-size
+  dropdown (100 / 125 / 150 / 175%) that scales `body.style.fontSize`
+  and exposes `--ui-scale` as a CSS custom property, and a Theme
+  dropdown (Standard / High contrast) that swaps the page's `:root`
+  CSS variables for WCAG-AA pairings.  Persisted via the existing
+  `Storage.readPrefs / writePrefs` API as `prefs.uiScale` and
+  `prefs.uiTheme`, so the choice follows the pupil across all five
+  editor pages.  Canvas scaling deliberately not engineered —
+  every canvas already has `image-rendering: pixelated` and browser
+  zoom (Ctrl-+/-) handles low-vision pupils' canvas needs natively.
+  Tour on the Backgrounds and Sprites pages now ends with a step
+  pointing at the new controls.  Regression suite gained
+  [a11y.mjs](tools/builder-tests/a11y.mjs) covering pref round-trip,
+  DOM injection, and change-event persistence.
+- **Status / date:** [done] 2026-04-25
 
 ---
 
@@ -586,6 +613,35 @@ of a game without writing new C themselves.
   modal-open.
 - **Status / date:** [done] 2026-04-25.
 
+- **Said:** "There is strange behaviour on the 2 by 2 scrolling in
+  the top down mode. It appears to sometime draw the wrong section
+  of the background and then sometimes the correct part of the
+  background." (Pupil report, 2026-04-25.)
+- **Mitigation:** Hardware-level NES PPU constraint, not a code bug.
+  The cartridge config in
+  [cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg) sets
+  `NES_MIRRORING = 1` (vertical), which gives only two distinct
+  nametable RAM banks: NT0/NT2 share one, NT1/NT3 share the other.
+  Horizontal scroll (2×1) works because it alternates between NT0
+  and NT1.  *Any* vertical scroll — 1×2 *and* 2×2 — needs NT0 ≠ NT2,
+  which V-mirror doesn't provide, so the off-screen row writes land
+  in the same physical RAM as the visible screen and the bottom of
+  the world overwrites the top.  Pupils see "sometimes wrong,
+  sometimes correct" depending on which screen was written most
+  recently.  Stop-gap (2026-04-25): the Backgrounds-page size
+  selector now warns + reverts when *either* 1×2 or 2×2 is picked
+  ([index.html:4148-4181](tools/tile_editor_web/index.html#L4148-L4181)),
+  with both dropdown labels updated to `(… — not yet working)` so
+  pupils see the hint before clicking.  Proper fix is tracked as
+  Phase 4.4 of [next-steps-plan.md](next-steps-plan.md): emit a
+  4-screen-VRAM cartridge config (iNES header byte 6 bit 3) for
+  projects that need > 2 distinct nametables, drop the alert, and
+  add a regression-suite check that the header bit lands.  Single
+  fix closes both 1×2 and 2×2.
+- **Status / date:** [planned] 2026-04-25 — alert+revert shipped
+  for both vertical sizes, 4-screen build path queued under
+  Phase 4.4.
+
 - **Said:** *Investigation under the parked C2 scroll-flicker entry*
   — FCEUX PPU-Viewer of a 2×1 scrolling project showed corruption
   starting only when the camera began to move, with tile data smearing
@@ -593,22 +649,37 @@ of a game without writing new C themselves.
   empty-sky rows) and the floor row disappearing while scrolling left.
   Initial misread of the column-update routine; actual cause was
   compiler-level.
-- **Mitigation:** [scroll.c](steps/Step_Playground/src/scroll.c) sets
-  `PPU_CTRL` to `+32` stride immediately before the 30-tile
-  `PPU_DATA` column burst, then resets it to `+1` afterwards. With the
-  PPU register macros defined as plain `*((unsigned char*)0x2000)`,
-  cc65's optimiser is free to elide the stride-flip write because the
-  next syntactic access to the same address is another assignment —
-  so the column burst ran with whatever stride the previous frame
-  left behind (`+1` after `scroll_apply_ppu`), and the 30 tiles for
-  one column smeared across one row of the nametable. Each subsequent
-  scroll-step laid another stripe at a different row, escalating into
-  full-screen corruption. Fixed by qualifying the PPU/OAM macros
-  `volatile` in [scroll.c](steps/Step_Playground/src/scroll.c),
-  [main.c](steps/Step_Playground/src/main.c), and
-  [platformer.c](tools/tile_editor_web/builder-templates/platformer.c).
-  Builder regression suite (incl. byte-identical-ROM invariant) green
-  after the change. Closes the parked C2 scroll-flicker investigation.
+- **Mitigation:** Closed across four chained fixes (2026-04-25):
+    1. **Volatile PPU macros.** cc65 was eliding the
+       `PPU_CTRL = +32 stride` write before the column burst because
+       the macros were plain `*((unsigned char*)0x2000)`. The 30-tile
+       burst then ran at `+1` stride, smearing each column across one
+       nametable row. Fixed by qualifying the PPU/OAM macros
+       `volatile` in [scroll.c](steps/Step_Playground/src/scroll.c),
+       [main.c](steps/Step_Playground/src/main.c), and
+       [platformer.c](tools/tile_editor_web/builder-templates/platformer.c).
+       Removed the catastrophic stripe corruption.
+    2. **`PPU_MASK` wrap.** A residual one-frame ghost "a few tiles
+       below" the BG appeared on each scroll-step — late writes from
+       the column burst were spilling past the line-261 T→V copy and
+       polluting the rendering V register mid-frame. Wrapped the
+       vblank work in `PPU_MASK = 0` … `PPU_MASK = 0x1E` so any late
+       write can't reach the screen.
+    3. **Prepare / stream split.** [scroll.h](steps/Step_Playground/src/scroll.h)
+       gained `scroll_stream_prepare()`, called BEFORE `waitvsync()`.
+       The slow `bg_world_tiles[rr * BG_WORLD_COLS + col]` indexing now
+       happens outside vblank into a 30-byte static buffer, so the
+       in-vblank loop is just `*buf -> PPU_DATA`.
+    4. **Unrolled 30-write burst.** cc65 is invoked without `-O`, so
+       even the simplified loop cost ~50–65 cycles per iteration,
+       still enough for the tail to spill (12-tile-below ghost,
+       briefer but persistent). Unrolled the column and row bursts
+       in `scroll_stream` to `lda buf+N; sta $2007` pairs (8 cycles
+       each, ~250 cycles total). Fully clean across all scroll
+       speeds and directions.
+  Builder regression suite (10 smoke suites + byte-identical-ROM
+  invariant) green after every step. Closes the parked C2 scroll-
+  flicker investigation outright.
 - **Status / date:** [done] 2026-04-25.
 
 - **Said:** "When I first opened my project from my files I could use
@@ -850,3 +921,83 @@ sub-item so a half-baked piece never blocks a pupil session.
   `tools/tile_editor_web/builder-templates/platformer.c`. Builder
   regression suite (10 smoke suites + byte-identical-ROM invariant)
   green after the change.
+- 2026-04-25 (continued) — full C2 fix chain landed across three more
+  passes: PPU_MASK = 0/0x1E wrap around the vblank work, prepare/
+  stream split (slow array indexing moved before `waitvsync()`), and
+  fully-unrolled 30-tile column / 32-tile row bursts to escape cc65's
+  no-`O` per-iteration overhead.  Pupil confirmed clean across all
+  scroll speeds and directions.  Audited the rest of the vblank-time
+  PPU writes — only the dialogue module's row-write loop remains as a
+  theoretical spill candidate (rare, only on open/close transition
+  frames, and protected by the same PPU_MASK wrap), tracked but not
+  acted on.  Tried a `cc65 -O` Makefile change as a global perf lever
+  but reverted — even plain `-O` makes the byte-identical-baseline
+  invariant fail because the optimiser handles the stock vs Builder
+  template differently on the no-modules path.  Logged a separate
+  pupil bug: 2×2 (4-screen) backgrounds in top-down mode draw the
+  wrong section due to V-mirror only providing two distinct nametable
+  banks; shipped an alert+revert gate on the dropdown
+  ([index.html:4148-4170](tools/tile_editor_web/index.html#L4148-L4170))
+  and queued the proper fix (4-screen-VRAM cartridge config) as
+  Phase 4.4 of [next-steps-plan.md](next-steps-plan.md).
+- 2026-04-25 (Phase 4.1) — accessibility pass shipped.  New shared
+  [a11y.js](tools/tile_editor_web/a11y.js) module auto-injects two
+  controls into every editor page's header: a Text-size dropdown
+  (100 / 125 / 150 / 175%) that scales `body.style.fontSize` and
+  exposes `--ui-scale` as a CSS custom property, and a Theme dropdown
+  (Standard / High contrast) that swaps the page's `:root` CSS
+  variables for WCAG-AA pairings (true black bg / true white fg /
+  bright yellow accent / forced borders on inputs).  Persisted as
+  `prefs.uiScale` and `prefs.uiTheme` so choices follow the pupil
+  across all five editor pages.  Tour updated on Backgrounds and
+  Sprites pages to point at the new controls.  New
+  [a11y.mjs](tools/builder-tests/a11y.mjs) regression suite covers
+  pref round-trip, DOM injection, and change-event persistence; full
+  Builder regression suite green.  Closed the 2026-04-20
+  "Make text size configurable / bigger" pupil ask in the same pass.
+- 2026-04-25 (Phase 4.2) — gallery / showcase shipped.  New
+  `/gallery/publish`, `/gallery/list`, `/gallery/<slug>/<file>` and
+  `/gallery/remove` endpoints in
+  [playground_server.py](tools/playground_server.py); per-entry
+  storage at `tools/gallery/<slug>/` holds rom.nes, preview.png,
+  project.json (so other pupils can remix), and metadata.json.  New
+  [gallery.html](tools/tile_editor_web/gallery.html) card grid with
+  ▶ Play (shared emulator), ⬇ ROM, ⬇ Project, 🗑 Remove.  Builder
+  page gained a **📤 Publish to gallery** button that re-uses
+  `PlayPipeline.play()` and captures a 30-frame preview via a hidden
+  jsnes instance.  Gallery nav link added to all five editor pages.
+  Forward-compatible with the planned pupil/teacher accounts (Phase
+  4.6 of [next-steps-plan.md](next-steps-plan.md)): metadata schema
+  reserves an `owner` slot, pupil_handle is already first-class,
+  Remove will become teacher-gated.  No personal info collected today
+  or planned for the accounts work — handles are pseudonymous, no
+  real names anywhere.  New
+  [gallery.mjs](tools/builder-tests/gallery.mjs) regression suite
+  covers the full publish-list-fetch-remove round-trip plus
+  path-traversal rejection; full suite green (12 smoke suites).
+  Closed the 2026-04-20 "Gallery to upload screenshots / ROMs"
+  pupil ask in the same pass.
+- 2026-04-25 (continued) — pupil flagged the same V-mirror
+  corruption on **1×2 vertical** worlds that broke 2×2 in top-down
+  mode; same root cause (NT0/NT2 share one bank under V-mirror so
+  any vertical scroll overwrites the visible screen).  Extended the
+  Backgrounds-page size-selector gate to alert + revert on *both*
+  vertical sizes, and merged the 1×N case into Phase 4.4 of
+  [next-steps-plan.md](next-steps-plan.md) (one 4-screen-VRAM fix
+  closes both).
+- 2026-04-25 (Phase 1.3) — project-menu parity shipped.  Behaviour,
+  Builder and Code now expose **Recover from snapshot** and
+  **Migration backup** alongside Save / Open / Duplicate / Delete,
+  matching the Backgrounds-page menu (Builder + Code intentionally
+  keep their "new projects start on the Sprites page" hint).  New
+  shared [project-menu.js](tools/tile_editor_web/project-menu.js)
+  module lazily injects the recovery dialog on pages that don't
+  ship one and wires the handlers via an idempotent
+  `ProjectMenu.wire()` call.  Backgrounds + Sprites untouched — the
+  module is a no-op on buttons that already have inline handlers.
+  New
+  [project-menu.mjs](tools/builder-tests/project-menu.mjs)
+  regression suite covers HTML parity across all 5 pages, the
+  shared module's wiring + idempotency, dialog injection,
+  snapshot-list rendering, and the Restore → saveCurrent → reload
+  path.

@@ -117,33 +117,55 @@ first, tabs for every other page, a Feedback tab always present.
 **Files touched.**  New `help.js`; modifications to `index.html`,
 `sprites.html`, `behaviour.html`, `builder.html`, `code.html`.
 
-### 1.3 — Project-dropdown parity (S)
+### 1.3 — Project-dropdown parity (S) — DONE 2026-04-25
 
-**Goal.**  Every page shows the same project menu (New / Open /
-Save / Rename / Duplicate / Delete / Import / Export).  Today
-Backgrounds has the full menu and the others are sparser.
+**Outcome.**  Every editor page now exposes the same project-
+lifecycle controls.  Behaviour, Builder and Code previously shipped
+a thinner subset (no **Migration backup**, no **Recover from
+snapshot**); both now appear in their menus and work via a shared
+[project-menu.js](tools/tile_editor_web/project-menu.js) module that
+lazily injects a recovery dialog and wires the handlers without
+clashing with Backgrounds' / Sprites' existing inline wiring.
 
-**Plan.**
+**What shipped.**
 
-1. Catalogue each page's current `<details class="projects-menu">`
-   contents.
-2. Add `Storage.projectMenuEntries(pageId)` returning a canonical
-   list of `{ id, label, handler, section }` entries.  Handlers move
-   into `storage.js` too so they're not duplicated five times (the
-   Backgrounds page handlers are the most complete; those become
-   the canonical implementations).
-3. A `Storage.renderProjectMenu(hostElement, pageId)` helper
-   renders the dropdown from that list.  Each page calls it after
-   loading state.
-4. Page-specific extras (e.g. the Backgrounds-page Import/Export of
-   `.chr` / `.nam` / `.pal` files) stay local — the shared menu
-   only covers project-level actions.
-5. Test: project lifecycle (New → edit → Save → Rename → Duplicate
-   → Delete → Open) works identically from every page.  Storage is
-   already well-covered by smoke tests, so the new helper just
-   delegates.
+- New [project-menu.js](tools/tile_editor_web/project-menu.js) —
+  exposes `ProjectMenu.wire(opts)` (idempotent — won't double-attach
+  on a second call) and `ProjectMenu.openRecoveryDialog(opts)`.
+  Lazily injects a `<dialog id="recovery-dialog">` if the page
+  doesn't already carry one (Backgrounds does), reads snapshots +
+  backups via the existing `Storage.list*` API, and on Restore
+  saves the loaded state back through `Storage.saveCurrent` then
+  reloads — works on every page because they all read state from
+  Storage on init.
+- HTML additions: `<button id="btn-recover">` and `<button
+  id="btn-migration-download" hidden>` added to
+  [behaviour.html](tools/tile_editor_web/behaviour.html),
+  [builder.html](tools/tile_editor_web/builder.html), and
+  [code.html](tools/tile_editor_web/code.html); each page now
+  loads `project-menu.js` after `storage.js` and calls
+  `ProjectMenu.wire()` once during init.
+- Backgrounds + Sprites untouched — their inline handlers already
+  cover everything, and `ProjectMenu.wire` is a no-op for buttons
+  it sees an existing `dataset.projectMenuWired` flag on (or, more
+  defensively, that already have a non-null `onclick`).
 
-**Files touched.**  `storage.js`; every `*.html`.
+**Note on the New-project gap.**  Builder and Code intentionally
+omit `+ New project…` and instead show a hint pointing pupils at
+the Sprites page so a starter hero gets seeded.  Preserved that
+design choice; the parity fix is about the universal lifecycle
+controls (Duplicate / Delete / Migration / Save / Open / Recover)
+that Behaviour, Builder and Code were missing.
+
+**Tests.**  New
+[project-menu.mjs](tools/builder-tests/project-menu.mjs) suite
+asserts every page declares the universal buttons (with the New
+exception explicit), the three thin-menu pages load and invoke
+`project-menu.js`, the shared module wires both handlers as
+expected on a minimal DOM shim, the recovery dialog injects + lists
+mocked snapshots + restores via `Storage.saveCurrent` + reloads,
+and a second `wire()` call doesn't double-attach.  Wired into
+`run-all.mjs`; full suite green.
 
 ### 1.4 — Backgrounds palette selector facelift (S)
 
@@ -370,53 +392,103 @@ paragraph in PUPIL_GUIDE because it's a visibly new capability.
 Each item here is a sprint on its own.  Don't stack them — each
 needs its own focused session.  **Order by risk, safest first:**
 
-### 4.1 — Accessibility pass (M)
+### 4.1 — Accessibility pass (M) — DONE 2026-04-25
 
-Starting here because it's the lowest-risk and most immediately
-helpful — pupils with small laptops, big monitors, or low-vision
-needs all benefit.
+**Outcome.**  Shipped a shared
+[a11y.js](tools/tile_editor_web/a11y.js) module that auto-injects
+two controls into every editor page's `<header class="app-header">`
+on load:
 
-**Plan.**
+- **Text size** dropdown (100 / 125 / 150 / 175%) — sets
+  `body.style.fontSize` (so `em` / `rem` children scale with it)
+  and exposes `--ui-scale` as a CSS custom property.  Persisted as
+  `prefs.uiScale`, follows the pupil across all five pages.
+- **Theme** dropdown (Standard / High contrast) — toggles
+  `<html data-ui-theme="high-contrast">` and an injected `<style>`
+  block overrides the page's `:root` CSS variables with WCAG-AA
+  pairings (true black bg, true white fg, bright yellow accent,
+  forced borders on inputs / selects so they don't disappear).
+  Persisted as `prefs.uiTheme`.
 
-- `--ui-scale` CSS custom property driven by a header dropdown
-  (`100% / 125% / 150% / 175%`), persisted in `prefs.uiScale`.
-  Applied to `body` font-size so headings + buttons + tooltips
-  all grow.
-- Canvas scaling so the 8×8 tile editor + sprite preview + nametable
-  enlarge with the text — use CSS `transform: scale()` on the
-  canvas parent so the bitmaps stay crisp.
-- High-contrast theme toggle alongside the existing `bgTheme`
-  (dark / mid / light).  New "high-contrast" theme with WCAG-AA
-  pairings; one extra row in the theme selector.
-- Update the tour to mention the UI-scale control on the first
-  load so pupils who need it find it immediately.
-- Tests: new `a11y.mjs` suite that smoke-checks
-  `document.querySelector(':root').style.getPropertyValue('--ui-scale')`
-  round-trips correctly after a toggle.
+The first-run tour on the Backgrounds and Sprites pages now ends
+with a step pointing at `.a11y-controls` so pupils discover them.
+Canvas scaling was deliberately *not* engineered — every canvas
+already has `image-rendering: pixelated`, and browser zoom (Ctrl-+/-)
+already handles low-vision pupils' canvas needs without conflicting
+with the existing px-sized layout.
 
-### 4.2 — Gallery / showcase (L)
+**Wiring.**  `<script src="a11y.js"></script>` added once per page
+right after `storage.js` so the module can use the existing
+`Storage.readPrefs / writePrefs` API.  No per-page CSS or markup
+changes beyond the script tag — every page shares the exact same
+`:root` block, confirmed via diff.
 
-Pupils asked for a way to share their work.  Medium risk — mostly
-a server-side file dance with a moderation UI.
+**Tests.**  New
+[tools/builder-tests/a11y.mjs](tools/builder-tests/a11y.mjs) smoke
+suite drives a11y.js through a minimal DOM shim, asserts the public
+`A11y.apply / A11y.current` API behaves, the high-contrast `<style>`
+block injects, the controls land in `.app-header`, and a `change`
+event on the dropdown round-trips through `Storage.writePrefs`.
+Wired into the standard `run-all.mjs` runner.
 
-**Plan.**
+### 4.2 — Gallery / showcase (L) — DONE 2026-04-25
 
-- `tools/playground_server.py` grows a **Publish to gallery**
-  endpoint that copies the current `game.nes`, a preview PNG (the
-  first frame captured via jsnes), and project metadata into
-  `tools/gallery/<slug>/`.
-- A new `/gallery` page lists every published project with
-  card-style previews.  Clicking a card loads the ROM into the
-  shared embedded emulator (`emulator.js`) read-only.
-- Publish-from-page button on Builder + Code pages: opens a
-  confirm dialog with a title + description + "Remove" link
-  shown to the teacher account.
-- No accounts — gallery entries are per-machine, teacher curates
-  by deleting folders.
-- Stretch: **Export gallery bundle** zips
-  `tools/gallery/` for cross-machine sharing.
-- Tests: new `gallery.mjs` suite — publish → list → load → unpublish
-  round-trip.
+**Outcome.**  Pupils can now hit **📤 Publish to gallery** on the
+Builder page, type a title / optional description / optional
+pseudonymous handle, and the project is captured to a shared gallery
+that everyone in the class can browse.  Each entry exposes the ROM
+*and* the project JSON for download, so other pupils can remix
+each other's work.
+
+**What shipped.**
+
+- **Server endpoints** in
+  [playground_server.py](tools/playground_server.py):
+  `POST /gallery/publish` (validates body, slugifies title, writes
+  rom.nes / preview.png / project.json / metadata.json into
+  `tools/gallery/<slug>/`), `GET /gallery/list` (returns metadata
+  for every entry, newest first), `GET /gallery/<slug>/<file>`
+  (serves the four artefacts; ROM + project JSON sent with
+  `Content-Disposition: attachment` so download links work), and
+  `POST /gallery/remove` (deletes a folder).  Path-traversal
+  rejected via a strict slug regex; payload caps at 4 MB per
+  publish (1 MB ROM, 512 KB preview, the rest project state).
+- **Gallery page** at
+  [gallery.html](tools/tile_editor_web/gallery.html) — card grid
+  (preview, title, description, pupil handle, timestamp), per-card
+  ▶ Play (loads ROM into the shared `NesEmulator` dialog), ⬇ ROM,
+  ⬇ Project (JSON for remix), 🗑 Remove.  Same `<header>` as the
+  other pages, so `a11y.js` text-size + theme controls work here
+  too.
+- **Publish button** on the Builder page
+  ([builder.html](tools/tile_editor_web/builder.html)) — opens a
+  modal that re-uses the existing `PlayPipeline.play()` build path
+  (no second build step), runs the freshly built ROM in a hidden
+  jsnes instance for ~30 frames to capture the preview PNG, then
+  POSTs `{ title, description, pupil_handle, project, rom_b64,
+  preview_b64, source_page }` to `/gallery/publish`.
+- **Gallery nav link** added to every editor page
+  ([index](tools/tile_editor_web/index.html), [sprites](tools/tile_editor_web/sprites.html),
+  [behaviour](tools/tile_editor_web/behaviour.html), [builder](tools/tile_editor_web/builder.html),
+  [code](tools/tile_editor_web/code.html)).
+
+**Forward-compatible with future accounts (§4.6).**  Each entry's
+metadata.json reserves an `owner` slot (always `null` today) and
+`pupil_handle` is already a first-class field — when accounts ship,
+publish auto-fills the handle from the signed-in identity, populates
+`owner`, and `/gallery/remove` becomes teacher-gated.
+
+**Tests.**  New
+[gallery.mjs](tools/builder-tests/gallery.mjs) covers the full
+round-trip: empty list → reject missing title → publish (returns
+slug) → all four files on disk → list shows the entry with handle +
+null owner → ROM bytes match → project JSON round-trips →
+path-traversal blocked → remove deletes → remove of unknown slug
+returns 404.  Wired into `run-all.mjs`; full suite green.
+
+**Code-page publish** deferred — the Builder is where pupils most
+often "finish" something they want to share, and the publish flow
+is identical apart from `source_page`.  Add later if pupils ask.
 
 ### 4.3 — Audio (L, possibly XL)
 
@@ -452,7 +524,124 @@ classroom-friendliness (pupils need a way to author tunes — either
 ship a browser tracker or settle for importing pre-made .ftm
 files).  Worth a discovery sprint before committing.
 
-### 4.4 — Nice-to-haves worth keeping on the list
+### 4.4 — Vertical + 2×2 (4-screen) backgrounds (M)
+
+**Why.**  The Backgrounds page exposes both `1×2 (vertical scroll —
+not yet working)` and `2×2 (4-screen — not yet working)` size
+options, currently gated behind an `alert()` that reverts the
+selection (added 2026-04-25 after pupils hit the silent-corruption
+case in top-down mode — first 2×2, then 1×2 when they tried to
+work around it).  That gate is a stop-gap — a fully-working
+vertical / 2×2 mode is on the wishlist for top-down RPGs in
+particular, where 4-screen worlds are the natural shape.
+
+**Why both are broken right now.**  The cartridge config in
+[cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg) sets
+`NES_MIRRORING = 1` (vertical mirroring), which gives only two
+distinct nametable RAM banks: NT0/NT2 alias to one, NT1/NT3 alias
+to the other.  Horizontal scroll (2×1) works because the streaming
+engine alternates between NT0 and NT1, which are physically
+distinct under V-mirror.  *Any* vertical scroll (1×2 or 2×2)
+needs NT0 ≠ NT2, which V-mirror doesn't provide — the off-screen
+row writes land in the same physical RAM as the visible screen,
+so as the camera moves down the bottom of the world overwrites
+the top.  Pupils see "random patches of the wrong section"
+exactly as you'd expect.  Single fix (4-screen-VRAM cartridge
+config) closes both 1×2 and 2×2 in one shot.
+
+**Plan.**
+
+1. **Detect 2×2 in `playground_server.py`** (the build pipeline
+   already generates project-specific source files; this is the
+   right place to also pick a project-specific cartridge config).
+2. **Emit a 4-screen VRAM cfg** when `screens_x * screens_y == 4`
+   (or anything that needs > 2 distinct nametables).  iNES header
+   byte 6 bit 3 = "four-screen VRAM" overrides the mirroring bit;
+   cc65's NES_MIRRORING = 8 sets that bit on the produced ROM.
+   Verify that jsnes and fceux both honour it — they generally do
+   for any mapper, even NROM.
+3. **Confirm `load_world_bg` and `scroll_stream` already handle
+   the 2×2 case** once the four nametables are physically distinct
+   (they should — the address arithmetic is already correct, V-mirror
+   was just aliasing the writes).  If not, fix the streaming logic
+   to walk all four nametables.
+4. **Drop the `alert()` gate** in [index.html:4148-4170](tools/tile_editor_web/index.html#L4148-L4170)
+   and update the dropdown label back to `2×2 (4-screen)`.
+5. **Add a regression suite check** that builds a 2×2 world,
+   sha1s the resulting ROM, and asserts the iNES header byte 6
+   has bit 3 set when the project is 2×2 (and cleared otherwise so
+   the byte-identical-baseline test for 1×1 still holds).
+
+**Risks / open questions.**
+
+- 4-screen VRAM is rare on real NROM hardware — pupils running on a
+  real NES with a 60-pin Famicom flash cart may see the same
+  corruption.  Browser / fceux is fine.  Document the caveat in the
+  pupil-facing message if we want to keep the feature emulator-only.
+- Worlds wider/taller than 2 screens (e.g. 3×3) still need streaming
+  on both axes plus 4-screen.  Out of scope for this entry; track
+  separately if a pupil ever asks.
+
+**Deliverable.**  A 2×2 world that scrolls cleanly in browser jsnes
+and local fceux, with the alert removed and a regression-suite guard
+that the four-screen header bit lands correctly.  Effort: half a day
+to a day, plus a manual playtest pass.
+
+### 4.6 — Pupil + teacher accounts (future, optional) (L)
+
+**Why.**  A natural follow-up to the gallery (4.2) and to teacher
+moderation generally — once pupils start publishing, teachers want
+to see "everything pupil X has shared" / "open pupil X's project to
+make a tweak" without copying files between machines.  Today the
+gallery and per-machine project storage are entirely identity-less;
+that's deliberate, and accounts must remain **opt-in** so a pupil
+can keep working without ever signing in.
+
+**Hard privacy constraints.**
+
+- **No real names anywhere.**  Pupils pick a pseudonymous handle
+  (`pixel-cactus-42`, `level-design-jen`, etc.) — the same field
+  the gallery already exposes today.
+- **No personal info collected.**  No email, no DOB, no class, no
+  free-text "about me".  The handle and a teacher-issued group code
+  are the only identifiers stored.
+- **Teacher accounts** are issued out-of-band by whoever administers
+  the install.  Teachers can list / open / edit / delete projects
+  belonging to handles in their group; nothing more.
+- **Local-first.**  Same single-machine classroom story still works
+  with accounts disabled — accounts only matter when the playground
+  is shared across machines (gallery export bundle, network deploy).
+
+**Plan (sketch — flesh out when scheduled).**
+
+1. **Identity model.**  Server gains `tools/accounts/` with
+   `handles.json` (`{ handle, group, role, created_at }`) and
+   `groups.json` (`{ group, teacher_handle, joined_handles }`).
+   No per-handle password — login is "type your handle, type the
+   group code" (the `joined_handles` check authenticates).  This
+   matches how schools already manage shared-class kit; teachers
+   can reset / reissue codes by editing the JSON.
+2. **Wire the gallery's existing hooks.**  4.2 already records
+   `pupil_handle` + a reserved `owner` slot in `metadata.json` —
+   accounts populate `owner` and gate `/gallery/remove` on the
+   teacher of the owning handle's group.
+3. **Teacher dashboard** — new page listing every project + gallery
+   entry by group, with "open" / "remove" / "rename" actions.  Uses
+   the same `Storage.*` API the editor pages use, scoped to the
+   teacher's group.
+4. **Optional sign-in widget** in the editor header.  Stays signed
+   out by default; signing in tags subsequent gallery publishes
+   with the handle automatically.
+5. **Audit log** — every teacher edit / remove writes a line to
+   `tools/accounts/audit.jsonl` so a pupil who claims "the teacher
+   broke my project" has a paper trail.
+
+**Risks.**  Network-deploy story is a separate scope (today the
+playground is a localhost server).  Don't ship accounts without a
+matching deployment plan, or pupils will sign in on machine A and
+not see their work on machine B.  Probably L+ once that's factored.
+
+### 4.5 — Nice-to-haves worth keeping on the list
 
 Not big enough for their own phase row, but still worth tracking:
 
@@ -488,8 +677,11 @@ Not big enough for their own phase row, but still worth tracking:
 6. **Phase 4.1 Accessibility** first.
 7. **Phase 4.2 Gallery** second.
 8. **Phase 4.3 Audio** last — discovery spike before committing.
-9. **Phase 4.4 nice-to-haves** picked up opportunistically — OAM
-   cycling may come early if scroll flicker needs it.
+9. **Phase 4.4 (2×2 backgrounds)** — schedule when a pupil hits
+   the alert often enough to be a nuisance, or when the RPG /
+   top-down content stream is producing 4-screen-shaped worlds.
+10. **Phase 4.5 nice-to-haves** picked up opportunistically — OAM
+    cycling may come early if scroll flicker needs it.
 
 ## Out of scope
 

@@ -385,6 +385,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
     <a class="page-link active" href="behaviour.html" title="You are here — mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
     <a class="page-link" href="builder.html" title="Build the game by ticking modules — no C required">🧱 Builder</a>
     <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
+    <a class="page-link" href="gallery.html" title="Browse projects published from across the class">🖼 Gallery</a>
   </nav>
   <div class="toolbar">
     <span id="save-status" class="saved" title="Loading…">●</span>
@@ -400,10 +401,12 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
           <button type="button" id="btn-project-new">+ New project…</button>
           <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
           <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
+          <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
           <hr class="tb-inline-divider">
           <div class="tb-section-label">Save &amp; restore</div>
           <button type="button" id="btn-save-all"  class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
           <button type="button" id="btn-load-all"             title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+          <button type="button" id="btn-recover" title="Recover from a snapshot or backup">♻ Recover from snapshot…</button>
         </div>
       </details>
     </div>
@@ -527,6 +530,8 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 </dialog>
 
 <script src="storage.js"></script>
+<script src="a11y.js"></script>
+<script src="project-menu.js"></script>
 <script src="feedback.js"></script>
 <script src="help.js"></script>
 <!-- Shared Play pipeline + its BuilderAssembler deps.  Behaviour has
@@ -1756,6 +1761,11 @@ function init() {
   Storage.wireBasicProjectActions({
     makeFreshState: () => createDefaultState(),
   });
+  // Wire the shared Recover-from-snapshot + Migration-backup buttons.
+  // ProjectMenu.wire is a no-op for any button that's missing or
+  // already has a handler attached — Backgrounds + Sprites keep
+  // their inline wiring untouched.
+  if (window.ProjectMenu) window.ProjectMenu.wire();
 
   // First render -----------------------------------------------
   renderProjectsMenu();

@@ -31,6 +31,7 @@ import json
 import os
 import pathlib
 import re
+import secrets
 import shutil
 import socket
 import socketserver
@@ -57,6 +58,20 @@ LESSONS_DIR = ROOT / "lessons"
 SNIPPETS_DIR = ROOT / "snippets"
 FEEDBACK_PATH = ROOT / "feedback.jsonl"
 FEEDBACK_HANDLED_PATH = ROOT / "feedback-handled.json"
+
+# Phase 4.2 — published-project gallery.  Lives outside WEB_DIR so a
+# pupil running the editor can't accidentally clobber another pupil's
+# entry from a project's import/export.  No auth on /gallery/remove
+# today (single-machine classroom assumption); the plan is to gate it
+# on the teacher role once accounts ship — see next-steps-plan.md §4.6.
+GALLERY_DIR = ROOT / "tools" / "gallery"
+GALLERY_LOCK = threading.Lock()
+GALLERY_MAX_BODY = 4 * 1024 * 1024  # 4 MB — ROM + preview + project state.
+GALLERY_MAX_TITLE = 80
+GALLERY_MAX_DESC = 500
+GALLERY_MAX_HANDLE = 40
+GALLERY_SOURCE_PAGES = ("builder", "code")
+GALLERY_FILES = ("rom.nes", "preview.png", "project.json", "metadata.json")
 
 FEEDBACK_CATEGORIES = ("feature", "broken", "general")
 FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code")
@@ -1949,6 +1964,163 @@ def run_play(body):
 
 
 # ---------------------------------------------------------------------------
+# Gallery (Phase 4.2)
+# ---------------------------------------------------------------------------
+
+# Slug builder.  Lower-cases title, replaces every non-[a-z0-9] run
+# with a single dash, trims leading/trailing dashes, caps length, and
+# tacks on a 4-char random suffix so two pupils calling their game
+# "Untitled" don't collide.
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+_SLUG_FORBIDDEN = {"", ".", ".."}
+
+
+def _gallery_slug(title):
+    base = _SLUG_RE.sub("-", (title or "").lower()).strip("-")[:48]
+    if base in _SLUG_FORBIDDEN:
+        base = "untitled"
+    suffix = secrets.token_hex(2)  # 4 hex chars
+    return f"{base}-{suffix}"
+
+
+def _gallery_metadata_path(slug):
+    return GALLERY_DIR / slug / "metadata.json"
+
+
+def _gallery_load_metadata(slug):
+    """Read a gallery entry's metadata.json.  Returns None on any error."""
+    try:
+        with _gallery_metadata_path(slug).open("r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            data["slug"] = slug
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def _gallery_list_entries():
+    """Return every gallery entry's metadata, newest first.  Skips
+    folders without a valid metadata.json so a half-written publish
+    in flight can't break the gallery page."""
+    if not GALLERY_DIR.exists():
+        return []
+    out = []
+    for child in GALLERY_DIR.iterdir():
+        if not child.is_dir():
+            continue
+        meta = _gallery_load_metadata(child.name)
+        if meta is None:
+            continue
+        out.append(meta)
+    out.sort(key=lambda m: m.get("ts", ""), reverse=True)
+    return out
+
+
+def _gallery_safe_slug(slug):
+    """Reject path-traversal / odd chars before touching the filesystem."""
+    if not isinstance(slug, str):
+        return None
+    if not slug or slug in _SLUG_FORBIDDEN:
+        return None
+    if "/" in slug or "\\" in slug or ".." in slug:
+        return None
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,80}", slug):
+        return None
+    return slug
+
+
+def _gallery_decode_b64(s, max_bytes):
+    if not isinstance(s, str):
+        raise ValueError("expected base64 string")
+    try:
+        raw = base64.b64decode(s, validate=True)
+    except Exception as e:
+        raise ValueError(f"bad base64: {e}")
+    if len(raw) > max_bytes:
+        raise ValueError(f"payload too large ({len(raw)} > {max_bytes} bytes)")
+    return raw
+
+
+def _gallery_publish(body):
+    """Validate, slugify, and write a gallery entry to disk.  Caller
+    holds GALLERY_LOCK so two near-simultaneous publishes don't collide
+    on the same slug."""
+    title = (body.get("title") or "").strip()[:GALLERY_MAX_TITLE]
+    if not title:
+        raise ValueError("title required")
+    description = (body.get("description") or "").strip()[:GALLERY_MAX_DESC]
+    handle = (body.get("pupil_handle") or "").strip()[:GALLERY_MAX_HANDLE]
+    source = body.get("source_page") if body.get("source_page") in GALLERY_SOURCE_PAGES else "builder"
+    project = body.get("project")
+    if not isinstance(project, dict):
+        raise ValueError("project (dict) required")
+    rom = _gallery_decode_b64(body.get("rom_b64"), 1 * 1024 * 1024)
+    preview = _gallery_decode_b64(body.get("preview_b64"), 512 * 1024)
+    if not rom.startswith(b"NES\x1a"):
+        raise ValueError("rom_b64 does not look like an iNES file")
+    if not preview.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("preview_b64 does not look like a PNG")
+
+    GALLERY_DIR.mkdir(parents=True, exist_ok=True)
+    # Retry slug generation a few times if the random suffix collides.
+    for _ in range(8):
+        slug = _gallery_slug(title)
+        target = GALLERY_DIR / slug
+        if not target.exists():
+            break
+    else:
+        raise RuntimeError("could not allocate a unique slug after 8 attempts")
+
+    target.mkdir(parents=True, exist_ok=False)
+    (target / "rom.nes").write_bytes(rom)
+    (target / "preview.png").write_bytes(preview)
+    (target / "project.json").write_text(
+        json.dumps(project, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    metadata = {
+        "title": title,
+        "description": description,
+        "pupil_handle": handle,
+        # `owner` is reserved for the future-account feature
+        # (next-steps-plan.md §4.6) — gallery removes will be gated on
+        # the owning account when this isn't None.
+        "owner": None,
+        "source_page": source,
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "rom_size": len(rom),
+        "preview_size": len(preview),
+    }
+    (target / "metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    metadata["slug"] = slug
+    return metadata
+
+
+def _gallery_remove(slug):
+    """Best-effort folder removal.  Returns True if the folder existed
+    and is gone afterwards.  No auth — see header comment on
+    GALLERY_DIR for the future-accounts plan."""
+    target = GALLERY_DIR / slug
+    if not target.exists():
+        return False
+    # Belt-and-braces: never recurse outside GALLERY_DIR.
+    try:
+        resolved = target.resolve()
+        gallery_resolved = GALLERY_DIR.resolve()
+    except OSError:
+        return False
+    if gallery_resolved not in resolved.parents and resolved != gallery_resolved:
+        return False
+    shutil.rmtree(target, ignore_errors=True)
+    return not target.exists()
+
+
+# ---------------------------------------------------------------------------
 # HTTP plumbing
 # ---------------------------------------------------------------------------
 
@@ -1984,6 +2156,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._snippet_body(unquote(parsed.path[len("/snippets/"):]))
         if parsed.path == "/feedback":
             return self._feedback_viewer()
+        if parsed.path == "/gallery/list":
+            return self._gallery_list_response()
+        if parsed.path.startswith("/gallery/"):
+            # /gallery/<slug>/<file> — serve the four files written by
+            # _gallery_publish.  Anything else under /gallery/ (e.g.
+            # /gallery/index.html) falls through to SimpleHTTPRequestHandler
+            # so a future static gallery template still works.
+            served = self._gallery_static(parsed.path)
+            if served is not None:
+                return served
         return super().do_GET()
 
     def _lessons_index(self):
@@ -2068,6 +2250,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._feedback()
         if parsed.path == "/feedback/handled":
             return self._feedback_toggle_handled()
+        if parsed.path == "/gallery/publish":
+            return self._gallery_publish_response()
+        if parsed.path == "/gallery/remove":
+            return self._gallery_remove_response()
         return self.send_error(404)
 
     def _feedback(self):
@@ -2153,6 +2339,93 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 current.discard(idx)
             _save_handled_set(current)
         return self._json(200, {"ok": True})
+
+    # ----- Gallery (Phase 4.2) ------------------------------------------
+
+    def _gallery_list_response(self):
+        try:
+            entries = _gallery_list_entries()
+        except Exception as e:
+            sys.stderr.write(f"[playground] gallery list failed: {e}\n")
+            return self._json(500, {"ok": False, "error": "could not read gallery"})
+        return self._json(200, {"ok": True, "entries": entries})
+
+    def _gallery_static(self, path):
+        # path is /gallery/<slug>/<file>.  Anything else returns None
+        # so the caller falls back to the static-file handler.
+        rest = path[len("/gallery/"):]
+        if "/" not in rest:
+            return None
+        slug, _, fname = rest.partition("/")
+        slug = _gallery_safe_slug(slug)
+        if slug is None or fname not in GALLERY_FILES:
+            return None
+        target = GALLERY_DIR / slug / fname
+        if not target.is_file():
+            self.send_error(404)
+            return True
+        try:
+            data = target.read_bytes()
+        except OSError as e:
+            self.send_error(500, f"could not read {fname}: {e}")
+            return True
+        ctype = {
+            "rom.nes":      "application/octet-stream",
+            "preview.png":  "image/png",
+            "project.json": "application/json; charset=utf-8",
+            "metadata.json": "application/json; charset=utf-8",
+        }[fname]
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        # Pupils download these via <a download> — give them sensible names.
+        if fname in ("rom.nes", "project.json"):
+            self.send_header("Content-Disposition",
+                             f'attachment; filename="{slug}-{fname}"')
+        self.end_headers()
+        self.wfile.write(data)
+        return True
+
+    def _gallery_publish_response(self):
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0 or length > GALLERY_MAX_BODY:
+            return self._json(400, {"ok": False, "error": "bad payload size"})
+        try:
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+        if not isinstance(body, dict):
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+        try:
+            with GALLERY_LOCK:
+                meta = _gallery_publish(body)
+        except ValueError as e:
+            return self._json(400, {"ok": False, "error": str(e)})
+        except Exception as e:
+            sys.stderr.write(f"[playground] gallery publish failed: {e}\n")
+            return self._json(500, {"ok": False, "error": "could not publish"})
+        return self._json(200, {"ok": True, "slug": meta["slug"], "metadata": meta})
+
+    def _gallery_remove_response(self):
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0 or length > 4096:
+            return self._json(400, {"ok": False, "error": "bad payload size"})
+        try:
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+        if not isinstance(body, dict):
+            return self._json(400, {"ok": False, "error": "bad JSON"})
+        slug = _gallery_safe_slug(body.get("slug"))
+        if slug is None:
+            return self._json(400, {"ok": False, "error": "bad slug"})
+        with GALLERY_LOCK:
+            removed = _gallery_remove(slug)
+        if not removed:
+            return self._json(404, {"ok": False, "error": "no such entry"})
+        return self._json(200, {"ok": True})
+
+    # --------------------------------------------------------------------
 
     def _json(self, code, obj):
         data = json.dumps(obj).encode("utf-8")
