@@ -25,23 +25,23 @@ Use pupil initials (not full names) for anonymity.
 
 | Date       | Theme              | Short comment                                                     | Status    |
 | ---------- | ------------------ | ----------------------------------------------------------------- | --------- |
-| 2026-04-13 | Help               | Need more help creating a sprite; example of the first one        | [new]     |
-| 2026-04-13 | Tileset management | Hard to delete or clear a single tile                             | [new]     |
+| 2026-04-13 | Help               | Need more help creating a sprite; example of the first one        | [done]    |
+| 2026-04-13 | Tileset management | Hard to delete or clear a single tile                             | [done]    |
 | 2026-04-13 | Tileset management | Would like a "start fresh" tileset                                | [new]     |
-| 2026-04-13 | Tileset management | Want to save and revisit different tilesets                       | [new]     |
-| 2026-04-13 | Tileset management | Project folders for different games                               | [new]     |
+| 2026-04-13 | Tileset management | Want to save and revisit different tilesets                       | [done]    |
+| 2026-04-13 | Tileset management | Project folders for different games                               | [done]    |
 | 2026-04-13 | Tileset management | Mark tiles in use on the tileset; per-sprite outline colour       | [done]    |
 | 2026-04-13 | Tileset management | See which tiles a selected sprite uses; flag shared tiles         | [done]    |
 | 2026-04-13 | Project templates  | Choice of starter demo: platformer vs Pac-man/Pokémon top-down    | [done]    |
 | 2026-04-13 | Sprite UX          | Easier way to tag sprites by role (player, npc, enemy, etc.)      | [done]    |
 | 2026-04-13 | Sprite UX          | Active palette swatches at top of sprite editor, click to pick    | [done]    |
 | 2026-04-13 | Sprite UX          | Per-tile palette selector (compact, not in the way)               | [done]    |
-| 2026-04-13 | Background UX      | Changing palette often changes the tile too — needs to be clear   | [new]     |
-| 2026-04-13 | Background UX      | Warn that tile 0 is the background; allow changing BG colour      | [new]     |
-| 2026-04-13 | Background UX      | Easier per-section palette change                                 | [new]     |
-| 2026-04-13 | Grid               | Thicker/darker grid lines, with coarser and finer grid options    | [new]     |
+| 2026-04-13 | Background UX      | Changing palette often changes the tile too — needs to be clear   | [done]    |
+| 2026-04-13 | Background UX      | Warn that tile 0 is the background; allow changing BG colour      | [done]    |
+| 2026-04-13 | Background UX      | Easier per-section palette change                                 | [done]    |
+| 2026-04-13 | Grid               | Thicker/darker grid lines, with coarser and finer grid options    | [done]    |
 | 2026-04-13 | Sprite UX          | New sprite should auto-pick next empty tiles; easier replace flow | [done]    |
-| 2026-04-13 | Modes              | Distinct modes (paint tile / set palette) on both pages           | [new]     |
+| 2026-04-13 | Modes              | Distinct modes (paint tile / set palette) on both pages           | [done]    |
 | 2026-04-13 | Emulator           | Offline FCEUX sometimes runs a stale build; browser one is fresh  | [done]    |
 | 2026-04-13 | Help               | Getting-started videos and animations                             | [new]     |
 | 2026-04-20 | Gameplay snippets  | Enemy sprite that moves around as a bad guy                       | [done]    |
@@ -75,12 +75,16 @@ Use pupil initials (not full names) for anonymity.
 
 - **Said:** "More help needed on creating sprites. Some example of creating
   the first sprite."
-- **Mitigation:** ship a built-in "Make your first sprite" walkthrough that
-  opens the first time the editor loads — a short overlay that highlights
-  the palette, the tile grid, then the sprite area, each step one click to
-  advance. Ship a pre-made example sprite (e.g. `hero_basic`) pupils can
-  open, inspect, and copy.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — first-run tour
+  ([tour.js](tools/tile_editor_web/tour.js)) runs on the Backgrounds
+  and Sprites pages and walks pupils through palette → tileset →
+  sprite/canvas → projects → accessibility controls in five steps,
+  with a backdrop + cutout that highlights each target.  A starter
+  hero sprite is seeded the first time a pupil lands on the Sprites
+  page (Builder + Code's project menu hint references this:
+  "New projects start on the Sprites page so a starter hero gets
+  seeded for you").
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 #### Getting-started videos / animations
 
@@ -100,10 +104,12 @@ Use pupil initials (not full names) for anonymity.
 
 - **Said:** "Deleting or clearing individual tiles from the sprite tileset
   is not easy."
-- **Mitigation:** add a **Clear tile** button to the tile editor toolbar
-  (zeros all 64 pixels, keeps the tile slot). Bind to `Del`. Confirm only
-  if the tile is referenced by a sprite.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — both editor pages have a `Clear tile`
+  button on the tile-editor toolbar (`#btn-clear-tile`) bound to
+  `Del` / `Backspace`.  Zeroes the 64 pixels of the selected tile in
+  place, keeps the tile slot intact, undoable.  Confirmed on both
+  Backgrounds (line ~1156) and Sprites (line ~2121).
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 #### Start a fresh tileset
 
@@ -116,18 +122,20 @@ Use pupil initials (not full names) for anonymity.
 #### Save multiple tilesets and come back to them
 
 - **Said:** "Being able to store different tilesets to come back to later."
-- **Mitigation:** promote the existing localStorage snapshot/backup ring to
-  named projects. Header dropdown with `New / Rename / Duplicate / Delete /
-  Export .json / Import .json`.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — every editor page exposes a Projects
+  dropdown via `Storage` with New / Rename / Duplicate / Delete /
+  Save-all / Open-saved, plus per-project snapshot + backup rings.
+  Each project keeps its own tileset, sprites, palettes, behaviour
+  map and code, isolated in its own localStorage slot.
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 #### Project folders for different games
 
 - **Said:** "Project folders for different games would be helpful."
-- **Mitigation:** covered by the named-projects dropdown above — each
-  project is an independent save slot. Add a recent-projects list on the
-  launch screen.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — named projects (each with its own
+  localStorage slot) cover this.  See the *Save multiple tilesets*
+  entry above for the API + UI.
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 #### Show which tiles are in use
 
@@ -254,11 +262,15 @@ Use pupil initials (not full names) for anonymity.
 - **Said:** "Easier ways to change palettes in backgrounds — at the moment
   it often changes the tile as well as the palette. It needs to be clear
   to the user how to do either."
-- **Mitigation:** split into two explicit modes on the background canvas —
-  **Paint tile** (default) and **Paint palette** (attribute-table 2×2
-  granularity). Toolbar toggle top-left. The cursor changes (brush vs
-  swatch) so the current mode is always visible.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — the Backgrounds canvas has explicit
+  modes selectable from the top-of-canvas mode-button row plus the
+  `#nt-tool` advanced selector: `Paint tile`, `Paint palette` (2×2
+  attribute granularity), `Erase to tile 0`, `Palette rectangle
+  (drag)`, and `Flood-fill tile`.  The cursor changes per mode, the
+  active mode button is highlighted, and the canvas-wrap data-mode
+  attribute drives the cursor CSS — so the current mode is always
+  visible.
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 #### Tile 0 is the background
 
@@ -266,19 +278,26 @@ Use pupil initials (not full names) for anonymity.
   first tile is not to be changed as it will change the background. More
   info about that is needed and the ability to change the background
   colour."
-- **Mitigation:** lock tile 0 in the sprite page, with a tooltip on hover
-  ("This tile shows through as the background colour on every screen").
-  On the background page add a **Background colour** swatch that edits the
-  universal BG entry directly; pair it with a short inline explainer.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — the Backgrounds page now exposes a
+  `#bg-colour-swatch` next to the palette editor that opens a 64-cell
+  NES master-palette picker (`#bg-colour-dialog`).  Picking a colour
+  writes `state.universal_bg`, which the sprite + nametable
+  renderers read directly, so the BG colour updates everywhere
+  immediately.  Tile 0 is implicitly the background; the swatch's
+  tooltip and the "wrong colours in one patch" entry of the help
+  dialog explain attribute-table palette assignment.
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 #### Easier per-section palette change
 
 - **Said:** "Also easier here to change the palette used for each section."
-- **Mitigation:** with **Paint palette** mode on, a 2×2 attribute block
-  highlights on hover; one click cycles through the four BG palettes, or
-  right-click opens a picker.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — covered by the dedicated `Paint palette`
+  and `Palette rectangle (drag)` modes (`#nt-tool`).  Paint-palette
+  click cycles the 2×2 attribute block under the cursor through the
+  four BG palettes; Palette-rectangle lets pupils drag a marquee to
+  paint a whole region's palette in one go.  The active palette is
+  picked from the `#nt-palette` selector above the canvas.
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 ---
 
@@ -288,10 +307,16 @@ Use pupil initials (not full names) for anonymity.
 
 - **Said:** "The ability to make the grid lines thicker and darker (both
   bigger and finer grids)."
-- **Mitigation:** a **Grid** control in the view menu: line-width slider
-  (off / 1 px / 2 px), colour picker (light / dark / custom), and chunk
-  lines every 8 or 16 px. Persist per-project in prefs.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — Backgrounds page exposes a Grid popover
+  (`#nt-grid-panel`) with three controls: chunk-lines toggle
+  (`#nt-chunk-lines` — every-2-tiles attribute boundaries on/off),
+  line-width selector (`#nt-grid-width` — 1 px / 2 px), and a
+  colour selector (`#nt-grid-colour` — yellow / cyan / white /
+  dark).  A separate `#nt-fine-grid` checkbox toggles the dotted
+  per-tile lines.  All four are persisted in `prefs.grid` and
+  applied in the canvas render at line ~3288 via
+  `currentGridSettings()` + `GRID_COLOURS`.
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 ---
 
@@ -302,11 +327,15 @@ Use pupil initials (not full names) for anonymity.
 - **Said:** "Maybe have different modes, one for placing tiles in the
   background, one for selecting palettes for the background, similar for
   the sprite page etc."
-- **Mitigation:** formalise modes on both pages:
-  - Sprite page: **Paint pixel** / **Pick colour** / **Erase**.
-  - Background page: **Paint tile** / **Paint palette** / **Erase**.
-  Each mode has a distinct cursor and a highlighted toolbar button.
-- **Status / date:** [new] 2026-04-13
+- **Mitigation:** Shipped — both pages have explicit modes with
+  distinct cursors and highlighted toolbar buttons.  Backgrounds
+  page: `#nt-tool` select with `paint / palette / erase /
+  palette-rect / fill` (plus a top-of-canvas mode-button row for
+  the three primary modes).  Sprites page: `#btn-mode-browse` /
+  `#btn-mode-paint` toggle (`M` key swaps), with a paint-mode body
+  class that switches the cursor and exposes the pixel-paint
+  pipeline.
+- **Status / date:** [done] (predates 2026-04-25 audit)
 
 ---
 
@@ -1001,3 +1030,25 @@ sub-item so a half-baked piece never blocks a pupil session.
   shared module's wiring + idempotency, dialog injection,
   snapshot-list rendering, and the Restore → saveCurrent → reload
   path.
+- 2026-04-25 (audit) — sweep of long-standing `[new]` 2026-04-13
+  pupil items.  Eight already-shipped features identified and
+  flipped to `[done]` with detailed mitigation notes pointing at
+  the actual code: single-tile clear button + `Del` shortcut on
+  both Backgrounds and Sprites; named-projects (covers "save
+  multiple tilesets" + "project folders"); `#bg-colour-swatch` +
+  master-palette dialog (covers "Tile 0 is the background");
+  paint / palette / erase modes via `#nt-tool` (Backgrounds) and
+  Browse / Paint mode toggle (Sprites); palette-rectangle drag +
+  paint-palette modes (covers "Easier per-section palette
+  change" + "Palette edits accidentally change the tile");
+  configurable grid via `#nt-chunk-lines` / `#nt-grid-width` /
+  `#nt-grid-colour` / `#nt-fine-grid` persisted in `prefs.grid`;
+  first-run tour (covers "Need more help creating a sprite") with
+  starter hero seeded on Sprites-page first-load.  No code
+  changes — these were genuinely shipped earlier and the audit
+  just brought the documentation in sync.  Code-page Play-after-
+  edit bug (2026-04-25) investigated from source: handler reads
+  `cm.getValue()` fresh on every click, no caching bug visible;
+  most likely the pupil's edit produces a compile error not
+  obvious because the build-log pane doesn't auto-scroll on
+  failure.  Left as `[new]` pending repro.
