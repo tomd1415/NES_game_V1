@@ -102,8 +102,22 @@ Every module has a **tick-box** that turns it on or off.  Modules
 that are off contribute nothing to the emitted `main.c`.
 
 ### `game`
-Picks the base template.  Only `platformer` is active today;
-`topdown` is stubbed out.
+Picks the player-physics style.  Two options:
+
+- **Platformer** (default) — side-on, gravity, jumping, ladder
+  climbing.  The original Step 1 / SMB-style mental model.
+- **Top-down** — Pokémon / Zelda-style four-way movement.  No
+  gravity, no jump, ladder tiles are walkable floor.  Wall and
+  solid-ground tiles still block movement on every axis.
+
+Both styles share the same `platformer.c` template.  Picking
+top-down emits `#define BW_GAME_STYLE 1` into the declarations
+slot; the template's `#if BW_GAME_STYLE == 0 / 1` blocks gate
+the platformer-only pieces (gravity loop, jump state machine,
+ladder probe, scene-sprite gravity) and the top-down equivalents
+(4-way step + collision).  All other modules — damage, dialogue,
+doors, pickups, HUD, win conditions, scene-instance AI — work
+identically in either style; only player physics swaps.
 
 ### `players` + `players.player1` + `players.player2`
 Configure the main character(s).  Fields per player: `startX`,
@@ -174,13 +188,18 @@ per-tile metadata).
 
 ### `dialogue`
 NPC speech boxes.  Press **B** near an NPC-tagged sprite (within
-`proximity` tiles of the player's centre) to pop up a text row at
+`proximity` tiles of the player's centre) to pop up text rows at
 the bottom of the screen.  Press B again to close.  See §4 for
 the **critical font-tile convention** — pupils have to paint
 letter glyphs on the Backgrounds page for text to render.
 
 Extra config:
 
+- **Lines 1–3** (`text`, `text2`, `text3`) — up to 3 rows of
+  text.  Trailing-empty lines drop, so leaving line 2 and 3
+  blank still gives a single-row dialog (matches pre-3.2
+  behaviour exactly when only line 1 is filled).  Each line is
+  capped at 28 characters.
 - **Pause while open** (`pauseOnOpen`, default on) — freezes both
   players in place (zeros `walk_speed` / `climb_speed`, cancels
   any in-progress jump, swallows the current pad edge) while the
@@ -191,10 +210,20 @@ Extra config:
   when it hits zero.  B still closes early even when a timer is
   set, so pupils who read fast aren't stuck waiting.
 
+**Per-NPC dialogue text.**  In the Builder's Scene module, each
+NPC scene-instance gains a "💬 says:" text input below its row.
+Filling it in overrides the module-level shared text for THAT
+NPC only (single line up to 28 characters); leaving it blank
+falls back to the shared multi-line text.  Pupils can mix —
+have most NPCs share a default greeting and one or two named
+NPCs say something specific.
+
 Emitted macros control the extra code paths so the baseline ROM
 stays byte-identical when dialogue is off:
 `BW_DIALOG_PAUSE` (0/1) gates the save/restore + freeze block,
-and `BW_DIALOG_AUTOCLOSE` (0–240) gates the timer decrement.
+`BW_DIALOG_AUTOCLOSE` (0–240) gates the timer decrement,
+`BW_DIALOG_ROW_COUNT` (1–3) controls the vblank loop, and
+`BW_DIALOG_PER_NPC` (0/1) gates the per-NPC override table.
 
 ### `win_condition`
 How the pupil's game ends.  Two types:
@@ -419,20 +448,26 @@ this automatically.
 
 ## 8. Known limitations
 
-- **Multi-line dialogue** — current boxes are one row (28 tiles).
-  Wrapping would need either multiple strings or a richer text
-  engine.
-- **Per-door / per-NPC config** — doors and dialogue modules use
-  a single config object today.  Per-tile / per-sprite metadata is
-  a future UI upgrade.
+- **Per-door config** — doors module still uses a single config
+  object today.  Per-tile metadata (each painted DOOR tile having
+  its own destination) is a future UI upgrade; per-NPC dialogue
+  shipped in Phase 3.3.
 - **No audio** — waits on the FamiStudio engine chunk.
-- **P2 jump animation** — P2 walk animation works; jump still
-  uses the static layout.
 - **Scrolling + multi-background** — `SCROLL_BUILD` projects
   can still use doors, but the camera follow snaps to the new
   room with no transition.  Minor visual quirk, not a breaker.
 - **Player-vs-player collision** — not implemented.  P1 and P2
   can overlap freely.
+- **Select tool resize handles** — the Sprites-page Select tool
+  supports marquee + delete + drag-to-move + clipboard copy/paste,
+  but resizing a selection by dragging a handle isn't wired yet.
+  Filed as a follow-up.
+- **Vertical scrolling** — the project's `NES_MIRRORING: 1`
+  (horizontal arrangement) lets `$2800` mirror `$2000`, which
+  rules out tall worlds with a unique top/bottom nametable.
+  Pupils building horizontal scrollers are unaffected; if you
+  want a tall world, that needs a different mirroring choice
+  (one-way rebuild).
 
 See the `Deferred from …` sections in
 [changelog-implemented.md](changelog-implemented.md) for the full

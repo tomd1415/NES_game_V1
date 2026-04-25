@@ -1,22 +1,22 @@
 # Next-steps plan (post pupil-fix pass)
 
 > **Status stamp (2026-04-25).**  Phase 1 complete except 1.1 C2
-> (parked pending teacher investigation).  **Phase 2 is done** —
-> 2.2 (palette picker QoL: hover-to-preview + recent colours),
-> 2.3 (inline animation strip above the composition canvas) and
-> 2.1 (drawing tools) all shipped.  2.1 was mostly already in place
-> from Sprint 9; this session closed the remaining gaps (filled
-> Rect + filled Circle tool variants, Alt-letter keyboard shortcuts
-> for tool switching, centralised tool-type check).  Still deferred
-> from 2.1's spec: Select → resize drag handles, shelved as a
-> self-contained follow-up.  All Phase 1 polish items landed:
-> shared `help.js` page-tabs + Feedback toggle (1.2), project-
-> dropdown parity (1.3), Backgrounds paint-with-palette row (1.4).
-> See the "Phase 1", "Scroll-flicker follow-up", and "Phase 2.1 /
-> 2.2 / 2.3" entries in
+> (parked pending teacher investigation; debug guide at
+> [DEBUGGING_FCEUX.md](DEBUGGING_FCEUX.md) supports the workflow).
+> **Phase 2 done** (2.1 drawing tools + 2.2 palette QoL + 2.3
+> animation strip).  **Phase 3 done** — all four items shipped in
+> a single session: 3.1 RPG / top-down preset (BW_GAME_STYLE
+> macro, both templates symmetrically gated, new topdown smoke
+> suite), 3.2 multi-line dialogue (1-3 rows, BW_DIALOG_ROW_COUNT
+> + table indirection + per-row vblank loop), 3.3 per-NPC
+> dialogue text (each NPC instance can override the shared
+> dialogue line, falls back when empty), 3.4 P2 jump animation
+> (priority jump > walk > static with proper cycle reset).  Still
+> deferred: 1.1 C2 scroll flicker, 2.1 Select → resize drag
+> handles.  See the "Phase 3.1 / 3.2 / 3.3 / 3.4" entries in
 > [changelog-implemented.md](changelog-implemented.md).  **Next:
-> Phase 3** (content & templates — RPG top-down preset, multi-line
-> dialogue, per-NPC dialogue, P2 jump animation).
+> Phase 4** (big standalone initiatives — accessibility first,
+> then gallery, then audio).
 
 Where to go from here, as of 2026-04-24.  Two preceding plan docs
 remain useful history:

@@ -3137,3 +3137,169 @@ update code went with it).
 Tests green: 15 syntax checks, 5 invariants, byte-identical ROM
 baseline, 9 smoke suites.  Sprites-only changes — no template
 or emitted-C touched.
+
+### FCEUX PPU-viewer guide — 2026-04-25
+
+New top-level doc
+[DEBUGGING_FCEUX.md](DEBUGGING_FCEUX.md) walks through using
+fceux's built-in PPU / Name Table / OAM viewers to diagnose
+graphics issues that don't show in jsnes (specifically: the
+remaining C2 scroll-flicker investigation that's still parked
+on the teacher's bench).  Six steps from "build a ROM that
+reproduces" through to "common findings, mapped to fixes."
+Also covers what to capture for a useful bug report.
+
+### Phase 3.1 — 2026-04-25 RPG / top-down preset
+
+The Builder's `game` module gains a working **Top-down**
+option (was placeholder-disabled "Coming in Phase B").  No
+second template file — both styles share `platformer.c` and
+the existing Step_Playground `main.c`, gated by a new
+`BW_GAME_STYLE` macro.
+
+- **`game` module**:
+  [tools/tile_editor_web/builder-modules.js](tools/tile_editor_web/builder-modules.js)
+  re-enables the Top-down enum option, gains an `applyToTemplate`
+  that emits `#define BW_GAME_STYLE 1` only when top-down is
+  picked.  Platformer (default) emits nothing — keeps the
+  byte-identical-baseline test passing because the absent
+  macro evaluates to 0 in cc65's preprocessor (`#if UNDEFINED
+  == 0` is true).
+- **Templates**: both
+  [tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+  and
+  [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+  gained symmetric `#if BW_GAME_STYLE == 0 / == 1` blocks
+  around:
+  - The player's vertical-movement section (ladders + jump +
+    gravity for platformer; 4-way step with wall collision
+    for top-down — UP / DOWN move `py` by `walk_speed`,
+    SOLID_GROUND / WALL block, no jump, no airborne state).
+  - The Player 2 vertical-movement section (matching
+    treatment).
+  - The scene-sprite gravity loop (top-down sprites stay
+    where placed).
+  - The walk-anim trigger condition: top-down counts UP / DOWN
+    keypresses as walking too (`pad & 0x0F` instead of the
+    platformer's `pad & 0x03`).
+- **Smoke suite**:
+  [tools/builder-tests/topdown.mjs](tools/builder-tests/topdown.mjs)
+  with four cases (T1–T4): default state emits no
+  BW_GAME_STYLE override, explicit platformer matches default,
+  top-down emits exactly one `#define BW_GAME_STYLE 1`, and
+  the end-to-end `/play` build of a top-down project succeeds.
+
+The `game` module's `BW_GAME_STYLE` switch is intentionally
+NOT a "scrap everything else" mode change.  Damage, dialogue,
+doors, pickups, HUD, win conditions, scene-instance AI all
+work unchanged in either style — the only thing that swaps is
+player physics.
+
+### Phase 3.2 — 2026-04-25 multi-line dialogue (1-3 rows)
+
+The dialogue module's text field grows from one line to three.
+
+- **Schema**: `text` is now "Line 1", with optional `text2` /
+  `text3` for "Line 2" / "Line 3".  Trailing-empty lines drop
+  (a "HELLO" + "" + "WORLD" config emits 3 rows on purpose;
+  "HELLO" + "" + "" emits 1).
+- **Emission**:
+  - One `bw_dialogue_text_<i>[]` byte array per non-trimmed
+    line (so a 3-line dialog emits `_0 _1 _2`, a 1-line
+    dialog just `_0`).
+  - Indexable lookup table `bw_dialogue_text_table[]` so the
+    runtime can pick row N by index without a chained `if /
+    else`.
+  - New macro `BW_DIALOG_ROW_COUNT` (1-3) drives the runtime
+    loop.
+- **Runtime**: the vblank PPU-write block in the dialogue
+  module's emitted code now loops over `BW_DIALOG_ROW_COUNT`
+  rows, recomputing the destination VRAM address +
+  `bg_nametable_0` offset per iteration.  Worst-case is 3 ×
+  28 = 84 PPU writes per draw or restore, ~840 cycles —
+  comfortably inside the ~2273-cycle NTSC vblank budget even
+  alongside scroll_stream + OAM DMA.
+- **Tests**: round2-dialogue.mjs gains B6 (1- and 2-row
+  emissions + per-row vblank loop assertion).  Existing
+  cases (A, B1–B5, E1) keep passing — the single-line
+  default code path is byte-for-byte similar (the only
+  change pupils with no overrides see is the new
+  `BW_DIALOG_ROW_COUNT` macro and the table indirection).
+
+### Phase 3.3 — 2026-04-25 per-NPC dialogue text
+
+Each NPC scene-instance can now have its own dialogue line —
+walk up to a different NPC, get a different line.  When the
+NPC's text is empty, the dialog falls back to the module-
+level multi-line text from Phase 3.2.
+
+- **State shape**: scene `instances[i]` gains an optional
+  `text` field that's only meaningful when the matching
+  sprite has `role === 'npc'`.
+- **Builder UI**:
+  [tools/tile_editor_web/builder.html](tools/tile_editor_web/builder.html)
+  scene-instance rows now render an extra `.scene-instance-
+  text` row below NPC instances with a "💬 says:" label and
+  a 28-char text input.  Non-NPC instances render the row
+  unchanged so the 7-column grid layout from Phase 1's B4 is
+  untouched.
+- **Emission**: when any NPC instance has non-empty text,
+  the dialogue module's `applyToTemplate` walks
+  `state.builder.modules.scene.config.instances`, emits one
+  `bw_dialogue_npc_<i>[]` array per overriding NPC, plus a
+  lookup table `bw_dialogue_per_npc[NUM_STATIC_SPRITES]`
+  with NULL entries for non-overriders.  `BW_DIALOG_PER_NPC`
+  (0 / 1) gates the new code paths so projects without any
+  per-NPC text emit nothing extra.
+- **Runtime**:
+  - The per-frame proximity-trigger block sets a new global
+    `bw_dialog_npc_idx = j` when it picks an NPC, so the
+    vblank writer knows which slot to look up.
+  - The vblank PPU-write block consults
+    `bw_dialogue_per_npc[bw_dialog_npc_idx]`; when non-NULL
+    it draws that single line instead of the module-level
+    table; `dlg_total` collapses to 1 row for that draw.
+    Close still restores `BW_DIALOG_ROW_COUNT` rows so the
+    screen returns to its pre-open state cleanly even when
+    open used a single-row override.
+- **Tests**: round2-dialogue.mjs gains B7 (covers the
+  "BW_DIALOG_PER_NPC 0 with no overrides", "1 with one
+  override", per-NPC array emission, npc-idx recording, and
+  vblank lookup).
+
+### Phase 3.4 — 2026-04-25 Player 2 jump animation
+
+Finishes the P1/P2 animation symmetry.  Pupils tag a
+`role=player2, style=jump` animation on the Sprites page;
+the runtime swaps to those frames while P2 is airborne.
+
+- **`playground_server.py`**: `anim_targets` list extended
+  with `("player2", "jump")` so the same machinery that
+  emits `ANIM_PLAYER2_WALK_*` now emits
+  `ANIM_PLAYER2_JUMP_*`.  Absent pairs cost nothing — the
+  count macro is 0 and the gated render block compiles out.
+- **Template**: new `p2_jump_frame` / `p2_jump_tick`
+  globals in
+  [tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+  (gated behind `ANIM_PLAYER2_JUMP_COUNT > 0`).  The P2
+  render block was a pure walk-or-static fork; it's now
+  walk-OR-jump-or-static with priority **jump > walk >
+  static** — pupils mid-jump see the jump pose even if
+  they're drifting sideways (matches SMB-style feel).  Both
+  cycles reset to frame 0 when neither animation owns the
+  frame.
+- **Tests**: round1-polish.mjs gains an `E3-jump` end-to-end
+  case that builds a state with a tagged P2 jump animation,
+  asserts `ANIM_PLAYER2_JUMP_COUNT` is in the assembled
+  source, and confirms the ROM links cleanly via `/play`.
+  The existing E4 "everything-on" case is extended to
+  include `withP2Jump`, exercising the simultaneous walk +
+  jump pair under the priority chooser.
+
+**Phase 3 done.**  All four items — RPG preset, multi-line
+dialogue, per-NPC text, P2 jump — landed.  Tests:
+`run-all.mjs` green: 15 syntax checks, 5 invariants,
+byte-identical ROM baseline (both templates received
+symmetric edits for 3.1), and **10 smoke suites** (the new
+`topdown.mjs` joins the existing nine; `round1-polish.mjs`
+and `round2-dialogue.mjs` gained new in-suite cases).

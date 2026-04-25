@@ -39,6 +39,17 @@
 #include "scroll.h"
 #endif
 
+// Game style — selected by the Builder's `game` module.  Undefined or
+// 0 = platformer (default; gravity, jump, ladders).  1 = top-down
+// (4-way movement, no gravity, classic Pokémon / Zelda-2 mental model)
+// when the Builder emits `#define BW_GAME_STYLE 1` into the
+// declarations slot.  cc65 treats undefined macros as 0 in `#if`
+// comparisons, so the default-platformer path needs no fallback
+// definition here — and crucially, leaving the macro undefined when
+// the Builder doesn't override it keeps the byte-identical-baseline
+// test (Step_Playground stock vs Builder template with no modules)
+// passing without "macro redefinition is not identical" errors.
+
 #define PPU_CTRL      *((unsigned char*)0x2000)
 #define PPU_MASK      *((unsigned char*)0x2001)
 #define OAM_ADDR      *((unsigned char*)0x2003)
@@ -143,6 +154,14 @@ unsigned char player2_dead;
 unsigned char bw_dialog_open;
 unsigned char bw_dialog_prev_b;
 unsigned char bw_dialog_cmd;
+#if BW_DIALOG_PER_NPC
+/* Phase 3.3 — per-NPC dialogue.  bw_dialog_npc_idx records WHICH NPC
+ * in the scene's sprite array the pupil triggered, so the vblank
+ * writer can pick that NPC's own line via the bw_dialogue_per_npc[]
+ * lookup.  When the looked-up entry is NULL (NPC has no override),
+ * the writer falls back to bw_dialogue_text_table from above. */
+unsigned char bw_dialog_npc_idx;
+#endif
 #if BW_DIALOG_AUTOCLOSE > 0
 unsigned char bw_dialog_timer;
 #endif
@@ -189,6 +208,15 @@ unsigned char walk_speed2 = 1;
  * cleanly each time they start walking. */
 unsigned char p2_walk_frame;
 unsigned char p2_walk_tick;
+#endif
+#if ANIM_PLAYER2_JUMP_COUNT > 0
+/* Phase 3.4 — Player 2 jump animation state.  Mirror of P2 walk;
+ * cycles a tagged `role=player2, style=jump` animation while P2 is
+ * airborne.  Jump animation has higher priority than walk (matches
+ * the SMB-style "always show jump pose mid-jump even if you're
+ * drifting sideways"). */
+unsigned char p2_jump_frame;
+unsigned char p2_jump_tick;
 #endif
 #endif
 
@@ -375,6 +403,10 @@ void main(void) {
     p2_walk_frame = 0;
     p2_walk_tick = 0;
 #endif
+#if ANIM_PLAYER2_JUMP_COUNT > 0
+    p2_jump_frame = 0;
+    p2_jump_tick = 0;
+#endif
 #endif
 
 #if PLAYER_HP_ENABLED
@@ -455,6 +487,8 @@ void main(void) {
             plrdir = 0x40;
         }
 
+#if BW_GAME_STYLE == 0
+        // ----- Platformer vertical movement: ladders + jump + gravity -----
         // Ladder probe.  If any tile the player overlaps is a LADDER the
         // player can move up/down with the D-pad and gravity is suspended.
         // Stepping sideways off the ladder resumes normal falling.
@@ -576,17 +610,64 @@ void main(void) {
                 jumping = 1;   // airborne (jump descent or walked off a ledge)
             }
         }
+#endif  /* BW_GAME_STYLE == 0 (platformer vertical) */
+
+#if BW_GAME_STYLE == 1
+        // ----- Top-down vertical movement: 4-way step with collision -----
+        // No gravity, no jump, no ladder.  UP/DOWN move the player by
+        // walk_speed pixels per frame just like LEFT/RIGHT do above; the
+        // SOLID_GROUND / WALL columns/rows in front of the player block
+        // the step so pupils get classic "you bump into a wall" feel.
+        // PLATFORM and LADDER tiles are walkable in top-down — there is
+        // no notion of "below" or "rungs to climb."
+        if (pad & 0x08) {                     // UP
+            if (py >= walk_speed) {
+                unsigned char ahead_row = (py - walk_speed) >> 3;
+                unsigned char left_col  = px >> 3;
+                unsigned char right_col = (px + (PLAYER_W << 3) - 1) >> 3;
+                unsigned char b_l = behaviour_at((unsigned int)left_col,  (unsigned int)ahead_row);
+                unsigned char b_r = behaviour_at((unsigned int)right_col, (unsigned int)ahead_row);
+                if (!(b_l == BEHAVIOUR_SOLID_GROUND || b_l == BEHAVIOUR_WALL
+                   || b_r == BEHAVIOUR_SOLID_GROUND || b_r == BEHAVIOUR_WALL)) {
+                    py -= walk_speed;
+                }
+            }
+        }
+        if (pad & 0x04) {                     // DOWN
+            if (py + (PLAYER_H << 3) + walk_speed <= WORLD_H_PX) {
+                unsigned char ahead_row = (py + (PLAYER_H << 3) + walk_speed - 1) >> 3;
+                unsigned char left_col  = px >> 3;
+                unsigned char right_col = (px + (PLAYER_W << 3) - 1) >> 3;
+                unsigned char b_l = behaviour_at((unsigned int)left_col,  (unsigned int)ahead_row);
+                unsigned char b_r = behaviour_at((unsigned int)right_col, (unsigned int)ahead_row);
+                if (!(b_l == BEHAVIOUR_SOLID_GROUND || b_l == BEHAVIOUR_WALL
+                   || b_r == BEHAVIOUR_SOLID_GROUND || b_r == BEHAVIOUR_WALL)) {
+                    py += walk_speed;
+                }
+            }
+        }
+        jumping = 0;   /* never airborne in top-down */
+        jmp_up  = 0;
+        on_ladder = 0;
+#endif  /* BW_GAME_STYLE == 1 (top-down vertical) */
 
         // Pick the active animation for this frame.  Jumping wins over
         // walking so the jump cycle plays even while drifting sideways.
         // Unassigned animations (count == 0) fall through to the static
         // player_tiles layout.
         anim_mode = 0;
-#if JUMP_FRAME_COUNT > 0
+#if JUMP_FRAME_COUNT > 0 && BW_GAME_STYLE == 0
         if (jumping) anim_mode = 2;
 #endif
 #if WALK_FRAME_COUNT > 0
+        // Top-down counts UP/DOWN as walking too, so the walk cycle
+        // plays on any direction press.  Platformer keeps the original
+        // LEFT|RIGHT bitmask so jumping doesn't auto-trigger walk.
+#if BW_GAME_STYLE == 1
+        if (anim_mode == 0 && (pad & 0x0F)) anim_mode = 1;
+#else
         if (anim_mode == 0 && (pad & 0x03)) anim_mode = 1;
+#endif
 #endif
 
         if (anim_mode == 2) {
@@ -621,6 +702,7 @@ void main(void) {
         }
         anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
 
+#if BW_GAME_STYLE == 0
 //>> gravity: Scene sprites fall until they land on solid_ground or platform. Tick 🕊 Flying on the Sprites page to make a sprite hover instead.
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             unsigned char foot_b;
@@ -635,6 +717,7 @@ void main(void) {
             if (ss_y[i] < 232) ss_y[i]++;  // fall 1 px/frame, clamp near screen bottom
         }
 //<<
+#endif  /* BW_GAME_STYLE == 0 — top-down has no gravity */
 
 #if PLAYER2_ENABLED
         /* ----------------------------------------------------------
@@ -682,7 +765,8 @@ void main(void) {
             plrdir2 = 0x40;
         }
 
-        /* Edge-triggered jump (no ceiling bonk in the MVP). */
+#if BW_GAME_STYLE == 0
+        /* Platformer P2: edge-triggered jump (no ceiling bonk in MVP). */
         if ((pad2 & 0x08) && !(prev_pad2 & 0x08) && !jumping2) {
             jumping2 = 1;
 //>> player2_jump_height: How high Player 2 jumps. Bigger number = higher.
@@ -713,6 +797,40 @@ void main(void) {
                 jumping2 = 1;
             }
         }
+#endif  /* BW_GAME_STYLE == 0 (P2 platformer vertical) */
+
+#if BW_GAME_STYLE == 1
+        /* Top-down P2: 4-way step with wall collision (mirror of P1 above). */
+        if (pad2 & 0x08) {                    /* UP */
+            if (py2 >= walk_speed2) {
+                unsigned char ahead_row = (py2 - walk_speed2) >> 3;
+                unsigned char left2  = px2 >> 3;
+                unsigned char right2 = (px2 + (PLAYER2_W << 3) - 1) >> 3;
+                unsigned char b_l = behaviour_at((unsigned int)left2,  (unsigned int)ahead_row);
+                unsigned char b_r = behaviour_at((unsigned int)right2, (unsigned int)ahead_row);
+                if (!(b_l == BEHAVIOUR_SOLID_GROUND || b_l == BEHAVIOUR_WALL
+                   || b_r == BEHAVIOUR_SOLID_GROUND || b_r == BEHAVIOUR_WALL)) {
+                    py2 -= walk_speed2;
+                }
+            }
+        }
+        if (pad2 & 0x04) {                    /* DOWN */
+            if (py2 + (PLAYER2_H << 3) + walk_speed2 <= WORLD_H_PX) {
+                unsigned char ahead_row = (py2 + (PLAYER2_H << 3) + walk_speed2 - 1) >> 3;
+                unsigned char left2  = px2 >> 3;
+                unsigned char right2 = (px2 + (PLAYER2_W << 3) - 1) >> 3;
+                unsigned char b_l = behaviour_at((unsigned int)left2,  (unsigned int)ahead_row);
+                unsigned char b_r = behaviour_at((unsigned int)right2, (unsigned int)ahead_row);
+                if (!(b_l == BEHAVIOUR_SOLID_GROUND || b_l == BEHAVIOUR_WALL
+                   || b_r == BEHAVIOUR_SOLID_GROUND || b_r == BEHAVIOUR_WALL)) {
+                    py2 += walk_speed2;
+                }
+            }
+        }
+        prev_pad2 = pad2;
+        jumping2 = 0;
+        jmp_up2  = 0;
+#endif  /* BW_GAME_STYLE == 1 (P2 top-down vertical) */
 #endif  /* PLAYER2_ENABLED */
 
         //@ insert: per_frame
@@ -773,13 +891,40 @@ void main(void) {
          * `role=player2, style=walk`, ANIM_PLAYER2_WALK_COUNT flips
          * on, per-frame tick advances below, and the render picks
          * the animated tile set when P2 is walking. */
-#if ANIM_PLAYER2_WALK_COUNT > 0
+#if (ANIM_PLAYER2_WALK_COUNT > 0) || (ANIM_PLAYER2_JUMP_COUNT > 0)
         {
             const unsigned char *p2_src_tiles = player2_tiles;
             const unsigned char *p2_src_attrs = player2_attrs;
             unsigned char p2_walking = (pad2 & 0x03) ? 1 : 0;
-            if (p2_walking && PLAYER2_W == ANIM_PLAYER2_WALK_W
-                           && PLAYER2_H == ANIM_PLAYER2_WALK_H) {
+            unsigned char p2_anim_picked = 0;
+#if ANIM_PLAYER2_JUMP_COUNT > 0
+            /* Phase 3.4 — jump beats walk so a P2 mid-jump shows the
+             * jump pose even if they are drifting sideways. */
+            if (jumping2 && PLAYER2_W == ANIM_PLAYER2_JUMP_W
+                         && PLAYER2_H == ANIM_PLAYER2_JUMP_H) {
+#if ANIM_PLAYER2_JUMP_COUNT > 1
+                p2_jump_tick++;
+                if (p2_jump_tick >= ANIM_PLAYER2_JUMP_TICKS) {
+                    p2_jump_tick = 0;
+                    p2_jump_frame++;
+                    if (p2_jump_frame >= ANIM_PLAYER2_JUMP_COUNT) {
+                        p2_jump_frame = 0;
+                    }
+                }
+#endif
+                {
+                    unsigned int p2_anim_off = (unsigned int)p2_jump_frame
+                        * ANIM_PLAYER2_JUMP_W * ANIM_PLAYER2_JUMP_H;
+                    p2_src_tiles = anim_player2_jump_tiles + p2_anim_off;
+                    p2_src_attrs = anim_player2_jump_attrs + p2_anim_off;
+                }
+                p2_anim_picked = 1;
+            }
+#endif
+#if ANIM_PLAYER2_WALK_COUNT > 0
+            if (!p2_anim_picked && p2_walking
+                && PLAYER2_W == ANIM_PLAYER2_WALK_W
+                && PLAYER2_H == ANIM_PLAYER2_WALK_H) {
 #if ANIM_PLAYER2_WALK_COUNT > 1
                 p2_walk_tick++;
                 if (p2_walk_tick >= ANIM_PLAYER2_WALK_TICKS) {
@@ -796,11 +941,21 @@ void main(void) {
                     p2_src_tiles = anim_player2_walk_tiles + p2_anim_off;
                     p2_src_attrs = anim_player2_walk_attrs + p2_anim_off;
                 }
-            } else {
-                /* Not walking → reset the cycle so it restarts clean
-                 * next time P2 moves. */
+                p2_anim_picked = 1;
+            }
+#endif
+            if (!p2_anim_picked) {
+                /* Neither animation chose this frame → reset cycles so
+                 * each plays from its first frame next time it owns
+                 * the render. */
+#if ANIM_PLAYER2_JUMP_COUNT > 0
+                p2_jump_frame = 0;
+                p2_jump_tick = 0;
+#endif
+#if ANIM_PLAYER2_WALK_COUNT > 0
                 p2_walk_frame = 0;
                 p2_walk_tick = 0;
+#endif
             }
             for (r = 0; r < PLAYER2_H; r++) {
                 for (c = 0; c < PLAYER2_W; c++) {

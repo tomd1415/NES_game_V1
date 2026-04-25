@@ -208,6 +208,90 @@ function assembleWithDialog(overrides) {
   }
   console.log('✓ B5 autoClose clamps to 240');
 }
+
+// Phase 3.2 — multi-line dialogue (1-3 rows).
+// Default config (text='HELLO', text2/text3 empty) → 1 row.
+// Two non-empty rows → 2 rows.  Trailing empties drop, leading
+// empties don't (leaving line 2 set but line 3 empty still gives 2).
+{
+  const out1 = assembleWithDialog({});  // default: text='HELLO'
+  if (!/^#define BW_DIALOG_ROW_COUNT 1$/m.test(out1)) {
+    console.error('FAIL B6a: default should emit ROW_COUNT 1'); process.exit(1);
+  }
+  if (!/static const unsigned char bw_dialogue_text_0\[\]/.test(out1)) {
+    console.error('FAIL B6b: default should emit bw_dialogue_text_0[]'); process.exit(1);
+  }
+  if (/static const unsigned char bw_dialogue_text_1\[\]/.test(out1)) {
+    console.error('FAIL B6c: default should NOT emit bw_dialogue_text_1[] (trailing-empty trim)'); process.exit(1);
+  }
+  const out2 = assembleWithDialog({ text: 'HI', text2: 'WORLD' });
+  if (!/^#define BW_DIALOG_ROW_COUNT 2$/m.test(out2)) {
+    console.error('FAIL B6d: two filled rows should emit ROW_COUNT 2'); process.exit(1);
+  }
+  if (!/static const unsigned char bw_dialogue_text_1\[\]/.test(out2)) {
+    console.error('FAIL B6e: two-line config should emit bw_dialogue_text_1[]'); process.exit(1);
+  }
+  // The vblank loop must iterate rows now, not bake in a single
+  // BW_DIALOG_ROW.  Look for the dlg_r-driven structure (Phase 3.3
+  // changed the bound from BW_DIALOG_ROW_COUNT to dlg_total to
+  // accommodate single-row per-NPC overrides; the BW_DIALOG_ROW_COUNT
+  // initialisation lives one line above and is checked separately).
+  if (!/for \(dlg_r = 0; dlg_r < dlg_total; dlg_r\+\+\)/.test(out2)) {
+    console.error('FAIL B6f: vblank loop should iterate dlg_total rows'); process.exit(1);
+  }
+  if (!/dlg_draw_rows = BW_DIALOG_ROW_COUNT/.test(out2)) {
+    console.error('FAIL B6g: vblank should default dlg_draw_rows to BW_DIALOG_ROW_COUNT'); process.exit(1);
+  }
+  console.log('✓ B6 multi-line dialogue: 1- and 2-row emissions + per-row vblank loop');
+}
+
+// Phase 3.3 — per-NPC dialogue text.
+// When a scene instance with role=npc has a non-empty `text`, the
+// module emits a per-NPC text array + lookup table, sets
+// BW_DIALOG_PER_NPC to 1, and the vblank loop consults the override.
+// When no NPC has its own text, BW_DIALOG_PER_NPC is 0 and nothing
+// extra emits — pre-3.3 behaviour exactly.
+{
+  // Default state has zero scene instances → no per-NPC overrides.
+  const out0 = assembleWithDialog({});
+  if (!/^#define BW_DIALOG_PER_NPC 0$/m.test(out0)) {
+    console.error('FAIL B7a: empty-scene config should emit BW_DIALOG_PER_NPC 0');
+    process.exit(1);
+  }
+  // The table DECLARATION is only emitted when at least one NPC has
+  // its own text.  References to bw_dialogue_per_npc inside the
+  // template's vblank logic still appear in the source — they're
+  // gated by `#if BW_DIALOG_PER_NPC` so the preprocessor removes
+  // them at compile time when the macro is 0.
+  if (/static const unsigned char \* const bw_dialogue_per_npc\[/.test(out0)) {
+    console.error('FAIL B7b: should not declare bw_dialogue_per_npc[] when nothing overrides');
+    process.exit(1);
+  }
+  // State with one NPC instance + its own text.
+  const s = mkState({ dialogueOn: true });
+  s.builder.modules.scene.config.instances = [
+    { id: 'i1', spriteIdx: 1, x: 96,  y: 120, ai: 'static' },              // enemy, no text
+    { id: 'i2', spriteIdx: 2, x: 160, y: 120, ai: 'static', text: 'HI' },   // npc, override
+  ];
+  const out1 = window.BuilderAssembler.assemble(s, tpl);
+  if (!/^#define BW_DIALOG_PER_NPC 1$/m.test(out1)) {
+    console.error('FAIL B7c: NPC with text should emit BW_DIALOG_PER_NPC 1');
+    process.exit(1);
+  }
+  if (!/static const unsigned char bw_dialogue_npc_1\[\]/.test(out1)) {
+    console.error('FAIL B7d: should emit bw_dialogue_npc_1[] for NPC at instance 1');
+    process.exit(1);
+  }
+  if (!/bw_dialog_npc_idx = j;/.test(out1)) {
+    console.error('FAIL B7e: per-frame trigger should record bw_dialog_npc_idx');
+    process.exit(1);
+  }
+  if (!/npc_text\s*=\s*bw_dialogue_per_npc\[bw_dialog_npc_idx\]/.test(out1)) {
+    console.error('FAIL B7f: vblank should look up bw_dialogue_per_npc'); process.exit(1);
+  }
+  console.log('✓ B7 per-NPC dialogue: lookup table + index recording + vblank routing');
+}
+
 // /play end-to-end
 const srv = spawn('python3',
   [path.join(ROOT, 'tools', 'playground_server.py')],

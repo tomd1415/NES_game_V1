@@ -32,7 +32,7 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-13 | Tileset management | Project folders for different games                               | [new]     |
 | 2026-04-13 | Tileset management | Mark tiles in use on the tileset; per-sprite outline colour       | [done]    |
 | 2026-04-13 | Tileset management | See which tiles a selected sprite uses; flag shared tiles         | [done]    |
-| 2026-04-13 | Project templates  | Choice of starter demo: platformer vs Pac-man/Pokémon top-down    | [new]     |
+| 2026-04-13 | Project templates  | Choice of starter demo: platformer vs Pac-man/Pokémon top-down    | [done]    |
 | 2026-04-13 | Sprite UX          | Easier way to tag sprites by role (player, npc, enemy, etc.)      | [done]    |
 | 2026-04-13 | Sprite UX          | Active palette swatches at top of sprite editor, click to pick    | [done]    |
 | 2026-04-13 | Sprite UX          | Per-tile palette selector (compact, not in the way)               | [done]    |
@@ -316,7 +316,17 @@ Use pupil initials (not full names) for anonymity.
   - **Top-down** (4-way movement, no gravity; Pac-man-style).
   Each template seeds the correct starter tileset, sprite, background and
   `main.c`.
-- **Status / date:** [new] 2026-04-13
+- **Status / date:** [done] 2026-04-25 — shipped as Phase 3.1 of
+  [next-steps-plan.md](next-steps-plan.md).  The Builder's `game`
+  module's "Top-down (four-way, no gravity)" radio is now live;
+  picking it emits `#define BW_GAME_STYLE 1` which the template's
+  `#if BW_GAME_STYLE == 1` blocks pick up to swap player physics.
+  No second template file — both styles share `platformer.c` (and
+  Step_Playground's `main.c`) via symmetric preprocessor gates,
+  keeping the byte-identical-baseline test passing.  Damage,
+  dialogue, doors, pickups, HUD, win conditions, scene-instance AI
+  all work unchanged in either style.  See the "Phase 3.1" entry
+  in [changelog-implemented.md](changelog-implemented.md).
 
 ---
 

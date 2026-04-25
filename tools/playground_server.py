@@ -990,6 +990,13 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         ("enemy",   "idle"),
         ("pickup",  "idle"),
         ("player2", "walk"),
+        # Phase 3.4 — finishes the P1/P2 animation symmetry.  P2 walk
+        # already wires through above; jump now picks up the same
+        # `role=player2, style=jump` tagged animation and the
+        # template's per-frame render switches to it while jumping2 is
+        # active.  Gated by `ANIM_PLAYER2_JUMP_COUNT > 0` so projects
+        # without a tagged P2 jump animation pay nothing.
+        ("player2", "jump"),
     ]
     for role, style in anim_targets:
         token = f"{role.upper()}_{style.upper()}"

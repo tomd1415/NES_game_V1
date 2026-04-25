@@ -39,6 +39,14 @@
 #include "scroll.h"
 #endif
 
+// Game style — Step_Playground's main.c is the platformer baseline,
+// so BW_GAME_STYLE stays undefined here.  cc65 treats undefined macros
+// as 0 in `#if` comparisons, which keeps `#if BW_GAME_STYLE == 0`
+// true and the platformer vertical-movement block active.  The
+// Builder's platformer.c template uses the same convention; the
+// `game` module emits `#define BW_GAME_STYLE 1` only when the pupil
+// picks the top-down option.
+
 #define PPU_CTRL      *((unsigned char*)0x2000)
 #define PPU_MASK      *((unsigned char*)0x2001)
 #define OAM_ADDR      *((unsigned char*)0x2003)
@@ -257,6 +265,8 @@ void main(void) {
             plrdir = 0x40;
         }
 
+#if BW_GAME_STYLE == 0
+        // ----- Platformer vertical movement: ladders + jump + gravity -----
         // Ladder probe.  If any tile the player overlaps is a LADDER the
         // player can move up/down with the D-pad and gravity is suspended.
         // Stepping sideways off the ladder resumes normal falling.
@@ -378,17 +388,59 @@ void main(void) {
                 jumping = 1;   // airborne (jump descent or walked off a ledge)
             }
         }
+#endif  /* BW_GAME_STYLE == 0 (platformer vertical) */
+
+#if BW_GAME_STYLE == 1
+        // ----- Top-down vertical movement: 4-way step with collision -----
+        // No gravity, no jump, no ladder.  UP/DOWN move the player by
+        // walk_speed pixels per frame.  SOLID_GROUND / WALL block the
+        // step.  PLATFORM and LADDER are walkable in top-down (no
+        // notion of "below" or "rungs" without gravity).
+        if (pad & 0x08) {                     // UP
+            if (py >= walk_speed) {
+                unsigned char ahead_row = (py - walk_speed) >> 3;
+                unsigned char left_col  = px >> 3;
+                unsigned char right_col = (px + (PLAYER_W << 3) - 1) >> 3;
+                unsigned char b_l = behaviour_at((unsigned int)left_col,  (unsigned int)ahead_row);
+                unsigned char b_r = behaviour_at((unsigned int)right_col, (unsigned int)ahead_row);
+                if (!(b_l == BEHAVIOUR_SOLID_GROUND || b_l == BEHAVIOUR_WALL
+                   || b_r == BEHAVIOUR_SOLID_GROUND || b_r == BEHAVIOUR_WALL)) {
+                    py -= walk_speed;
+                }
+            }
+        }
+        if (pad & 0x04) {                     // DOWN
+            if (py + (PLAYER_H << 3) + walk_speed <= WORLD_H_PX) {
+                unsigned char ahead_row = (py + (PLAYER_H << 3) + walk_speed - 1) >> 3;
+                unsigned char left_col  = px >> 3;
+                unsigned char right_col = (px + (PLAYER_W << 3) - 1) >> 3;
+                unsigned char b_l = behaviour_at((unsigned int)left_col,  (unsigned int)ahead_row);
+                unsigned char b_r = behaviour_at((unsigned int)right_col, (unsigned int)ahead_row);
+                if (!(b_l == BEHAVIOUR_SOLID_GROUND || b_l == BEHAVIOUR_WALL
+                   || b_r == BEHAVIOUR_SOLID_GROUND || b_r == BEHAVIOUR_WALL)) {
+                    py += walk_speed;
+                }
+            }
+        }
+        jumping = 0;
+        jmp_up  = 0;
+        on_ladder = 0;
+#endif  /* BW_GAME_STYLE == 1 (top-down vertical) */
 
         // Pick the active animation for this frame.  Jumping wins over
         // walking so the jump cycle plays even while drifting sideways.
         // Unassigned animations (count == 0) fall through to the static
         // player_tiles layout.
         anim_mode = 0;
-#if JUMP_FRAME_COUNT > 0
+#if JUMP_FRAME_COUNT > 0 && BW_GAME_STYLE == 0
         if (jumping) anim_mode = 2;
 #endif
 #if WALK_FRAME_COUNT > 0
+#if BW_GAME_STYLE == 1
+        if (anim_mode == 0 && (pad & 0x0F)) anim_mode = 1;
+#else
         if (anim_mode == 0 && (pad & 0x03)) anim_mode = 1;
+#endif
 #endif
 
         if (anim_mode == 2) {
@@ -423,6 +475,7 @@ void main(void) {
         }
         anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
 
+#if BW_GAME_STYLE == 0
 //>> gravity: Scene sprites fall until they land on solid_ground or platform. Tick 🕊 Flying on the Sprites page to make a sprite hover instead.
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             unsigned char foot_b;
@@ -437,6 +490,7 @@ void main(void) {
             if (ss_y[i] < 232) ss_y[i]++;  // fall 1 px/frame, clamp near screen bottom
         }
 //<<
+#endif  /* BW_GAME_STYLE == 0 — top-down has no scene-sprite gravity */
 
 #ifdef SCROLL_BUILD
         // Pull the camera toward the player's centre.  Clamped at world

@@ -289,6 +289,27 @@ label { -webkit-user-select: none; user-select: none; }
   border-radius: 4px;
   text-align: center;
 }
+/* Phase 3.3: per-NPC dialogue text input (only rendered for NPC
+   instances).  Sits directly below the matching scene-instance row
+   so it visually belongs to that NPC. */
+.scene-instance-text {
+  display: flex; align-items: center; gap: 6px;
+  margin: -2px 0 6px 8px;
+  padding: 4px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  font-size: 0.82em;
+  color: var(--muted);
+}
+.scene-instance-text .sit-label { white-space: nowrap; }
+.scene-instance-text .sit-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 0.9em;
+}
 .scene-add-row {
   display: flex; gap: 8px; align-items: center;
   margin-top: 8px;
@@ -1156,7 +1177,40 @@ body.emu-single-player #emu-p2-controls { display: none; }
     row.appendChild(yIn);
     row.appendChild(aiSel);
     row.appendChild(delBtn);
-    return row;
+
+    // Phase 3.3: NPC instances get an optional dialogue-text input
+    // appearing immediately below the row.  When filled, the dialogue
+    // module emits a per-NPC text array and the runtime trigger
+    // routes the dialog to that NPC's own line instead of the module-
+    // level text.  Sits in its own row so the 7-column grid up top
+    // stays untouched.
+    const isNpc = sprite && sprite.role === 'npc';
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(row);
+    if (isNpc) {
+      const textRow = document.createElement('div');
+      textRow.className = 'scene-instance-text';
+      const lbl = document.createElement('span');
+      lbl.className = 'sit-label';
+      lbl.textContent = '💬 says:';
+      lbl.title = 'Per-NPC dialogue line.  Leave blank to fall back to ' +
+        'the dialogue module\'s shared text.  Single line, up to 28 ' +
+        'characters.  Multi-line per-NPC is a future upgrade.';
+      const tIn = document.createElement('input');
+      tIn.type = 'text';
+      tIn.className = 'sit-input';
+      tIn.maxLength = 28;
+      tIn.placeholder = '(blank → use the shared dialogue line)';
+      tIn.value = (typeof inst.text === 'string') ? inst.text : '';
+      tIn.addEventListener('input', () => {
+        inst.text = tIn.value;
+        scheduleSave();
+      });
+      textRow.appendChild(lbl);
+      textRow.appendChild(tIn);
+      fragment.appendChild(textRow);
+    }
+    return fragment;
   }
 
   // --- Scene preview canvas ---------------------------------------

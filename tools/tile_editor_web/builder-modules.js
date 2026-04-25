@@ -45,8 +45,11 @@
   // --------------------------------------------------------------------
   modules['game'] = {
     label: 'Game type',
-    description: 'What kind of game is this?  Pick a platformer for ' +
-      'side-on jump-and-run, or top-down for a Pokémon / Zelda feel.',
+    description: 'What kind of game is this?  Platformer = side-on with ' +
+      'gravity, jumping and ladders.  Top-down = Pokémon / Zelda feel: ' +
+      'four-way movement, no gravity, no jumping.  All other modules ' +
+      '(damage, dialogue, doors, pickups, …) work the same in either ' +
+      'mode — only the player physics changes.',
     defaultConfig: { type: 'platformer' },
     schema: [
       {
@@ -55,14 +58,29 @@
         type: 'enum',
         options: [
           { value: 'platformer', label: '🏃 Platformer (side-on, gravity + jump)' },
-          { value: 'topdown',    label: '🧭 Top-down (four-way, no gravity)',
-            disabled: true, disabledReason: 'Coming in Phase B' },
+          { value: 'topdown',    label: '🧭 Top-down (four-way, no gravity)' },
         ],
       },
     ],
-    // No template mutation — selecting the game type happens up-stream,
-    // by the Builder page choosing which template file to feed the
-    // assembler in the first place.
+    // Phase 3.1: top-down support.  Both styles share one template
+    // (`platformer.c`).  We just emit a `BW_GAME_STYLE` macro that the
+    // template's preprocessor uses to pick which player-vertical block
+    // to compile — gravity + jump + ladder for platformer (default),
+    // 4-way movement with collision for top-down.  Default value of 0
+    // matches Step_Playground's stock main.c so the byte-identical-
+    // baseline test still holds when no Builder modules are ticked.
+    applyToTemplate(template, node /*, state */) {
+      const c = (node && node.config) || {};
+      const isTopdown = c.type === 'topdown';
+      // Platformer: emit nothing (BW_GAME_STYLE defaults to 0 in the
+      // template's `#ifndef`).  Keeps the no-modules-ticked path
+      // byte-for-byte identical to today.
+      if (!isTopdown) return template;
+      return A.appendToSlot(template, 'declarations', [
+        '/* Builder game module — top-down style. */',
+        '#define BW_GAME_STYLE 1',
+      ].join('\n'));
+    },
   };
 
   // --------------------------------------------------------------------
@@ -701,6 +719,8 @@
       'B = 0x42, … Z = 0x5A; 0 = 0x30, … 9 = 0x39; space = 0x20).',
     defaultConfig: {
       text: 'HELLO',
+      text2: '',
+      text3: '',
       proximity: 2,
       pauseOnOpen: true,
       autoClose: 0,
@@ -708,10 +728,24 @@
     schema: [
       {
         key: 'text',
-        label: 'What the NPC says (up to 28 characters)',
+        label: 'Line 1 (up to 28 characters)',
         type: 'text',   // renderer handles plain text input
         help: 'Use UPPERCASE letters and spaces.  Keep it short — ' +
-          'only one row of the screen is used.',
+          'each line is one row of the screen.',
+      },
+      {
+        key: 'text2',
+        label: 'Line 2 (optional)',
+        type: 'text',
+        help: 'Leave blank for a single-line dialog.  Adds a second ' +
+          'row directly below line 1 when filled in.',
+      },
+      {
+        key: 'text3',
+        label: 'Line 3 (optional)',
+        type: 'text',
+        help: 'Leave blank to skip.  Three lines is the max — any ' +
+          'more would push the box off the bottom of the screen.',
       },
       {
         key: 'proximity',
@@ -761,33 +795,111 @@
     ],
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
-      const rawText = (typeof c.text === 'string') ? c.text : 'HELLO';
-      // Clip to 28 chars to keep the line on one row with a 2-col
-      // margin on each side.
-      const text = rawText.slice(0, 28);
+      // Phase 3.2: 1-3 lines of dialogue.  Pupils fill text/text2/text3;
+      // empty lines drop out so a "HELLO" + "" + "" project emits a
+      // single row (matching pre-3.2 behaviour byte-for-byte aside
+      // from the new BW_DIALOG_ROW_COUNT macro + table indirection).
+      const rawLines = [c.text, c.text2, c.text3]
+        .map(s => (typeof s === 'string') ? s : '')
+        .map(s => s.slice(0, 28));
+      // Take the first row always (default 'HELLO') so an
+      // accidentally-empty config still has SOMETHING to draw.  Drop
+      // any TRAILING empty rows so the box height matches the actual
+      // text (a pupil who clears line 2 but leaves line 3 still gets
+      // 3 rows; that's their explicit choice).
+      const firstRow = rawLines[0] || 'HELLO';
+      let trimmed = [firstRow, rawLines[1] || '', rawLines[2] || ''];
+      while (trimmed.length > 1 && trimmed[trimmed.length - 1] === '') {
+        trimmed.pop();
+      }
+      const lines = trimmed;
+      const rowCount = lines.length;
       const proximity = A.clampInt(c.proximity, 1, 6, 2);
       const autoClose = A.clampInt(c.autoClose, 0, 240, 0);
       const pauseOn = (c.pauseOnOpen === undefined) ? true : !!c.pauseOnOpen;
-      // Emit bytes as hex so unusual characters (if the pupil typed
-      // lowercase or punctuation outside ASCII-printable) don't
-      // break the cc65 source.  The null terminator comes for free
-      // as the last entry.
-      const bytes = [];
-      for (let i = 0; i < text.length; i++) {
-        bytes.push('0x' + (text.charCodeAt(i) & 0xFF).toString(16).toUpperCase().padStart(2, '0'));
+      const lineDecls = [];
+      function strToBytes(s) {
+        const bytes = [];
+        for (let i = 0; i < s.length; i++) {
+          bytes.push('0x' + (s.charCodeAt(i) & 0xFF)
+            .toString(16).toUpperCase().padStart(2, '0'));
+        }
+        bytes.push('0x00');
+        return bytes;
       }
-      bytes.push('0x00');
+      for (let li = 0; li < rowCount; li++) {
+        lineDecls.push(
+          'static const unsigned char bw_dialogue_text_' + li +
+          '[] = { ' + strToBytes(lines[li]).join(', ') + ' };');
+      }
+      // Indexable table so the vblank loop can pick the right row by
+      // index rather than chaining `if (r == 0) … else if (r == 1) …`.
+      const tableEntries = [];
+      for (let li = 0; li < rowCount; li++) {
+        tableEntries.push('  bw_dialogue_text_' + li);
+      }
+      lineDecls.push(
+        'static const unsigned char * const bw_dialogue_text_table[' +
+        rowCount + '] = {\n' + tableEntries.join(',\n') + '\n};');
+
+      // Phase 3.3: per-NPC dialogue text.  Walk state.builder.modules.
+      // scene.config.instances and emit one bw_dialogue_npc_<i>[]
+      // array per NPC instance whose `text` is non-empty.  The
+      // bw_dialogue_per_npc[] lookup maps each scene-sprite slot to
+      // either a per-NPC array (override) or NULL (use the module-
+      // level lines from above).  Empty when no NPC has its own
+      // text — the macro BW_DIALOG_PER_NPC is then 0 and the runtime
+      // skips the lookup entirely.
+      const sceneNode = state && state.builder && state.builder.modules
+        && state.builder.modules.scene;
+      const sceneInstances = (sceneNode && sceneNode.config &&
+        Array.isArray(sceneNode.config.instances))
+        ? sceneNode.config.instances : [];
+      const npcOverrides = [];   // [{ idx, text }]
+      for (let i = 0; i < sceneInstances.length; i++) {
+        const inst = sceneInstances[i];
+        if (!inst) continue;
+        const sp = (state.sprites || [])[inst.spriteIdx];
+        if (!sp || sp.role !== 'npc') continue;
+        const t = (typeof inst.text === 'string') ? inst.text.trim() : '';
+        if (!t) continue;
+        npcOverrides.push({ idx: i, text: t.slice(0, 28) });
+      }
+      const havePerNpc = npcOverrides.length > 0 &&
+        sceneInstances.length > 0;
+      lineDecls.push('#define BW_DIALOG_PER_NPC ' + (havePerNpc ? 1 : 0));
+      if (havePerNpc) {
+        // One byte array per overriding NPC.
+        for (const ov of npcOverrides) {
+          lineDecls.push(
+            'static const unsigned char bw_dialogue_npc_' + ov.idx +
+            '[] = { ' + strToBytes(ov.text).join(', ') + ' };');
+        }
+        // Lookup table — one entry per scene-sprite slot.  Non-NPCs
+        // and NPCs without an override get a 0 (NULL) entry; the
+        // runtime falls back to the module-level lines.
+        const lookup = [];
+        for (let i = 0; i < sceneInstances.length; i++) {
+          if (npcOverrides.some(ov => ov.idx === i)) {
+            lookup.push('  bw_dialogue_npc_' + i);
+          } else {
+            lookup.push('  0');
+          }
+        }
+        lineDecls.push(
+          'static const unsigned char * const bw_dialogue_per_npc[' +
+          sceneInstances.length + '] = {\n' + lookup.join(',\n') + '\n};');
+      }
       template = A.appendToSlot(template, 'declarations', [
         '#define BW_DIALOGUE_ENABLED 1',
         '#define BW_DIALOG_ROW 25',
         '#define BW_DIALOG_COL 2',
         '#define BW_DIALOG_PROXIMITY ' + proximity,
         '#define BW_DIALOG_WIDTH 28',
+        '#define BW_DIALOG_ROW_COUNT ' + rowCount,
         '#define BW_DIALOG_AUTOCLOSE ' + autoClose,
         '#define BW_DIALOG_PAUSE ' + (pauseOn ? 1 : 0),
-        'static const unsigned char bw_dialogue_text[] = { ' +
-          bytes.join(', ') + ' };',
-      ].join('\n'));
+      ].concat(lineDecls).join('\n'));
       // Per-frame: detect the B-edge + NPC proximity, set a
       // pending-command flag (1 = draw, 2 = clear).  The vblank_writes
       // slot later does the actual PPU poke — keeping draw_text() out
@@ -873,6 +985,9 @@
         '                    if (dx + dy <= BW_DIALOG_PROXIMITY) {',
         '                        bw_dialog_cmd = 1;   /* draw */',
         '                        bw_dialog_open = 1;',
+        '#if BW_DIALOG_PER_NPC',
+        '                        bw_dialog_npc_idx = j;',
+        '#endif',
         '#if BW_DIALOG_AUTOCLOSE > 0',
         '                        bw_dialog_timer = BW_DIALOG_AUTOCLOSE;',
         '#endif',
@@ -920,32 +1035,61 @@
         '        // keep dialogue open while walking through a door (and',
         '        // pauseOnOpen makes it impossible by default).',
         '        if (bw_dialog_cmd != 0) {',
-        '            unsigned int dlg_addr = 0x2000',
-        '                + ((unsigned int)BW_DIALOG_ROW * 32)',
-        '                + BW_DIALOG_COL;',
-        '            unsigned int dlg_src = (unsigned int)BW_DIALOG_ROW',
-        '                * 32 + BW_DIALOG_COL;',
+        '            /* Phase 3.2 + 3.3 — multi-line + per-NPC.',
+        '             *',
+        '             * BW_DIALOG_ROW_COUNT (1-3) is the module-level',
+        '             * row count; the for-loop iterates that many',
+        '             * rows, draws or restores each.  When per-NPC is',
+        '             * active and the triggering NPC has an override,',
+        '             * the dialog collapses to a single-row draw using',
+        '             * that NPC\'s text — close still restores',
+        '             * BW_DIALOG_ROW_COUNT rows so the screen returns',
+        '             * to its pre-open state cleanly even if the open',
+        '             * was single-row.  Worst case 3 × 28 = 84 PPU',
+        '             * writes (~840 cycles), well under vblank budget.',
+        '             */',
+        '            unsigned char dlg_r;',
         '            unsigned char dlg_j;',
-        '            PPU_ADDR = (unsigned char)(dlg_addr >> 8);',
-        '            PPU_ADDR = (unsigned char)(dlg_addr & 0xFF);',
-        '            if (bw_dialog_cmd == 1) {',
-        '                /* Draw: stamp text across the row.  Cells past',
-        '                 * the null terminator are left alone — the tile',
-        '                 * already in VRAM at those positions is correct',
-        '                 * (load_background() wrote bg_nametable_0 there',
-        '                 * at boot, and a prior clear restored them). */',
-        '                for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
-        '                    unsigned char ch = bw_dialogue_text[dlg_j];',
-        '                    if (ch == 0) break;',
-        '                    PPU_DATA = ch;',
-        '                }',
-        '            } else {',
-        '                /* Clear: restore every cell from bg_nametable_0.',
-        '                 * Writing all BW_DIALOG_WIDTH is wasteful when',
-        '                 * the text was short, but cheap enough in vblank',
-        '                 * and keeps the loop dead simple. */',
-        '                for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
-        '                    PPU_DATA = bg_nametable_0[dlg_src + dlg_j];',
+        '            unsigned char dlg_draw_rows = BW_DIALOG_ROW_COUNT;',
+        '#if BW_DIALOG_PER_NPC',
+        '            const unsigned char *npc_text =',
+        '                bw_dialogue_per_npc[bw_dialog_npc_idx];',
+        '            if (bw_dialog_cmd == 1 && npc_text != 0) dlg_draw_rows = 1;',
+        '#endif',
+        '            unsigned char dlg_total =',
+        '                (bw_dialog_cmd == 1) ? dlg_draw_rows : BW_DIALOG_ROW_COUNT;',
+        '            for (dlg_r = 0; dlg_r < dlg_total; dlg_r++) {',
+        '                unsigned int dlg_addr = 0x2000',
+        '                    + ((unsigned int)(BW_DIALOG_ROW + dlg_r) * 32)',
+        '                    + BW_DIALOG_COL;',
+        '                unsigned int dlg_src  =',
+        '                    (unsigned int)(BW_DIALOG_ROW + dlg_r) * 32',
+        '                    + BW_DIALOG_COL;',
+        '                PPU_ADDR = (unsigned char)(dlg_addr >> 8);',
+        '                PPU_ADDR = (unsigned char)(dlg_addr & 0xFF);',
+        '                if (bw_dialog_cmd == 1) {',
+        '                    /* Draw row dlg_r — pick the override line',
+        '                     * when this NPC has its own text, else',
+        '                     * fall through to the module-level table. */',
+        '                    const unsigned char *line;',
+        '#if BW_DIALOG_PER_NPC',
+        '                    line = (npc_text != 0) ? npc_text',
+        '                                           : bw_dialogue_text_table[dlg_r];',
+        '#else',
+        '                    line = bw_dialogue_text_table[dlg_r];',
+        '#endif',
+        '                    for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
+        '                        unsigned char ch = line[dlg_j];',
+        '                        if (ch == 0) break;',
+        '                        PPU_DATA = ch;',
+        '                    }',
+        '                } else {',
+        '                    /* Clear row dlg_r — restore every cell from',
+        '                     * bg_nametable_0 so the scenery underneath',
+        '                     * comes back exactly. */',
+        '                    for (dlg_j = 0; dlg_j < BW_DIALOG_WIDTH; dlg_j++) {',
+        '                        PPU_DATA = bg_nametable_0[dlg_src + dlg_j];',
+        '                    }',
         '                }',
         '            }',
         '            bw_dialog_cmd = 0;',

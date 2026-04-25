@@ -43,6 +43,14 @@ function mkState(opts = {}) {
     sprites.push({ role: 'decoration', name: 'lf_b', width: 2, height: 2, cells: mkCells(2, 2, 0x51) });
     animFrames.p2Walk = [sprites.length - 2, sprites.length - 1];
   }
+  // Phase 3.4 — Player 2 jump animation.  Same shape as P2 walk; the
+  // template's render block prefers jump > walk > static when both
+  // are tagged.
+  if (opts.withP2Jump) {
+    sprites.push({ role: 'decoration', name: 'lj_a', width: 2, height: 2, cells: mkCells(2, 2, 0x60) });
+    sprites.push({ role: 'decoration', name: 'lj_b', width: 2, height: 2, cells: mkCells(2, 2, 0x61) });
+    animFrames.p2Jump = [sprites.length - 2, sprites.length - 1];
+  }
   const animations = [];
   let aid = 1;
   if (animFrames.enemyIdle) {
@@ -53,6 +61,9 @@ function mkState(opts = {}) {
   }
   if (animFrames.p2Walk) {
     animations.push({ id: aid++, name: 'luigi_walk', frames: animFrames.p2Walk, fps: 8, role: 'player2', style: 'walk' });
+  }
+  if (animFrames.p2Jump) {
+    animations.push({ id: aid++, name: 'luigi_jump', frames: animFrames.p2Jump, fps: 8, role: 'player2', style: 'jump' });
   }
   const s = {
     name: 'r1', version: 1, universal_bg: 0x21, sprites, animations,
@@ -157,9 +168,29 @@ try {
     if (!r.ok) { console.error('FAIL E3 p2+walk:', r.stage, (r.log||'').slice(-1500)); process.exit(2); }
     console.log('✓ E3 player2+walk build (' + r.size + ' bytes, ' + r.build_time_ms + ' ms)');
   }
-  // Everything on together — P2 HP + P2 walk anim + enemy+idle + pickup+idle + damage + HUD
+  // Phase 3.4 — player2+jump end-to-end.  Pupil tags a P2 jump
+  // animation; the template prefers it over walk when P2 is airborne.
   {
-    const s = mkState({ withP2: true, withP2Walk: true, withEnemyIdle: true,
+    const s = mkState({ withP2: true, withP2Jump: true });
+    s.builder.modules.players.submodules.player2.enabled = true;
+    const customMainC = window.BuilderAssembler.assemble(s, tpl);
+    // Sanity: assembler emits the P2 jump animation symbols.
+    if (!/ANIM_PLAYER2_JUMP_COUNT/.test(customMainC)) {
+      console.error('FAIL E3-jump assembler: ANIM_PLAYER2_JUMP_COUNT missing from output');
+      process.exit(1);
+    }
+    const r = await postPlay({
+      state: s, playerSpriteIdx: 0, playerStart: { x: 60, y: 120 },
+      playerSpriteIdx2: 2, playerStart2: { x: 180, y: 120 },
+      sceneSprites: [{ spriteIdx: 1, x: 96, y: 120 }],
+      mode: 'browser', customMainC: customMainC,
+    });
+    if (!r.ok) { console.error('FAIL E3-jump:', r.stage, (r.log||'').slice(-1500)); process.exit(2); }
+    console.log('✓ E3-jump player2+jump build (' + r.size + ' bytes, ' + r.build_time_ms + ' ms)');
+  }
+  // Everything on together — P2 HP + P2 walk + P2 jump + enemy+idle + pickup+idle + damage + HUD
+  {
+    const s = mkState({ withP2: true, withP2Walk: true, withP2Jump: true, withEnemyIdle: true,
       withPickup: true, withPickupIdle: true });
     s.builder.modules.players.submodules.player2.enabled = true;
     s.builder.modules.players.submodules.player2.config.maxHp = 3;
