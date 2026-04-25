@@ -47,15 +47,19 @@
 // `game` module emits `#define BW_GAME_STYLE 1` only when the pupil
 // picks the top-down option.
 
-#define PPU_CTRL      *((unsigned char*)0x2000)
-#define PPU_MASK      *((unsigned char*)0x2001)
-#define OAM_ADDR      *((unsigned char*)0x2003)
-#define OAM_DATA      *((unsigned char*)0x2004)
-#define PPU_SCROLL    *((unsigned char*)0x2005)
-#define PPU_ADDR      *((unsigned char*)0x2006)
-#define PPU_DATA      *((unsigned char*)0x2007)
-#define OAM_DMA       *((unsigned char*)0x4014)
-#define JOYPAD1       *((unsigned char*)0x4016)
+/* volatile so cc65 cannot elide back-to-back PPU/OAM register writes
+   — see scroll.c for the column-stream bug that motivated the
+   qualifier.  Mirroring the macros here keeps both translation units
+   consistent. */
+#define PPU_CTRL      (*(volatile unsigned char*)0x2000)
+#define PPU_MASK      (*(volatile unsigned char*)0x2001)
+#define OAM_ADDR      (*(volatile unsigned char*)0x2003)
+#define OAM_DATA      (*(volatile unsigned char*)0x2004)
+#define PPU_SCROLL    (*(volatile unsigned char*)0x2005)
+#define PPU_ADDR      (*(volatile unsigned char*)0x2006)
+#define PPU_DATA      (*(volatile unsigned char*)0x2007)
+#define OAM_DMA       (*(volatile unsigned char*)0x4014)
+#define JOYPAD1       (*(volatile unsigned char*)0x4016)
 
 /* OAM shadow buffer — 256 bytes at $0200 (page-aligned by the linker's
  * OAM segment, see cfg/nes.cfg).  Every frame we build the sprite list

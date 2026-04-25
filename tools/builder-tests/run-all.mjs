@@ -224,6 +224,33 @@ check('invariant: scroll.c has no bare `continue` in streaming blocks', () => {
   }
 }) || (anyFail = true);
 
+// Guard: the PPU/OAM register macros must stay `volatile`.  Without
+// the qualifier cc65 elides the `PPU_CTRL = +32 stride` write that
+// precedes the column burst in scroll_stream, and the 30-tile column
+// smears across one nametable row each scroll-step (full-screen
+// corruption on any 2×1+ project).  Discovered 2026-04-25 via FCEUX
+// PPU-Viewer; closed the parked C2 scroll-flicker bug.
+check('invariant: PPU register macros are volatile', () => {
+  const files = [
+    path.join(STEP, 'src', 'scroll.c'),
+    path.join(STEP, 'src', 'main.c'),
+    path.join(ROOT, 'tools', 'tile_editor_web', 'builder-templates', 'platformer.c'),
+  ];
+  for (const f of files) {
+    const raw = fs.readFileSync(f, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/\/\/[^\n]*/g,       ' ');
+    // Match the literal pattern these files used before the fix.
+    // `*((unsigned char*)0x20XX)` without `volatile` is the hazard.
+    const m = /\*\s*\(\s*\(\s*unsigned\s+char\s*\*\s*\)\s*0x[0-9A-Fa-f]+\s*\)/.exec(raw);
+    if (m) {
+      throw new Error(path.relative(ROOT, f) +
+        ' has a non-volatile PPU/OAM macro near offset ' + m.index +
+        ' — keep `(*(volatile unsigned char*)0xNNNN)` or cc65 will elide stride writes');
+    }
+  }
+}) || (anyFail = true);
+
 console.log('');
 
 // --- Step 3: byte-identical ROM invariant ------------------------------

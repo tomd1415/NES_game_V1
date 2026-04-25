@@ -6,10 +6,20 @@
    baseline.  Unused extern declarations in scroll.h are harmless. */
 #if (BG_WORLD_COLS > 32) || (BG_WORLD_ROWS > 30)
 
-#define PPU_CTRL      *((unsigned char*)0x2000)
-#define PPU_SCROLL    *((unsigned char*)0x2005)
-#define PPU_ADDR      *((unsigned char*)0x2006)
-#define PPU_DATA      *((unsigned char*)0x2007)
+/* `volatile` is load-bearing.  The column-burst below sets PPU_CTRL
+   to +32 stride immediately before 30 PPU_DATA writes; without the
+   volatile qualifier cc65 is free to elide the stride-flip write
+   because the next syntactic access to the same address is another
+   assignment ("PPU_CTRL = PPU_CTRL_BASE" further down).  When that
+   elision happens the column burst runs with whatever stride the
+   previous frame left behind (+1 after scroll_apply_ppu) and the
+   30 tiles smear across one nametable row instead of stepping down
+   the column — visible in FCEUX as horizontal stripes accumulating
+   in NT0/NT1 as the camera scrolls. */
+#define PPU_CTRL      (*(volatile unsigned char*)0x2000)
+#define PPU_SCROLL    (*(volatile unsigned char*)0x2005)
+#define PPU_ADDR      (*(volatile unsigned char*)0x2006)
+#define PPU_DATA      (*(volatile unsigned char*)0x2007)
 
 /* BG pattern table 1 (matches main.c's boot-time PPU_CTRL setup). */
 #define PPU_CTRL_BASE 0x10

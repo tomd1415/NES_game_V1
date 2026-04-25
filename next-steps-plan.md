@@ -12,8 +12,12 @@
 > dialogue text (each NPC instance can override the shared
 > dialogue line, falls back when empty), 3.4 P2 jump animation
 > (priority jump > walk > static with proper cycle reset).  Still
-> deferred: 1.1 C2 scroll flicker, 2.1 Select → resize drag
-> handles.  See the "Phase 3.1 / 3.2 / 3.3 / 3.4" entries in
+> deferred: 2.1 Select → resize drag handles.  1.1 C2 scroll
+> flicker is **closed** (2026-04-25): FCEUX PPU-Viewer pinned the
+> cause to cc65 eliding the `PPU_CTRL = +32 stride` write before the
+> column-burst in `scroll.c`; fixed by qualifying the PPU/OAM
+> register macros `volatile` in `scroll.c`, `main.c`, and the
+> builder platformer template.  See the "Phase 3.1 / 3.2 / 3.3 / 3.4" entries in
 > [changelog-implemented.md](changelog-implemented.md).  **Next:
 > Phase 4** (big standalone initiatives — accessibility first,
 > then gallery, then audio).
@@ -48,37 +52,37 @@ small on its own; grouping them into one session gives pupils a
 visibly nicer editor next time they sit down.  Total effort:
 **half a day to two days**, depending on C2.
 
-### 1.1 — Verify C2 (scroll flicker) (S)
+### 1.1 — Verify C2 (scroll flicker) (S) — DONE 2026-04-25
 
-**Why first.**  The OAM-DMA fix we shipped addresses the most common
-fceux-visible-but-jsnes-clean timing issue.  It may already have
-killed the scroll flicker pupils reported.  Worth measuring before
-doing any deeper scroll-stream refactoring.
+**Outcome.**  Confirmed not fixed by the OAM-DMA work.  FCEUX
+PPU-Viewer screenshots of a 2×1 scrolling project showed the camera
+starting clean, then accumulating horizontal-stripe corruption across
+NT0/NT1 the moment scrolling began — every scroll-step laid 30 tiles
+across one nametable row instead of stepping down a column, and the
+floor row vanished while scrolling left.
 
-**Plan.**
+**Cause.**  cc65's optimiser was eliding the
+`PPU_CTRL = PPU_CTRL_BASE | PPU_CTRL_STRIDE_COL` write that precedes
+the 30-tile `PPU_DATA` column burst in [scroll.c](steps/Step_Playground/src/scroll.c),
+because the next syntactic access to the same address was another
+assignment further down (`PPU_CTRL = PPU_CTRL_BASE`) — so the column
+burst ran with whatever stride `scroll_apply_ppu` had left behind
+(+1) and smeared the column across one nametable row.
 
-1. Build (or load) a two-screen horizontal-scroll test project with
-   several scene sprites that move.
-2. Play in Local mode (fceux).  Compare against the pre-OAM-DMA
-   behaviour if possible (git stash + pre-fix build, or screenshots
-   the user already has).
-3. **If clean:** mark C2 done in the changelog and close the
-   pupil-feedback pass entirely.
-4. **If flicker remains:** dig into `scroll.c`'s `scroll_stream()` +
-   `scroll_apply_ppu()` timing.  Leading candidates from the
-   plan-batches.md Batch C section:
-   - Scroll column + row transfer in the same vblank overruns
-     budget.  Fix: cap `scroll_stream` to one transfer per vblank
-     and carry the other to the next frame.
-   - `PPU_CTRL` stride bit (+32 vs +1) left at the wrong value.
-     Fix: always reset to +1 at the end of `scroll_stream`.
-   - Dialogue vblank writes interleaving with scroll writes.  Fix:
-     reorder so dialogue finishes before scroll_stream starts.
+**Fix.**  Qualified the PPU/OAM register macros `volatile` in
+[scroll.c](steps/Step_Playground/src/scroll.c),
+[main.c](steps/Step_Playground/src/main.c), and
+[platformer.c](tools/tile_editor_web/builder-templates/platformer.c).
+Builder regression suite (10 smoke suites + byte-identical-ROM
+invariant) green after the change.  The earlier preventive measures
+(stride reset at the end of `scroll_stream`, one-transfer-per-vblank
+cap) are still load-bearing — they were necessary but not sufficient.
 
-**Deliverable.**  Either a confirm-clean note in the changelog, or
-a targeted scroll-timing fix plus regression guard.  This step is
-**manual** — automated glitch detection on jsnes isn't meaningful
-when jsnes already tolerates the timing our ROM used to have.
+**Outstanding.**  Manual playtest on the pupil's project to confirm
+the in-game scroll is clean.  Worth adding a regression guard that
+diffs `*((unsigned char*)0x2000)` against `(*(volatile unsigned char*)0x2000)`
+in a build-time text scan of `main.c` / `scroll.c` / `platformer.c`,
+so a future contributor can't accidentally drop the qualifier.
 
 ### 1.2 — Help popover tabs + Feedback tab (M)
 

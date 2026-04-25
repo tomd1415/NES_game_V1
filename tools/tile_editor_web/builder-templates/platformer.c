@@ -50,16 +50,22 @@
 // test (Step_Playground stock vs Builder template with no modules)
 // passing without "macro redefinition is not identical" errors.
 
-#define PPU_CTRL      *((unsigned char*)0x2000)
-#define PPU_MASK      *((unsigned char*)0x2001)
-#define OAM_ADDR      *((unsigned char*)0x2003)
-#define OAM_DATA      *((unsigned char*)0x2004)
-#define PPU_SCROLL    *((unsigned char*)0x2005)
-#define PPU_ADDR      *((unsigned char*)0x2006)
-#define PPU_DATA      *((unsigned char*)0x2007)
-#define OAM_DMA       *((unsigned char*)0x4014)
-#define JOYPAD1       *((unsigned char*)0x4016)
-#define JOYPAD2       *((unsigned char*)0x4017)
+/* volatile so cc65 cannot elide back-to-back PPU/OAM register writes
+   — the column-streamer in scroll.c sets PPU_CTRL to +32 stride
+   immediately before 30 PPU_DATA writes, and a non-volatile macro
+   lets the optimiser drop that stride-flip (smearing the column
+   across one row of the nametable).  Must match main.c byte-for-byte
+   so cc65's "macro redefinition is not identical" check stays happy. */
+#define PPU_CTRL      (*(volatile unsigned char*)0x2000)
+#define PPU_MASK      (*(volatile unsigned char*)0x2001)
+#define OAM_ADDR      (*(volatile unsigned char*)0x2003)
+#define OAM_DATA      (*(volatile unsigned char*)0x2004)
+#define PPU_SCROLL    (*(volatile unsigned char*)0x2005)
+#define PPU_ADDR      (*(volatile unsigned char*)0x2006)
+#define PPU_DATA      (*(volatile unsigned char*)0x2007)
+#define OAM_DMA       (*(volatile unsigned char*)0x4014)
+#define JOYPAD1       (*(volatile unsigned char*)0x4016)
+#define JOYPAD2       (*(volatile unsigned char*)0x4017)
 
 #define PLAYER_TILES_PER_FRAME (PLAYER_W * PLAYER_H)
 

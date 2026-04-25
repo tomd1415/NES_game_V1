@@ -61,6 +61,7 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-24 | Builder            | Multi-background doors / room transitions                         | [done]    |
 | 2026-04-25 | Play pipeline      | Arrow keys move the player AND scroll the tileset on Backgrounds  | [done]    |
 | 2026-04-25 | Play pipeline      | Code-page ▶ Play stops working after first edit; Backgrounds OK   | [new]     |
+| 2026-04-25 | Scrolling          | C2 scroll flicker — column-burst stride elided by cc65 optimiser  | [done]    |
 
 ---
 
@@ -585,6 +586,31 @@ of a game without writing new C themselves.
   modal-open.
 - **Status / date:** [done] 2026-04-25.
 
+- **Said:** *Investigation under the parked C2 scroll-flicker entry*
+  — FCEUX PPU-Viewer of a 2×1 scrolling project showed corruption
+  starting only when the camera began to move, with tile data smearing
+  across multiple rows of NT0/NT1 (visible as horizontal stripes in
+  empty-sky rows) and the floor row disappearing while scrolling left.
+  Initial misread of the column-update routine; actual cause was
+  compiler-level.
+- **Mitigation:** [scroll.c](steps/Step_Playground/src/scroll.c) sets
+  `PPU_CTRL` to `+32` stride immediately before the 30-tile
+  `PPU_DATA` column burst, then resets it to `+1` afterwards. With the
+  PPU register macros defined as plain `*((unsigned char*)0x2000)`,
+  cc65's optimiser is free to elide the stride-flip write because the
+  next syntactic access to the same address is another assignment —
+  so the column burst ran with whatever stride the previous frame
+  left behind (`+1` after `scroll_apply_ppu`), and the 30 tiles for
+  one column smeared across one row of the nametable. Each subsequent
+  scroll-step laid another stripe at a different row, escalating into
+  full-screen corruption. Fixed by qualifying the PPU/OAM macros
+  `volatile` in [scroll.c](steps/Step_Playground/src/scroll.c),
+  [main.c](steps/Step_Playground/src/main.c), and
+  [platformer.c](tools/tile_editor_web/builder-templates/platformer.c).
+  Builder regression suite (incl. byte-identical-ROM invariant) green
+  after the change. Closes the parked C2 scroll-flicker investigation.
+- **Status / date:** [done] 2026-04-25.
+
 - **Said:** "When I first opened my project from my files I could use
   'Play in NES' from code section and all was well. Once I changed the
   value of `jmp_up` (line 278, value changed to 35 and I left the
@@ -814,3 +840,13 @@ sub-item so a half-baked piece never blocks a pupil session.
   the shared `<dialog id="emu-dialog">` is open, so arrow keys / Ctrl-S
   / undo / hotkeys can no longer mutate the project mid-play. The
   Code-page Play regression is still `[new]` pending repro.
+- 2026-04-25 (later) — closed the parked **C2 scroll flicker** after
+  FCEUX PPU-Viewer screenshots showed the corruption pattern was a
+  stride bug: cc65 was eliding the `PPU_CTRL = +32 stride` write that
+  precedes the column burst in [scroll.c](steps/Step_Playground/src/scroll.c),
+  so 30-tile column writes ran at `+1` stride and smeared the column
+  across one nametable row each scroll-step. Fixed by qualifying the
+  PPU/OAM register macros `volatile` in `scroll.c`, `main.c`, and
+  `tools/tile_editor_web/builder-templates/platformer.c`. Builder
+  regression suite (10 smoke suites + byte-identical-ROM invariant)
+  green after the change.
