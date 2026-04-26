@@ -190,6 +190,25 @@ both a song *and* an sfx pack — the engine needs both to start up.
 The Audio page won't enable audio in the build until both are
 present.
 
+**The music tempo speeds up or slows down when lots of stuff is
+moving on-screen** in the *in-browser* emulator (the ▶ Play button
+on this page or the Builder page).  This is a known limitation of
+the in-browser NES emulator (jsnes) when the page is doing heavy
+work: emulation runs slightly slower than 60 fps, the audio
+hardware keeps consuming samples at the same rate, and the music
+sounds like it's stuttering or warping.  Running the same ROM in a
+*local* emulator like FCEUX (the *Local* play mode in the dropdown
+next to ▶ Play) gives steady playback because the emulator runs in
+its own native process.  We've reduced the wobble by decoupling the
+emulator's clock from the browser's render loop, but pupils with
+older laptops or busy scenes may still notice some drift — record
+your gameplay in FCEUX if you want the audio to be rock-steady.
+
+**The 🔊 / 🔇 button doesn't seem to do anything the first time.**
+Some browsers require the page to play a sound *once* before they
+fully unlock audio.  Click ▶ Play, then the mute button — second
+click should toggle correctly.
+
 ## What's next
 
 Want to swap background music when you reach a new scene, or

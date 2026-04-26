@@ -263,18 +263,41 @@
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup',   ku);
 
-    let raf = null;
-    function tick() {
-      nes.frame();
-      raf = requestAnimationFrame(tick);
-    }
-    raf = requestAnimationFrame(tick);
+    // Drive emulation from a fixed-time-step setInterval rather than
+    // requestAnimationFrame.  rAF stalls whenever the main thread is
+    // busy (heavy sprite scenes, scrolling) — that drops jsnes from
+    // 60 fps to 30-50 fps, and because the audio device keeps
+    // consuming samples at 44.1 kHz the producer falls behind, the
+    // ring buffer underruns, and pupils hear the music tempo wobble.
+    // setInterval is steady (browsers clamp at ~4 ms minimum, well
+    // below our 16.67 ms target), and a small catch-up loop runs
+    // 1-2 frames per tick if the timer fires late.  We cap the
+    // catch-up at 4 frames to stop a paused tab from triggering a
+    // death-spiral on resume.
+    const FRAME_MS = 1000 / 60;   // NES NTSC: 60.0988 Hz; close enough.
+    const CATCHUP_CAP = 4;
+    let lastTick = performance.now();
+    const intervalId = setInterval(() => {
+      const now = performance.now();
+      let elapsed = now - lastTick;
+      // Tab-resume: cap so we don't churn through dozens of frames
+      // in one go (which would block the main thread for hundreds
+      // of ms and cause an audible lurch on its own).
+      if (elapsed > CATCHUP_CAP * FRAME_MS) {
+        elapsed = FRAME_MS;
+        lastTick = now - FRAME_MS;
+      }
+      let frames = Math.max(1, Math.floor(elapsed / FRAME_MS));
+      if (frames > CATCHUP_CAP) frames = CATCHUP_CAP;
+      for (let i = 0; i < frames; i++) nes.frame();
+      lastTick += frames * FRAME_MS;
+    }, FRAME_MS);
 
     dlg.showModal();
 
     return new Promise(resolve => {
       const close = () => {
-        if (raf) cancelAnimationFrame(raf);
+        if (intervalId) clearInterval(intervalId);
         window.removeEventListener('keydown', kd);
         window.removeEventListener('keyup',   ku);
         if (scriptNode) {

@@ -446,8 +446,69 @@ Concretely shipped in update 2:
   `/starter/audio` returns ≥2 songs + a sfx pack with named slots,
   the starter pack actually builds end-to-end via `/play`, and
   swapping the default-song target through PlayPipeline's alias
-  trailer produces a different ROM.  All 15 smoke suites + every
+  trailer produces a different ROM.  All 16 smoke suites + every
   invariant in `run-all.mjs` green.
+
+---
+
+## Known limitation — in-browser audio tempo wobble
+
+**Symptom (pupil-reported 2026-04-26).**  When the in-browser
+emulator (jsnes) runs a ROM with audio, the music tempo can speed
+up or slow down based on what's happening on screen — calm scenes
+play at near-60 Hz, busy ones (lots of sprites + scrolling) drop
+the emulator below 60 Hz and the music sounds like it's
+stuttering or warping.
+
+**Root cause.**  jsnes is single-threaded JavaScript that runs on
+the browser's main thread; we drive its `nes.frame()` from a
+fixed-rate `setInterval` and feed `onAudioSample(left, right)`
+into a Web Audio ring buffer that a `ScriptProcessorNode` drains.
+The audio device consumes at 44.1 kHz regardless of what the
+emulator is doing.  When the main thread is busy (heavy scenes,
+GC, layout reflow, the ScriptProcessorNode's own callback running
+in the same thread), `nes.frame()` runs slower than its target
+16.67 ms cadence, the ring buffer underruns, and the audio device
+reads stale samples — perceived as tempo wobble.
+
+**What we've done about it (2026-04-26).**
+
+- Switched the emulator's frame loop from `requestAnimationFrame`
+  to `setInterval(tick, 1000 / 60)` with a small catch-up loop
+  (max 4 frames / tick).  rAF was getting throttled by the same
+  rendering pressure that was slowing the page; setInterval is
+  steady and runs at the same priority as the audio script
+  processor.
+- Audio ring buffer at 4096 stereo frames (~93 ms) so a single
+  late tick doesn't underrun.  Larger buffer would mask more
+  wobble but adds noticeable input latency, so we kept it
+  conservative.
+- The `Local (fceux)` play mode is unaffected — it runs the ROM
+  in a native emulator with its own audio backend.  Pupil docs
+  point pupils at it when they need rock-steady playback (for
+  recording, classroom showcases, etc.).
+
+**What we haven't done (potential future work).**
+
+- Move emulation off the main thread into a Web Worker, so the
+  rendering pressure on the editor pages can never starve the
+  emulator.  Worth doing if Web Audio's `AudioWorklet` migration
+  is also on the cards (the worklet runs in its own thread
+  already, and could pull samples directly from the worker via a
+  SharedArrayBuffer).
+- Replace `ScriptProcessorNode` (deprecated) with `AudioWorklet`.
+  The worklet runs on the audio thread, so the emulation step
+  could be triggered from there, guaranteeing tempo accuracy.
+  Bigger change — needs a separate worklet file and changes to
+  how we ship `emulator.js`.
+- Resample emulator output to match the audio device's actual
+  sample rate (we currently request 44.1 kHz and hope the browser
+  honours it).  Most do; some Pixel-class Android browsers are
+  fixed at 48 kHz and the slight pitch shift is currently
+  imperceptible.
+
+For pupils who need recording-grade audio today, the *Local
+(fceux)* play mode in the ▶ Play dropdown is the answer.
 
 ---
 
