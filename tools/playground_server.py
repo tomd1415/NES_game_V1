@@ -63,7 +63,8 @@ FEEDBACK_HANDLED_PATH = ROOT / "feedback-handled.json"
 # pupil running the editor can't accidentally clobber another pupil's
 # entry from a project's import/export.  No auth on /gallery/remove
 # today (single-machine classroom assumption); the plan is to gate it
-# on the teacher role once accounts ship — see next-steps-plan.md §4.6.
+# on the teacher role once accounts ship — see
+# docs/plans/archive/2026-04-26-next-steps.md §4.6.
 GALLERY_DIR = ROOT / "tools" / "gallery"
 
 # Phase 4.3 — starter audio assets shipped under tools/audio/starter/.
@@ -2238,7 +2239,7 @@ def _gallery_publish(body):
         "description": description,
         "pupil_handle": handle,
         # `owner` is reserved for the future-account feature
-        # (next-steps-plan.md §4.6) — gallery removes will be gated on
+        # (docs/plans/archive/2026-04-26-next-steps.md §4.6) — gallery removes will be gated on
         # the owning account when this isn't None.
         "owner": None,
         "source_page": source,

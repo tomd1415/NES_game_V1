@@ -182,8 +182,9 @@ You can:
 
 Two-player co-op is supported — Player 2 uses the `I` / `J` / `K`
 / `L` cluster on the keyboard.  See
-[BUILDER_GUIDE.md](BUILDER_GUIDE.md) for the module reference +
-the font-tile convention you need to know for Dialogue.
+[docs/guides/BUILDER_GUIDE.md](docs/guides/BUILDER_GUIDE.md) for
+the module reference + the font-tile convention you need to know
+for Dialogue.
 
 ### 💾 Exporting your work
 
@@ -209,14 +210,33 @@ To move a text-format file into the visual editor, run
 `python3 tools/convert_my_tiles.py` and then on each page click
 **Import…** and pick the resulting `assets/pupil/my_project.json`.
 
-Full editor instructions: **`assets/pupil/TILE_EDITOR_GUIDE.md`**.
+Full editor instructions: **[`docs/guides/TILE_EDITOR_GUIDE.md`](docs/guides/TILE_EDITOR_GUIDE.md)**.
 All 64 NES colours: **`assets/pupil/palette_reference.png`**.
 
 ---
 
-## More detail
+## More detail and where to find it
 
-There is a much longer guide in `PUPIL_GUIDE.md` at the top of this folder if you want to know more about how everything works.
+The project's documentation now lives in **[`docs/`](docs/)** — see
+[`docs/README.md`](docs/README.md) for a navigation index.  The
+short version:
+
+- **[`docs/guides/`](docs/guides/)** — pupil-facing
+  ([PUPIL_GUIDE](docs/guides/PUPIL_GUIDE.md),
+  [BUILDER_GUIDE](docs/guides/BUILDER_GUIDE.md),
+  [AUDIO_GUIDE](docs/guides/AUDIO_GUIDE.md),
+  [TILE_EDITOR_GUIDE](docs/guides/TILE_EDITOR_GUIDE.md)) plus
+  teacher / debugging / Aseprite workflow docs.
+- **[`docs/plans/current/`](docs/plans/current/)** — what we're
+  working on now.  The active plan is
+  [2026-04-26-fixes-and-features.md](docs/plans/current/2026-04-26-fixes-and-features.md).
+- **[`docs/plans/archive/`](docs/plans/archive/)** — superseded
+  plans, named chronologically (`YYYY-MM-DD-name.md`) so you can
+  walk the history of how the project evolved.
+- **[`docs/feedback/`](docs/feedback/)** — pupil bug reports and
+  feature requests, including the running
+  [recently-observed bugs list](docs/feedback/recently-observed-bugs.md).
+- **[`docs/changelog/`](docs/changelog/)** — what shipped, when.
 
 Have fun!
 

@@ -197,7 +197,7 @@
   // --------------------------------------------------------------------
   // Player 2 — opt-in second character, driven by the second NES
   // controller.  Uses the second sprite tagged Player on the Sprites
-  // page (findSpritesByRole[1]).  See builder-plan-player2.md for the
+  // page (findSpritesByRole[1]).  See docs/plans/archive/2026-04-23-builder-player2.md for the
   // full plan, especially the "MVP omissions" list (no ladder, no
   // ceiling-bonk, no per-player animation).
   // --------------------------------------------------------------------

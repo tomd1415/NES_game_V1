@@ -585,7 +585,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
 
 <!-- Phase 4.2 — publish-to-gallery dialog.  Lazily populated by
      the publish flow.  `pupil_handle` is optional today; once
-     accounts ship (next-steps-plan.md §4.6) it'll auto-fill from
+     accounts ship (docs/plans/archive/2026-04-26-next-steps.md §4.6) it'll auto-fill from
      the signed-in handle. -->
 <dialog id="publish-dialog" class="publish-dialog">
   <form id="publish-form" method="dialog">
@@ -2022,7 +2022,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
     // Code page's customMainC takes priority in the /play path);
     // the pupil can come back to the Builder any time but their
     // hand-edits won't round-trip.  One-way by design, per
-    // builder-plan.md Q1.
+    // docs/plans/archive/2026-04-23-builder.md Q1.
     document.getElementById('btn-eject-to-code').addEventListener('click', () => {
       if (!templateText) {
         alert('Template still loading — try again in a moment.');

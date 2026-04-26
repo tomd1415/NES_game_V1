@@ -63,7 +63,7 @@ attempt1/
 If you want to draw your own tiles, sprites, and levels, jump to
 **[Designing your own graphics](#designing-your-own-graphics)** at the
 bottom of this guide. The full tile-editor walkthrough lives in
-[`assets/pupil/TILE_EDITOR_GUIDE.md`](assets/pupil/TILE_EDITOR_GUIDE.md).
+[`TILE_EDITOR_GUIDE.md`](TILE_EDITOR_GUIDE.md).
 
 ---
 
@@ -306,7 +306,7 @@ It writes `assets/pupil/my_project.json`. Open the editor, click
 **Import…** on each page, pick the JSON, and your tiles, palettes,
 sprites and background arrive in the new format.
 
-Full editor walkthrough: [`assets/pupil/TILE_EDITOR_GUIDE.md`](assets/pupil/TILE_EDITOR_GUIDE.md).
+Full editor walkthrough: [`TILE_EDITOR_GUIDE.md`](TILE_EDITOR_GUIDE.md).
 
 ---
 
