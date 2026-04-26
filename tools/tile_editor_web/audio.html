@@ -271,6 +271,17 @@ input[type=file] { display: none; }
 (function () {
   'use strict';
 
+  // Instantiate the project-storage wrapper.  Every editor page
+  // does this — `createTileEditorStorage` is exposed as a global by
+  // storage.js but the per-page `Storage` const has to be created
+  // explicitly.  Audio doesn't run its own state migrate/validate
+  // (sprites + backgrounds + behaviour are the source of truth for
+  // those), so we pass identity functions through.
+  const Storage = createTileEditorStorage({
+    migrateState: (s) => s,
+    validateState: () => null,
+  });
+
   const grid       = document.getElementById('songs-grid');
   const sfxHost    = document.getElementById('sfx-card-host');
   const statusBar  = document.getElementById('status-bar');
@@ -303,7 +314,6 @@ input[type=file] { display: none; }
   function loadState() {
     state = Storage.loadCurrent();
     if (!state || typeof state !== 'object') {
-      setStatus('No project loaded — start one on the Sprites page first.', 'warn');
       state = null;
       return;
     }
@@ -316,6 +326,35 @@ input[type=file] { display: none; }
   function saveState() {
     if (!state) return;
     Storage.saveCurrent(state);
+  }
+
+  // Every action handler that mutates state.audio funnels through
+  // this guard.  Returns true if state is ready, false otherwise —
+  // and in the false case it sets a clear status that points pupils
+  // at the Sprites page so they don't see the generic catch-block
+  // "is the playground server running?" error that used to fire.
+  function requireState() {
+    if (state) return true;
+    setStatus('No project yet — open the Sprites page first to create one, then come back here.', 'warn');
+    return false;
+  }
+
+  // Toggles the page action buttons en masse based on whether a
+  // project is actually loaded.  Without this, pupils landing on the
+  // Audio page first see a banner saying "no project" but the buttons
+  // are still clickable, which then throws when they touch state.
+  function setActionsEnabled(enabled) {
+    const ids = ['btn-load-starter', 'btn-clear-all',
+                 'btn-upload-song', 'btn-upload-sfx', 'btn-preview'];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      // The preview button has its own enable rules (depends on
+      // whether sfx is loaded); when state is missing it stays
+      // disabled, otherwise the render() pass decides.
+      if (id === 'btn-preview' && enabled) continue;
+      el.disabled = !enabled;
+    }
   }
 
   function render() {
@@ -492,6 +531,7 @@ input[type=file] { display: none; }
 
   async function handleSongUpload(file) {
     if (!file) return;
+    if (!requireState()) return;
     setStatus('Reading ' + file.name + '…');
     try {
       const asm = await readFileAsText(file);
@@ -517,6 +557,7 @@ input[type=file] { display: none; }
 
   async function handleSfxUpload(file) {
     if (!file) return;
+    if (!requireState()) return;
     setStatus('Reading ' + file.name + '…');
     try {
       const asm = await readFileAsText(file);
@@ -556,6 +597,7 @@ input[type=file] { display: none; }
   });
 
   document.getElementById('btn-load-starter').addEventListener('click', async () => {
+    if (!requireState()) return;
     setStatus('Fetching starter pack from the playground server…');
     try {
       const res = await fetch('/starter/audio');
@@ -584,6 +626,7 @@ input[type=file] { display: none; }
   });
 
   document.getElementById('btn-clear-all').addEventListener('click', () => {
+    if (!requireState()) return;
     if (!confirm('Remove every song and the sfx pack?  This cannot be undone.')) return;
     state.audio = { songs: [], sfx: null, defaultSongIdx: 0 };
     saveState(); render();
@@ -592,7 +635,7 @@ input[type=file] { display: none; }
 
   // --- Preview ----------------------------------------------------
   previewBtn.addEventListener('click', async () => {
-    if (!state) return;
+    if (!requireState()) return;
     const previewState = JSON.parse(JSON.stringify(state));
     const idx = parseInt(previewSel.value, 10) || 0;
     previewState.audio.defaultSongIdx = idx;
@@ -626,8 +669,25 @@ input[type=file] { display: none; }
     .then(t => { templateText = t; })
     .catch(e => console.warn('[audio] template fetch failed:', e));
   render();
+  setActionsEnabled(!!state);
   if (!state) {
-    setStatus('Open a project on the Sprites page first, then come back here.', 'warn');
+    // Pupils who land here without a project see a permanent banner
+    // (not just a status line) so they understand the page is real
+    // but the data they need to act on is somewhere else.  Replaces
+    // the empty-state in the songs grid because nothing else on the
+    // page can do anything until they have a project.
+    const banner = document.createElement('div');
+    banner.className = 'empty-card';
+    banner.style.padding = '32px 24px';
+    banner.innerHTML =
+      '<h3 style="color:var(--accent);margin:0 0 8px">No project yet</h3>' +
+      '<p style="margin:0 0 12px">Audio belongs to a project — start one on the ' +
+      '<a href="sprites.html">Sprites page</a> first (it\'ll seed a starter hero ' +
+      'sprite for you), then come back here to add music + sound effects.</p>' +
+      '<a class="page-link" href="sprites.html">🦸 Open the Sprites page</a>';
+    grid.replaceChildren(banner);
+    sfxHost.replaceChildren();
+    setStatus('No project yet — open the Sprites page first.', 'warn');
   } else if (state.audio.songs.length === 0) {
     setStatus('No songs yet.  Click "Load starter pack" or upload your own FamiStudio export.', '');
   } else {

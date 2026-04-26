@@ -175,6 +175,19 @@ main { padding: 16px; }
 (function () {
   'use strict';
 
+  // Instantiate the project-storage wrapper — needed so a11y.js
+  // can persist text-size + theme prefs the same way it does on
+  // every other editor page.  Gallery doesn't read or write
+  // project state itself, but `Storage` must resolve to our
+  // wrapper rather than the browser's built-in Web Storage
+  // interface, otherwise a11y.js's `Storage.readPrefs / writePrefs`
+  // calls silently no-op.
+  // eslint-disable-next-line no-unused-vars
+  const Storage = createTileEditorStorage({
+    migrateState: (s) => s,
+    validateState: () => null,
+  });
+
   const grid       = document.getElementById('gallery-grid');
   const emptyState = document.getElementById('gallery-empty');
   const statusBar  = document.getElementById('status-bar');

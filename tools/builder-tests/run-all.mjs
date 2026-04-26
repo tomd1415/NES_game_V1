@@ -253,6 +253,28 @@ check('invariant: PPU register macros are volatile', () => {
 
 console.log('');
 
+// Guard: every editor page that loads storage.js must instantiate
+// the storage wrapper via `createTileEditorStorage(...)`.  audio.html
+// shipped 2026-04-26 referencing `Storage.loadCurrent()` without
+// calling the factory — `Storage` resolved to the browser's
+// built-in Web Storage interface, the call threw silently inside
+// the IIFE, and pupils saw "No project yet" even when projects
+// existed (because state stayed null).  Cheap text-level guard so
+// the same mistake can't ship undetected on a future page.
+check('invariant: every page that loads storage.js calls createTileEditorStorage', () => {
+  const pages = ['index.html', 'sprites.html', 'behaviour.html',
+                 'builder.html', 'code.html', 'audio.html', 'gallery.html'];
+  for (const p of pages) {
+    const html = fs.readFileSync(path.join(WEB, p), 'utf8');
+    const loadsStorage = /<script\s+src=["']storage\.js["']/i.test(html);
+    if (!loadsStorage) continue;
+    if (!/createTileEditorStorage\s*\(/.test(html)) {
+      throw new Error(`${p} loads storage.js but never calls createTileEditorStorage(...)` +
+        ' — Storage.loadCurrent will hit the browser\'s Web Storage interface and throw');
+    }
+  }
+}) || (anyFail = true);
+
 // --- Step 3: byte-identical ROM invariant ------------------------------
 //
 // Step_Playground's stock main.c compiles to a baseline ROM.  Swapping
