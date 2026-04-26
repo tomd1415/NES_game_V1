@@ -78,6 +78,17 @@ AUDIO_STARTER_SONGS = [
     ("Tense loop",    "song_tense_loop.s"),
 ]
 AUDIO_STARTER_SFX = ("Starter sfx pack", "sfx_pack.s")
+
+# Absolute path the Makefile's FAMISTUDIO_DIR variable gets
+# overridden to.  The Makefile's default is `../../tools/audio/
+# famistudio`, which resolves correctly when make runs in STEP_DIR
+# but breaks when the customMainC path clones STEP_DIR into a
+# tempdir (the relative path then points at a sibling that doesn't
+# exist).  Passing the absolute path on the make command line
+# works for both paths, and the build output stays portable
+# because the engine's `.include` / `.incbin` paths are all
+# relative to the engine source, not the Makefile.
+AUDIO_ENGINE_DIR = ROOT / "tools" / "audio" / "famistudio"
 GALLERY_LOCK = threading.Lock()
 GALLERY_MAX_BODY = 4 * 1024 * 1024  # 4 MB — ROM + preview + project state.
 GALLERY_MAX_TITLE = 80
@@ -1834,6 +1845,7 @@ def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
             audio_songs_path.write_text(audio_songs_asm)
             audio_sfx_path.write_text(audio_sfx_asm)
             make_args.append("USE_AUDIO=1")
+            make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
         else:
             # Belt-and-braces: clear any stale audio files from a
             # previous request so the next no-audio build is clean.
@@ -1891,6 +1903,10 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
             (tmp_root / "src" / "audio_songs.s").write_text(audio_songs_asm)
             (tmp_root / "src" / "audio_sfx.s").write_text(audio_sfx_asm)
             make_args.append("USE_AUDIO=1")
+            # Override the Makefile's relative `../../tools/audio/famistudio`
+            # default with the real path — the tempdir clone of STEP_DIR
+            # has no `tools/` sibling, so the relative form would 404.
+            make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
 
         build = subprocess.run(
             make_args,

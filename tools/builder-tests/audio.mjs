@@ -240,6 +240,42 @@ try {
   }
   console.log('✓ swapping default song produces a different ROM (alias trailer is wired)');
 
+  // Case 9 — customMainC + audio (the audio.html preview path).
+  // The shared-dir audio build (cases 2/3/7/8) and the customMainC
+  // tempdir build hit different code paths in the playground
+  // server.  The tempdir path clones STEP_DIR, so the Makefile's
+  // default `FAMISTUDIO_DIR = ../../tools/audio/famistudio` no
+  // longer points anywhere real.  Caught a real shipped regression
+  // where the audio.html preview emitted "No rule to make target
+  // ../../tools/audio/famistudio/famistudio_engine.s"; the server
+  // now passes the absolute path on the make command line.  This
+  // case forces a customMainC build with audio so that path is
+  // covered by the smoke suite.
+  const minimalCustomMain = `
+unsigned char dummy;
+void waitvsync(void);
+extern void play_song(unsigned char idx);
+int main(void) { dummy = 0; for(;;) { waitvsync(); } return 0; }
+const void *vectors[] = { (void*)0, (void*)main, (void*)0 };
+`;
+  const r2 = await fetch(`http://127.0.0.1:${PORT}/play`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      state: mkState(),
+      playerSpriteIdx: 0, playerStart: { x: 60, y: 120 },
+      sceneSprites: [], mode: 'browser',
+      customMainC: minimalCustomMain,
+      audioSongsAsm: buildSongsAsm(starter.songs, 0),
+      audioSfxAsm:   buildSfxAsm(starter.sfx),
+    }),
+  });
+  const customData = await r2.json();
+  if (!customData.ok) {
+    fail(`customMainC + audio build failed at stage ${customData.stage}: ` +
+         (customData.log || '').slice(-400));
+  }
+  console.log('✓ customMainC + audio build succeeds (tempdir FAMISTUDIO_DIR override works)');
+
 } finally {
   srv.kill('SIGTERM');
   await sleep(300);
