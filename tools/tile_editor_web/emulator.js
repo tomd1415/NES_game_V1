@@ -93,6 +93,7 @@
     dlg.innerHTML =
       '<div class="emu-header">' +
       '  <h2>▶ Your game</h2>' +
+      '  <button type="button" class="close-fab" id="emu-mute" title="Mute / unmute audio" aria-pressed="false">🔊</button>' +
       '  <button type="button" class="close-fab" id="emu-close" title="Close">×</button>' +
       '</div>' +
       '<canvas id="emu-canvas" width="256" height="240"></canvas>' +
@@ -130,6 +131,34 @@
     return null;
   }
 
+  // Web Audio plumbing — Phase 4.3.  jsnes emits stereo samples
+  // through `onAudioSample(left, right)`; we drop them into a small
+  // ring buffer and a ScriptProcessorNode pulls from the same buffer
+  // to fill the speaker output.  Lazily created and cached: opening
+  // the emulator twice in one session reuses the same AudioContext
+  // (browsers limit how many you can create, and resuming a
+  // suspended context inside a click handler is what unlocks audio
+  // post-autoplay-policy).
+  //
+  // ScriptProcessorNode is deprecated in favour of AudioWorklet but
+  // (a) every shipping browser still supports it, (b) AudioWorklet
+  // needs a separate worklet file, which we'd rather avoid for a
+  // single shared module.  Trade-off documented so a future cleanup
+  // pass knows what to swap to.
+  let audioCtx = null;
+  let audioMuted = false;
+  function ensureAudioContext() {
+    if (audioCtx) return audioCtx;
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    try {
+      audioCtx = new Ctor({ sampleRate: 44100 });
+    } catch (_) {
+      try { audioCtx = new Ctor(); } catch (__) { audioCtx = null; }
+    }
+    return audioCtx;
+  }
+
   // --------------------------------------------------------------------
   // Open the dialog, load ROM, run.  Returns a Promise that resolves
   // when the dialog closes, so pages can sequence things if they want.
@@ -153,16 +182,81 @@
     dlg.classList.toggle('single-player', opts.hasP2 === false);
     document.body.classList.toggle('emu-single-player', opts.hasP2 === false);
 
+    // Audio ring buffer: 4096 stereo frames = 8192 samples.  At
+    // 44.1 kHz that's ~93 ms of headroom, comfortably more than the
+    // ~17 ms between rAF-driven jsnes frames so we don't underrun
+    // even if a frame is late.  Stereo is interleaved L,R,L,R,...
+    const SAMPLE_BUF_LEN = 8192;
+    const sampleBuf = new Float32Array(SAMPLE_BUF_LEN);
+    let writeIdx = 0;
+    let readIdx  = 0;
+
     const nes = new jsnes.NES({
       onFrame(buf) {
         for (let i = 0; i < buf.length; i++) frame[i] = 0xff000000 | buf[i];
         ctx.putImageData(img, 0, 0);
       },
-      onAudioSample() {},
+      onAudioSample(left, right) {
+        sampleBuf[writeIdx]     = left;
+        sampleBuf[writeIdx + 1] = right;
+        writeIdx = (writeIdx + 2) % SAMPLE_BUF_LEN;
+      },
     });
     let romStr = '';
     for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
     nes.loadROM(romStr);
+
+    // Web Audio output.  Best-effort — if the browser refuses
+    // (very old WebKit, locked-down WebView, or AudioContext
+    // creation fails) the game still runs silently.
+    const ac = ensureAudioContext();
+    let scriptNode = null;
+    if (ac) {
+      // open() always runs from a click handler, which is the
+      // gesture the autoplay policy needs.  Resume in case a
+      // previous open() left the context suspended.
+      if (ac.state === 'suspended') {
+        try { ac.resume(); } catch (_) {}
+      }
+      scriptNode = ac.createScriptProcessor(2048, 0, 2);
+      scriptNode.onaudioprocess = (e) => {
+        const out0 = e.outputBuffer.getChannelData(0);
+        const out1 = e.outputBuffer.getChannelData(1);
+        if (audioMuted) {
+          // Drain the ring buffer even when muted so the producer
+          // doesn't keep overwriting itself + producing audible
+          // glitches when un-muted.
+          for (let i = 0; i < out0.length; i++) {
+            out0[i] = 0; out1[i] = 0;
+            readIdx = (readIdx + 2) % SAMPLE_BUF_LEN;
+          }
+          return;
+        }
+        for (let i = 0; i < out0.length; i++) {
+          out0[i] = sampleBuf[readIdx]     || 0;
+          out1[i] = sampleBuf[readIdx + 1] || 0;
+          readIdx = (readIdx + 2) % SAMPLE_BUF_LEN;
+        }
+      };
+      scriptNode.connect(ac.destination);
+    }
+
+    // Mute toggle.  The button's label/aria-pressed update on click
+    // so screen readers + the a11y high-contrast theme both reflect
+    // the state.
+    const muteBtn = document.getElementById('emu-mute');
+    function syncMuteUi() {
+      if (!muteBtn) return;
+      muteBtn.textContent = audioMuted ? '🔇' : '🔊';
+      muteBtn.setAttribute('aria-pressed', audioMuted ? 'true' : 'false');
+      muteBtn.title = audioMuted ? 'Unmute audio' : 'Mute audio';
+    }
+    syncMuteUi();
+    function onMute() {
+      audioMuted = !audioMuted;
+      syncMuteUi();
+    }
+    if (muteBtn) muteBtn.onclick = onMute;
 
     const kd = (e) => { const m = mapCode(e.code); if (m) nes.buttonDown(m.pad, m.button); };
     const ku = (e) => { const m = mapCode(e.code); if (m) nes.buttonUp(m.pad,   m.button); };
@@ -183,6 +277,18 @@
         if (raf) cancelAnimationFrame(raf);
         window.removeEventListener('keydown', kd);
         window.removeEventListener('keyup',   ku);
+        if (scriptNode) {
+          try { scriptNode.disconnect(); } catch (_) {}
+          scriptNode.onaudioprocess = null;
+          scriptNode = null;
+        }
+        // Suspend (don't close) the AudioContext so the next open()
+        // can resume it cheaply.  Closing it would force creating a
+        // new context, which browsers throttle.
+        if (ac && ac.state === 'running') {
+          try { ac.suspend(); } catch (_) {}
+        }
+        if (muteBtn) muteBtn.onclick = null;
         try { dlg.close(); } catch (_) {}
         if (typeof opts.onClose === 'function') {
           try { opts.onClose(); } catch (_) {}
