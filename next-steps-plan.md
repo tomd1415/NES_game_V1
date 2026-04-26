@@ -490,39 +490,40 @@ returns 404.  Wired into `run-all.mjs`; full suite green.
 often "finish" something they want to share, and the publish flow
 is identical apart from `source_page`.  Add later if pupils ask.
 
-### 4.3 — Audio (L, possibly XL)
+### 4.3 — Audio (L)
 
-The biggest pupil ask but also the biggest engineering risk.  Leave
-for last.
+**Detailed plan in [audio-plan.md](audio-plan.md).**  Two-tier
+approach agreed 2026-04-26 after a deep dive on the FamiStudio
+repo:
 
-**Strategy.**  Vendor the FamiStudio sound engine under
-`tools/audio/` (LGPL, NES-standard).  Teach the Makefile to assemble
-and link it.  Add an **Audio** page that accepts FamiStudio `.ftm →
-.s` exports and stores them alongside `src/`.  Ship `play_music(n)`
-and two snippets (`music-on-start`, `jump-sfx`).
+- **Tier A (this phase).**  Vendor Mathieu Gauthier's FamiStudio
+  sound engine (`famistudio_ca65.s` + `famistudio_cc65.h`) under
+  `tools/audio/famistudio/`.  Engine ships under a "do whatever,
+  keep the notice" licence — more permissive than MIT, no
+  copyleft contagion (the LGPL/GPL bits in FamiStudio's
+  `ThirdParty/` are editor-only and we don't touch them).  New
+  `audio` Builder module + `audio.html` editor page accept `.s`
+  files exported from standalone FamiStudio desktop, expose
+  per-event sfx mappings (jump / hit / pickup / land / dialogue /
+  door) and per-trigger song mappings (start / per-scene /
+  low-HP / win / lose).  Quick-start guide in
+  `AUDIO_GUIDE.md` walks pupils through install → compose →
+  export → upload.  Most pupils already use FamiStudio so the
+  install step isn't a barrier today.  Effort ~4 focused days
+  (~L).
+- **Tier B (deferred follow-up).**  Browser-native simplified
+  composer for pupils who can't install FamiStudio (Chromebooks /
+  locked-down classroom kit).  Deliberately *narrow*: one song,
+  16×16 grid, two pulse channels, single octave, fixed tempo —
+  aimed at first-time programmers, not full FamiStudio replacement.
+  Exports to the same `.s` format Tier A consumes so the runtime
+  pipeline stays identical.  Web Audio for preview (not
+  cycle-accurate, "did I write what I meant?" only).  Schedule
+  only if a pupil is genuinely blocked from installing FamiStudio.
+  Effort ~weeks (Phase 4.2-sized).
 
-**Plan.**
-
-1. Discovery spike (S): check FamiStudio export compatibility with
-   cc65-linked projects, measure ROM-size impact of the engine
-   (~2 KB), confirm NTSC/PAL handling.
-2. Vendor `tools/audio/famistudio_ca65.s` + README on how to
-   regenerate.
-3. Makefile rule: assemble + link the engine, gated on a
-   `USE_AUDIO` flag (0 = off, ROM stays the stock size).
-4. Builder: new `audio` module with upload slot + track-index
-   config.  Assembler emits `USE_AUDIO=1` + `#define AUDIO_INDEX N`
-   when enabled.
-5. Snippets: `music-on-start.c` calls `play_music(AUDIO_INDEX)`
-   on init; `jump-sfx.c` calls `play_sfx(SFX_JUMP)` on A press.
-6. Tests: new `audio.mjs` suite — build with audio off (baseline
-   size), build with audio on + a stub .s file, ROM size increases
-   but stays under the iNES limit.
-
-**Risks.**  FamiStudio engine wiring on NTSC/PAL, ROM-size budget,
-classroom-friendliness (pupils need a way to author tunes — either
-ship a browser tracker or settle for importing pre-made .ftm
-files).  Worth a discovery sprint before committing.
+See [audio-plan.md](audio-plan.md) for the full file-by-file
+breakdown, risks, and ordering.
 
 ### 4.4 — Vertical + 2×2 (4-screen) backgrounds (M) — DONE 2026-04-26
 

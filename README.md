@@ -219,3 +219,13 @@ All 64 NES colours: **`assets/pupil/palette_reference.png`**.
 There is a much longer guide in `PUPIL_GUIDE.md` at the top of this folder if you want to know more about how everything works.
 
 Have fun!
+
+---
+
+## Licence
+
+This project is **free and open-source software** released under the [MIT Licence](LICENSE).
+You — and your pupils — can use it, copy it, change it, share it, or build on it for any purpose.
+
+A few third-party components are bundled (jsnes, CodeMirror) or relied on (cc65, FCEUX, optionally FamiStudio).
+Each one's original licence and credit lives in [NOTICE.md](NOTICE.md).
