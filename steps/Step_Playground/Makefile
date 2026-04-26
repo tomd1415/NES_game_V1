@@ -30,12 +30,30 @@ EMULATOR = fceux
 ROM     = game.nes
 BUILD   = build
 
+# Audio (Phase 4.3) — opt-in.  When USE_AUDIO=1 is passed on the
+# make command line (the playground server sets it when the audio
+# module is enabled), the FamiStudio sound engine + the per-project
+# audio_songs.s + audio_sfx.s blobs get compiled in.  Default off
+# keeps the 1×1 byte-identical baseline test honest.
+USE_AUDIO ?= 0
+
 C_SRC   = src/main.c src/behaviour.c src/bg_world.c src/scroll.c
 ASM_SRC = src/graphics.s
 
+FAMISTUDIO_DIR = ../../tools/audio/famistudio
+
+ifeq ($(USE_AUDIO),1)
+# audio_songs.s + audio_sfx.s are written into src/ by the
+# playground server right before invoking make.  The engine itself
+# lives outside the step tree and is referenced by relative path so
+# we never accidentally ship a stale local copy.
+AUDIO_OBJS = $(BUILD)/famistudio_engine.o $(BUILD)/audio_songs.o $(BUILD)/audio_sfx.o
+CFLAGS    += -DUSE_AUDIO=1
+endif
+
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
-OBJECTS = $(C_OBJ) $(ASM_OBJ)
+OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS)
 
 .PHONY: all clean run rebuild-run
 
@@ -80,6 +98,22 @@ $(BUILD)/scroll.o: src/scroll.c src/scroll.h src/bg_world.h | $(BUILD)
 	rm -f $(BUILD)/scroll.s
 
 $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(BUILD)
+	$(AS) -t $(TARGET) -o $@ $<
+
+# Audio (Phase 4.3) — only built when USE_AUDIO=1.  Engine asm is
+# vendored under tools/audio/famistudio/ (see NOTICE.md there); we
+# assemble the wrapper, which `.include`s the engine source so the
+# vendored file stays untouched and our config flags (SFX_SUPPORT,
+# DPCM_SUPPORT off, etc.) take effect.  The pupil-uploaded song /
+# sfx blobs are staged into src/ by the playground server before
+# each build.
+$(BUILD)/famistudio_engine.o: $(FAMISTUDIO_DIR)/famistudio_engine.s $(FAMISTUDIO_DIR)/famistudio_ca65.s | $(BUILD)
+	$(AS) -t $(TARGET) -I $(FAMISTUDIO_DIR) -o $@ $<
+
+$(BUILD)/audio_songs.o: src/audio_songs.s | $(BUILD)
+	$(AS) -t $(TARGET) -o $@ $<
+
+$(BUILD)/audio_sfx.o: src/audio_sfx.s | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $<
 
 run: $(ROM)

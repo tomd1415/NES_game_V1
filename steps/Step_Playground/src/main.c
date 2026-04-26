@@ -51,6 +51,51 @@
    — see scroll.c for the column-stream bug that motivated the
    qualifier.  Mirroring the macros here keeps both translation units
    consistent. */
+#ifdef USE_AUDIO
+/* Phase 4.3 — FamiStudio sound engine.  The wrapper at
+ * tools/audio/famistudio/famistudio_engine.s assembles the engine
+ * with our config (SFX on, DPCM off, NTSC).  audio_songs.s + audio_sfx.s
+ * are staged into src/ by the playground server when the audio module
+ * is enabled in the project; their `music_data_*` and `audio_sfx_data`
+ * symbols are referenced from this file so the linker pulls them in.
+ *
+ * Pupils opting into audio MUST upload at least one song, otherwise
+ * audio_songs.s won't define `audio_default_music`.  The playground
+ * server enforces this before invoking make.
+ */
+#define FAMISTUDIO_PLATFORM_NTSC 1
+#define FAMISTUDIO_SFX_CH0 0
+#define FAMISTUDIO_SFX_CH1 15
+extern unsigned char audio_default_music[];
+extern unsigned char audio_sfx_data[];
+void __fastcall__ _famistudio_init(unsigned char platform);
+void __fastcall__ famistudio_music_play(unsigned char song_index);
+void __fastcall__ famistudio_update(void);
+void __fastcall__ _famistudio_sfx_init(void);
+void __fastcall__ famistudio_sfx_play(unsigned char sfx_index, unsigned char channel);
+/* The engine's cc65 header wraps `init` with inline asm to load the
+ * music-data pointer into A:X before jsr; we replicate the minimum
+ * we need here so a bare main.c can call it without including the
+ * vendored header. */
+#define famistudio_init(platform, music_data)         \
+    (__AX__ = ((unsigned int)(music_data))),          \
+    __asm__ ("pha\n"),                                \
+    __asm__ ("txa\n"),                                \
+    __asm__ ("tay\n"),                                \
+    __asm__ ("pla\n"),                                \
+    __asm__ ("tax\n"),                                \
+    __asm__ ("lda #%b\n", (unsigned char)(platform)), \
+    __asm__ ("jsr _famistudio_init\n");
+#define famistudio_sfx_init(sfx_data)      \
+    (__AX__ = ((unsigned int)(sfx_data))), \
+    __asm__ ("pha\n"),                     \
+    __asm__ ("txa\n"),                     \
+    __asm__ ("tay\n"),                     \
+    __asm__ ("pla\n"),                     \
+    __asm__ ("tax\n"),                     \
+    __asm__ ("jsr _famistudio_sfx_init\n");
+#endif
+
 #define PPU_CTRL      (*(volatile unsigned char*)0x2000)
 #define PPU_MASK      (*(volatile unsigned char*)0x2001)
 #define OAM_ADDR      (*(volatile unsigned char*)0x2003)
@@ -208,6 +253,16 @@ void main(void) {
     PPU_SCROLL = 0;
 #endif
     PPU_MASK = 0x1E;
+
+#ifdef USE_AUDIO
+    /* Phase 4.3 — boot the sound engine.  audio_default_music points
+     * at the first song the pupil uploaded; audio_sfx_data is the
+     * single sfx blob.  Both are emitted by the playground server
+     * before make is invoked. */
+    famistudio_init(FAMISTUDIO_PLATFORM_NTSC, audio_default_music);
+    famistudio_sfx_init(audio_sfx_data);
+    famistudio_music_play(0);
+#endif
 
 //>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200). Paint SOLID_GROUND or PLATFORM tiles on the Behaviour page under this spot or the player will drop to the ground.
     px = PLAYER_X;
@@ -631,6 +686,16 @@ void main(void) {
         /* Re-enable rendering well before the pre-render T→V copy
            window so the next frame's scroll position lands. */
         PPU_MASK = 0x1E;
+#endif
+#ifdef USE_AUDIO
+        /* Phase 4.3 — engine update once per frame at the end of
+         * vblank.  Cheap (~200-400 cycles); the PPU_MASK = 0 wrap
+         * still covers it from V-pollution risk if the budget is
+         * tight, since this runs *before* PPU_MASK is reset above
+         * in the SCROLL_BUILD branch.  On the no-scroll path the
+         * engine just runs after rendering is back on, which is
+         * fine — it doesn't touch PPU_ADDR. */
+        famistudio_update();
 #endif
     }
 }
