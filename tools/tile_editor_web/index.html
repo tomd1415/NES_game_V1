@@ -1261,6 +1261,11 @@ kbd {
         <span class="nt-mode-icon" aria-hidden="true">🧽</span>
         <span>Erase</span>
       </button>
+      <button type="button" class="nt-mode" data-mode="fill" aria-pressed="false"
+              title="Fill: flood-fill all connected cells of the same tile with the currently selected tile + palette. Quick way to paint big areas of background.">
+        <span class="nt-mode-icon" aria-hidden="true">🪣</span>
+        <span>Fill</span>
+      </button>
     </div>
     <label class="nt-advanced-tool" title="Extra tools: palette rectangle paints a dragged rectangle of palette only; flood-fill replaces connected same-tile cells.">Advanced
       <select id="nt-tool">
@@ -1345,7 +1350,7 @@ kbd {
       <li><b>Pick a colour</b> — press <kbd>0</kbd>, <kbd>1</kbd>, <kbd>2</kbd>, or <kbd>3</kbd>. Colour 0 is always "transparent / show the universal background".</li>
       <li><b>Draw a tile</b> — click squares in the big Editing Tile canvas. Use <kbd>[</kbd> / <kbd>]</kbd> to move to the previous / next tile (there are 256).</li>
       <li><b>Choose colours for the palette</b> — in the Palettes panel, click a slot (e.g. BG0 slot 1) then click a colour in the 64-colour master grid to assign it.</li>
-      <li><b>Paint the background</b> — scroll to <i>Background / Nametable</i>. Pick a mode at the top of the toolbar: <b>🖌 Paint tile</b> stamps the selected tile, <b>🎨 Paint palette</b> only recolours a 2×2 block, <b>🧽 Erase</b> resets to tile 0. Try the <b>📌 Pop-out tileset</b> and <b>🎨 Pop-out palettes</b> windows for easy picking while you paint.</li>
+      <li><b>Paint the background</b> — scroll to <i>Background / Nametable</i>. Pick a mode at the top of the toolbar: <b>🖌 Paint tile</b> stamps the selected tile, <b>🎨 Paint palette</b> only recolours a 2×2 block, <b>🧽 Erase</b> resets to tile 0, <b>🪣 Fill</b> flood-fills every connected same-tile cell — quickest way to lay down a big sky or floor area. Try the <b>📌 Pop-out tileset</b> and <b>🎨 Pop-out palettes</b> windows for easy picking while you paint.</li>
       <li><b>Preview it</b> — click <b>🖥 Full preview</b> (or press <kbd>F</kbd>) to see it at real NES size. Press <kbd>Esc</kbd> to close.</li>
     </ol>
     <p class="help-hint">

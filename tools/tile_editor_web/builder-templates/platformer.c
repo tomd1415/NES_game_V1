@@ -165,6 +165,17 @@ unsigned char attr;
 
 //@ insert: declarations
 
+/* Gravity application macro — Builder's Globals module
+ * (T1.6 in docs/plans/current/2026-04-26-fixes-and-features.md)
+ * overrides this via the declarations slot above.  The default
+ * `(y)++` matches the historic 1 px/frame fall and is byte-
+ * equivalent to the literal `ss_y[i]++` cc65 used to emit, so
+ * the no-modules-ticked baseline ROM stays identical to
+ * Step_Playground's main.c. */
+#ifndef BW_APPLY_GRAVITY
+#define BW_APPLY_GRAVITY(y) (y)++
+#endif
+
 #if PLAYER_HP_ENABLED
 /* Phase B finale chunk A — HP + damage.  The Builder's damage module
  * writes `#define PLAYER_HP_ENABLED 1` + `#define PLAYER_MAX_HP <n>`
@@ -770,7 +781,7 @@ void main(void) {
              || foot_b == BEHAVIOUR_PLATFORM) {
                 continue;  // resting on a surface — don't fall further
             }
-            if (ss_y[i] < 232) ss_y[i]++;  // fall 1 px/frame, clamp near screen bottom
+            if (ss_y[i] < 232) BW_APPLY_GRAVITY(ss_y[i]);  // fall 1 px/frame by default; Globals module can override
         }
 //<<
 #endif  /* BW_GAME_STYLE == 0 — top-down has no gravity */

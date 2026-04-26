@@ -3387,3 +3387,80 @@ commit.  A scheduled follow-up (one week out) sweeps the
 inter-archive cross-links that weren't all chased in the
 initial reorg.
 
+## Tier 1 (post-Phase-4 plan) — second batch shipped 2026-04-27
+
+Source plan:
+[`docs/plans/current/2026-04-26-fixes-and-features.md`](../plans/current/2026-04-26-fixes-and-features.md).
+The remaining four Tier-1 items + the deferred T1.3 regression
+guard all landed in one session, completing Tier 1 of the plan.
+
+- **T1.4 — wider Sprite reactions panel** *(item 20)*.
+  `tools/tile_editor_web/behaviour.html`'s page-level grid
+  collapses from `260px 1fr 340px` (three columns, reactions
+  cramped on the right) to `260px 1fr` with
+  `grid-template-areas` placing the types palette on the left
+  full-height, the canvas top-right, and the sprite-reactions
+  panel under the canvas full-width.  Pure CSS / no DOM moves
+  thanks to the `grid-template-areas` pattern.
+- **T1.2 — pixel grid overlay on sprite top view** *(item 19)*.
+  New `show-pixel-grid` checkbox on the Sprites toolbar (off by
+  default — the existing cell grid stays the prominent
+  landmark).  `renderSpriteCanvas` draws faint 1-px lines at
+  every per-pixel boundary on the composition canvas, gated to
+  zoom ≥ 6× so the lines aren't unreadable at low zoom.  Mirrors
+  the per-tile pixel editor that already had a grid.
+- **T1.3 follow-up — regression guard for sprite duplicate**.
+  New invariant in `tools/builder-tests/run-all.mjs`:
+  `btn-sprite-dup handler clones tile pixels (not just sprite
+  struct)`.  Source-level check that the handler still calls
+  `findFreeTileRun(...)`, `clonePixels(...)`, and writes a fresh
+  `state.sprite_tiles[t]` entry.  A behavioural test would need
+  JSDOM (which the project doesn't ship); when JSDOM lands this
+  guard can be replaced with a real assertion.
+- **T1.1 — Background-tile fill tool surfaced** *(item 1)*.
+  The flood-fill logic already existed in `index.html`'s
+  `nt-tool` Advanced dropdown (`tool === 'fill'` branch with the
+  `ntFloodFill` BFS implementation), but pupils couldn't find
+  it.  Added a fourth top-level mode button (🪣 Fill) to the
+  `.nt-mode-toggle` row alongside Paint tile / Paint palette /
+  Erase.  No new logic — the existing `setNtMode('fill')` path
+  already handled the wiring.  Help-tab tutorial copy updated
+  to mention the button.
+- **T1.6 — Globals Builder module** *(item 22)*.
+  New `globals` module in `builder-modules.js` exposing a
+  `gravityPx` integer (0-4, default 1) that overrides scene-
+  sprite fall rate game-wide.  Implementation uses a macro
+  pattern that preserves the byte-identical baseline:
+  - Both `steps/Step_Playground/src/main.c` and
+    `tools/tile_editor_web/builder-templates/platformer.c` gain
+    a default `#ifndef BW_APPLY_GRAVITY / #define
+    BW_APPLY_GRAVITY(y) (y)++ / #endif`.  The literal `(y)++`
+    expansion compiles to the same ROM bytes cc65 used to emit
+    for `ss_y[i]++`, verified by sha1sum'ing the resulting
+    `.nes` before and after the change.
+  - The scene-sprite gravity site changes from `ss_y[i]++` to
+    `BW_APPLY_GRAVITY(ss_y[i])` in both files.
+  - When the module ticks, its `applyToTemplate` writes
+    `#define BW_GRAVITY_PX <n>` and
+    `#define BW_APPLY_GRAVITY(y) ((y) += BW_GRAVITY_PX)` into
+    the `declarations` slot, which sits *above* the default
+    `#ifndef`, so the override wins.
+  - `MODULE_ORDER` in `builder-assembler.js` gains `'globals'`
+    immediately after `'game'` so its declarations land near
+    the top of the customMainC.
+
+  T2.5 (per-sprite tuning) will plug per-instance overrides into
+  this same macro infrastructure when it ships.
+
+**Tests.**  Full `run-all.mjs` regression suite green — every
+invariant including the byte-identical baseline (proves the
+`BW_APPLY_GRAVITY` macro doesn't disturb the no-modules-ticked
+path), the new T1.3 sprite-duplicate guard, and all 16 smoke
+suites including audio.
+
+**Tier 1 complete.**  Nine of nine items shipped (T1.1 through
+T1.9).  Next session moves into Tier 2 — recommended start point
+is the door-bug bundle (T2.1 + T2.2) since it's a known-bad
+pupil report and likely shares a root cause across the two
+items.
+

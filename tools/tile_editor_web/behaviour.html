@@ -168,13 +168,26 @@ label { -webkit-user-select: none; user-select: none; }
 button.warn { border-color: var(--warn); color: var(--warn); }
 
 /* --- Main layout -------------------------------------------- */
+/* Two columns: type-palette (fixed) + canvas/reactions (flex).
+   The reactions panel sits *under* the canvas rather than to the
+   right (pre-2026-04-27 it was in a 340 px right column and felt
+   cramped — pupil-reported, item 20 in
+   docs/feedback/recently-observed-bugs.md).  Putting it below the
+   canvas gives it the full 1fr column width while keeping the
+   types palette pinned where pupils expect it. */
 .app-main {
   display: grid;
-  grid-template-columns: 260px 1fr 340px;
+  grid-template-columns: 260px 1fr;
+  grid-template-areas:
+    "types  canvas"
+    "types  reactions";
   gap: 12px;
   padding: 12px 16px;
   align-items: start;
 }
+.type-panel      { grid-area: types; }
+.canvas-panel    { grid-area: canvas; }
+.reactions-panel { grid-area: reactions; }
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -289,7 +302,7 @@ button.warn { border-color: var(--warn); color: var(--warn); }
   line-height: 1.35;
 }
 
-/* --- Right: reactions / backgrounds ------------------------- */
+/* --- Reactions (now under the canvas, see grid-template-areas) -- */
 .reactions-panel { min-width: 280px; }
 .reactions-table {
   width: 100%;

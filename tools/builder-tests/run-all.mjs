@@ -275,6 +275,45 @@ check('invariant: every page that loads storage.js calls createTileEditorStorage
   }
 }) || (anyFail = true);
 
+// T1.3 follow-up — duplicate-sprite must allocate fresh tile slots.
+//
+// Pre-2026-04-26 the duplicate-sprite handler did
+// `JSON.parse(JSON.stringify(sp))` and pushed the result, which deep-
+// cloned the sprite struct (cells, name, role, ...) but kept every
+// cell's `tile` index pointing at the *shared* `state.sprite_tiles`
+// entry.  Editing the duplicate's pixels then silently edited the
+// original.  The fix allocates a fresh contiguous tile run via
+// `findFreeTileRun(w*h, state)` and copies pixels into it.  This
+// guard checks the handler text still does both — a pure source-text
+// regression so the cheaper text-only fix doesn't get reverted by
+// accident.  A behavioural test would need a JSDOM harness which the
+// project doesn't currently have; if/when that lands this guard can
+// be replaced with a real assertion.
+check('invariant: btn-sprite-dup handler clones tile pixels (not just sprite struct)', () => {
+  const html = fs.readFileSync(path.join(WEB, 'sprites.html'), 'utf8');
+  const dupBlockMatch = html.match(/btn-sprite-dup'\)\.addEventListener\([\s\S]*?renderAll\(\);\s*\}\);/);
+  if (!dupBlockMatch) {
+    throw new Error("sprites.html: couldn't locate the btn-sprite-dup click handler" +
+      ' — the regex needs updating if the structure changed');
+  }
+  const dupBlock = dupBlockMatch[0];
+  if (!/findFreeTileRun\(/.test(dupBlock)) {
+    throw new Error('btn-sprite-dup handler no longer calls findFreeTileRun(...) — ' +
+      'duplicating a sprite will silently share tile pixels with the original ' +
+      '(item 18 in docs/feedback/recently-observed-bugs.md regressed)');
+  }
+  if (!/clonePixels\(/.test(dupBlock)) {
+    throw new Error('btn-sprite-dup handler no longer calls clonePixels(...) — ' +
+      'duplicate sprite will reference original tile pixels by index ' +
+      '(item 18 in docs/feedback/recently-observed-bugs.md regressed)');
+  }
+  if (!/state\.sprite_tiles\[\s*t\s*\]\s*=/.test(dupBlock)) {
+    throw new Error('btn-sprite-dup handler no longer writes a fresh ' +
+      'state.sprite_tiles[t] entry — the new tile slots will be empty and ' +
+      'the duplicate will paint from a stale tile');
+  }
+}) || (anyFail = true);
+
 // --- Step 3: byte-identical ROM invariant ------------------------------
 //
 // Step_Playground's stock main.c compiles to a baseline ROM.  Swapping

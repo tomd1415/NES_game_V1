@@ -1968,6 +1968,9 @@ details.collapsible > summary .sub-count {
       <label title="Show a faint grid at each 8×8 tile boundary">
         <input type="checkbox" id="show-cell-grid" checked> cell grid
       </label>
+      <label title="Show a fainter grid at every 1×1 pixel boundary on the composition canvas (mirrors the per-tile pixel editor).  Auto-hides at very low zoom.">
+        <input type="checkbox" id="show-pixel-grid"> pixel grid
+      </label>
       <label title="How thick the grid lines are drawn">
         Grid
         <select id="grid-width" title="Line thickness: off hides the grid, 2px is easier on tired eyes">
@@ -4297,6 +4300,7 @@ function renderSpriteCanvas() {
   const sp = currentSprite();
   const showChecker = document.getElementById('show-checker').checked;
   const showCellGrid = document.getElementById('show-cell-grid').checked;
+  const showPixelGrid = !!document.getElementById('show-pixel-grid')?.checked;
   const px = spriteZoom;
 
   if (!sp) {
@@ -4353,6 +4357,35 @@ function renderSpriteCanvas() {
           ctx.fillRect((cc * 8 + pxl) * px, (cr * 8 + py) * px, px, px);
         }
       }
+    }
+  }
+
+  // Pixel grid (T1.2 — pupil-requested item 19 in
+  // docs/feedback/recently-observed-bugs.md).  Mirrors the faint
+  // 1×1 grid the per-tile pixel editor already shows; helps when
+  // pupils paint at high zoom and want to count individual pixels.
+  // Auto-hides below px=6 — at low zoom the lines would crowd
+  // each 1-px cell to the point of unreadability.  Drawn before
+  // the cell grid so the cell-grid lines stay the more prominent
+  // visual landmark.
+  if (showPixelGrid && px >= 6) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    const totalPxX = sp.width * 8;
+    const totalPxY = sp.height * 8;
+    for (let i = 1; i < totalPxX; i++) {
+      const x = i * px + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let i = 1; i < totalPxY; i++) {
+      const y = i * px + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
     }
   }
 
@@ -8187,6 +8220,7 @@ function init() {
   });
   document.getElementById('show-checker').addEventListener('change', renderSpriteCanvas);
   document.getElementById('show-cell-grid').addEventListener('change', renderSpriteCanvas);
+  document.getElementById('show-pixel-grid')?.addEventListener('change', renderSpriteCanvas);
   document.getElementById('grid-width').addEventListener('change', e => {
     const prefs = Storage.readPrefs();
     prefs.gridWidth = parseInt(e.target.value, 10);

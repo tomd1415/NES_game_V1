@@ -168,6 +168,16 @@ unsigned char sy;
 unsigned char tile;
 unsigned char attr;
 
+/* Gravity application macro — Builder's Globals module
+ * (T1.6 in docs/plans/current/2026-04-26-fixes-and-features.md)
+ * overrides this with a different fall rate when ticked.  The
+ * default `(y)++` matches the historic 1 px/frame fall and is
+ * byte-equivalent to the literal `ss_y[i]++` cc65 used to emit
+ * here, so the no-modules-ticked baseline ROM is unchanged. */
+#ifndef BW_APPLY_GRAVITY
+#define BW_APPLY_GRAVITY(y) (y)++
+#endif
+
 // Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
 // changes we reset frame/tick so a new animation always plays from its
 // first frame.  anim_base is the byte offset of the current frame inside
@@ -557,7 +567,7 @@ void main(void) {
              || foot_b == BEHAVIOUR_PLATFORM) {
                 continue;  // resting on a surface — don't fall further
             }
-            if (ss_y[i] < 232) ss_y[i]++;  // fall 1 px/frame, clamp near screen bottom
+            if (ss_y[i] < 232) BW_APPLY_GRAVITY(ss_y[i]);  // fall 1 px/frame by default; Globals module can override
         }
 //<<
 #endif  /* BW_GAME_STYLE == 0 — top-down has no scene-sprite gravity */

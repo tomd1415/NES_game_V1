@@ -84,6 +84,57 @@
   };
 
   // --------------------------------------------------------------------
+  // Globals (T1.6 — pupil-requested item 22 in
+  // docs/feedback/recently-observed-bugs.md).  Game-wide variables that
+  // override default physics constants the platformer template hard-codes.
+  // Currently only `gravityPx` (scene-sprite fall rate); future iterations
+  // (T2.5) will add per-sprite tuning that falls back to these defaults.
+  // --------------------------------------------------------------------
+  modules['globals'] = {
+    label: 'Globals',
+    description: 'Variables that affect the whole game — start with how ' +
+      'fast objects fall.  Tick this and slide the value to make the world ' +
+      'feel heavier or floatier.  More globals (e.g. walk-speed defaults, ' +
+      'screen-edge wrap) get added here over time.',
+    defaultConfig: {
+      // 1 px/frame matches the historic hardcoded fall rate, so a freshly
+      // ticked module with default values produces the same play feel as
+      // unticked.  Pupils only see a difference when they slide gravityPx.
+      gravityPx: 1,
+    },
+    schema: [
+      {
+        key: 'gravityPx',
+        label: 'Gravity (pixels per frame)',
+        type: 'int',
+        min: 0,
+        max: 4,
+        step: 1,
+        help: '0 = floating (no fall), 1 = default lazy drift, 2 = ' +
+          'normal platformer feel, 3-4 = heavy/snappy.  Affects scene ' +
+          'sprites (enemies, pickups) — the player\'s jump arc is ' +
+          'controlled separately by Player 1\'s Jump height.',
+      },
+    ],
+    // Emit `#define BW_GRAVITY_PX <n>` and an override of the
+    // BW_APPLY_GRAVITY macro into the declarations slot.  Both
+    // platformer.c and Step_Playground/main.c carry a default
+    // `#define BW_APPLY_GRAVITY(y) (y)++` that activates only when
+    // this module is *not* ticked, so unticking the module restores
+    // the byte-identical baseline.
+    applyToTemplate(template, node /*, state */) {
+      const c = (node && node.config) || {};
+      const g = (typeof c.gravityPx === 'number') ? c.gravityPx : 1;
+      const clamped = Math.max(0, Math.min(4, g | 0));
+      return A.appendToSlot(template, 'declarations', [
+        '/* Builder Globals module — game-wide gravity override. */',
+        `#define BW_GRAVITY_PX ${clamped}`,
+        '#define BW_APPLY_GRAVITY(y) ((y) += BW_GRAVITY_PX)',
+      ].join('\n'));
+    },
+  };
+
+  // --------------------------------------------------------------------
   // Players — container module.  Chunk 1 only renders Player 1; a
   // second-player submodule ships in Phase B.
   // --------------------------------------------------------------------

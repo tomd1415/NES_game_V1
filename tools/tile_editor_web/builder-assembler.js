@@ -126,7 +126,7 @@
   // Deterministic module order.  Later modules see the output of earlier
   // ones, so the order matters: `game` picks the template; `players`
   // then fills in player region values.
-  const MODULE_ORDER = ['game', 'players', 'scene',
+  const MODULE_ORDER = ['game', 'globals', 'players', 'scene',
     'behaviour_walls', 'pickups', 'damage', 'hud', 'doors',
     'dialogue', 'events', 'win_condition'];
 
