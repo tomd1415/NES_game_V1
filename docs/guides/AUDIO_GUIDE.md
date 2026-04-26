@@ -147,6 +147,38 @@ update for you — you only need to add `famistudio_sfx_play(...)`
 calls where you want sound effects, and `famistudio_music_play(N)`
 when you want to switch to a different song.
 
+#### Connecting sound effects to events
+
+The four sounds pupils most often want are **jump**, **land**,
+**hit** (taking damage), and **pickup** (collecting an item).
+Each one is a single `famistudio_sfx_play(...)` call placed at
+the right spot in your `main.c`.  In the starter template these
+spots all live inside the main game loop — search for the
+existing keywords below and drop the matching line in.
+
+| Event   | Where to add the call (search for…) | Snippet |
+| ------- | ----------------------------------- | ------- |
+| Jump start | `jumping = 1;` (the line that starts a new jump, around the `JOY_A` button check) | `famistudio_sfx_play(0, FAMISTUDIO_SFX_CH0);` |
+| Landing | `jumping = 0;` immediately after the player hits the ground (look for the comment `feet on a surface`) | `famistudio_sfx_play(3, FAMISTUDIO_SFX_CH1);` |
+| Hit / damage taken | wherever your code decreases the player's HP | `famistudio_sfx_play(1, FAMISTUDIO_SFX_CH0);` |
+| Pickup collected | wherever your code marks a pickup as collected | `famistudio_sfx_play(2, FAMISTUDIO_SFX_CH1);` |
+
+The slot numbers (0, 1, 2, 3) match the order you uploaded sfx
+on the Audio page — slot 0 is the first sound, slot 1 the
+second, and so on.  The channel argument (`FAMISTUDIO_SFX_CH0`
+or `FAMISTUDIO_SFX_CH1`) picks which of the two engine sfx
+voices plays the sound; using different channels for different
+events lets two sounds play at the same time without cutting
+each other off.  *Tip:* pair "jump" with "land" on the **same**
+channel — when you land mid-jump the land sound naturally
+replaces the jump tail.
+
+> **Coming in a follow-up.**  The 🧱 Builder will gain an
+> Audio module that lets you point each event at a sfx slot
+> from a dropdown, with no code editing — see
+> [`docs/plans/current/2026-04-26-fixes-and-features.md`](../plans/current/2026-04-26-fixes-and-features.md)
+> §T2.6.  Until that lands, the snippets above are the way.
+
 A more comprehensive Code-page guide (including this audio section,
 plus everything else the Code page lets you do) is on the roadmap;
 for now the **🧱 Builder**'s audio module is the smoothest path.

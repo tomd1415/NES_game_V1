@@ -565,36 +565,31 @@ initiates.
 
 ---
 
-## Open questions (please answer before that work starts)
+## Decisions (answers from 2026-04-26)
 
-- **T1.7 gallery thumbnail.**  Frame 30 is a guess — would the
-  user prefer a different number, or a "first frame on which
-  any sprite has moved" heuristic?
-
-Answer: Frame 30 sounds good to me.
-
-- **T2.4 enemy defeat.**  Stomp first (the standard
-  platformer mechanic) is my recommendation; confirm the user
-  doesn't want projectile first.
-
-Answer: That is correctt.
-
-- **T2.7 default sfx.**  Should the starter pack be the
-  default for *every* new project, or only when the pupil
-  picks a "platformer" preset?
-
-Answer: Default for time being, add more later.
-
-- **T3.2 beyond-2-screens.**  Is there a hard preference
-  between "upgrade to MMC1 mapper" (breaks every old project)
-  and "stick with mapper 0 + runtime streaming" (caps
-  achievable world size)?
-
-Answer: Is there a way of allowing the MMC1 mapper but having an option for the older projects to keep the old way of doing it?
-
-- **T4.2 account scope.**  Is the eventual goal genuinely
-  "log in from any browser and your projects follow you", or
-  is "save my projects on this one shared school computer"
-  the realistic ceiling?
-
-Answer: Pupils want to continue their work on games from home and having an account would be the easiest way for them to do that.
+- **T1.7 gallery thumbnail.**  Capture **frame 30** — confirmed.
+- **T2.4 enemy defeat.**  Ship **stomp first**, defer projectile —
+  confirmed.
+- **T2.7 default sfx.**  **Yes, default for every new project for
+  the time being.**  Re-evaluate (and possibly switch to "default
+  for platformer preset only") once the top-down preset's
+  audio-event vocabulary is in.
+- **T3.2 beyond-2-screens.**  **Add an MMC1 path, keep the
+  existing mapper-0 path as a per-project opt-out.**  Net effect:
+  default new projects to whichever is *currently* simplest (most
+  likely mapper 0 stays the default until the MMC1 path is proven),
+  expose a project-level "large world support" toggle that flips
+  the build to MMC1, and make sure the toggle is one-way per
+  project (turning it off after content has been laid out for
+  >2 screens silently truncates, which we should warn the pupil
+  about).  All existing projects boot identically with no toggle
+  flip.  Add an ADR-style note to T3.2 once the spike has
+  confirmed CHR-ROM banking works under jsnes + FCEUX.
+- **T4.2 account scope.**  **Cross-device project sync is the
+  goal** (pupils continue work from home).  Sub-piece order from
+  the original list stands; promote sub-piece 1 (anonymous
+  per-browser nonce so anonymous gallery deletions work) to a
+  Tier 2 near-term item — it's small, useful by itself, and
+  unblocks the gallery-removal UX before the full account stack
+  lands.  Tracked here for now; the full plan doc gets written
+  before any backend work starts.

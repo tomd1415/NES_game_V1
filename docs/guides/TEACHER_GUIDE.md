@@ -843,6 +843,12 @@ The NES's limitations (256 colors but only 25 on screen, 64 sprites max, 8 per s
 
 ## Useful references
 
+The short list below is the on-ramp.  A more detailed,
+project-specific curation of references — what each one answers
+and when to reach for it — lives in
+[`docs/reference/nes-resources.md`](../reference/nes-resources.md);
+that's the file to point a curious pupil or visiting developer at.
+
 - **NESdev Wiki** (nesdev.org/wiki): The definitive NES technical reference
 - **cc65 documentation**: cc65.github.io/doc
 - **NES color palette**: Search "NES palette" for visual charts of all 64 color values

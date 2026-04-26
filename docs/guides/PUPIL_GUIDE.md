@@ -393,3 +393,14 @@ Look at the step folders to see how each feature was added! Each step builds on 
 - Y = 0 is the top, Y = 239 is the bottom
 - The NES can show up to **64 sprites** at once (we use 8 for the player)
 - Each sprite is **8x8 pixels**
+
+## Want to learn more about how the NES works?
+
+The NES has been around since 1983 and the people who reverse-
+engineered it have written a *lot* of useful documentation.  When
+you want to understand *why* something behaves the way it does,
+have a look at [`docs/reference/nes-resources.md`](../reference/nes-resources.md)
+— it's a curated list of the best places to look up how the
+hardware works, how the music engine is wired up, and how the
+toolchain we use puts everything together.  None of it is
+required reading, but it's all there if you're curious.

@@ -3303,3 +3303,87 @@ byte-identical ROM baseline (both templates received
 symmetric edits for 3.1), and **10 smoke suites** (the new
 `topdown.mjs` joins the existing nine; `round1-polish.mjs`
 and `round2-dialogue.mjs` gained new in-suite cases).
+
+## Tier 1 (post-Phase-4 plan) — first batch shipped 2026-04-26
+
+Source plan:
+[`docs/plans/current/2026-04-26-fixes-and-features.md`](../plans/current/2026-04-26-fixes-and-features.md).
+Five Tier-1 items landed in one session — all the lower-risk
+documentation and single-spot-code fixes.  T1.1 (background fill),
+T1.2 (pixel grid overlay), T1.4 (wider behaviour panel) and T1.6
+(Globals Builder module) are deliberately deferred to the next
+session because they're either more substantive code edits or
+require a fresh environment.
+
+- **T1.7 — gallery thumbnail** *(item 25)*.
+  `tools/tile_editor_web/builder.html`'s `captureRomPreview()`
+  now boots jsnes for **60 frames** before snapshotting the
+  framebuffer (was 30).  Pupils were reporting blank
+  background-only thumbnails; 30 frames covered cc65's startup
+  + first few main-loop iterations on paper but jsnes-side
+  evidence said it wasn't enough in practice for at least one
+  animation cycle to tick on the player sprite.  The function
+  now carries a docstring explaining the constraint and
+  pointing at the bug item that motivated it, so future readers
+  don't bisect this back to "magic constant 60".
+- **T1.5 part 1 — sfx event linkage doc** *(item 27)*.
+  [AUDIO_GUIDE.md](../guides/AUDIO_GUIDE.md) gains a *Connecting
+  sound effects to events* sub-section under "Code-page pupils"
+  with a four-row table (jump start / land / hit / pickup)
+  showing where to add `famistudio_sfx_play(...)` calls + which
+  channel to use for each.  The Builder UI side of this item
+  (T1.5 part 2) is gated on T2.6 and intentionally not done
+  here.
+- **T1.8 — palette-bug diagnosis framework** *(item 16)*.
+  [`docs/feedback/recently-observed-bugs.md`](../feedback/recently-observed-bugs.md)
+  now ends with a *Diagnosis notes* section.  Item 16 has a
+  three-step repro plan (UI persistence / canvas render /
+  runtime ROM render) plus a triage matrix mapping outcomes to
+  likely fix locations.  Captures the plan's "do not fix
+  blind" guidance as a checklist the next session can fill in.
+- **T1.9 — NES dev resources** *(item 4)*.  New file
+  [`docs/reference/nes-resources.md`](../reference/nes-resources.md)
+  curating the canonical references the project leans on:
+  NESdev wiki PPU/scrolling/mirroring/APU/iNES pages, cc65 +
+  ca65 + ld65 docs, FCEUX / Mesen / jsnes references, FamiStudio
+  notes, NESdev forum, Nerdy Nights tutorials.  Each entry has
+  a one-line "what it answers" hook.  Cross-linked from
+  [PUPIL_GUIDE.md](../guides/PUPIL_GUIDE.md) (curiosity-driven)
+  and [TEACHER_GUIDE.md](../guides/TEACHER_GUIDE.md) (replaces
+  the old short list).
+- **T1.3 — duplicate sprite copies tiles** *(item 18)*.
+  `tools/tile_editor_web/sprites.html`'s `btn-sprite-dup` handler
+  now allocates a fresh contiguous tile run via
+  `findFreeTileRun(w*h, state)` and copies the source's pixel
+  data (via `clonePixels`) into the new slots, then rewires the
+  duplicate's cells to point at the new indices.  Without this
+  step, editing the duplicate's pixels silently edited the
+  original because both shared `state.sprite_tiles[idx]`.
+  Falls back to the old shared-tile behaviour with a warn
+  toast when the tile sheet is full.
+
+**Tests.**  Full `run-all.mjs` regression suite green after
+the work — 16 builder smoke suites + every invariant including
+byte-identical-ROM and audio.  No new test cases added in this
+batch; the next session should add one for the
+`btn-sprite-dup` flow specifically (build a state with a
+sprite whose pixels are non-zero, duplicate, edit the duplicate's
+pixels, assert the original's pixels are unchanged) — flagged
+under T1.3 in the plan as a follow-up.
+
+**Documentation reorg.**  All `.md` files (except top-level
+`README.md`, `NOTICE.md`, and `LICENSE`) moved into a
+structured `docs/` tree on the same day: `docs/guides/` (pupil-
+and teacher-facing), `docs/plans/current/` (active plans),
+`docs/plans/archive/` (chronologically named superseded plans),
+`docs/feedback/` (bug list + pupil ideas + feedback summary),
+`docs/changelog/` (this file), and `docs/reference/` (T1.9's
+new home).  See [`docs/README.md`](../README.md) for the full
+old→new path table.  Code-side references (`audio.html`'s
+`<a href="AUDIO_GUIDE.md">`, doc comments in `builder.html`,
+`code.html`, `behaviour.html`, `builder-modules.js`,
+`playground_server.py`) updated to the new paths in the same
+commit.  A scheduled follow-up (one week out) sweeps the
+inter-archive cross-links that weren't all chased in the
+initial reorg.
+

@@ -1703,6 +1703,21 @@ body.emu-single-player #emu-p2-controls { display: none; }
     dlg.showModal();
   }
 
+  // Capture a ROM thumbnail for the gallery.  We boot a fresh
+  // jsnes instance, run `frames` frames cold from reset, and
+  // snapshot the final framebuffer.  The frame count is a
+  // deliberate over-count: cc65's startup runs zerobss + copydata
+  // + initlib + the main()-side palette/nametable/PPU-mask
+  // sequence before the game loop produces anything visible, and
+  // jsnes appears to need ~10-20 frames before its onFrame
+  // callback emits non-blank pixels for our build.  60 frames
+  // (~1 s) is well past that envelope and lets at least one
+  // animation cycle tick on the player sprite, so the captured
+  // image is representative rather than mid-boot.  Pupil bug
+  // report 2026-04-26 (item 25 in
+  // docs/feedback/recently-observed-bugs.md) said the previous
+  // value left thumbnails as plain background colour — that's
+  // what this number guards against.
   async function captureRomPreview(rom, frames) {
     if (window.NesEmulator && typeof window.NesEmulator.ensureJsnes === 'function') {
       await window.NesEmulator.ensureJsnes();
@@ -1774,7 +1789,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
       }
 
       statusEl.textContent = 'Capturing preview…';
-      const dataUrl = await captureRomPreview(rom, 30);
+      const dataUrl = await captureRomPreview(rom, 60);
       const previewB64 = dataUrl.split(',')[1];
       const romB64 = bytesToBase64(rom);
 

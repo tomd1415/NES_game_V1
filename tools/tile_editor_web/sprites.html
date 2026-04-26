@@ -7951,8 +7951,40 @@ function init() {
     const sp = currentSprite();
     if (!sp) return;
     pushUndo();
+    // Deep-clone the sprite struct (cells, name, width/height, role, ...).
     const copy = JSON.parse(JSON.stringify(sp));
     copy.name = (sp.name || 'sprite') + '_copy';
+    // Reassign each non-empty cell to a fresh tile index and copy the
+    // source pixels into the new slot.  Without this the duplicate's
+    // cells would share global tile entries with the original — pupil-
+    // reported 2026-04-26 (item 18 in
+    // docs/feedback/recently-observed-bugs.md): editing the duplicate
+    // silently edits the original because both sprites point at the
+    // same `state.sprite_tiles[idx]`.  Allocating a contiguous run
+    // matches the convention `assignFreshTiles` uses for new sprites.
+    const w = copy.width, h = copy.height;
+    const start = findFreeTileRun(w * h, state);
+    if (start > 0) {
+      let t = start;
+      for (let r = 0; r < h; r++) {
+        for (let c = 0; c < w; c++) {
+          const cell = copy.cells[r][c];
+          if (cell.empty) { t++; continue; }
+          const srcTile = state.sprite_tiles[cell.tile];
+          if (srcTile && srcTile.pixels) {
+            state.sprite_tiles[t] = {
+              pixels: clonePixels(srcTile.pixels),
+              name: srcTile.name || '',
+            };
+            cell.tile = t;
+          }
+          t++;
+        }
+      }
+    } else {
+      setStatus('warn',
+        '● Tile sheet is full — duplicate shares pixels with the original');
+    }
     state.sprites.splice(selectedSpriteIdx + 1, 0, copy);
     selectedSpriteIdx = selectedSpriteIdx + 1;
     markDirty();
