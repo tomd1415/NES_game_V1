@@ -1,8 +1,12 @@
 # Audio integration plan (Phase 4.3)
 
-> **Status (2026-04-26).**  Plan agreed.  Implementation pending.
-> Existing 4.3 sketch in [next-steps-plan.md](next-steps-plan.md)
-> rolled into this document; that section now points back here.
+> **Status (2026-04-26).**  *Tier A foundation shipped.*  Vendored
+> the FamiStudio sound engine, wired the Makefile + cfg + main.c,
+> plumbed `/play` to accept audio blobs, added a regression suite
+> that proves the path round-trips end-to-end.  No-audio builds
+> stay byte-identical.  Editor UI / Builder module / starter pack
+> / AUDIO_GUIDE land in the next session — see *Follow-up scope*
+> at the bottom of this file.
 
 This document fleshes out Phase 4.3 — adding music + sound effects
 to pupil games.  Two tiers, in order:
@@ -307,3 +311,115 @@ in their games at the cost of a vendoring step + a Builder module
 + a page.  Tier B sits parked behind a deliberately-tight scope
 so it can ship in weeks rather than months *if* it turns out to
 be needed.
+
+---
+
+## What landed 2026-04-26 (Tier A foundation)
+
+The build pipeline is in place.  An NES ROM produced via `/play`
+with `audioSongsAsm` and `audioSfxAsm` blobs links the FamiStudio
+sound engine plus the supplied data and runs it from `main()`'s
+init and per-frame vblank update.  No-audio builds stay byte-
+identical to the prior baseline.
+
+Concretely shipped:
+
+- **Engine vendored** under
+  [`tools/audio/famistudio/`](tools/audio/famistudio/):
+  `famistudio_ca65.s` (~7.5 KLOC, vendored verbatim), `famistudio_cc65.h`,
+  the `NoteTables/` directory, `LICENSE`, `NOTICE.md`, `VERSION.txt`,
+  and `sync.sh` for upstream refresh.  A small wrapper
+  `famistudio_engine.s` sets the config flags (SFX on, DPCM off,
+  NTSC) before `.include`ing the engine, so the vendored file stays
+  unmodified.
+- **Build pipeline** —
+  [`Makefile`](steps/Step_Playground/Makefile) and
+  [`cfg/nes.cfg`](steps/Step_Playground/cfg/nes.cfg).
+  `USE_AUDIO=1` flag flips on the audio path, which assembles the
+  engine wrapper plus `src/audio_songs.s` plus `src/audio_sfx.s`
+  and links them into the ROM.  Three new optional cfg segments
+  (`FAMISTUDIO_ZP`, `FAMISTUDIO_BSS`, `FAMISTUDIO_CODE`) coexist
+  with cc65's runtime without segment-attribute clashes.  ZP grown
+  from 26 → 254 bytes to fit the engine's ~8 byte ZP footprint.
+- **Runtime hooks** in [`main.c`](steps/Step_Playground/src/main.c):
+  guarded `#ifdef USE_AUDIO` blocks declare the engine API, call
+  `famistudio_init` + `famistudio_sfx_init` + `famistudio_music_play(0)`
+  on boot, and `famistudio_update` once per frame at the end of
+  vblank.
+- **Server staging** in
+  [`playground_server.py`](tools/playground_server.py): `_build_rom`
+  validates optional `audioSongsAsm` + `audioSfxAsm` strings (64 KB
+  cap, must be strings, both required to enable), and the build
+  paths write them into the build's `src/` and append `USE_AUDIO=1`
+  to the make invocation.  Asymmetric uploads (one of the two
+  missing) silently fall back to no-audio.
+- **Regression suite** in
+  [`tools/builder-tests/audio.mjs`](tools/builder-tests/audio.mjs):
+  proves the no-audio path returns the baseline ROM, the audio path
+  returns a different (non-baseline) ROM, asymmetric uploads fall
+  back, and bad inputs are rejected.  Wired into `run-all.mjs`.
+- **Project licence + attribution.**
+  [LICENSE](LICENSE) (MIT) + [NOTICE.md](NOTICE.md) at the project
+  root; the FamiStudio entry was forward-referenced before this
+  phase and is now real.
+
+What this checkpoint can do today: any caller (test, future Builder
+module, future audio editor page) can POST a state with
+FamiStudio-exported `.s` blobs in `audioSongsAsm` + `audioSfxAsm`
+and get back an NES ROM that boots, calls `famistudio_init`, and
+plays song 0 from the supplied music data.
+
+What it can't do yet: pupils have no UI to upload `.s` files, no
+state schema to remember them across sessions, no Builder mappings
+for events / triggers, no starter pack, no `AUDIO_GUIDE.md`.
+
+---
+
+## Follow-up scope (next session)
+
+In rough priority order — items 1–4 are pupil-facing essentials,
+items 5–7 round out the experience.
+
+1. **`state.audio` schema migration.**  Top-level
+   `state.audio = { songs: [{name, asm, size}], sfx: {asm, size},
+   triggers: {…}, events: {…} }`.  Storage fortifier seeds an
+   empty block on load for projects that predate the schema.
+2. **`audio.html` editor page.**  Card-grid for songs (filename,
+   detected `music_data_*` symbol, size, ▶ Preview, 🗑 Remove,
+   *Upload song* button), one for sfx (single blob), the two
+   mapping tables (event-to-sfx and trigger-to-song), ROM-size
+   audit panel, and a prominent quick-start banner pointing pupils
+   at FamiStudio.
+3. **Builder `audio` module.**  Wires the mappings into the
+   platformer template's slots — boot block calls
+   `famistudio_music_play(start_song)`, event hooks call
+   `famistudio_sfx_play(idx, channel)`, scene transitions call
+   `track_for_state(scene_idx)`.  Builder UI exposes the same
+   mappings as the audio.html page (single source of truth via
+   `state.audio`).
+4. **Code-page integration.**  Expose the engine API to the Code
+   page's `customMainC` builds — at minimum, surface the
+   `famistudio_*` symbols + the `audio_default_music` /
+   `audio_sfx_data` externs in the auto-included header so
+   advanced pupils can write their own music + sfx logic.
+5. **Starter pack.**  Author 2–3 short, original `.fmstxt`
+   FamiStudio text-format projects (verified working via the CLI
+   round-trip during this session) — a happy-major loop, a
+   minor-key tense loop, a victory fanfare — plus a 4–6-sfx pack
+   (jump / hit / pickup / land / blip / error).  Build script
+   `tools/audio/starter/build.sh` runs the FamiStudio CLI to
+   regenerate `.s` from the `.fmstxt` sources; commit both so
+   offline use works without FamiStudio installed.
+6. **`AUDIO_GUIDE.md`.**  Pupil-facing walkthrough: install
+   FamiStudio → compose 60-second example → export to `.s` → upload
+   → wire up triggers/events → hit ▶ Play.  Two paths, one for
+   Builder pupils and one for Code-page pupils.
+7. **Comprehensive Code-page pupil documentation
+   (`CODE_GUIDE.md`).**  Separate from audio but flagged by the
+   user during the Phase 4.3 kick-off.  Covers what the Code page
+   does, when to use it vs the Builder, the project-state contract
+   (sprites / backgrounds shared across pages), how to handle
+   common patterns (input, animation, scrolling, audio), and how
+   to debug build errors.  Tracked here so it doesn't get lost,
+   but should be its own work item — see
+   [next-steps-plan.md](next-steps-plan.md) when this lands.

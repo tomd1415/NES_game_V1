@@ -1656,6 +1656,38 @@ def _build_rom(body):
             rom_bytes = _patch_ines_four_screen(rom_bytes)
         return rom_bytes, build_log
 
+    # Phase 4.3 — optional audio assets.  The browser-side audio
+    # editor passes the FamiStudio-exported `.s` blobs in here.
+    # Both must be present for USE_AUDIO=1 to flip on, since
+    # main.c links against `audio_default_music` *and*
+    # `audio_sfx_data` symbols.  Small validation: must be strings,
+    # capped at 64 KB each so a runaway upload can't eat memory.
+    AUDIO_MAX_BYTES = 64 * 1024
+    audio_songs = body.get("audioSongsAsm")
+    audio_sfx   = body.get("audioSfxAsm")
+    if audio_songs is not None:
+        if not isinstance(audio_songs, str):
+            raise ValueError("'audioSongsAsm' must be a string if provided")
+        if len(audio_songs.encode("utf-8")) > AUDIO_MAX_BYTES:
+            raise ValueError(f"'audioSongsAsm' too large (>{AUDIO_MAX_BYTES} bytes)")
+        if not audio_songs.strip():
+            audio_songs = None
+    if audio_sfx is not None:
+        if not isinstance(audio_sfx, str):
+            raise ValueError("'audioSfxAsm' must be a string if provided")
+        if len(audio_sfx.encode("utf-8")) > AUDIO_MAX_BYTES:
+            raise ValueError(f"'audioSfxAsm' too large (>{AUDIO_MAX_BYTES} bytes)")
+        if not audio_sfx.strip():
+            audio_sfx = None
+    # Audio is only enabled when *both* are present — main.c needs
+    # both symbols to link.  Asymmetric uploads (song without sfx
+    # or vice versa) silently fall back to no-audio rather than
+    # erroring, with a hint in the build log so pupils know.
+    audio_kwargs = {}
+    if audio_songs and audio_sfx:
+        audio_kwargs = {"audio_songs_asm": audio_songs,
+                        "audio_sfx_asm":   audio_sfx}
+
     if custom_main_asm is not None:
         pal_asm = build_palettes_asminc(state)
         scene_asm = build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y)
@@ -1677,10 +1709,11 @@ def _build_rom(body):
         return _maybe_patch(_build_in_tempdir(
             custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
             collision_h, behaviour_c, bg_world_h, bg_world_c,
+            **audio_kwargs,
         ))
     return _maybe_patch(_build_in_shared_dir(
         chr_bytes, nam_bytes, pal_src, scene_src, collision_h, behaviour_c,
-        bg_world_h, bg_world_c,
+        bg_world_h, bg_world_c, **audio_kwargs,
     ))
 
 
@@ -1759,7 +1792,8 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
 
 
 def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
-                         collision_h, behaviour_c, bg_world_h, bg_world_c):
+                         collision_h, behaviour_c, bg_world_h, bg_world_c,
+                         audio_songs_asm=None, audio_sfx_asm=None):
     # Serialise the shared-directory writes + make.  Multiple pupils pressing
     # Play at once queue here instead of corrupting each other's scene.inc.
     with BUILD_LOCK:
@@ -1776,8 +1810,26 @@ def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
         BG_WORLD_H_PATH.write_text(bg_world_h)
         BG_WORLD_C_PATH.write_text(bg_world_c)
 
+        # Phase 4.3 — audio.  When the project ships a song + sfx
+        # blob, write them into src/ and pass USE_AUDIO=1 to make so
+        # the FamiStudio engine + per-project blobs link in.  Default
+        # off keeps the byte-identical-baseline test honest.
+        audio_songs_path = STEP_DIR / "src" / "audio_songs.s"
+        audio_sfx_path   = STEP_DIR / "src" / "audio_sfx.s"
+        make_args = ["make", "-C", str(STEP_DIR)]
+        if audio_songs_asm and audio_sfx_asm:
+            audio_songs_path.write_text(audio_songs_asm)
+            audio_sfx_path.write_text(audio_sfx_asm)
+            make_args.append("USE_AUDIO=1")
+        else:
+            # Belt-and-braces: clear any stale audio files from a
+            # previous request so the next no-audio build is clean.
+            for p in (audio_songs_path, audio_sfx_path):
+                try: p.unlink()
+                except FileNotFoundError: pass
+
         build = subprocess.run(
-            ["make", "-C", str(STEP_DIR)],
+            make_args,
             capture_output=True, text=True,
         )
         build_log = (build.stdout or "") + (build.stderr or "")
@@ -1793,7 +1845,8 @@ def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
 
 
 def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
-                      collision_h, behaviour_c, bg_world_h, bg_world_c):
+                      collision_h, behaviour_c, bg_world_h, bg_world_c,
+                      audio_songs_asm=None, audio_sfx_asm=None):
     # Clone STEP_DIR into a throwaway directory so the pupil's main.c and
     # generated asset files don't touch the shared tree.  Concurrent custom
     # builds can therefore proceed in parallel without the BUILD_LOCK.
@@ -1816,8 +1869,18 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
         (tmp_root / "src" / "bg_world.h").write_text(bg_world_h)
         (tmp_root / "src" / "bg_world.c").write_text(bg_world_c)
 
+        # Phase 4.3 — audio.  See the matching block in
+        # _build_in_shared_dir.  The custom-main build clones STEP_DIR
+        # so we always start with no audio files; only stage them
+        # when the project ships them.
+        make_args = ["make", "-C", str(tmp_root)]
+        if audio_songs_asm and audio_sfx_asm:
+            (tmp_root / "src" / "audio_songs.s").write_text(audio_songs_asm)
+            (tmp_root / "src" / "audio_sfx.s").write_text(audio_sfx_asm)
+            make_args.append("USE_AUDIO=1")
+
         build = subprocess.run(
-            ["make", "-C", str(tmp_root)],
+            make_args,
             capture_output=True, text=True,
         )
         build_log = (build.stdout or "") + (build.stderr or "")

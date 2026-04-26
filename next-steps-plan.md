@@ -490,11 +490,15 @@ returns 404.  Wired into `run-all.mjs`; full suite green.
 often "finish" something they want to share, and the publish flow
 is identical apart from `source_page`.  Add later if pupils ask.
 
-### 4.3 — Audio (L)
+### 4.3 — Audio (L) — IN PROGRESS, foundation done 2026-04-26
 
 **Detailed plan in [audio-plan.md](audio-plan.md).**  Two-tier
 approach agreed 2026-04-26 after a deep dive on the FamiStudio
-repo:
+repo.  *Tier A's runtime + build foundation shipped same day*;
+editor UI + Builder module + starter pack + pupil-facing guide
+queued for the next session.  See the *Follow-up scope* section
+of [audio-plan.md](audio-plan.md) for the exact remaining
+deliverables.
 
 - **Tier A (this phase).**  Vendor Mathieu Gauthier's FamiStudio
   sound engine (`famistudio_ca65.s` + `famistudio_cc65.h`) under
@@ -587,6 +591,51 @@ passes (the patch is a no-op for that path).
 - Worlds wider/taller than 2 screens (e.g. 3×3) still need streaming
   on *both* axes plus 4-screen.  Out of scope for this entry; track
   separately if a pupil ever asks.
+
+### 4.7 — Comprehensive Code-page pupil documentation (M)
+
+**Why.**  Flagged by the user during the Phase 4.3 audio kick-off
+(2026-04-26): the Code page is where more advanced pupils
+hand-edit C, but it lacks pupil-facing documentation comparable
+to `PUPIL_GUIDE.md`'s coverage of the Backgrounds / Sprites /
+Behaviour pages.  Pupils opening the Code page today have to
+reverse-engineer the project-state contract from the existing
+template, which is a sharp jump in difficulty from the Builder.
+
+**Plan (sketch — flesh out when scheduled).**
+
+- New `CODE_GUIDE.md` at the project root.  Pupil-facing tone,
+  matches `PUPIL_GUIDE.md`'s style.
+- Sections:
+  1. **What the Code page is for**, and when to use it vs the
+     Builder.  Frame it as "the next step after the Builder, for
+     when you want to do something the modules don't cover".
+  2. **The shared project state.**  How sprites / backgrounds /
+     behaviour / palettes / audio are shared with the other pages
+     — what the Code page can read, what it shouldn't change.
+  3. **The starter `main.c`'s structure.**  Walk through the
+     boot block, the main loop, the vblank window, how the
+     scroll engine + audio engine + dialogue module hook in.
+  4. **Common patterns** with copy-pasteable snippets:
+     reading the gamepad, moving a sprite, animating a sprite,
+     simple physics, scrolling, playing a sound effect on an
+     event, swapping background music on a trigger.
+  5. **Reading build errors.**  Where the build log appears,
+     how to use the clickable file:line links, how to recover
+     from "I broke the build and don't know what I changed".
+  6. **The Code-page Play pipeline.**  What ▶ Play actually does
+     (assemble → cc65 → ca65 → ld65 → ROM → emulator), why edits
+     can break the build but Backgrounds-page Play still works
+     (the still-pending bug from 2026-04-25), and how to roll
+     back via the Recover-from-snapshot button.
+- Cross-reference `AUDIO_GUIDE.md`'s Code-page section so audio
+  isn't documented twice.
+- Add a one-line link to `CODE_GUIDE.md` from the Code page's
+  help popover so pupils discover it without leaving the editor.
+
+**Effort: M (~1 focused day).**  Mostly content writing + a few
+screenshots; no code changes.  Schedule independently of Phase
+4.3's editor UI work — they don't block each other.
 
 ### 4.6 — Pupil + teacher accounts (future, optional) (L)
 
