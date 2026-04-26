@@ -21,8 +21,20 @@
 #define PPU_ADDR      (*(volatile unsigned char*)0x2006)
 #define PPU_DATA      (*(volatile unsigned char*)0x2007)
 
-/* BG pattern table 1 (matches main.c's boot-time PPU_CTRL setup). */
+/* BG pattern table 1 (matches main.c's boot-time PPU_CTRL setup).
+   Bit 7 (NMI enable) is added when USE_AUDIO=1 — every PPU_CTRL write
+   in this file happens inside the main loop's vblank window AFTER the
+   FamiStudio engine has been initialised, so it's safe to keep the
+   bit set across burst flips and the apply call.  Critically, PPU
+   stride-flip writes during scroll_stream's column burst MUST keep
+   bit 7 set: dropping it mid-frame would disable NMI generation
+   for the *next* vblank, the famistudio NMI handler would stop
+   firing, and music would stall. */
+#ifdef USE_AUDIO
+#define PPU_CTRL_BASE 0x90
+#else
 #define PPU_CTRL_BASE 0x10
+#endif
 /* Auto-increment stride: bit 2 = 0 -> +1 per write (row walk),
                           bit 2 = 1 -> +32 per write (column walk). */
 #define PPU_CTRL_STRIDE_COL 0x04

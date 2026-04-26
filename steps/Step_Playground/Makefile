@@ -47,7 +47,7 @@ ifeq ($(USE_AUDIO),1)
 # playground server right before invoking make.  The engine itself
 # lives outside the step tree and is referenced by relative path so
 # we never accidentally ship a stale local copy.
-AUDIO_OBJS = $(BUILD)/famistudio_engine.o $(BUILD)/audio_songs.o $(BUILD)/audio_sfx.o
+AUDIO_OBJS = $(BUILD)/famistudio_engine.o $(BUILD)/famistudio_nmi.o $(BUILD)/audio_songs.o $(BUILD)/audio_sfx.o
 CFLAGS    += -DUSE_AUDIO=1
 endif
 
@@ -109,6 +109,13 @@ $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(B
 # each build.
 $(BUILD)/famistudio_engine.o: $(FAMISTUDIO_DIR)/famistudio_engine.s $(FAMISTUDIO_DIR)/famistudio_ca65.s | $(BUILD)
 	$(AS) -t $(TARGET) -I $(FAMISTUDIO_DIR) -o $@ $<
+
+# NMI hook (Phase 4.3 follow-up).  Tiny shim that the iNES NMI vector
+# in main.c points at when USE_AUDIO=1, so famistudio_update fires at
+# the hardware vblank rate (60 Hz NTSC) instead of the main loop's
+# variable rate.  See famistudio_nmi.s for the full reasoning.
+$(BUILD)/famistudio_nmi.o: $(FAMISTUDIO_DIR)/famistudio_nmi.s | $(BUILD)
+	$(AS) -t $(TARGET) -o $@ $<
 
 $(BUILD)/audio_songs.o: src/audio_songs.s | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $<

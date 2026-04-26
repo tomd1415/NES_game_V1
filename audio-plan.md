@@ -347,8 +347,12 @@ Concretely shipped:
 - **Runtime hooks** in [`main.c`](steps/Step_Playground/src/main.c):
   guarded `#ifdef USE_AUDIO` blocks declare the engine API, call
   `famistudio_init` + `famistudio_sfx_init` + `famistudio_music_play(0)`
-  on boot, and `famistudio_update` once per frame at the end of
-  vblank.
+  on boot, then enable hardware NMI generation.
+  `famistudio_update` is wired into the NMI handler (see
+  [`famistudio_nmi.s`](tools/audio/famistudio/famistudio_nmi.s)) so it
+  fires at the PPU's true 60 Hz vblank rate independent of main-loop
+  cost — see *Phase 4.3 follow-up — NMI-driven engine update* below
+  for the full reasoning.
 - **Server staging** in
   [`playground_server.py`](tools/playground_server.py): `_build_rom`
   validates optional `audioSongsAsm` + `audioSfxAsm` strings (64 KB
@@ -439,8 +443,8 @@ Concretely shipped in update 2:
   `famistudio_music_play(N)` / `famistudio_sfx_play(idx, channel)`
   directly from a custom `main.c`.
 - **`platformer.c` mirrored** — same audio macros + boot init +
-  `famistudio_update` call as `main.c`, so the byte-identical-
-  baseline test still passes when no modules are ticked.
+  NMI-vector wiring as `main.c`, so the byte-identical-baseline
+  test still passes when no modules are ticked.
 - **Extended regression suite** —
   [audio.mjs](tools/builder-tests/audio.mjs) now also asserts:
   `/starter/audio` returns ≥2 songs + a sfx pack with named slots,
@@ -448,6 +452,88 @@ Concretely shipped in update 2:
   swapping the default-song target through PlayPipeline's alias
   trailer produces a different ROM.  All 16 smoke suites + every
   invariant in `run-all.mjs` green.
+
+---
+
+## Phase 4.3 follow-up — NMI-driven engine update (2026-04-25)
+
+**Symptom (pupil-reported, after the in-browser tempo fix).**  Even in
+the *local* FCEUX emulator — where the in-browser timing problems
+described below don't apply — music tempo varied with on-screen
+activity.  Calm scenes ran at the composed tempo; the moment the
+player started moving, music slowed in proportion.  Because FCEUX
+is a native 60 Hz emulator with its own audio backend, this
+couldn't be a host-timing problem — it had to be in the ROM.
+
+**Root cause.**  `famistudio_update` was being called from the main
+loop's vblank window:
+
+```text
+build OAM → waitvsync → DMA → scroll_stream → scroll_apply_ppu →
+famistudio_update → loop
+```
+
+When the main loop's per-frame work fits in one frame, this runs
+60 times per second and music plays at the composed tempo.  When
+the player starts moving, behaviour + scroll + collision work
+inflates per-frame cost; the loop can't reach `waitvsync` before
+the *next* vblank arrives, and effectively runs at 30 Hz.  The
+engine update fires half as often, and tempo halves with it.
+
+**Fix.**  Move `famistudio_update` off the main loop and into the
+hardware NMI handler — the standard NES pattern for audio-driving
+work.  The PPU asserts NMI at the start of every vblank
+(60.0988 Hz NTSC) regardless of what the CPU is doing, so the
+engine ticks at exactly the rate FamiStudio expects no matter how
+heavy the main loop's frame is.  Concretely:
+
+- New
+  [`tools/audio/famistudio/famistudio_nmi.s`](tools/audio/famistudio/famistudio_nmi.s) —
+  tiny shim that pushes A/X/Y, `jsr`s the engine update, pops, and
+  `rti`s.  In its own segment so cc65's runtime is untouched.
+- Step_Playground Makefile assembles the shim and links it into
+  `AUDIO_OBJS` whenever `USE_AUDIO=1`.  Default-off path is byte-
+  identical to before.
+- `main.c` and `platformer.c` declare `famistudio_nmi_handler`,
+  drop the in-vblank `famistudio_update()` call, and wire the
+  `vectors[]` table to point the NMI slot at the handler when
+  `USE_AUDIO` is defined.  After the engine init triple, they OR
+  in `0x80` on `PPU_CTRL` to enable NMI generation — strictly
+  *after* init so the first vblank doesn't fire the handler into
+  uninitialised engine state.
+- `scroll.c`'s `PPU_CTRL_BASE` becomes `0x90` (was `0x10`) when
+  `USE_AUDIO=1` — every vblank-window scroll_apply_ppu and
+  column-burst stride flip writes back the NMI bit, so it stays
+  asserted across frames.  Without this, scroll_apply_ppu would
+  silently disable NMI on every frame and the handler would
+  stop firing.
+
+**Safety analysis.**
+
+- `famistudio_update` only writes APU registers ($4000–$4017).  It
+  never touches the PPU, so an NMI firing in the middle of, say, a
+  scroll_stream column burst (it can't — see below) wouldn't
+  corrupt rendering.
+- NMI fires at vblank *start*; the main loop is always either
+  pre-vblank (still computing OAM / scroll prepare) or in
+  `waitvsync` busy-polling `$2002`.  In both cases the NMI runs to
+  completion before the main loop's vblank work begins, so the
+  engine doesn't preempt mid-burst writes.
+- The handler costs ~200–400 cycles, which is exactly what the old
+  in-vblank `famistudio_update` cost — the cycle budget for
+  OAM DMA + scroll_stream is unchanged in aggregate.
+- FamiStudio's ZP footprint lives in its own `FAMISTUDIO_ZP`
+  segment (declared in `cfg/nes.cfg`), separate from cc65's
+  `ZEROPAGE`.  The NMI handler can write its ZP without disturbing
+  any cc65-emitted state on the main loop's stack frame.
+- A/X/Y are pushed/popped in the shim because `famistudio_update`
+  clobbers all three and the interrupted main-loop code expects
+  them preserved across an interrupt return.
+
+**Verification.**  Full regression suite (`run-all.mjs`) green:
+all 16 builder smoke suites pass, and the byte-identical-ROM
+invariant proves the no-audio path is unchanged (the NMI handler
+is only assembled / linked when `USE_AUDIO=1`).
 
 ---
 

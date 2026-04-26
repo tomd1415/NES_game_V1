@@ -66,6 +66,13 @@ void __fastcall__ famistudio_music_play(unsigned char song_index);
 void __fastcall__ famistudio_update(void);
 void __fastcall__ _famistudio_sfx_init(void);
 void __fastcall__ famistudio_sfx_play(unsigned char sfx_index, unsigned char channel);
+/* NMI hook — see tools/audio/famistudio/famistudio_nmi.s.  Hardware
+ * vblank vectors here so famistudio_update fires at exactly 60 Hz no
+ * matter how busy the main loop's per-frame work is.  Without this
+ * (i.e. driving the engine from the main loop), heavy game logic on
+ * the player's frame slows the loop below 60 Hz and the music tempo
+ * drops in proportion. */
+void famistudio_nmi_handler(void);
 #define famistudio_init(platform, music_data)         \
     (__AX__ = ((unsigned int)(music_data))),          \
     __asm__ ("pha\n"),                                \
@@ -402,6 +409,23 @@ void main(void) {
     PPU_MASK = 0;
 
     write_palettes();
+
+#ifdef USE_AUDIO
+    /* Phase 4.3 — boot the sound engine BEFORE anything writes
+     * PPU_CTRL.  scroll.c's PPU_CTRL_BASE bakes in bit 7 (NMI enable)
+     * under USE_AUDIO, so the very next PPU_CTRL write — load_world_bg
+     * or scroll_apply_ppu in the SCROLL_BUILD branch, the explicit
+     * literal in the no-scroll branch — would otherwise fire the NMI
+     * handler into uninitialised engine memory and the APU writes
+     * garbage.  PPU_CTRL is also write-only ($2000 returns open-bus on
+     * read), so we can't simply `|= 0x80` after init — we'd OR in
+     * unpredictable bits.  Calling init first sidesteps both problems
+     * without touching the byte-identical no-audio path. */
+    famistudio_init(FAMISTUDIO_PLATFORM_NTSC, audio_default_music);
+    famistudio_sfx_init(audio_sfx_data);
+    famistudio_music_play(0);
+#endif
+
 #ifdef SCROLL_BUILD
     // Multi-screen projects load the whole painted world (up to the
     // first two screens per scrolling axis) from bg_world_tiles[]
@@ -412,19 +436,19 @@ void main(void) {
     scroll_apply_ppu();
 #else
     load_background();
+#ifdef USE_AUDIO
+    /* BG pattern table 1 + NMI enabled (bit 7).  Driving
+     * famistudio_update from the hardware NMI vector is what keeps
+     * music tempo independent of how heavy the main loop's per-frame
+     * work gets — see famistudio_nmi.s. */
+    PPU_CTRL = 0x90;
+#else
     PPU_CTRL = 0x10;          // BG uses pattern table 1; sprites use table 0
+#endif
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
 #endif
     PPU_MASK = 0x1E;
-
-#ifdef USE_AUDIO
-    /* Phase 4.3 — boot the sound engine.  Same call sequence as
-     * main.c. */
-    famistudio_init(FAMISTUDIO_PLATFORM_NTSC, audio_default_music);
-    famistudio_sfx_init(audio_sfx_data);
-    famistudio_music_play(0);
-#endif
 
 //>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200). Paint SOLID_GROUND or PLATFORM tiles on the Behaviour page under this spot or the player will drop to the ground.
     px = PLAYER_X;
@@ -1325,16 +1349,20 @@ void main(void) {
            window so the next frame's scroll position lands. */
         PPU_MASK = 0x1E;
 #endif
-#ifdef USE_AUDIO
-        /* Phase 4.3 — engine update once per frame.  Same placement
-         * as Step_Playground/main.c. */
-        famistudio_update();
-#endif
+        /* No famistudio_update() here on purpose — the engine is
+         * driven by the hardware NMI handler (famistudio_nmi.s).
+         * Keeping that responsibility off the main loop means music
+         * tempo is independent of how heavy a given frame's game
+         * logic is. */
     }
 }
 
 const void *vectors[] = {
+#ifdef USE_AUDIO
+    (void *) famistudio_nmi_handler,
+#else
     (void *) 0,
+#endif
     (void *) main,
     (void *) 0
 };
