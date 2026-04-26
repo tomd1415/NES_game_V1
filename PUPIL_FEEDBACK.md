@@ -64,6 +64,8 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-25 | Scrolling          | C2 scroll flicker — column-burst stride elided by cc65 optimiser  | [done]    |
 | 2026-04-25 | Scrolling          | 2×2 background draws wrong section in top-down (4-screen unsupp.) | [done]    |
 | 2026-04-25 | Scrolling          | 1×2 vertical scroll has the same V-mirror corruption as 2×2       | [done]    |
+| 2026-04-26 | Scrolling          | Vertical worlds: first screen shows the wrong part of the BG      | [new]     |
+| 2026-04-26 | Scrolling          | Vertical worlds: bottom edge wraps and the top screen pops in     | [new]     |
 
 ---
 
@@ -672,6 +674,37 @@ of a game without writing new C themselves.
   regression suite added.  Manual playtest on a real pupil project
   still recommended.
 
+- **Said:** *Pupil playtest of the Phase 4.4 fix (2026-04-26): "almost
+  fixed the vertical and 2 by 2 scrolling.  There are still issues
+  where the first screen is the wrong part of the background, and
+  when going to the bottom of the bottom the top screen pops in."*
+- **Mitigation:** The catastrophic V-mirror corruption is gone (the
+  4-screen header bit is doing its job — `load_world_bg` is writing
+  to four distinct nametables, `scroll_stream`'s vertical block
+  lands rows in the right RAM).  Two residual issues remain that
+  feel like initial-state + camera-clamp rather than nametable
+  aliasing:
+    1. **Initial frame shows the wrong part of the BG.**  Likely
+       PPU_CTRL bits 0/1 (the NT-base nibble) are non-zero before
+       the first `scroll_apply_ppu` runs, or the first frame's T→V
+       copy fires before scroll_apply_ppu sets T.  Check that
+       `scroll_init` sets cam_y to 0 *and* that `scroll_apply_ppu`
+       runs at least once on the boot path before rendering is
+       enabled.
+    2. **Bottom of bottom screen wraps to top.**  Smells like the
+       PPU's vertical wrap (coarse Y rolls past 29 → toggles NT_y
+       bit → goes back to NT0 / NT1).  `scroll_follow` should be
+       clamping `cam_y` at `WORLD_H_PX - SCREEN_H_PX`, but the
+       rendering path may be advancing past it because cam_y bit 8
+       still flips PPU_CTRL bit 1.  Investigate whether the clamp
+       in `scroll_follow` is tight enough, and whether the
+       streamed rows for `row >= BG_WORLD_ROWS` are getting
+       suppressed correctly.
+  Pupil is collecting more details before we dig in; left as `[new]`
+  pending repro / FCEUX captures of the two scenarios.
+- **Status / date:** [new] 2026-04-26 — residual issues after Phase 4.4
+  fix, pupil investigating.
+
 - **Said:** *Investigation under the parked C2 scroll-flicker entry*
   — FCEUX PPU-Viewer of a 2×1 scrolling project showed corruption
   starting only when the camera began to move, with tile data smearing
@@ -1052,6 +1085,17 @@ sub-item so a half-baked piece never blocks a pupil session.
   full Builder regression suite green (14 smoke suites).  Closed
   both 2026-04-25 pupil bugs (`2×2 wrong section` and `1×2 same
   V-mirror corruption`) in one fix.
+- 2026-04-26 (Phase 4.4 follow-up) — pupil playtested the fix and
+  confirmed the catastrophic V-mirror corruption is gone, but
+  flagged two narrower residuals: (a) the first frame on a vertical
+  world shows the wrong part of the BG, and (b) reaching the bottom
+  of the bottom screen makes the top screen pop in.  Logged both
+  as `[new]` summary rows + a follow-up theme entry under
+  *Scrolling* (with leading hypotheses around initial PPU_CTRL
+  state and `scroll_follow` clamp tightness), and added them to
+  Phase 4.4's *Outstanding* list in
+  [next-steps-plan.md](next-steps-plan.md).  Pupil is gathering
+  FCEUX captures before we dig in — no code change today.
 - 2026-04-25 (audit) — sweep of long-standing `[new]` 2026-04-13
   pupil items.  Eight already-shipped features identified and
   flipped to `[done]` with detailed mitigation notes pointing at

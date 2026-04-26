@@ -559,8 +559,25 @@ passes (the patch is a no-op for that path).
 
 **Outstanding (non-blocking).**
 
+- **Two residual bugs surfaced on the pupil's 2026-04-26 playtest.**
+  The catastrophic V-mirror corruption is gone but two narrower
+  symptoms remain; pupil is collecting FCEUX captures before we dig
+  in, so left as `[new]` rather than pre-emptively fixed.  See the
+  matching PUPIL_FEEDBACK entry under *Scrolling* for the leading
+  hypotheses; in brief:
+    1. **First frame shows the wrong part of the BG.**  Suspected
+       initial-state issue — PPU_CTRL bits 0/1 may be non-zero
+       before the first `scroll_apply_ppu`, or the first pre-render
+       T→V copy fires before scroll_apply_ppu writes T.
+    2. **Reaching the bottom of the bottom screen wraps to the top
+       screen.**  Likely the clamp in `scroll_follow` lets `cam_y`
+       advance one tile too far, so PPU coarse-Y rolls past 29 and
+       toggles NT_y back to the top.  Could also be a missing
+       `row < BG_WORLD_ROWS` guard on `scroll_stream`'s vertical
+       row write.
 - Manual playtest in fceux + jsnes on a real 1×2 / 2×2 pupil project
-  to confirm the in-game scroll is clean.
+  to confirm the in-game scroll is clean once the two residuals
+  above are fixed.
 - 4-screen VRAM is rare on real NROM hardware (most carts physically
   ship two banks of nametable RAM).  Browser jsnes and fceux honour
   the iNES bit regardless; pupils running on a 60-pin Famicom flash
