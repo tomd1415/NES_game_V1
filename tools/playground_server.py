@@ -1540,6 +1540,55 @@ BG_WORLD_C_PATH = STEP_DIR / "src" / "bg_world.c"
 # Build + launch pipeline
 # ---------------------------------------------------------------------------
 
+def _project_needs_four_screen(state):
+    """True if any background in the project scrolls vertically (any
+    `screens_y > 1`).  Vertical scroll under V-mirror corrupts the
+    visible screen because NT0 ≡ NT2; flipping the 4-screen bit in the
+    iNES header makes every emulator allocate four physically distinct
+    nametables, which is what the scroll core already assumes.  We
+    deliberately *don't* flip this for purely-horizontal worlds (2×1)
+    because V-mirror is the right choice there and it keeps the
+    byte-identical-baseline test honest for the 1×1 stock build.
+
+    Phase 4.4 fix — see [scroll.c](steps/Step_Playground/src/scroll.c)
+    `load_world_bg` and `scroll_stream`'s vertical block, which already
+    address `$2800/$2C00` correctly assuming NT2/NT3 are distinct.
+    """
+    if not isinstance(state, dict):
+        return False
+    bgs = state.get("backgrounds") or []
+    if not isinstance(bgs, list):
+        return False
+    for bg in bgs:
+        if not isinstance(bg, dict):
+            continue
+        dims = bg.get("dimensions") or {}
+        try:
+            sy = int(dims.get("screens_y") or 1)
+        except (TypeError, ValueError):
+            sy = 1
+        if sy > 1:
+            return True
+    return False
+
+
+def _patch_ines_four_screen(rom_bytes):
+    """Set bit 3 of the iNES header byte 6 (the 4-screen-VRAM flag).
+    cc65 v2.18's nes.lib hard-codes byte 6 to 0x03 (vertical mirroring
+    + a stray battery bit) regardless of the cfg's `NES_MIRRORING`
+    weak symbol, so reaching it via the cfg is a dead end on this
+    toolchain.  Patching the produced ROM in-place is reliable, costs
+    one byte to mutate, and lets the regression suite sha1 a stable
+    output."""
+    if not rom_bytes or len(rom_bytes) < 16:
+        return rom_bytes
+    if rom_bytes[0:4] != b"NES\x1a":
+        return rom_bytes
+    header = bytearray(rom_bytes[:16])
+    header[6] |= 0x08
+    return bytes(header) + rom_bytes[16:]
+
+
 def _build_rom(body):
     """Generate + compile the ROM. Returns (rom_bytes, build_log) or raises.
 
@@ -1553,6 +1602,10 @@ def _build_rom(body):
     * neither                   -> in-place build against the shared
       STEP_DIR using the stock main.c template.  Used by the native /
       offline workflow.
+
+    After whichever path runs, if the project needs vertical scroll
+    we flip the 4-screen-VRAM bit in the iNES header so emulators
+    allocate four distinct nametables (Phase 4.4).
     """
     state = body.get("state")
     if not isinstance(state, dict):
@@ -1595,12 +1648,20 @@ def _build_rom(body):
     chr_bytes = build_chr(state)
     nam_bytes = build_nam(state)
 
+    needs_four_screen = _project_needs_four_screen(state)
+
+    def _maybe_patch(result):
+        rom_bytes, build_log = result
+        if needs_four_screen:
+            rom_bytes = _patch_ines_four_screen(rom_bytes)
+        return rom_bytes, build_log
+
     if custom_main_asm is not None:
         pal_asm = build_palettes_asminc(state)
         scene_asm = build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y)
-        return _build_asm_in_tempdir(
+        return _maybe_patch(_build_asm_in_tempdir(
             custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_asm,
-        )
+        ))
 
     pal_src = build_palettes_inc(state)
     scene_src = build_scene_inc(
@@ -1613,14 +1674,14 @@ def _build_rom(body):
     bg_world_c = build_bg_world_c(state)
 
     if custom_main_c is not None:
-        return _build_in_tempdir(
+        return _maybe_patch(_build_in_tempdir(
             custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
             collision_h, behaviour_c, bg_world_h, bg_world_c,
-        )
-    return _build_in_shared_dir(
+        ))
+    return _maybe_patch(_build_in_shared_dir(
         chr_bytes, nam_bytes, pal_src, scene_src, collision_h, behaviour_c,
         bg_world_h, bg_world_c,
-    )
+    ))
 
 
 # Minimal Makefile for the asm-only build path.  No cc65 step; main.s and

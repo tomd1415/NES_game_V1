@@ -27,7 +27,7 @@
    grid so the same data works when scrolling is added later. */
 #define WORLD_COLS   32
 #define WORLD_ROWS   30
-#define NUM_BEHAVIOUR_SPRITES 8
+#define NUM_BEHAVIOUR_SPRITES 1
 
 /* Look up the behaviour id at a given world tile (8x8 grid).
    Returns BEHAVIOUR_NONE (0) for out-of-range coordinates. */

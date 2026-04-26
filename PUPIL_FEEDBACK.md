@@ -62,8 +62,8 @@ Use pupil initials (not full names) for anonymity.
 | 2026-04-25 | Play pipeline      | Arrow keys move the player AND scroll the tileset on Backgrounds  | [done]    |
 | 2026-04-25 | Play pipeline      | Code-page ▶ Play stops working after first edit; Backgrounds OK   | [new]     |
 | 2026-04-25 | Scrolling          | C2 scroll flicker — column-burst stride elided by cc65 optimiser  | [done]    |
-| 2026-04-25 | Scrolling          | 2×2 background draws wrong section in top-down (4-screen unsupp.) | [planned] |
-| 2026-04-25 | Scrolling          | 1×2 vertical scroll has the same V-mirror corruption as 2×2       | [planned] |
+| 2026-04-25 | Scrolling          | 2×2 background draws wrong section in top-down (4-screen unsupp.) | [done]    |
+| 2026-04-25 | Scrolling          | 1×2 vertical scroll has the same V-mirror corruption as 2×2       | [done]    |
 
 ---
 
@@ -646,30 +646,31 @@ of a game without writing new C themselves.
   the top down mode. It appears to sometime draw the wrong section
   of the background and then sometimes the correct part of the
   background." (Pupil report, 2026-04-25.)
-- **Mitigation:** Hardware-level NES PPU constraint, not a code bug.
-  The cartridge config in
-  [cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg) sets
-  `NES_MIRRORING = 1` (vertical), which gives only two distinct
-  nametable RAM banks: NT0/NT2 share one, NT1/NT3 share the other.
-  Horizontal scroll (2×1) works because it alternates between NT0
-  and NT1.  *Any* vertical scroll — 1×2 *and* 2×2 — needs NT0 ≠ NT2,
-  which V-mirror doesn't provide, so the off-screen row writes land
-  in the same physical RAM as the visible screen and the bottom of
-  the world overwrites the top.  Pupils see "sometimes wrong,
-  sometimes correct" depending on which screen was written most
-  recently.  Stop-gap (2026-04-25): the Backgrounds-page size
-  selector now warns + reverts when *either* 1×2 or 2×2 is picked
-  ([index.html:4148-4181](tools/tile_editor_web/index.html#L4148-L4181)),
-  with both dropdown labels updated to `(… — not yet working)` so
-  pupils see the hint before clicking.  Proper fix is tracked as
-  Phase 4.4 of [next-steps-plan.md](next-steps-plan.md): emit a
-  4-screen-VRAM cartridge config (iNES header byte 6 bit 3) for
-  projects that need > 2 distinct nametables, drop the alert, and
-  add a regression-suite check that the header bit lands.  Single
-  fix closes both 1×2 and 2×2.
-- **Status / date:** [planned] 2026-04-25 — alert+revert shipped
-  for both vertical sizes, 4-screen build path queued under
-  Phase 4.4.
+- **Mitigation:** Hardware-level NES PPU constraint that needed a
+  cartridge-config fix, not a runtime fix.  Under V-mirror NT0/NT2
+  share one RAM bank and NT1/NT3 share the other; horizontal scroll
+  (2×1) works because it alternates between NT0 and NT1, but any
+  vertical scroll (1×2 or 2×2) needs NT0 ≠ NT2 and V-mirror doesn't
+  provide it, so off-screen row writes overwrite the visible screen
+  and pupils see "sometimes wrong, sometimes correct".  **Closed
+  2026-04-26 as Phase 4.4** — the playground server now patches
+  the iNES header's 4-screen-VRAM bit (byte 6 bit 3) on every build
+  whose project has any background with `screens_y > 1`.  cc65
+  v2.18's nes.lib hard-codes byte 6 to `0x03` regardless of the
+  cfg's `NES_MIRRORING` weak symbol, so the fix lives in
+  `_patch_ines_four_screen` in
+  [playground_server.py](tools/playground_server.py) — one byte
+  mutation per build, no header-segment overrides, no per-project
+  cfg generation.  Horizontal-only worlds (2×1) keep V-mirror so
+  the byte-identical-baseline test for the stock 1×1 build is
+  unchanged.  Alert+revert gate removed, dropdown labels restored
+  to `1×2 (vertical scroll)` / `2×2 (4-screen)`.  New
+  [four-screen.mjs](tools/builder-tests/four-screen.mjs) regression
+  suite asserts the bit reflects `screens_y` across all four world
+  shapes.
+- **Status / date:** [done] 2026-04-26 — fix shipped, alert removed,
+  regression suite added.  Manual playtest on a real pupil project
+  still recommended.
 
 - **Said:** *Investigation under the parked C2 scroll-flicker entry*
   — FCEUX PPU-Viewer of a 2×1 scrolling project showed corruption
@@ -1030,6 +1031,27 @@ sub-item so a half-baked piece never blocks a pupil session.
   shared module's wiring + idempotency, dialog injection,
   snapshot-list rendering, and the Restore → saveCurrent → reload
   path.
+- 2026-04-26 (Phase 4.4) — vertical + 2×2 (4-screen) scroll bug
+  closed.  cc65 v2.18's nes.lib was found to hard-code iNES byte 6
+  to `0x03` regardless of the cfg's `NES_MIRRORING` weak symbol, so
+  reaching the 4-screen bit through `cfg/nes.cfg` is a dead end on
+  this toolchain.  Fix lives in
+  [playground_server.py](tools/playground_server.py)'s new
+  `_patch_ines_four_screen` helper — for builds whose project state
+  has any background with `screens_y > 1`, ORs `0x08` into byte 6
+  of the returned ROM bytes after the build finishes.  Emulators
+  honour the bit and allocate four distinct nametables; the existing
+  scroll core's `load_world_bg` + `scroll_stream` address arithmetic
+  for `$2800/$2C00` lands in the right RAM.  Horizontal-only worlds
+  (2×1) keep V-mirror, so the byte-identical-baseline test for the
+  1×1 stock build is unchanged.  Alert+revert gate removed from
+  [index.html:4141](tools/tile_editor_web/index.html#L4141), dropdown
+  labels restored to `1×2 (vertical scroll)` / `2×2 (4-screen)`.
+  New [four-screen.mjs](tools/builder-tests/four-screen.mjs) suite
+  asserts the bit reflects `screens_y` across 1×1 / 2×1 / 1×2 / 2×2;
+  full Builder regression suite green (14 smoke suites).  Closed
+  both 2026-04-25 pupil bugs (`2×2 wrong section` and `1×2 same
+  V-mirror corruption`) in one fix.
 - 2026-04-25 (audit) — sweep of long-standing `[new]` 2026-04-13
   pupil items.  Eight already-shipped features identified and
   flipped to `[done]` with detailed mitigation notes pointing at

@@ -1236,8 +1236,8 @@ kbd {
       <select id="nt-size">
         <option value="1x1">1×1 (single screen)</option>
         <option value="2x1">2×1 (horizontal scroll)</option>
-        <option value="1x2">1×2 (vertical scroll — not yet working)</option>
-        <option value="2x2">2×2 (4-screen — not yet working)</option>
+        <option value="1x2">1×2 (vertical scroll)</option>
+        <option value="2x2">2×2 (4-screen)</option>
       </select>
     </label>
     <label>Zoom
@@ -4142,39 +4142,6 @@ function init() {
   // --- Nametable controls ---
   document.getElementById('nt-size').addEventListener('change', e => {
     const [sx, sy] = e.target.value.split('x').map(Number);
-    // Anything that needs vertical scroll (1×2, 2×2) hits the same
-    // wall: the cartridge config (NES_MIRRORING = 1, vertical) gives
-    // only two distinct nametable banks — NT0/NT2 share one and
-    // NT1/NT3 share the other.  Horizontal scroll (2×1) works because
-    // it alternates between NT0 and NT1.  Vertical scroll would need
-    // NT0 ≠ NT2, which V-mirror doesn't provide, so the off-screen
-    // row writes overwrite the visible screen and pupils see random
-    // patches of the wrong section.  Until the playground builds
-    // optionally emit a 4-screen-VRAM header (next-steps-plan.md §4.4),
-    // block the selection with an explanation rather than letting the
-    // pupil hit a confusing silent corruption.
-    if (sy === 2) {
-      const reason = (sx === 2)
-        ? 'The NES needs four separate nametable banks for a 2×2 ' +
-          'world to scroll properly, but the cartridge this editor ' +
-          'builds only provides two.  When the camera moves diagonally ' +
-          'the bottom of the world overwrites the top.'
-        : 'Vertical scrolling needs two stacked nametable banks, but ' +
-          'the cartridge this editor builds shares the top and bottom ' +
-          'banks.  When the camera moves down the new screen overwrites ' +
-          'the one you\'re standing on.';
-      const recommend = (sx === 2)
-        ? 'For now, please use 2×1 (horizontal scroll) or 1×1.'
-        : 'For now, please use 2×1 (horizontal scroll) or 1×1.';
-      alert(
-        (sx === 2 ? '2×2 (4-screen)' : '1×2 (vertical scroll)') +
-        ' backgrounds aren\'t working yet.\n\n' + reason + '\n\n' +
-        recommend + '  Full vertical / 4-screen support is on the roadmap.'
-      );
-      const cur = activeBg().dimensions;
-      e.target.value = cur.screens_x + 'x' + cur.screens_y;
-      return;
-    }
     pushUndo();
     activeBg().dimensions = { screens_x: sx, screens_y: sy };
     resizeNametable(state);

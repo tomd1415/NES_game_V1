@@ -524,68 +524,51 @@ classroom-friendliness (pupils need a way to author tunes — either
 ship a browser tracker or settle for importing pre-made .ftm
 files).  Worth a discovery sprint before committing.
 
-### 4.4 — Vertical + 2×2 (4-screen) backgrounds (M)
+### 4.4 — Vertical + 2×2 (4-screen) backgrounds (M) — DONE 2026-04-26
 
-**Why.**  The Backgrounds page exposes both `1×2 (vertical scroll —
-not yet working)` and `2×2 (4-screen — not yet working)` size
-options, currently gated behind an `alert()` that reverts the
-selection (added 2026-04-25 after pupils hit the silent-corruption
-case in top-down mode — first 2×2, then 1×2 when they tried to
-work around it).  That gate is a stop-gap — a fully-working
-vertical / 2×2 mode is on the wishlist for top-down RPGs in
-particular, where 4-screen worlds are the natural shape.
+**Outcome.**  Both `1×2 (vertical scroll)` and `2×2 (4-screen)`
+size options are live again — the alert+revert gate is gone and
+the dropdown labels are restored.  The playground server now sets
+the iNES header's 4-screen-VRAM bit on every build whose project
+has any background with `screens_y > 1`, so emulators allocate four
+physically-distinct nametables and the existing scroll core's
+`load_world_bg` + `scroll_stream` address arithmetic for `$2800`
+/ `$2C00` lands in the right RAM.
 
-**Why both are broken right now.**  The cartridge config in
-[cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg) sets
-`NES_MIRRORING = 1` (vertical mirroring), which gives only two
-distinct nametable RAM banks: NT0/NT2 alias to one, NT1/NT3 alias
-to the other.  Horizontal scroll (2×1) works because the streaming
-engine alternates between NT0 and NT1, which are physically
-distinct under V-mirror.  *Any* vertical scroll (1×2 or 2×2)
-needs NT0 ≠ NT2, which V-mirror doesn't provide — the off-screen
-row writes land in the same physical RAM as the visible screen,
-so as the camera moves down the bottom of the world overwrites
-the top.  Pupils see "random patches of the wrong section"
-exactly as you'd expect.  Single fix (4-screen-VRAM cartridge
-config) closes both 1×2 and 2×2 in one shot.
+**How the fix works (and why it isn't done in the cfg).**  cc65
+v2.18's `nes.lib` ignores the `NES_MIRRORING` weak symbol — every
+ROM produced by this toolchain comes back with iNES byte 6 = `0x03`
+regardless of the cfg (verified empirically before committing the
+fix).  Reaching the 4-screen bit through `cfg/nes.cfg` is therefore
+a dead end on this toolchain.  Instead,
+[playground_server.py](tools/playground_server.py) gained a tiny
+`_patch_ines_four_screen` helper that, for builds whose state has
+any vertical-scroll background, ORs `0x08` into byte 6 of the
+returned ROM bytes after the build finishes.  Cost: one byte of
+mutation per build, no header-segment overrides, no per-project
+cfg generation.  Horizontal-only worlds (`2×1`) keep V-mirror —
+that's the right choice and it's what the byte-identical-baseline
+test pins down.
 
-**Plan.**
+**Tests.**  New
+[four-screen.mjs](tools/builder-tests/four-screen.mjs) regression
+suite builds a 1×1, 2×1, 1×2 and 2×2 ROM and asserts the byte 6
+4-screen bit reflects the project's `screens_y`.  Wired into
+`run-all.mjs`; the byte-identical-baseline invariant for 1×1 still
+passes (the patch is a no-op for that path).
 
-1. **Detect 2×2 in `playground_server.py`** (the build pipeline
-   already generates project-specific source files; this is the
-   right place to also pick a project-specific cartridge config).
-2. **Emit a 4-screen VRAM cfg** when `screens_x * screens_y == 4`
-   (or anything that needs > 2 distinct nametables).  iNES header
-   byte 6 bit 3 = "four-screen VRAM" overrides the mirroring bit;
-   cc65's NES_MIRRORING = 8 sets that bit on the produced ROM.
-   Verify that jsnes and fceux both honour it — they generally do
-   for any mapper, even NROM.
-3. **Confirm `load_world_bg` and `scroll_stream` already handle
-   the 2×2 case** once the four nametables are physically distinct
-   (they should — the address arithmetic is already correct, V-mirror
-   was just aliasing the writes).  If not, fix the streaming logic
-   to walk all four nametables.
-4. **Drop the `alert()` gate** in [index.html:4148-4170](tools/tile_editor_web/index.html#L4148-L4170)
-   and update the dropdown label back to `2×2 (4-screen)`.
-5. **Add a regression suite check** that builds a 2×2 world,
-   sha1s the resulting ROM, and asserts the iNES header byte 6
-   has bit 3 set when the project is 2×2 (and cleared otherwise so
-   the byte-identical-baseline test for 1×1 still holds).
+**Outstanding (non-blocking).**
 
-**Risks / open questions.**
-
-- 4-screen VRAM is rare on real NROM hardware — pupils running on a
-  real NES with a 60-pin Famicom flash cart may see the same
-  corruption.  Browser / fceux is fine.  Document the caveat in the
-  pupil-facing message if we want to keep the feature emulator-only.
+- Manual playtest in fceux + jsnes on a real 1×2 / 2×2 pupil project
+  to confirm the in-game scroll is clean.
+- 4-screen VRAM is rare on real NROM hardware (most carts physically
+  ship two banks of nametable RAM).  Browser jsnes and fceux honour
+  the iNES bit regardless; pupils running on a 60-pin Famicom flash
+  cart may still see corruption.  Document the caveat in pupil docs
+  if/when that comes up.
 - Worlds wider/taller than 2 screens (e.g. 3×3) still need streaming
-  on both axes plus 4-screen.  Out of scope for this entry; track
+  on *both* axes plus 4-screen.  Out of scope for this entry; track
   separately if a pupil ever asks.
-
-**Deliverable.**  A 2×2 world that scrolls cleanly in browser jsnes
-and local fceux, with the alert removed and a regression-suite guard
-that the four-screen header bit lands correctly.  Effort: half a day
-to a day, plus a manual playtest pass.
 
 ### 4.6 — Pupil + teacher accounts (future, optional) (L)
 
