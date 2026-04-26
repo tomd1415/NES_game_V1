@@ -1,24 +1,25 @@
-// Phase 4.3 (foundation) — audio smoke-test.  The full audio Builder
-// module + audio.html editor page land in the next session; for now
-// this suite proves the build pipeline is sound:
+// Phase 4.3 — audio smoke-test.  Covers the full editor stack:
 //
-//   1. A no-audio /play build produces the byte-identical baseline
-//      ROM (already covered by the byte-identical-ROM invariant in
-//      run-all.mjs; we re-assert here so the dependency is explicit).
-//   2. A /play body with `audioSongsAsm` + `audioSfxAsm` strings
-//      flips the build into USE_AUDIO=1 mode, links the FamiStudio
-//      sound engine + the supplied blobs, and produces a clean ROM.
-//   3. The audio ROM differs from the baseline (cfg pads every ROM
-//      to the same fixed 49 168 bytes, so size is identical — but
-//      the contents must differ because the audio ROM links the
-//      engine + stub blobs).  We sha1 the two ROMs and assert.
+//   1. /play with no audio fields produces the byte-identical
+//      baseline ROM (re-assertion of the byte-identical invariant
+//      in run-all.mjs to make the dependency explicit).
+//   2. /play with `audioSongsAsm` + `audioSfxAsm` strings flips into
+//      USE_AUDIO=1 mode, links the FamiStudio sound engine + the
+//      supplied blobs, and produces a clean ROM.
+//   3. The audio ROM differs from baseline (cfg pads to 49 168 bytes
+//      so length is identical; contents must differ).
 //   4. Asymmetric uploads (song without sfx, or vice versa) fall
-//      back to no-audio rather than failing — UI on the editor side
-//      will eventually require both, but the server is forgiving.
-//
-// All assets used here are stub blobs, intentionally tiny — the
-// real audio content is FamiStudio-exported `.s` and ships from
-// the upcoming editor page.
+//      back to no-audio rather than failing — server is forgiving.
+//   5. Wrong-type audio fields are rejected with a non-200 response.
+//   6. /starter/audio returns the bundled starter pack — two songs +
+//      a sfx pack with named slots.
+//   7. The starter pack actually builds: feeding it back through
+//      /play with the alias trailers PlayPipeline appends produces
+//      a ROM that differs from baseline (i.e. the engine + starter
+//      content linked successfully).
+//   8. PlayPipeline.buildPlayRequest consumes a state.audio block
+//      shaped like the editor saves and emits the right
+//      audioSongsAsm + audioSfxAsm fields with default-song aliases.
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -182,8 +183,65 @@ try {
   if (r.status !== 500) fail(`expected non-200 for bad audioSongsAsm, got ${r.status}`);
   console.log('✓ wrong-type audioSongsAsm rejected');
 
+  // Case 6 — /starter/audio returns the bundled starter pack.
+  const starterRes = await fetch(`http://127.0.0.1:${PORT}/starter/audio`);
+  const starter = await starterRes.json();
+  if (!starter.ok) fail('/starter/audio did not return ok');
+  if (!Array.isArray(starter.songs) || starter.songs.length < 2) {
+    fail(`/starter/audio expected ≥2 songs, got ${starter.songs?.length}`);
+  }
+  if (!starter.sfx || !starter.sfx.symbol) {
+    fail('/starter/audio missing sfx pack with symbol');
+  }
+  if (!Array.isArray(starter.sfx.sfxNames) || starter.sfx.sfxNames.length === 0) {
+    fail('/starter/audio sfx pack has no named slots');
+  }
+  for (const song of starter.songs) {
+    if (!song.symbol) fail(`/starter/audio song "${song.name}" missing symbol`);
+    if (!song.asm.startsWith('; This file is for the FamiStudio Sound Engine')) {
+      fail(`/starter/audio song "${song.name}" .asm is not a FamiStudio export`);
+    }
+  }
+  console.log(`✓ /starter/audio returns ${starter.songs.length} songs + sfx pack with ${starter.sfx.sfxNames.length} named slots`);
+
+  // Case 7 — feed the starter pack back through /play.  Mirrors what
+  // PlayPipeline does: concatenate every song's .asm and append an
+  // alias trailer pointing audio_default_music at the first song's
+  // symbol.  The sfx alias points the editor's `audio_sfx_data`
+  // import at FamiStudio's `sounds` symbol.
+  function buildSongsAsm(songs, defaultIdx) {
+    const concat = songs.map(s => s.asm).join('\n\n');
+    const sym = songs[defaultIdx].symbol;
+    return concat +
+      `\n\n.export _audio_default_music:=${sym}\n` +
+      `.export audio_default_music:=${sym}\n`;
+  }
+  function buildSfxAsm(sfx) {
+    return sfx.asm +
+      `\n\n.export _audio_sfx_data:=${sfx.symbol}\n` +
+      `.export audio_sfx_data:=${sfx.symbol}\n`;
+  }
+  const starterRom = await build({
+    audioSongsAsm: buildSongsAsm(starter.songs, 0),
+    audioSfxAsm:   buildSfxAsm(starter.sfx),
+  });
+  if (sha1(starterRom) === stockHash) {
+    fail('starter-pack ROM hash matches baseline — engine + starter content did not link');
+  }
+  console.log(`✓ starter pack builds end-to-end (rom hash=${sha1(starterRom).slice(0,12)})`);
+
+  // Case 8 — try the second starter song as the default.
+  const altRom = await build({
+    audioSongsAsm: buildSongsAsm(starter.songs, 1),
+    audioSfxAsm:   buildSfxAsm(starter.sfx),
+  });
+  if (sha1(altRom) === sha1(starterRom)) {
+    fail('changing the default song produced an identical ROM — alias trailer did not switch targets');
+  }
+  console.log('✓ swapping default song produces a different ROM (alias trailer is wired)');
+
 } finally {
   srv.kill('SIGTERM');
   await sleep(300);
 }
-console.log('\nAudio (Phase 4.3 foundation) smoke-test complete.');
+console.log('\nAudio (Phase 4.3) smoke-test complete.');

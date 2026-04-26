@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Audio Editor</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+/* ===========================================================
+   NES AUDIO EDITOR — pupils upload FamiStudio-exported .s
+   files (or load the starter pack with one click) and pick a
+   default song that plays in their game.  Phase 4.3 Tier A.
+   =========================================================== */
+:root {
+  --bg:        #14121f;
+  --panel:     #1f1b30;
+  --panel2:    #2a2440;
+  --border:    #3a3352;
+  --fg:        #f4f4f4;
+  --muted:     #9a97ad;
+  --accent:    #ffd866;
+  --good:      #47d16c;
+  --warn:      #ff6188;
+  --info:      #78dce8;
+  --shadow:    0 4px 16px rgba(0,0,0,0.35);
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--fg);
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+}
+h1, h2, h3 { margin: 0; }
+h1 { font-size: 1.15em; color: var(--accent); }
+h2 { font-size: 1.0em;  color: var(--accent); margin-bottom: 6px; }
+h3 { font-size: 0.95em; color: var(--info); }
+button, select, input[type=text] {
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 10px; font-size: 0.9em;
+  cursor: pointer; font-family: inherit;
+}
+button:hover { background: #3a3560; }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: #3a2f50; border-color: var(--accent); color: var(--accent); }
+button.danger { border-color: var(--warn); color: var(--warn); }
+button.danger:hover { background: rgba(255,97,136,0.18); }
+input[type=text] { cursor: text; }
+a { color: var(--info); }
+
+/* --- Header / nav (mirrors other pages) --------------------- */
+.app-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.page-nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.page-link {
+  padding: 4px 10px; border-radius: 4px;
+  background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border);
+  text-decoration: none; font-size: 0.9em;
+}
+.page-link:hover { background: #3a3560; }
+.page-link.active {
+  background: #3a2f50; border-color: var(--accent); color: var(--accent);
+}
+
+main { padding: 16px; max-width: 1100px; margin: 0 auto; }
+
+#status-bar {
+  padding: 8px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9em; color: var(--muted);
+  min-height: 22px;
+}
+#status-bar.ok    { color: var(--good); }
+#status-bar.warn  { color: var(--warn); }
+
+/* --- Quick start banner ---------------------------------- */
+.quick-start {
+  background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 18px; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap;
+}
+.quick-start .qs-text { flex: 1; min-width: 280px; line-height: 1.45; }
+.quick-start ol { margin: 6px 0; padding-left: 20px; }
+.quick-start ol li { margin-bottom: 2px; }
+.quick-start .qs-actions {
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* --- Card grid ---------------------------------------------- */
+.section { margin-bottom: 22px; }
+.section-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.section-head h2 { flex: 1; }
+.audio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.audio-card {
+  background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.audio-card.is-default {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.audio-card .name {
+  font-size: 1.02em; color: var(--accent);
+  font-weight: bold; word-break: break-word;
+}
+.audio-card .meta {
+  font-size: 0.85em; color: var(--muted);
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.audio-card .meta code { font-size: 0.95em; }
+.audio-card .actions {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-top: 4px;
+}
+.audio-card .actions .danger { margin-left: auto; }
+.audio-card .badge {
+  display: inline-block;
+  font-size: 0.78em; color: var(--bg); background: var(--accent);
+  padding: 1px 6px; border-radius: 3px;
+}
+
+.empty-card {
+  border: 1px dashed var(--border); border-radius: 8px;
+  padding: 24px 18px; text-align: center;
+  color: var(--muted);
+}
+.empty-card a { color: var(--info); cursor: pointer; }
+
+/* --- ROM-size audit -------------------------------------- */
+.audit {
+  background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.audit .row { display: flex; justify-content: space-between; }
+.audit .total { font-weight: bold; }
+.audit .total.warn { color: var(--warn); }
+.audit .total.ok { color: var(--good); }
+.audit .bar {
+  height: 8px; background: var(--panel2); border-radius: 4px;
+  overflow: hidden; margin-top: 4px;
+}
+.audit .bar-fill { height: 100%; background: var(--good); transition: width 200ms; }
+.audit .bar-fill.warn { background: var(--warn); }
+
+/* --- Hidden file input we trigger from Upload buttons --- */
+input[type=file] { display: none; }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🎵 NES Audio Editor</h1>
+  <nav class="page-nav" aria-label="Editor pages">
+    <a class="page-link" href="index.html" title="Edit the tileset, palettes and background nametable">🏞 Backgrounds</a>
+    <a class="page-link" href="sprites.html" title="Design sprites from the shared tileset">🦸 Sprites</a>
+    <a class="page-link" href="behaviour.html" title="Mark what each tile does (ground, wall, door…) and how sprites react">🚧 Behaviour</a>
+    <a class="page-link" href="builder.html" title="Build the game by ticking modules — no C required">🧱 Builder</a>
+    <a class="page-link" href="code.html" title="Edit the C code that drives the NES game">📝 Code</a>
+    <a class="page-link active" href="audio.html" title="You are here — manage music + sound effects">🎵 Audio</a>
+    <a class="page-link" href="gallery.html" title="Browse projects published from across the class">🖼 Gallery</a>
+  </nav>
+</header>
+
+<div id="status-bar">Loading audio…</div>
+
+<main>
+  <div class="quick-start">
+    <div class="qs-text">
+      <h2 style="margin-bottom:4px">FamiStudio quick start</h2>
+      <ol>
+        <li>Install <a href="https://famistudio.org/" target="_blank" rel="noopener">FamiStudio</a> (free, runs on Windows / macOS / Linux).</li>
+        <li>Compose a song.</li>
+        <li><b>File → Export → FamiStudio Sound Engine assembly</b>, format <b>ca65</b>.</li>
+        <li>Drag the <code>.s</code> file onto this page (or click the upload buttons below).</li>
+      </ol>
+      <p style="color:var(--muted);margin:6px 0 0">
+        Want to hear something straight away?  Click <b>Load starter pack</b> on the right —
+        you can replace it with your own work whenever you like.
+        Full guide in <a href="AUDIO_GUIDE.md">AUDIO_GUIDE.md</a>.
+      </p>
+    </div>
+    <div class="qs-actions">
+      <button type="button" class="primary" id="btn-load-starter">📦 Load starter pack</button>
+      <button type="button" id="btn-clear-all" class="danger">🗑 Remove all audio</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>🎼 Songs</h2>
+      <button type="button" id="btn-upload-song">⬆ Upload song (.s)</button>
+      <input type="file" id="file-song" accept=".s,.asm">
+    </div>
+    <p style="color:var(--muted);margin:0 0 8px;font-size:0.9em">
+      Each song is a FamiStudio-exported <code>.s</code> file.  The one marked
+      <span class="badge">default</span> plays when the game starts.
+    </p>
+    <div class="audio-grid" id="songs-grid"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>💥 Sound effects</h2>
+      <button type="button" id="btn-upload-sfx">⬆ Upload sfx pack (.s)</button>
+      <input type="file" id="file-sfx" accept=".s,.asm">
+    </div>
+    <p style="color:var(--muted);margin:0 0 8px;font-size:0.9em">
+      A single FamiStudio sfx-export file holds up to 128 sound effects.
+      Each &quot;Song&quot; in your FamiStudio sfx project becomes one slot here.
+    </p>
+    <div id="sfx-card-host"></div>
+  </div>
+
+  <div class="section">
+    <h2>📐 ROM size</h2>
+    <div class="audit" id="audit">
+      <div class="row"><span>Engine</span><span id="audit-engine">≈ 3.5 KB</span></div>
+      <div class="row"><span>Songs</span><span id="audit-songs">0 B</span></div>
+      <div class="row"><span>Sound effects</span><span id="audit-sfx">0 B</span></div>
+      <div class="row total"><span>Total audio cost</span><span id="audit-total">≈ 3.5 KB</span></div>
+      <div class="bar"><div class="bar-fill" id="audit-bar" style="width:11%"></div></div>
+      <div style="font-size:0.85em;color:var(--muted)">
+        NES ROMs have a 32 KB program budget.  We warn when audio is using more than 12 KB so you've still got room for code, sprites and background data.
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>▶ Try it</h2>
+      <button type="button" class="primary" id="btn-preview" disabled>▶ Play in NES</button>
+      <select id="preview-song-sel" title="Pick which song to start the preview ROM with"></select>
+    </div>
+    <p style="color:var(--muted);margin:0 0 8px;font-size:0.9em">
+      Builds your project right now with the current audio choices and runs it in the in-browser NES emulator.
+    </p>
+    <div id="preview-host"></div>
+  </div>
+</main>
+
+<script src="storage.js"></script>
+<script src="a11y.js"></script>
+<script src="sprite-render.js"></script>
+<script src="builder-assembler.js"></script>
+<script src="builder-modules.js"></script>
+<script src="builder-validators.js"></script>
+<script src="play-pipeline.js"></script>
+<script src="emulator.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const grid       = document.getElementById('songs-grid');
+  const sfxHost    = document.getElementById('sfx-card-host');
+  const statusBar  = document.getElementById('status-bar');
+  const previewSel = document.getElementById('preview-song-sel');
+  const previewBtn = document.getElementById('btn-preview');
+
+  let state = null;
+  let templateText = null;
+
+  function setStatus(text, kind) {
+    statusBar.textContent = text;
+    statusBar.className = kind || '';
+  }
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    return (n / 1024).toFixed(1) + ' KB';
+  }
+
+  // Pull the leading export symbol out of a FamiStudio .s file.
+  // Mirrors _audio_extract_symbol on the server but lives here so
+  // local-only uploads work too.
+  function extractSymbol(asm) {
+    const m1 = (asm || '').match(/^\s*\.export\s+_([A-Za-z_][A-Za-z0-9_]*)\b/m);
+    if (m1) return m1[1];
+    const m2 = (asm || '').match(/^\s*\.export\s+([A-Za-z_][A-Za-z0-9_]*)\b/m);
+    return m2 ? m2[1] : '';
+  }
+
+  function loadState() {
+    state = Storage.loadCurrent();
+    if (!state || typeof state !== 'object') {
+      setStatus('No project loaded — start one on the Sprites page first.', 'warn');
+      state = null;
+      return;
+    }
+    if (!state.audio || typeof state.audio !== 'object'
+        || !Array.isArray(state.audio.songs)) {
+      state.audio = { songs: [], sfx: null, defaultSongIdx: 0 };
+    }
+  }
+
+  function saveState() {
+    if (!state) return;
+    Storage.saveCurrent(state);
+  }
+
+  function render() {
+    grid.replaceChildren();
+    sfxHost.replaceChildren();
+    previewSel.replaceChildren();
+
+    if (!state) return;
+    const songs = state.audio.songs || [];
+    const defIdx = state.audio.defaultSongIdx | 0;
+
+    if (songs.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-card';
+      empty.innerHTML =
+        'No songs yet — upload one with <b>⬆ Upload song</b> ' +
+        'or click <b>📦 Load starter pack</b> at the top of the page.';
+      grid.appendChild(empty);
+      previewBtn.disabled = true;
+    } else {
+      songs.forEach((song, idx) => {
+        const card = document.createElement('div');
+        card.className = 'audio-card' + (idx === defIdx ? ' is-default' : '');
+
+        const name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = song.name || song.filename || ('Song ' + (idx+1));
+        if (idx === defIdx) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = 'default';
+          name.appendChild(document.createTextNode(' '));
+          name.appendChild(badge);
+        }
+        card.appendChild(name);
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        if (song.symbol)   meta.appendChild(makeMetaSpan('symbol', song.symbol));
+        if (song.filename) meta.appendChild(makeMetaSpan('file', song.filename));
+        if (song.size)     meta.appendChild(makeMetaSpan('size', fmtBytes(song.size)));
+        card.appendChild(meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        if (idx !== defIdx) {
+          const def = document.createElement('button');
+          def.type = 'button';
+          def.textContent = '⭐ Make default';
+          def.title = 'Play this song when the game starts';
+          def.addEventListener('click', () => {
+            state.audio.defaultSongIdx = idx;
+            saveState(); render();
+          });
+          actions.appendChild(def);
+        }
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'danger';
+        remove.textContent = '🗑 Remove';
+        remove.addEventListener('click', () => {
+          if (!confirm('Remove "' + (song.name || 'this song') + '"?')) return;
+          state.audio.songs.splice(idx, 1);
+          if (state.audio.defaultSongIdx >= state.audio.songs.length) {
+            state.audio.defaultSongIdx = Math.max(0, state.audio.songs.length - 1);
+          }
+          saveState(); render();
+        });
+        actions.appendChild(remove);
+        card.appendChild(actions);
+        grid.appendChild(card);
+
+        const opt = document.createElement('option');
+        opt.value = String(idx);
+        opt.textContent = song.name || song.filename || ('Song ' + (idx+1));
+        if (idx === defIdx) opt.selected = true;
+        previewSel.appendChild(opt);
+      });
+      previewBtn.disabled = !state.audio.sfx;
+    }
+
+    if (!state.audio.sfx) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-card';
+      empty.innerHTML =
+        'No sfx pack yet — upload one with <b>⬆ Upload sfx pack</b>. ' +
+        'Without sfx, the engine still plays music but can’t play short sounds.';
+      sfxHost.appendChild(empty);
+    } else {
+      const sfx = state.audio.sfx;
+      const card = document.createElement('div');
+      card.className = 'audio-card';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = sfx.name || sfx.filename || 'Sfx pack';
+      card.appendChild(name);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      if (sfx.symbol)   meta.appendChild(makeMetaSpan('symbol', sfx.symbol));
+      if (sfx.filename) meta.appendChild(makeMetaSpan('file', sfx.filename));
+      if (sfx.size)     meta.appendChild(makeMetaSpan('size', fmtBytes(sfx.size)));
+      card.appendChild(meta);
+      if (Array.isArray(sfx.sfxNames) && sfx.sfxNames.length > 0) {
+        const list = document.createElement('div');
+        list.style.fontSize = '0.88em';
+        list.style.color = 'var(--muted)';
+        list.textContent = 'Slots: ' + sfx.sfxNames.map((n, i) => i + ' = ' + n).join(', ');
+        card.appendChild(list);
+      }
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'danger';
+      remove.textContent = '🗑 Remove';
+      remove.addEventListener('click', () => {
+        if (!confirm('Remove the sfx pack?')) return;
+        state.audio.sfx = null;
+        saveState(); render();
+      });
+      actions.appendChild(remove);
+      card.appendChild(actions);
+      sfxHost.appendChild(card);
+    }
+
+    renderAudit();
+  }
+
+  function makeMetaSpan(label, value) {
+    const span = document.createElement('span');
+    const code = document.createElement('code');
+    code.textContent = value;
+    span.appendChild(document.createTextNode(label + ': '));
+    span.appendChild(code);
+    return span;
+  }
+
+  function renderAudit() {
+    const songsBytes = (state && state.audio && Array.isArray(state.audio.songs))
+      ? state.audio.songs.reduce((s, x) => s + (x.size || 0), 0) : 0;
+    const sfxBytes = (state && state.audio && state.audio.sfx)
+      ? (state.audio.sfx.size || 0) : 0;
+    // .s assembly text is *roughly* 5x the resulting object size on
+    // average — but it's hard to predict precisely, so we report
+    // the source-text bytes and add a fixed engine cost so pupils
+    // get a useful relative number.
+    const engineBytes = 3500;
+    document.getElementById('audit-songs').textContent = fmtBytes(songsBytes);
+    document.getElementById('audit-sfx').textContent = fmtBytes(sfxBytes);
+    const total = engineBytes + songsBytes + sfxBytes;
+    const totalEl = document.getElementById('audit-total');
+    totalEl.textContent = '≈ ' + fmtBytes(total);
+    const ROM_BUDGET = 32 * 1024;
+    const WARN_AT    = 12 * 1024;
+    const pct = Math.min(100, Math.round((total / ROM_BUDGET) * 100));
+    const bar = document.getElementById('audit-bar');
+    bar.style.width = pct + '%';
+    if (total > WARN_AT) {
+      bar.classList.add('warn'); totalEl.classList.add('warn'); totalEl.classList.remove('ok');
+    } else {
+      bar.classList.remove('warn'); totalEl.classList.remove('warn'); totalEl.classList.add('ok');
+    }
+  }
+
+  // --- Uploads ----------------------------------------------------
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result || ''));
+      r.onerror = () => reject(r.error || new Error('read failed'));
+      r.readAsText(file);
+    });
+  }
+
+  async function handleSongUpload(file) {
+    if (!file) return;
+    setStatus('Reading ' + file.name + '…');
+    try {
+      const asm = await readFileAsText(file);
+      const symbol = extractSymbol(asm);
+      if (!symbol) {
+        setStatus('Could not find an .export line in that file — is it a FamiStudio sound-engine .s file?', 'warn');
+        return;
+      }
+      state.audio.songs.push({
+        name: file.name.replace(/\.(s|asm)$/i, '').replace(/^song_/i, '').replace(/_/g, ' '),
+        filename: file.name,
+        symbol,
+        asm,
+        size: asm.length,
+      });
+      if (state.audio.songs.length === 1) state.audio.defaultSongIdx = 0;
+      saveState(); render();
+      setStatus('Added song "' + file.name + '" (' + symbol + ').', 'ok');
+    } catch (e) {
+      setStatus('Failed to read ' + file.name + ': ' + (e.message || e), 'warn');
+    }
+  }
+
+  async function handleSfxUpload(file) {
+    if (!file) return;
+    setStatus('Reading ' + file.name + '…');
+    try {
+      const asm = await readFileAsText(file);
+      const symbol = extractSymbol(asm);
+      if (!symbol) {
+        setStatus('Could not find an .export line in that file — is it a FamiStudio sfx .s file?', 'warn');
+        return;
+      }
+      state.audio.sfx = {
+        name: file.name.replace(/\.(s|asm)$/i, '').replace(/^sfx_/i, '').replace(/_/g, ' '),
+        filename: file.name,
+        symbol,
+        sfxNames: [],
+        asm,
+        size: asm.length,
+      };
+      saveState(); render();
+      setStatus('Added sfx pack "' + file.name + '" (' + symbol + ').', 'ok');
+    } catch (e) {
+      setStatus('Failed to read ' + file.name + ': ' + (e.message || e), 'warn');
+    }
+  }
+
+  document.getElementById('btn-upload-song').addEventListener('click', () => {
+    document.getElementById('file-song').click();
+  });
+  document.getElementById('file-song').addEventListener('change', (e) => {
+    handleSongUpload(e.target.files && e.target.files[0]);
+    e.target.value = '';  // allow re-uploading the same file
+  });
+  document.getElementById('btn-upload-sfx').addEventListener('click', () => {
+    document.getElementById('file-sfx').click();
+  });
+  document.getElementById('file-sfx').addEventListener('change', (e) => {
+    handleSfxUpload(e.target.files && e.target.files[0]);
+    e.target.value = '';
+  });
+
+  document.getElementById('btn-load-starter').addEventListener('click', async () => {
+    setStatus('Fetching starter pack from the playground server…');
+    try {
+      const res = await fetch('/starter/audio');
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'fetch failed');
+      const songs = (data.songs || []).map(s => ({
+        name: s.name, filename: s.filename, symbol: s.symbol,
+        asm: s.asm, size: s.size,
+      }));
+      if (songs.length === 0 && !data.sfx) {
+        setStatus('Starter pack is missing on the server — run tools/audio/starter/build.sh first.', 'warn');
+        return;
+      }
+      state.audio.songs = songs;
+      state.audio.defaultSongIdx = 0;
+      state.audio.sfx = data.sfx ? {
+        name: data.sfx.name, filename: data.sfx.filename, symbol: data.sfx.symbol,
+        sfxNames: data.sfx.sfxNames || [], asm: data.sfx.asm, size: data.sfx.size,
+      } : null;
+      saveState(); render();
+      const sfxBit = data.sfx ? (' + ' + (data.sfx.sfxNames || []).length + ' sfx slots') : '';
+      setStatus('Loaded starter pack — ' + songs.length + ' songs' + sfxBit + '.  Replace any of these with your own FamiStudio exports whenever you like.', 'ok');
+    } catch (e) {
+      setStatus('Could not load starter pack: ' + (e.message || e) + '.  Is the playground server running?', 'warn');
+    }
+  });
+
+  document.getElementById('btn-clear-all').addEventListener('click', () => {
+    if (!confirm('Remove every song and the sfx pack?  This cannot be undone.')) return;
+    state.audio = { songs: [], sfx: null, defaultSongIdx: 0 };
+    saveState(); render();
+    setStatus('All audio removed.', 'ok');
+  });
+
+  // --- Preview ----------------------------------------------------
+  previewBtn.addEventListener('click', async () => {
+    if (!state) return;
+    const previewState = JSON.parse(JSON.stringify(state));
+    const idx = parseInt(previewSel.value, 10) || 0;
+    previewState.audio.defaultSongIdx = idx;
+    setStatus('Building preview ROM…');
+    previewBtn.disabled = true;
+    try {
+      const result = await window.PlayPipeline.play(previewState, {
+        mode: 'browser', download: false, templateText: templateText,
+        onStatus: (cls, msg) => setStatus(msg, cls === 'error' ? 'warn' : ''),
+        onRom: (rom) => window.NesEmulator.open(rom, { hasP2: false }),
+      });
+      if (result && result.ok) {
+        setStatus('Preview ROM built and running — close the dialog when done.', 'ok');
+      } else {
+        setStatus('Build failed.  Check the build log on the Builder or Code page.', 'warn');
+      }
+    } catch (e) {
+      setStatus('Preview failed: ' + (e.message || e), 'warn');
+    } finally {
+      previewBtn.disabled = false;
+    }
+  });
+
+  // --- Init -------------------------------------------------------
+  loadState();
+  // Fetch the platformer template once so PlayPipeline can build a
+  // default ROM with the pupil's audio without going through the
+  // Builder page.  Cached for subsequent previews.
+  fetch('builder-templates/platformer.c', { cache: 'no-store' })
+    .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(t => { templateText = t; })
+    .catch(e => console.warn('[audio] template fetch failed:', e));
+  render();
+  if (!state) {
+    setStatus('Open a project on the Sprites page first, then come back here.', 'warn');
+  } else if (state.audio.songs.length === 0) {
+    setStatus('No songs yet.  Click "Load starter pack" or upload your own FamiStudio export.', '');
+  } else {
+    setStatus('Ready.  ' + state.audio.songs.length + ' song' + (state.audio.songs.length === 1 ? '' : 's') + ' loaded.', 'ok');
+  }
+})();
+</script>
+</body>
+</html>

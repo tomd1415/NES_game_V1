@@ -102,11 +102,26 @@
     return Object.assign({}, state, { builder: window.BuilderDefaults() });
   }
 
+  // Phase 4.3 — fill in state.audio with empty defaults for projects
+  // that predate the audio schema.  Songs and sfx are pupil-uploaded
+  // FamiStudio .s blobs (or seeded from the starter pack); both
+  // optional.  defaultSongIdx is the song that plays at boot.
+  function ensureAudio(state) {
+    if (state.audio && Array.isArray(state.audio.songs)) return state;
+    return Object.assign({}, state, {
+      audio: {
+        songs: [],
+        sfx: null,
+        defaultSongIdx: 0,
+      },
+    });
+  }
+
   function fortifyState(state) {
     if (!state || typeof state !== 'object') {
       throw new Error('PlayPipeline: state is missing');
     }
-    return ensurePlayerSprite(ensureBuilderTree(state));
+    return ensureAudio(ensurePlayerSprite(ensureBuilderTree(state)));
   }
 
   // --------------------------------------------------------------------
@@ -232,6 +247,45 @@
       payload.playerSpriteIdx2 = players.playerIdx2;
       payload.playerStart2 = players.playerStart2;
     }
+
+    // Phase 4.3 — audio.  Both blobs must be present for the server
+    // to flip USE_AUDIO=1; an asymmetric upload silently falls back
+    // to no-audio (server validates this).  We assemble the songs
+    // blob from every uploaded song's .asm joined by blank lines
+    // and append an `_audio_default_music` alias pointing at the
+    // pupil's chosen default song.  If the project has no songs or
+    // no sfx yet, omit both fields and the server stays in
+    // no-audio mode.
+    const audio = s.audio || { songs: [], sfx: null };
+    if (Array.isArray(audio.songs) && audio.songs.length > 0
+        && audio.sfx && typeof audio.sfx.asm === 'string'
+        && audio.sfx.asm.trim().length > 0) {
+      const defaultIdx = (typeof audio.defaultSongIdx === 'number'
+        && audio.defaultSongIdx >= 0
+        && audio.defaultSongIdx < audio.songs.length)
+        ? audio.defaultSongIdx : 0;
+      const defaultSong = audio.songs[defaultIdx];
+      if (defaultSong && typeof defaultSong.asm === 'string'
+          && typeof defaultSong.symbol === 'string') {
+        const songsAsm = audio.songs
+          .map(song => song.asm || '')
+          .filter(asm => asm.trim().length > 0)
+          .join('\n\n');
+        const aliasTrailer =
+          '\n\n; Alias the pupil-chosen default song to the symbol\n' +
+          '; main.c imports.  Phase 4.3.\n' +
+          '.export _audio_default_music:=' + defaultSong.symbol + '\n' +
+          '.export audio_default_music:=' + defaultSong.symbol + '\n';
+        const sfxAlias =
+          '\n\n; Alias the FamiStudio-exported `sounds` symbol to the\n' +
+          '; one main.c imports.  Phase 4.3.\n' +
+          '.export _audio_sfx_data:=' + (audio.sfx.symbol || 'sounds') + '\n' +
+          '.export audio_sfx_data:=' + (audio.sfx.symbol || 'sounds') + '\n';
+        payload.audioSongsAsm = songsAsm + aliasTrailer;
+        payload.audioSfxAsm   = audio.sfx.asm + sfxAlias;
+      }
+    }
+
     return payload;
   }
 

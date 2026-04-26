@@ -50,6 +50,41 @@
 // test (Step_Playground stock vs Builder template with no modules)
 // passing without "macro redefinition is not identical" errors.
 
+#ifdef USE_AUDIO
+/* Phase 4.3 — FamiStudio sound engine.  Mirrored from
+ * Step_Playground/src/main.c so the byte-identical-baseline test
+ * still produces matching ROMs when no modules are ticked.  See the
+ * matching block in main.c for the rationale on each macro.
+ */
+#define FAMISTUDIO_PLATFORM_NTSC 1
+#define FAMISTUDIO_SFX_CH0 0
+#define FAMISTUDIO_SFX_CH1 15
+extern unsigned char audio_default_music[];
+extern unsigned char audio_sfx_data[];
+void __fastcall__ _famistudio_init(unsigned char platform);
+void __fastcall__ famistudio_music_play(unsigned char song_index);
+void __fastcall__ famistudio_update(void);
+void __fastcall__ _famistudio_sfx_init(void);
+void __fastcall__ famistudio_sfx_play(unsigned char sfx_index, unsigned char channel);
+#define famistudio_init(platform, music_data)         \
+    (__AX__ = ((unsigned int)(music_data))),          \
+    __asm__ ("pha\n"),                                \
+    __asm__ ("txa\n"),                                \
+    __asm__ ("tay\n"),                                \
+    __asm__ ("pla\n"),                                \
+    __asm__ ("tax\n"),                                \
+    __asm__ ("lda #%b\n", (unsigned char)(platform)), \
+    __asm__ ("jsr _famistudio_init\n");
+#define famistudio_sfx_init(sfx_data)      \
+    (__AX__ = ((unsigned int)(sfx_data))), \
+    __asm__ ("pha\n"),                     \
+    __asm__ ("txa\n"),                     \
+    __asm__ ("tay\n"),                     \
+    __asm__ ("pla\n"),                     \
+    __asm__ ("tax\n"),                     \
+    __asm__ ("jsr _famistudio_sfx_init\n");
+#endif
+
 /* volatile so cc65 cannot elide back-to-back PPU/OAM register writes
    — the column-streamer in scroll.c sets PPU_CTRL to +32 stride
    immediately before 30 PPU_DATA writes, and a non-volatile macro
@@ -382,6 +417,14 @@ void main(void) {
     PPU_SCROLL = 0;
 #endif
     PPU_MASK = 0x1E;
+
+#ifdef USE_AUDIO
+    /* Phase 4.3 — boot the sound engine.  Same call sequence as
+     * main.c. */
+    famistudio_init(FAMISTUDIO_PLATFORM_NTSC, audio_default_music);
+    famistudio_sfx_init(audio_sfx_data);
+    famistudio_music_play(0);
+#endif
 
 //>> player_start: Where the player begins. X = left(0) to right(240). Y = top(16) to bottom(200). Paint SOLID_GROUND or PLATFORM tiles on the Behaviour page under this spot or the player will drop to the ground.
     px = PLAYER_X;
@@ -1281,6 +1324,11 @@ void main(void) {
         /* Re-enable rendering well before the pre-render T→V copy
            window so the next frame's scroll position lands. */
         PPU_MASK = 0x1E;
+#endif
+#ifdef USE_AUDIO
+        /* Phase 4.3 — engine update once per frame.  Same placement
+         * as Step_Playground/main.c. */
+        famistudio_update();
 #endif
     }
 }

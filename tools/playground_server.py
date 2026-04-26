@@ -65,6 +65,19 @@ FEEDBACK_HANDLED_PATH = ROOT / "feedback-handled.json"
 # today (single-machine classroom assumption); the plan is to gate it
 # on the teacher role once accounts ship — see next-steps-plan.md §4.6.
 GALLERY_DIR = ROOT / "tools" / "gallery"
+
+# Phase 4.3 — starter audio assets shipped under tools/audio/starter/.
+# Each .s is built from a .fmstxt project via the FamiStudio CLI
+# (see tools/audio/starter/build.sh).  The /starter/audio endpoint
+# parses the symbol exports out of each file and serves them to the
+# editor so pupils can drop a starter pack into their project with
+# one click.
+AUDIO_STARTER_DIR = ROOT / "tools" / "audio" / "starter"
+AUDIO_STARTER_SONGS = [
+    ("Cheerful loop", "song_cheerful_loop.s"),
+    ("Tense loop",    "song_tense_loop.s"),
+]
+AUDIO_STARTER_SFX = ("Starter sfx pack", "sfx_pack.s")
 GALLERY_LOCK = threading.Lock()
 GALLERY_MAX_BODY = 4 * 1024 * 1024  # 4 MB — ROM + preview + project state.
 GALLERY_MAX_TITLE = 80
@@ -2245,6 +2258,92 @@ def _gallery_remove(slug):
 
 
 # ---------------------------------------------------------------------------
+# Audio starter pack (Phase 4.3)
+# ---------------------------------------------------------------------------
+
+# `.export _foo:=foo` or `.export foo`.  We pick the first `_`-prefixed
+# match because that's the cc65-mangled C symbol the engine wrapper
+# exposes; the bare symbol below is the asm name.  Falls back to the
+# plain form if no `_`-prefixed export is present (FamiStudio's sfx
+# export uses `.export _sounds=sounds` which matches the first arm).
+_AUDIO_EXPORT_RE = re.compile(
+    r"^\s*\.export\s+_([A-Za-z_][A-Za-z0-9_]*)\b", re.MULTILINE
+)
+_AUDIO_PLAIN_EXPORT_RE = re.compile(
+    r"^\s*\.export\s+([A-Za-z_][A-Za-z0-9_]*)\b", re.MULTILINE
+)
+
+
+def _audio_extract_symbol(asm):
+    """Best-effort: pull the music_data_* / sounds symbol out of a
+    FamiStudio-exported `.s` file so the editor can show pupils what
+    they uploaded and so the assembler's alias trailer hits the
+    right target.  Returns "" if no symbol is identifiable."""
+    m = _AUDIO_EXPORT_RE.search(asm or "")
+    if m:
+        return m.group(1)
+    m = _AUDIO_PLAIN_EXPORT_RE.search(asm or "")
+    return m.group(1) if m else ""
+
+
+# `Song Name="..."` lines in the .fmstxt source give us the
+# pupil-facing name for each sfx slot, in order.  Pulled from the
+# .fmstxt rather than the .s because the .s only carries
+# `@sfx_ntsc_<name>` labels which are identifiers, not display names.
+_FMSTXT_SONG_NAME_RE = re.compile(r'^\s*Song\s+Name="([^"]*)"', re.MULTILINE)
+
+
+def _audio_extract_sfx_names(fmstxt_text):
+    """Pull SFX names out of a .fmstxt source — order matters because
+    FamiStudio's sfx exporter emits them in declaration order."""
+    return _FMSTXT_SONG_NAME_RE.findall(fmstxt_text or "")
+
+
+def _audio_starter_payload():
+    """Build the JSON payload for /starter/audio.  Returns an empty
+    response if the .s files haven't been built yet — pupils get a
+    clear message in that case rather than an obscure 500."""
+    songs = []
+    for display_name, fname in AUDIO_STARTER_SONGS:
+        path = AUDIO_STARTER_DIR / fname
+        if not path.exists():
+            continue
+        try:
+            asm = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        songs.append({
+            "name":     display_name,
+            "filename": fname,
+            "symbol":   _audio_extract_symbol(asm),
+            "asm":      asm,
+            "size":     len(asm.encode("utf-8")),
+        })
+
+    sfx = None
+    sfx_name, sfx_fname = AUDIO_STARTER_SFX
+    sfx_path = AUDIO_STARTER_DIR / sfx_fname
+    if sfx_path.exists():
+        try:
+            sfx_asm = sfx_path.read_text(encoding="utf-8")
+            sfx_src_path = sfx_path.with_suffix(".fmstxt")
+            sfx_src_text = (sfx_src_path.read_text(encoding="utf-8")
+                            if sfx_src_path.exists() else "")
+            sfx = {
+                "name":     sfx_name,
+                "filename": sfx_fname,
+                "symbol":   _audio_extract_symbol(sfx_asm),
+                "sfxNames": _audio_extract_sfx_names(sfx_src_text),
+                "asm":      sfx_asm,
+                "size":     len(sfx_asm.encode("utf-8")),
+            }
+        except OSError:
+            sfx = None
+
+    return {"ok": True, "songs": songs, "sfx": sfx}
+
+
+# ---------------------------------------------------------------------------
 # HTTP plumbing
 # ---------------------------------------------------------------------------
 
@@ -2280,6 +2379,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._snippet_body(unquote(parsed.path[len("/snippets/"):]))
         if parsed.path == "/feedback":
             return self._feedback_viewer()
+        if parsed.path == "/starter/audio":
+            return self._json(200, _audio_starter_payload())
         if parsed.path == "/gallery/list":
             return self._gallery_list_response()
         if parsed.path.startswith("/gallery/"):

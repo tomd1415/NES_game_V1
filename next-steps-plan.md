@@ -490,15 +490,36 @@ returns 404.  Wired into `run-all.mjs`; full suite green.
 often "finish" something they want to share, and the publish flow
 is identical apart from `source_page`.  Add later if pupils ask.
 
-### 4.3 — Audio (L) — IN PROGRESS, foundation done 2026-04-26
+### 4.3 — Audio (L) — IN PROGRESS, Tier A almost complete 2026-04-26
 
 **Detailed plan in [audio-plan.md](audio-plan.md).**  Two-tier
 approach agreed 2026-04-26 after a deep dive on the FamiStudio
-repo.  *Tier A's runtime + build foundation shipped same day*;
-editor UI + Builder module + starter pack + pupil-facing guide
-queued for the next session.  See the *Follow-up scope* section
-of [audio-plan.md](audio-plan.md) for the exact remaining
-deliverables.
+repo.
+
+**Tier A — runtime, editor stack, and pupil docs all shipped
+2026-04-26.**  Pupils can open the new **🎵 Audio** page, click
+*Load starter pack* (or upload their own FamiStudio `.s` files),
+mark any song as default, and hit ▶ Play to hear it in their
+game.  PlayPipeline forwards the audio assets on every build
+across all editor pages, so audio "just works" from the Builder
+and Code page too without extra wiring.  Two original starter songs
+(*Cheerful loop*, *Tense loop*) and a six-slot sfx pack ship
+under `tools/audio/starter/` along with a `build.sh` that
+regenerates the `.s` files from `.fmstxt` sources via the
+FamiStudio CLI.  Pupil-facing walkthrough in
+[AUDIO_GUIDE.md](AUDIO_GUIDE.md).
+
+**Outstanding (Tier A):** Builder `audio` module that maps gameplay
+events (jump / hit / pickup / land / dialog / door) to specific
+sfx slots without the pupil writing C, plus matching track
+triggers (per-scene, low-HP, win/lose).  Deferred so Tier A could
+ship a usable end-to-end experience this session — see the
+*Remaining follow-up* section of [audio-plan.md](audio-plan.md)
+for the concrete plan.
+
+**Tier B (deferred indefinitely):** browser-native simplified
+composer.  Schedule only if a pupil is genuinely blocked from
+installing FamiStudio.
 
 - **Tier A (this phase).**  Vendor Mathieu Gauthier's FamiStudio
   sound engine (`famistudio_ca65.s` + `famistudio_cc65.h`) under
