@@ -49,3 +49,23 @@ tools/audio/famistudio/sync.sh /path/to/FamiStudio/repo
 It overwrites `famistudio_ca65.s` and `famistudio_cc65.h` with the
 upstream versions and bumps `VERSION.txt`.  Do **not** edit these
 files by hand — local changes are clobbered on every sync.
+
+## Also in this directory — `famistudio_crt0.s`
+
+`famistudio_crt0.s` is a **derivative** of cc65 v2.18's
+[`libsrc/nes/crt0.s`](https://github.com/cc65/cc65/blob/V2.18/libsrc/nes/crt0.s)
+(BSD-licensed; copyright Groepaz / Hitmen and Ullrich von
+Bassewitz).  We replace cc65's stock NES crt0 only when
+`USE_AUDIO=1` because cc65's stock NMI handler offers no project-
+level hook — without our copy, `famistudio_update` cannot fire
+from the hardware vblank interrupt.  See the file header for the
+full reasoning.
+
+The cc65 source carries the standard zlib-style "altered source
+versions must be plainly marked" notice; the modifications we
+make (a single `jsr _famistudio_update` in the NMI handler plus
+explanatory comments) are flagged at the top of the file.
+
+cc65 itself is not vendored here — we still rely on the
+system-installed `cc65 v2.18` package for the rest of `nes.lib`.
+This file is the *only* part of cc65 that lives in our tree.

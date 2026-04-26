@@ -73,13 +73,13 @@ void __fastcall__ famistudio_music_play(unsigned char song_index);
 void __fastcall__ famistudio_update(void);
 void __fastcall__ _famistudio_sfx_init(void);
 void __fastcall__ famistudio_sfx_play(unsigned char sfx_index, unsigned char channel);
-/* NMI hook — see tools/audio/famistudio/famistudio_nmi.s.  Hardware
- * vblank vectors here so famistudio_update fires at exactly 60 Hz no
- * matter how busy the main loop's per-frame work is.  Without this
- * (i.e. driving the engine from the main loop), heavy game logic on
- * the player's frame slows the loop below 60 Hz and the music tempo
- * drops in proportion. */
-void famistudio_nmi_handler(void);
+/* famistudio_update is called from the NMI handler in our project-
+ * local crt0 (tools/audio/famistudio/famistudio_crt0.s) so it runs at
+ * the hardware vblank rate (~60 Hz NTSC) regardless of how busy the
+ * main loop's per-frame work is.  We don't reference it directly from
+ * C — the import comes from inside the assembly crt0 — but we keep
+ * the prototype above so the .h-style block here stays a complete
+ * description of the engine API the project links in. */
 /* The engine's cc65 header wraps `init` with inline asm to load the
  * music-data pointer into A:X before jsr; we replicate the minimum
  * we need here so a bare main.c can call it without including the
@@ -717,12 +717,16 @@ void main(void) {
     }
 }
 
+/* This array has been here since Step_1 as a teaching prop —
+ * "the NES processor looks at $FFFA…" — but it lands in RODATA, not
+ * the linker's VECTORS segment, so it has never actually populated
+ * the iNES vector table.  cc65's nes.lib crt0 supplies the real
+ * vectors.  We leave the array in place because removing it would
+ * change the no-audio ROM bytes and break the byte-identical-baseline
+ * test, and because it still serves the original pedagogical purpose
+ * (pupils opening the file see vectors named explicitly). */
 const void *vectors[] = {
-#ifdef USE_AUDIO
-    (void *) famistudio_nmi_handler,
-#else
     (void *) 0,
-#endif
     (void *) main,
     (void *) 0
 };

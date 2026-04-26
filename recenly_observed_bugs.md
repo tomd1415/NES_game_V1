@@ -24,4 +24,9 @@ was a massive improvement.
 19. There should be an option to add a pixel grid to the top view of the sprite (just like the one on the individual tile of the sprite.)
 20. On the behaviour editor the Sprite reactions box needs to be wider so I think it should be below the background window and therefore have a bit more width to help make it easier to use.
 21. The triggers and doors on different places should be able to have different effects.
-22. 
+22. There should be the ability to change variables that affect the whole game, like gravity and similar in the builder section.
+23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
+24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
+25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
+26. The top down code has not been tested as much as the platform based code so that will need updating with everything that was discovered in the platform builder code writing and then testing. All should be documented. Again the NES is a very old system so there are probably many soultions to these problems already you should carry out a detailed search for sources of information to aid in writing this application and a suitable way of recording the information needed.
+27. It is not clear where the sound effects are linked to events or how to do that currently.

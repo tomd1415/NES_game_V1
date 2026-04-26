@@ -348,11 +348,12 @@ Concretely shipped:
   guarded `#ifdef USE_AUDIO` blocks declare the engine API, call
   `famistudio_init` + `famistudio_sfx_init` + `famistudio_music_play(0)`
   on boot, then enable hardware NMI generation.
-  `famistudio_update` is wired into the NMI handler (see
-  [`famistudio_nmi.s`](tools/audio/famistudio/famistudio_nmi.s)) so it
-  fires at the PPU's true 60 Hz vblank rate independent of main-loop
-  cost — see *Phase 4.3 follow-up — NMI-driven engine update* below
-  for the full reasoning.
+  `famistudio_update` is wired into the NMI handler in our project-
+  local [`famistudio_crt0.s`](tools/audio/famistudio/famistudio_crt0.s)
+  so it fires at the PPU's true 60 Hz vblank rate independent of
+  main-loop cost — see *Phase 4.3 follow-up — NMI-driven engine
+  update* below for the full reasoning, including why a project-local
+  crt0 is the only viable hook point in the cc65 NES target.
 - **Server staging** in
   [`playground_server.py`](tools/playground_server.py): `_build_rom`
   validates optional `audioSongsAsm` + `audioSfxAsm` strings (64 KB
@@ -485,28 +486,72 @@ hardware NMI handler — the standard NES pattern for audio-driving
 work.  The PPU asserts NMI at the start of every vblank
 (60.0988 Hz NTSC) regardless of what the CPU is doing, so the
 engine ticks at exactly the rate FamiStudio expects no matter how
-heavy the main loop's frame is.  Concretely:
+heavy the main loop's frame is.
+
+The wiring is non-obvious because cc65's stock NES `crt0.o`
+supplies the entire `VECTORS` segment (NMI / RESET / IRQ at
+$FFFA-$FFFF) with NO project-level NMI hook — the handler it
+points at does `ppubuf_flush` + a scroll reset + `rti` and
+nothing else.  A user-land `const void *vectors[] = {…}` array
+in C lands in `RODATA` by default, NOT in `VECTORS`, so it has
+no effect on the iNES vector table (this is true of every step
+in the project's history; the `vectors[]` declarations in
+`main.c` / `platformer.c` have always been pedagogical dead
+code).  The only viable hook is to provide our own `crt0.s` —
+ld65 only pulls library objects to satisfy unresolved symbols,
+so once *our* crt0 exports `__STARTUP__` and `_exit`, the
+library's crt0 isn't pulled and we own the vectors.
+
+Concretely:
 
 - New
-  [`tools/audio/famistudio/famistudio_nmi.s`](tools/audio/famistudio/famistudio_nmi.s) —
-  tiny shim that pushes A/X/Y, `jsr`s the engine update, pops, and
-  `rti`s.  In its own segment so cc65's runtime is untouched.
-- Step_Playground Makefile assembles the shim and links it into
-  `AUDIO_OBJS` whenever `USE_AUDIO=1`.  Default-off path is byte-
-  identical to before.
-- `main.c` and `platformer.c` declare `famistudio_nmi_handler`,
-  drop the in-vblank `famistudio_update()` call, and wire the
-  `vectors[]` table to point the NMI slot at the handler when
-  `USE_AUDIO` is defined.  After the engine init triple, they OR
-  in `0x80` on `PPU_CTRL` to enable NMI generation — strictly
-  *after* init so the first vblank doesn't fire the handler into
-  uninitialised engine state.
+  [`tools/audio/famistudio/famistudio_crt0.s`](tools/audio/famistudio/famistudio_crt0.s) —
+  copy of cc65 v2.18's `libsrc/nes/crt0.s` (BSD-licensed; see
+  `NOTICE.md`) with one substantive change: a `jsr _famistudio_update`
+  in the NMI handler before the register-restore.  Everything else
+  (the iNES header bytes, the startup zerobss/copydata/initlib/
+  callmain dance, the `ppubuf_flush` + scroll-reset NMI work cc65's
+  conio relies on) is preserved verbatim, so we don't accidentally
+  break any cc65 runtime feature the rest of the project might
+  depend on.
+- Step_Playground Makefile assembles `famistudio_crt0.s` and lists
+  it *first* in `AUDIO_OBJS` so ld65 sees its `__STARTUP__` /
+  `_exit` exports before searching `nes.lib`, preventing a
+  double-vectors overflow.  Only built when `USE_AUDIO=1` — the
+  no-audio build still uses cc65's stock crt0, keeping the
+  byte-identical baseline test honest.
+- `main.c` and `platformer.c` drop the in-vblank
+  `famistudio_update()` call, leaving the engine driven entirely
+  by our crt0's NMI handler.  After the engine init triple, they
+  write `PPU_CTRL = 0x90` (BG pattern table 1 + NMI enable bit) —
+  strictly *after* init so the first vblank doesn't fire the
+  handler into uninitialised engine state.
 - `scroll.c`'s `PPU_CTRL_BASE` becomes `0x90` (was `0x10`) when
   `USE_AUDIO=1` — every vblank-window scroll_apply_ppu and
   column-burst stride flip writes back the NMI bit, so it stays
   asserted across frames.  Without this, scroll_apply_ppu would
   silently disable NMI on every frame and the handler would
   stop firing.
+
+**Two false-start gotchas worth recording, since both bit during
+implementation.**
+
+- `PPU_CTRL` is *write-only* on the NES — `$2000` returns
+  open-bus on read.  The intuitive `PPU_CTRL |= 0x80;` to flip
+  the NMI bit after init compiles to a read-modify-write that
+  ORs in random open-bus bits, often including the column-stride
+  bit and the 8×16 sprite bit; symptom is "tile-sized pixel"
+  rendering corruption on first run.  The fix is to write a full
+  literal value (`PPU_CTRL = 0x90;`).
+- Boot ordering matters even when we *do* write a literal.
+  scroll.c's `PPU_CTRL_BASE = 0x90` means the boot-time
+  `scroll_apply_ppu()` writes the NMI-enable bit *before*
+  `famistudio_init` runs, and the very next vblank fires the NMI
+  handler into zeroed engine state — APU registers get garbage
+  and music dies.  Fix: call `famistudio_init` first thing in
+  `main()` (before `scroll_init` / `load_world_bg` / the explicit
+  `PPU_CTRL` literal in the no-scroll branch), so the engine is
+  ready by the time any code path enables NMI generation.
 
 **Safety analysis.**
 
@@ -526,14 +571,20 @@ heavy the main loop's frame is.  Concretely:
   segment (declared in `cfg/nes.cfg`), separate from cc65's
   `ZEROPAGE`.  The NMI handler can write its ZP without disturbing
   any cc65-emitted state on the main loop's stack frame.
-- A/X/Y are pushed/popped in the shim because `famistudio_update`
-  clobbers all three and the interrupted main-loop code expects
-  them preserved across an interrupt return.
+- A/X/Y are pushed/popped in the cc65-derived NMI prologue / epilogue
+  because `famistudio_update` (and `ppubuf_flush`) clobber all three
+  and the interrupted main-loop code expects them preserved across
+  an interrupt return.
 
 **Verification.**  Full regression suite (`run-all.mjs`) green:
 all 16 builder smoke suites pass, and the byte-identical-ROM
-invariant proves the no-audio path is unchanged (the NMI handler
-is only assembled / linked when `USE_AUDIO=1`).
+invariant proves the no-audio path is unchanged (`famistudio_crt0.s`
+is only assembled / linked when `USE_AUDIO=1`; without it, ld65 falls
+back to cc65's stock crt0 exactly as before).  Manually verified by
+dumping the iNES vectors out of an audio-build ROM (`$FFFA = $8035`
+points into our crt0, and the bytes there decode to the documented
+NMI handler ending in `jsr $99F3` — the linker map confirms `$99F3`
+resolves to `_famistudio_update`).
 
 ---
 

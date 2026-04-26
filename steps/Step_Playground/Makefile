@@ -47,7 +47,7 @@ ifeq ($(USE_AUDIO),1)
 # playground server right before invoking make.  The engine itself
 # lives outside the step tree and is referenced by relative path so
 # we never accidentally ship a stale local copy.
-AUDIO_OBJS = $(BUILD)/famistudio_engine.o $(BUILD)/famistudio_nmi.o $(BUILD)/audio_songs.o $(BUILD)/audio_sfx.o
+AUDIO_OBJS = $(BUILD)/famistudio_crt0.o $(BUILD)/famistudio_engine.o $(BUILD)/audio_songs.o $(BUILD)/audio_sfx.o
 CFLAGS    += -DUSE_AUDIO=1
 endif
 
@@ -110,11 +110,17 @@ $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(B
 $(BUILD)/famistudio_engine.o: $(FAMISTUDIO_DIR)/famistudio_engine.s $(FAMISTUDIO_DIR)/famistudio_ca65.s | $(BUILD)
 	$(AS) -t $(TARGET) -I $(FAMISTUDIO_DIR) -o $@ $<
 
-# NMI hook (Phase 4.3 follow-up).  Tiny shim that the iNES NMI vector
-# in main.c points at when USE_AUDIO=1, so famistudio_update fires at
-# the hardware vblank rate (60 Hz NTSC) instead of the main loop's
-# variable rate.  See famistudio_nmi.s for the full reasoning.
-$(BUILD)/famistudio_nmi.o: $(FAMISTUDIO_DIR)/famistudio_nmi.s | $(BUILD)
+# Custom crt0 (Phase 4.3 follow-up).  cc65's stock crt0 supplies the
+# VECTORS segment with NO project-level NMI hook, so we replace it
+# with our own copy that adds `jsr _famistudio_update` to the NMI
+# handler.  Listing this object first in the link line means ld65
+# sees its `__STARTUP__` / `_exit` exports before searching nes.lib,
+# so it never pulls cc65's crt0 in — preventing a double-vectors
+# overflow.  Only built when USE_AUDIO=1; the no-audio build still
+# uses cc65's stock crt0 exactly as before, keeping the byte-
+# identical baseline test honest.  See famistudio_crt0.s for the
+# full reasoning.
+$(BUILD)/famistudio_crt0.o: $(FAMISTUDIO_DIR)/famistudio_crt0.s | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $<
 
 $(BUILD)/audio_songs.o: src/audio_songs.s | $(BUILD)
