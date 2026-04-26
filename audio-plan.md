@@ -347,13 +347,12 @@ Concretely shipped:
 - **Runtime hooks** in [`main.c`](steps/Step_Playground/src/main.c):
   guarded `#ifdef USE_AUDIO` blocks declare the engine API, call
   `famistudio_init` + `famistudio_sfx_init` + `famistudio_music_play(0)`
-  on boot, then enable hardware NMI generation.
-  `famistudio_update` is wired into the NMI handler in our project-
-  local [`famistudio_crt0.s`](tools/audio/famistudio/famistudio_crt0.s)
-  so it fires at the PPU's true 60 Hz vblank rate independent of
-  main-loop cost — see *Phase 4.3 follow-up — NMI-driven engine
-  update* below for the full reasoning, including why a project-local
-  crt0 is the only viable hook point in the cc65 NES target.
+  on boot, and `famistudio_update` once per frame at the end of
+  the main loop's vblank window.  An NMI-driven version was tried
+  (see *Phase 4.3 follow-up* below) but reverted — the engine is
+  too long to run inside the NES vblank without pushing OAM DMA
+  and `scroll_stream` past the vblank boundary into the active
+  render.
 - **Server staging** in
   [`playground_server.py`](tools/playground_server.py): `_build_rom`
   validates optional `audioSongsAsm` + `audioSfxAsm` strings (64 KB
@@ -456,7 +455,7 @@ Concretely shipped in update 2:
 
 ---
 
-## Phase 4.3 follow-up — NMI-driven engine update (2026-04-25)
+## Phase 4.3 follow-up — NMI-driven engine update (attempted, reverted)
 
 **Symptom (pupil-reported, after the in-browser tempo fix).**  Even in
 the *local* FCEUX emulator — where the in-browser timing problems
@@ -585,6 +584,43 @@ dumping the iNES vectors out of an audio-build ROM (`$FFFA = $8035`
 points into our crt0, and the bytes there decode to the documented
 NMI handler ending in `jsr $99F3` — the linker map confirms `$99F3`
 resolves to `_famistudio_update`).
+
+**Why this was reverted (2026-04-26 follow-up).**  The plan above
+got music tempo locked at the composed BPM in FCEUX, but pupils
+running real game scenes immediately reported that **scrolling
+broke** the moment audio was on.  Root cause: the FamiStudio
+engine update is 1500-5000 CPU cycles (varies per frame depending
+on how many channels advance a row), and an NTSC vblank is only
+~2273 cycles.  Running the engine at vblank start inside NMI
+consumed the budget the main loop needs for OAM DMA (513 cyc) +
+`scroll_stream` column burst (~250 cyc) + `scroll_apply_ppu` (~30
+cyc), pushing those PPU writes past vblank into the active render
+— which corrupts visible tiles and sprites.  The cc65 engine has
+no hook to split fast (APU writes from a buffer) from slow (note
+tracking) work, so we couldn't keep just the cheap part inside
+NMI.  We've reverted to the original placement: `famistudio_update`
+runs at the end of the main loop's vblank window, *after*
+`PPU_MASK = 0x1E` re-enables rendering — the engine only writes
+APU registers ($4000-$4017), which the PPU ignores during active
+scanlines, so it's safe to overrun.  The trade-off is the original
+mild tempo drift on heavy frames (when the main loop drops below
+60 Hz the engine ticks proportionally slower).  AUDIO_GUIDE.md's
+troubleshooting section frames this for pupils and points them at
+"compose at slower BPM" / "keep scenes lighter" as the two
+mitigations.
+
+The project-local `famistudio_crt0.s` stays in place — it's now
+identical-in-behaviour to cc65's stock crt0 (its NMI handler no
+longer calls `_famistudio_update`), so leaving it linked is
+harmless, and a future re-attempt at NMI-driven updates (e.g.
+with a smaller hand-rolled engine or a buffered output split)
+has an obvious place to wire the hook again.
+
+`scroll.c`'s `PPU_CTRL_BASE` is back to `0x10` unconditionally
+(NMI bit unused).  `main.c` / `platformer.c`'s boot-time
+`PPU_CTRL` literal is back to `0x10`.  `famistudio_init` now
+runs *after* the rendering setup in main, mirroring the
+original ordering.
 
 ---
 

@@ -133,6 +133,7 @@ The functions you'll use most:
 famistudio_init(FAMISTUDIO_PLATFORM_NTSC, audio_default_music);
 famistudio_sfx_init(audio_sfx_data);
 famistudio_music_play(0);            // 0 = first song you uploaded
+famistudio_update();                  // call once per frame in vblank
 ```
 
 And to fire a sound effect:
@@ -141,11 +142,8 @@ And to fire a sound effect:
 famistudio_sfx_play(2, FAMISTUDIO_SFX_CH0);   // slot 2, on channel 0
 ```
 
-The starter `main.c` does the three init calls for you, and wires
-the per-frame engine update into the NES's hardware vblank
-interrupt so the music ticks at exactly 60 Hz regardless of what
-the rest of your code is doing — you don't need to call
-`famistudio_update()` yourself.  Just add `famistudio_sfx_play(...)`
+The starter `main.c` does the four init calls and the per-frame
+update for you — you only need to add `famistudio_sfx_play(...)`
 calls where you want sound effects, and `famistudio_music_play(N)`
 when you want to switch to a different song.
 
@@ -193,21 +191,33 @@ The Audio page won't enable audio in the build until both are
 present.
 
 **The music tempo speeds up or slows down when lots of stuff is
-moving on-screen** in the *in-browser* emulator (the ▶ Play button
-on this page or the Builder page).  This is a known limitation of
-the in-browser NES emulator (jsnes) when the page is doing heavy
-work: emulation runs slightly slower than 60 fps, the audio
-hardware keeps consuming samples at the same rate, and the music
-sounds like it's stuttering or warping.  Running the same ROM in a
-*local* emulator like FCEUX (the *Local* play mode in the dropdown
-next to ▶ Play) gives steady playback because the emulator runs in
-its own native process and the engine is now driven by the NES's
-hardware vblank interrupt — that means the music ticks at exactly
-60 Hz no matter how heavy the game's per-frame work is.  Pupils
-with older laptops or busy scenes may still notice some drift in
-the *browser* preview, but the local play and the final ROM
-itself are rock-steady — record your gameplay in FCEUX if you
-want the audio captured for sharing.
+moving on-screen.**  This happens in both the in-browser preview
+and the local FCEUX emulator, and it's the same root cause in
+each: when the player's frame has a lot of work to do (collision
+checks, moving sprites, scrolling), the main loop drops below 60
+frames per second, and the FamiStudio engine — which gets called
+once per game frame — ticks more slowly along with it.  We tried
+moving the engine onto the NES's hardware vblank interrupt to fix
+this, but the engine takes longer than the NES's tiny vblank
+window allows, and pushing it there caused background tiles to
+glitch on busy screens (you may have seen this in the very brief
+stretch between v1 and v2 of the audio update).  The current
+arrangement keeps graphics rock-steady at the cost of mild tempo
+drift on heavy frames.  Two ways to mitigate it if it bothers you:
+keep the scene lighter (fewer simultaneous moving sprites), or
+compose your song at a slightly slower BPM so the drift is less
+musically noticeable.
+
+**The music feels too fast.**  FamiStudio bakes the song's tempo
+into the exported `.s` data — there's no runtime knob in the
+editor to override it.  To change tempo, open the song in
+FamiStudio, click the song name in the left-hand panel, change
+the **BPM** field (default is often 150 BPM, which sounds quite
+brisk; 100-120 BPM is gentler for a slow-paced game), and re-
+export via *File → Export → FamiStudio Sound Engine assembly*.
+Upload the new `.s` over the old one on the Audio page.  The
+*Cheerful loop* and *Tense loop* in the starter pack are 150
+BPM — recompose them at whatever tempo fits your game.
 
 **The 🔊 / 🔇 button doesn't seem to do anything the first time.**
 Some browsers require the page to play a sound *once* before they

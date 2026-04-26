@@ -137,8 +137,32 @@ _exit:  jsr     donelib         ; Run module destructors
 ; System V-Blank Interrupt
 ; Updates PPU Memory (buffered).
 ; Updates VBLANK_FLAG and tickcount.
-; Phase 4.3 follow-up: also calls famistudio_update so music ticks at
-; the hardware vblank rate independent of main-loop cost.
+;
+; Phase 4.3 follow-up — *attempted* to add a `jsr _famistudio_update`
+; here so the music engine ticks at exactly 60 Hz NTSC regardless of
+; main-loop cost.  The plan failed in practice: famistudio_update
+; takes ~1500-5000 CPU cycles depending on how many channel notes it
+; advances on a given frame, and NTSC vblank is only ~2273 cycles.
+; Running the engine first inside NMI consumes the vblank budget the
+; main loop needs for OAM DMA (513 cyc) + scroll_stream column burst
+; (~250 cyc) + scroll_apply_ppu (~30 cyc), so those PPU writes spill
+; past vblank into the active render and corrupt the visible frame —
+; observed as scroll glitches and sprite flicker in fceux.
+;
+; Calling famistudio_update from the main loop *after* PPU_MASK is
+; back on (the engine only writes APU registers $4000-$4017, never
+; PPU) is the standard NES pattern and works cleanly — the only
+; visible cost is mild tempo drift on heavy frames where the main
+; loop drops below 60 Hz.  See AUDIO_GUIDE.md for the pupil-facing
+; framing of that tradeoff.
+;
+; The crt0 itself is still load-bearing: ld65 only pulls library
+; objects to satisfy unresolved symbols, and once we provide our own
+; `__STARTUP__` / `_exit` the linker won't pull cc65's crt0.  We
+; could revert to the stock crt0, but keeping our own copy means
+; the audio path is self-contained and a future re-attempt at
+; NMI-driven updates (e.g. with a smaller, hand-rolled engine) has
+; an obvious place to wire the hook.
 ; ------------------------------------------------------------------------
 
 nmi:    pha
@@ -165,16 +189,6 @@ nmi:    pha
         ; Reset scrolling.
         sta     PPU_VRAM_ADDR1
         sta     PPU_VRAM_ADDR1
-
-        ; --- FamiStudio engine tick ----------------------------------------
-        ; Drives the music + sfx engine at exactly 60 Hz NTSC.  The
-        ; main loop's scroll_apply_ppu() rewrites PPU_SCROLL right
-        ; after waitvsync exits anyway, so the cc65 scroll-reset above
-        ; is a no-op once the actual game frame work runs — we don't
-        ; need to skip it.  famistudio_update only writes APU
-        ; registers ($4000-$4017), never PPU, so it cannot interfere
-        ; with the scroll/PPU register state we leave behind here.
-        jsr     _famistudio_update
 
         pla
         tax
