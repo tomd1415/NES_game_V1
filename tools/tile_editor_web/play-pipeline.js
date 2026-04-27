@@ -248,25 +248,37 @@
       payload.playerStart2 = players.playerStart2;
     }
 
-    // Phase 4.3 — audio.  Both blobs must be present for the server
-    // to flip USE_AUDIO=1; an asymmetric upload silently falls back
-    // to no-audio (server validates this).  We assemble the songs
-    // blob from every uploaded song's .asm joined by blank lines
-    // and append an `_audio_default_music` alias pointing at the
-    // pupil's chosen default song.  If the project has no songs or
-    // no sfx yet, omit both fields and the server stays in
-    // no-audio mode.
+    // Phase 4.3 — audio.  Pre-2026-04-27 this gate required *both*
+    // a song and a sfx pack uploaded before audio engaged at all.
+    // Pupils uploading just a song saw silence: the editor dropped
+    // the songsAsm here, the server fell back to no-audio, the
+    // build linked without the engine.  Now the server auto-stubs
+    // whichever side is missing (see playground_server.py's
+    // _AUTO_SFX_STUB_ASM / _AUTO_SONGS_STUB_ASM), so we just send
+    // whatever the pupil has and let the server complete the pair.
+    //
+    // We still emit nothing when the pupil has *neither* — there's
+    // no audio asset at all to stub against, and engaging the
+    // engine just to play silence wastes ~3.5 KB of PRG.
     const audio = s.audio || { songs: [], sfx: null };
-    if (Array.isArray(audio.songs) && audio.songs.length > 0
-        && audio.sfx && typeof audio.sfx.asm === 'string'
-        && audio.sfx.asm.trim().length > 0) {
+    const hasSongs = Array.isArray(audio.songs) && audio.songs.length > 0
+      && audio.songs.some(s2 => s2 && typeof s2.asm === 'string'
+        && s2.asm.trim().length > 0);
+    const hasSfx = !!(audio.sfx && typeof audio.sfx.asm === 'string'
+      && audio.sfx.asm.trim().length > 0);
+    if (hasSongs) {
       const defaultIdx = (typeof audio.defaultSongIdx === 'number'
         && audio.defaultSongIdx >= 0
         && audio.defaultSongIdx < audio.songs.length)
         ? audio.defaultSongIdx : 0;
       const defaultSong = audio.songs[defaultIdx];
+      // Symbol must be a strict ca65 identifier or `.export X:=<sym>`
+      // throws "Constant expression expected" — that error is the
+      // canonical pupil-reported audio build failure (2026-04-27).
+      const validId = /^[A-Za-z_][A-Za-z0-9_]*$/;
       if (defaultSong && typeof defaultSong.asm === 'string'
-          && typeof defaultSong.symbol === 'string') {
+          && typeof defaultSong.symbol === 'string'
+          && validId.test(defaultSong.symbol)) {
         const songsAsm = audio.songs
           .map(song => song.asm || '')
           .filter(asm => asm.trim().length > 0)
@@ -276,13 +288,19 @@
           '; main.c imports.  Phase 4.3.\n' +
           '.export _audio_default_music:=' + defaultSong.symbol + '\n' +
           '.export audio_default_music:=' + defaultSong.symbol + '\n';
+        payload.audioSongsAsm = songsAsm + aliasTrailer;
+      }
+    }
+    if (hasSfx) {
+      const validId = /^[A-Za-z_][A-Za-z0-9_]*$/;
+      const sfxSym = audio.sfx.symbol || 'sounds';
+      if (validId.test(sfxSym)) {
         const sfxAlias =
           '\n\n; Alias the FamiStudio-exported `sounds` symbol to the\n' +
           '; one main.c imports.  Phase 4.3.\n' +
-          '.export _audio_sfx_data:=' + (audio.sfx.symbol || 'sounds') + '\n' +
-          '.export audio_sfx_data:=' + (audio.sfx.symbol || 'sounds') + '\n';
-        payload.audioSongsAsm = songsAsm + aliasTrailer;
-        payload.audioSfxAsm   = audio.sfx.asm + sfxAlias;
+          '.export _audio_sfx_data:=' + sfxSym + '\n' +
+          '.export audio_sfx_data:=' + sfxSym + '\n';
+        payload.audioSfxAsm = audio.sfx.asm + sfxAlias;
       }
     }
 
