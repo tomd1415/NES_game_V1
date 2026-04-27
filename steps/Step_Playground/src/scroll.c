@@ -260,7 +260,19 @@ void load_world_bg(void) {
     /* Number of screens to load on each axis: 1 for non-scrolling
        axes, 2 for scrolling axes.  Worlds taller / wider than 2
        screens rely on scroll_stream() to fill the remaining data
-       in as the camera moves. */
+       in as the camera moves.
+
+       T2.1/T2.2 follow-up (2026-04-27).  This function reads
+       `bg_world_tiles[]` which is the *selected* bg's tiles only.
+       For projects that stay within 2x2 (the Phase 4.4 cap) the
+       door-bug fix has already loaded all visible NTs from
+       `bg_nametable_<n>` so this is a non-issue.  Once T3.2
+       (worlds beyond 2x2) ships, scroll_stream() will start
+       fetching from `bg_world_tiles` mid-game; the multi-bg
+       door path will then need a second swap — replace
+       `bg_world_tiles` with a mutable pointer that
+       behaviour_set_active_bg-style swaps to the new bg's
+       data.  Tracked in the T2.1/T2.2 changelog entry. */
     unsigned char n_screens_x;
     unsigned char n_screens_y;
     unsigned char sx;

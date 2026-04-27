@@ -7,9 +7,9 @@
    painted; the scroll core (Sprint 11 S-1) streams columns/rows
    from this data into the off-screen nametable as the camera moves.
    1x1 projects still include this header but nothing consumes it. */
-#define BG_WORLD_COLS       32
+#define BG_WORLD_COLS       64
 #define BG_WORLD_ROWS       30
-#define BG_WORLD_ATTR_COLS  8
+#define BG_WORLD_ATTR_COLS  16
 #define BG_WORLD_ATTR_ROWS  8
 
 /* Full-world pixel dimensions.  Exposed here (rather than in

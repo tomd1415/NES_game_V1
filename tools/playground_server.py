@@ -499,6 +499,17 @@ def _active_nametable(state):
     return state.get("nametable") or []
 
 
+def selected_bg_idx_safe(state):
+    """Return state.selectedBgIdx clamped to a valid index, or 0."""
+    bgs = state.get("backgrounds") if isinstance(state, dict) else None
+    if not isinstance(bgs, list) or not bgs:
+        return 0
+    idx = state.get("selectedBgIdx", 0) or 0
+    if not isinstance(idx, int) or idx < 0 or idx >= len(bgs):
+        return 0
+    return idx
+
+
 def _nametable_bytes_for(nt):
     """Encode a single background's nametable (2D list of {tile,palette})
     into the raw NES format: 32*30 tile bytes followed by 64 attribute
@@ -1141,21 +1152,63 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             arr("ss_anim_tick", anim_zero, mutable=True),
         ]
 
-    # --- Per-background nametables (Phase B+ Round 3) ----------------
-    # For multi-background door transitions we need every painted
-    # background's 1024-byte nametable available in ROM.  Emit as
-    # const byte arrays — the template's `load_background_n` helper
-    # reads them into PPU $2000 when the pupil walks through a DOOR.
-    # Size budget: one nametable = 1024 B, a typical pupil project
-    # has 1-3 rooms so ~1-3 KB of additional PRG.
+    # --- Per-background nametables (Phase B+ Round 3 + T2.1 fix) ----
+    # For multi-background door transitions we emit each painted
+    # background's full nametable data in ROM, sized to the project's
+    # world dimensions.  Pre-T2.1 each `bg_nametable_<n>` was a fixed
+    # 1024 bytes (a single screen), so when a multi-screen project
+    # used a door to swap rooms only screen 0 of the new bg got
+    # written to NT0 — the player walking to a different screen post-
+    # door saw the *previous* bg's stale tiles in NT1+ (item 2 in
+    # docs/feedback/recently-observed-bugs.md).  The fix is to emit
+    # `screens_x * screens_y` consecutive 1024-byte blocks per bg
+    # (each block = one screen's tiles + attrs in NES format) and let
+    # `load_background_n` walk all of them at door-swap time.
+    #
+    # Constraint: every bg in the project must share the active bg's
+    # dimensions.  Mismatched bgs would need per-bg world dimensions
+    # in the scroll engine which is T3.2's territory.  A validator
+    # in builder-validators.js refuses the build before this code
+    # runs; here we silently project-wide clamp to the active bg's
+    # dimensions as a safety belt.
     bgs = state.get("backgrounds") or []
-    lines += ["", f"#define BG_COUNT {len(bgs)}", ""]
+    active_bg = bgs[selected_bg_idx_safe(state)] if bgs else None
+    proj_dims = ((active_bg or {}).get("dimensions") or {}) if active_bg else {}
+    proj_sx = max(1, int(proj_dims.get("screens_x") or 1))
+    proj_sy = max(1, int(proj_dims.get("screens_y") or 1))
+    bytes_per_bg = proj_sx * proj_sy * 1024  # 1024 = 32*30 tiles + 64 attrs
+    lines += ["", f"#define BG_COUNT {len(bgs)}",
+              f"#define BG_SCREENS_X {proj_sx}",
+              f"#define BG_SCREENS_Y {proj_sy}",
+              f"#define BG_NAMETABLE_BYTES {bytes_per_bg}",
+              ""]
     for bi, bg in enumerate(bgs):
         nt = bg.get("nametable") or []
-        nt_bytes = _nametable_bytes_for(nt)
-        hex_body = ", ".join(f"0x{b:02X}" for b in nt_bytes)
+        # Concatenate one 1024-byte NES block per screen, in
+        # row-major (sy, sx) order.  Block ordering matches the
+        # loop in load_background_n (sy outer, sx inner).
+        bg_bytes = bytearray()
+        for sy in range(proj_sy):
+            for sx in range(proj_sx):
+                # _nametable_bytes_for() works on a 30-row × 32-col
+                # grid; carve out the (sy, sx) screen from the bg's
+                # full multi-screen grid.  Pupils with mismatched-
+                # dimension bgs see padding (zeros) for missing rows.
+                rows_start = sy * SCREEN_ROWS
+                cols_start = sx * SCREEN_COLS
+                screen_grid = []
+                for r in range(SCREEN_ROWS):
+                    src_row = nt[rows_start + r] if rows_start + r < len(nt) else []
+                    cropped = src_row[cols_start:cols_start + SCREEN_COLS]
+                    # Pad short rows so _nametable_bytes_for sees the
+                    # full 32-col width.
+                    while len(cropped) < SCREEN_COLS:
+                        cropped.append({"tile": 0, "palette": 0})
+                    screen_grid.append(cropped)
+                bg_bytes += _nametable_bytes_for(screen_grid)
+        hex_body = ", ".join(f"0x{b:02X}" for b in bg_bytes)
         lines += [
-            f"static const unsigned char bg_nametable_{bi}[1024] = {{",
+            f"static const unsigned char bg_nametable_{bi}[BG_NAMETABLE_BYTES] = {{",
             "    " + hex_body,
             "};",
             "",
@@ -1264,14 +1317,21 @@ def _behaviour_world_dims(state):
 def _behaviour_world_map(state):
     """Build the flat world behaviour map as a bytes() of length cols*rows."""
     cols, rows = _behaviour_world_dims(state)
-    out = bytearray(cols * rows)
-    bgs = state.get("backgrounds")
     bg = None
+    bgs = state.get("backgrounds")
     if isinstance(bgs, list) and bgs:
-        idx = state.get("selectedBgIdx", 0) or 0
-        if not isinstance(idx, int) or idx < 0 or idx >= len(bgs):
-            idx = 0
-        bg = bgs[idx] or {}
+        bg = bgs[selected_bg_idx_safe(state)] or {}
+    return _behaviour_map_for_bg(bg, cols, rows), cols, rows
+
+
+def _behaviour_map_for_bg(bg, cols, rows):
+    """Encode a single bg's behaviour grid into the flat row-major
+    bytes() the runtime indexes into.  Pads with zeros (BEHAVIOUR_NONE)
+    for any cell missing from the source grid; T2.2 (per-bg behaviour
+    maps for multi-bg door swaps) calls this once per bg with the
+    project's world dimensions to get a consistent layout across all
+    rooms."""
+    out = bytearray(cols * rows)
     grid = (bg or {}).get("behaviour") or []
     for r in range(rows):
         row = grid[r] if r < len(grid) else []
@@ -1282,7 +1342,7 @@ def _behaviour_world_map(state):
             except (TypeError, ValueError):
                 v = 0
             out[base + c] = v & 0x07  # only ids 0..7 are valid
-    return bytes(out), cols, rows
+    return bytes(out)
 
 
 def _sprite_reaction_table(state):
@@ -1347,6 +1407,12 @@ def build_collision_h(state):
         "   Returns REACT_IGNORE (0) for out-of-range sprite or id. */",
         "unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id);",
         "",
+        "/* T2.2 — multi-bg behaviour swap.  Doors module's emitted code",
+        "   calls this after a teleport so behaviour_at queries the new",
+        "   room's collision data.  Out-of-range n leaves the current",
+        "   map in place. */",
+        "void behaviour_set_active_bg(unsigned char n);",
+        "",
         "#endif",
         "",
     ]
@@ -1354,14 +1420,28 @@ def build_collision_h(state):
 
 
 def build_behaviour_c(state):
-    """Emit src/behaviour.c — world map + reaction table + query functions."""
-    map_bytes, cols, rows = _behaviour_world_map(state)
-    react_bytes, num_sprites = _sprite_reaction_table(state)
+    """Emit src/behaviour.c — world map + reaction table + query functions.
 
-    def _hex_table(name, data, cols_per_line=16):
+    T2.2 (2026-04-27) — when the project has multiple backgrounds we
+    emit one `behaviour_map_<n>` per bg plus a mutable
+    `active_behaviour_map` pointer.  `behaviour_at()` reads through
+    the pointer; the doors module's emitted code calls
+    `behaviour_set_active_bg(n)` after a teleport so collision data
+    follows the visible room.  Pre-fix the global `behaviour_map[]`
+    held the *selected* bg only and never swapped, so post-door
+    collisions queried the wrong room (item 3 in
+    docs/feedback/recently-observed-bugs.md).
+    """
+    cols, rows = _behaviour_world_dims(state)
+    react_bytes, num_sprites = _sprite_reaction_table(state)
+    bgs = state.get("backgrounds")
+    bg_list = bgs if isinstance(bgs, list) else []
+    selected = selected_bg_idx_safe(state)
+
+    def _hex_table(name, data, cols_per_line=16, qualifier="const"):
         if not data:
-            return [f"const unsigned char {name}[1] = {{ 0 }}; /* empty */"]
-        out = [f"const unsigned char {name}[{len(data)}] = {{"]
+            return [f"{qualifier} unsigned char {name}[1] = {{ 0 }}; /* empty */"]
+        out = [f"{qualifier} unsigned char {name}[{len(data)}] = {{"]
         for i in range(0, len(data), cols_per_line):
             chunk = data[i:i + cols_per_line]
             out.append("  " + ", ".join(f"0x{b:02X}" for b in chunk) + ",")
@@ -1375,9 +1455,37 @@ def build_behaviour_c(state):
         "",
         f"/* World behaviour map: {cols} cols x {rows} rows, row-major. */",
     ]
-    lines += _hex_table("behaviour_map", map_bytes)
+
+    # Emit one per-bg map.  At least one map is always emitted so the
+    # pointer below has a valid initialiser even on projects with no
+    # backgrounds defined yet (the `or [None]` guarantees that).
+    bgs_for_emit = bg_list if bg_list else [None]
+    for i, bg in enumerate(bgs_for_emit):
+        map_bytes = _behaviour_map_for_bg(bg, cols, rows)
+        lines += [f"/* Behaviour map for background {i}. */"]
+        lines += _hex_table(f"behaviour_map_{i}", map_bytes)
+        lines.append("")
+
+    # Mutable pointer to whichever map is currently in play.  Door
+    # transitions update it via behaviour_set_active_bg().
+    init_idx = selected if bg_list else 0
     lines += [
+        f"/* Active map pointer — initialised to the selected bg ({init_idx}). */",
+        f"const unsigned char *active_behaviour_map = behaviour_map_{init_idx};",
         "",
+        "void behaviour_set_active_bg(unsigned char n) {",
+        "  switch (n) {",
+    ]
+    for i in range(len(bgs_for_emit)):
+        lines.append(f"    case {i}: active_behaviour_map = behaviour_map_{i}; break;")
+    lines += [
+        "    default: /* leave the current map in place */ break;",
+        "  }",
+        "}",
+        "",
+    ]
+
+    lines += [
         "/* Sprite x behaviour reaction table.",
         "   Row i (8 bytes) = sprite i's verb for behaviour ids 0..7. */",
     ]
@@ -1393,7 +1501,7 @@ def build_behaviour_c(state):
         "unsigned char behaviour_at(unsigned int world_col, unsigned int world_row) {",
         "  if (world_col >= WORLD_COLS) return BEHAVIOUR_NONE;",
         "  if (world_row >= WORLD_ROWS) return BEHAVIOUR_NONE;",
-        "  return behaviour_map[world_row * WORLD_COLS + world_col];",
+        "  return active_behaviour_map[world_row * WORLD_COLS + world_col];",
         "}",
         "",
         "unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id) {",

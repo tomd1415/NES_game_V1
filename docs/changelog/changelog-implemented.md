@@ -3476,3 +3476,103 @@ is the door-bug bundle (T2.1 + T2.2) since it's a known-bad
 pupil report and likely shares a root cause across the two
 items.
 
+## Tier 2 (post-Phase-4 plan) — door-bug bundle shipped 2026-04-27
+
+Source plan:
+[`docs/plans/current/2026-04-26-fixes-and-features.md`](../plans/current/2026-04-26-fixes-and-features.md).
+T2.1 (item 2 — wrong background after door) and T2.2 (item 3 —
+wrong behaviour blocks after door) shipped together as predicted
+in the plan; bisecting against the existing tests confirmed both
+shared a root cause: only one screen of nametable data + a single
+fixed behaviour map ever followed a door transition, so any
+multi-screen world (or any project with >1 background that the
+runtime needed to query collision against) saw stale tiles or
+stale collision data after a door fired.
+
+- **Root cause (T2.1).**
+  `tools/playground_server.py`'s `build_scene_inc` emitted each
+  bg's nametable as a fixed-size `bg_nametable_<n>[1024]` array —
+  one screen.  `tools/tile_editor_web/builder-templates/platformer.c`'s
+  `load_background_n` then wrote those 1024 bytes to PPU `$2000`
+  (NT0) only.  In a 2×1 world, the new bg's right-hand screen never
+  reached NT1 — it kept the previous bg's tiles.  Pupil report:
+  *"shows the wrong background for one of the screens."*
+- **Root cause (T2.2).**  `build_behaviour_c` emitted a single
+  global `behaviour_map[]` from the *selected* bg's behaviour grid,
+  and `behaviour_at()` read directly from it.  Door transitions
+  swapped the visible nametable but not the collision data, so
+  collision queries against the new room hit the source room's
+  walls/doors/triggers.  Pupil report: *"the 'behaviour blocks'
+  are from the wrong background."*
+- **Fix — server side.**
+  - `build_scene_inc` now emits each `bg_nametable_<n>` at
+    `screens_x × screens_y × 1024` bytes (one 1024-byte screen
+    block per screen, row-major sy outer / sx inner).  New macros
+    `BG_SCREENS_X`, `BG_SCREENS_Y`, `BG_NAMETABLE_BYTES` go in
+    scene.inc so the template knows the loop bounds.  All bgs in
+    the project share the project-wide world dimensions (taken
+    from the active bg) — mismatched dimensions are caught earlier
+    by builder-validators; this code is a safety belt that pads
+    short rows with `BEHAVIOUR_NONE`.
+  - `build_behaviour_c` now emits one `behaviour_map_<n>[]` per
+    bg, plus a mutable `const unsigned char *active_behaviour_map`
+    initialised to the selected bg's map, plus a
+    `behaviour_set_active_bg(unsigned char n)` switch.
+    `behaviour_at()` reads through the pointer.  `collision.h`
+    declares the new function.
+  - New `selected_bg_idx_safe(state)` helper consolidates the
+    bg-index validation that was duplicated in three places.
+- **Fix — template side.**
+  - `load_background_n(n)` body now walks every `(sy, sx)` block
+    in the new bg, computing each NT's base address (`$2000`,
+    `$2400`, `$2800`, `$2C00` per the same pattern as
+    `scroll.c`'s `load_world_bg`) and writing the matching
+    1024-byte block from `bg_nametable_<n>`.  After the writes
+    finish, it calls `behaviour_set_active_bg(n)` so collision
+    queries follow the visible room.
+  - No changes to main.c (Step_Playground stock) — the door logic
+    only exists in platformer.c (Builder template); main.c never
+    touches any of these symbols.  Byte-identical baseline ROM
+    hash unchanged.
+- **Tests.**
+  - New E4 case in
+    `tools/builder-tests/round3-multi-bg.mjs` builds a 2×1
+    + 2-bg + door project via the *shared-dir* path (no
+    customMainC) so the test can read back the staged
+    scene.inc + behaviour.c.  Asserts: `BG_SCREENS_X 2`,
+    `BG_NAMETABLE_BYTES 2048`, per-bg arrays
+    `bg_nametable_0[BG_NAMETABLE_BYTES]` and
+    `bg_nametable_1[BG_NAMETABLE_BYTES]` exist; `behaviour_map_0`
+    and `behaviour_map_1` arrays exist; `active_behaviour_map`
+    pointer + `behaviour_set_active_bg(...)` function present;
+    `behaviour_at` reads `active_behaviour_map[...]`.
+  - `mkBg` and `mkState` in `round3-multi-bg.mjs` gained
+    `screensX` / `screensY` parameters so the helper can build
+    multi-screen test fixtures.
+  - Existing tests untouched — V1, A1, A, E1, E2, E3 still cover
+    the original same-room and 1×1 multi-bg paths.
+- **Caveat — flagged for follow-up.**  When the project is
+  *multi-screen* and the world > 2×2, scroll.c's
+  `scroll_stream` reads `bg_world_tiles[]` (the SCROLL_BUILD
+  global, currently keyed off the selected bg only) to fetch
+  off-screen rows/columns as the camera moves.  If a multi-bg
+  door teleports between two such large worlds, post-door scroll
+  streaming would still pull from the source bg's tiles.  We
+  don't hit this today because Phase 4.4 caps worlds at 2×2 and
+  T3.2 (worlds-beyond-2-screens) hasn't shipped yet — by the
+  time T3.2 lands, the bg_world_tiles pointer needs swapping
+  too.  Note added inline in scroll.c's load_world_bg comment.
+
+**ROM-size impact.**  Bgs with 1×1 dimensions: same 1024 bytes
+as before.  2×1 / 1×2: 2048 bytes per bg (+1KB).  2×2: 4096
+bytes per bg (+3KB).  A typical project with three 2×1 rooms
+goes from ~3KB of nametable data to ~6KB; comfortably inside
+the 32KB PRG budget but worth knowing for projects pushing
+ROM-size limits.  The audit panel on the Audio page (and the
+ROM-size meter on the Builder page) reflect the new totals.
+
+**Tests.**  Full `run-all.mjs` regression suite green — every
+invariant including the byte-identical baseline (T2.1/T2.2 only
+touch the doors-active path; no-modules-ticked is unchanged), the
+T1.3 sprite-duplicate guard, and all 16 smoke suites.
+

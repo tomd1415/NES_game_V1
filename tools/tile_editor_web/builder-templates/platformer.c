@@ -386,6 +386,10 @@ void clear_text_row(unsigned char row, unsigned char col, unsigned char width) {
  * Scroll is reset to (0,0) so the new room starts cleanly. */
 static void load_background_n(unsigned char n) {
     unsigned int k;
+    unsigned int block_off;
+    unsigned int nt_base;
+    unsigned char sx;
+    unsigned char sy;
     const unsigned char *src;
     waitvsync();
     PPU_MASK = 0;
@@ -411,16 +415,35 @@ static void load_background_n(unsigned char n) {
             break;
     }
     if (src) {
-        PPU_ADDR = 0x20;
-        PPU_ADDR = 0x00;
-        for (k = 0; k < 1024; k++) {
-            PPU_DATA = src[k];
+        /* T2.1 — walk every screen of the new bg.  Pre-fix the loader
+         * wrote only the first 1024 bytes (one screen) to NT0, so the
+         * second screen of a 2x1 bg (or NT1+ in any multi-screen
+         * project) kept the previous bg's stale tiles when the door
+         * fired.  Block layout matches scene.inc's emission: one
+         * 1024-byte block per screen, row-major (sy outer, sx inner).
+         * Nametable base addresses match scroll.c's load_world_bg. */
+        block_off = 0;
+        for (sy = 0; sy < BG_SCREENS_Y; sy++) {
+            for (sx = 0; sx < BG_SCREENS_X; sx++) {
+                nt_base = 0x2000;
+                if (sx) nt_base += 0x400;
+                if (sy) nt_base += 0x800;
+                PPU_ADDR = (unsigned char)(nt_base >> 8);
+                PPU_ADDR = (unsigned char)(nt_base & 0xFF);
+                for (k = 0; k < 1024; k++) {
+                    PPU_DATA = src[block_off + k];
+                }
+                block_off += 1024;
+            }
         }
     }
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
     PPU_MASK = 0x1E;
     current_bg = n;
+    /* T2.2 — swap the behaviour map so collision queries follow the
+     * new room. */
+    behaviour_set_active_bg(n);
 }
 #endif
 

@@ -25,9 +25,9 @@
 
 /* World size in 8x8 tiles. Covers the full screens_x × screens_y
    grid so the same data works when scrolling is added later. */
-#define WORLD_COLS   32
+#define WORLD_COLS   64
 #define WORLD_ROWS   30
-#define NUM_BEHAVIOUR_SPRITES 1
+#define NUM_BEHAVIOUR_SPRITES 2
 
 /* Look up the behaviour id at a given world tile (8x8 grid).
    Returns BEHAVIOUR_NONE (0) for out-of-range coordinates. */
@@ -36,5 +36,11 @@ unsigned char behaviour_at(unsigned int world_col, unsigned int world_row);
 /* Look up the reaction verb a sprite has for a behaviour id.
    Returns REACT_IGNORE (0) for out-of-range sprite or id. */
 unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id);
+
+/* T2.2 — multi-bg behaviour swap.  Doors module's emitted code
+   calls this after a teleport so behaviour_at queries the new
+   room's collision data.  Out-of-range n leaves the current
+   map in place. */
+void behaviour_set_active_bg(unsigned char n);
 
 #endif
