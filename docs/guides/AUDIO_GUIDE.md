@@ -217,6 +217,19 @@ the starter pack; just upload your own files.
 area overflow.  You're over budget — remove a song or compress one
 in FamiStudio (fewer instruments, no slides/vibrato).
 
+**The build fails with `audio_songs.s(3): Error: Constant expression
+expected`.**  This was the most common pupil-reported audio build
+failure (2026-04-27).  Newer FamiStudio versions wrap their
+`.export` lines in an `.if FAMISTUDIO_CFG_C_BINDINGS` block, and
+ca65 errors when that symbol isn't defined.  The playground server
+now auto-prepends a `FAMISTUDIO_CFG_C_BINDINGS = 0` definition to
+every staged audio file, which makes the assembler skip the
+wrapped exports cleanly — our editor's own alias trailer maps
+`audio_default_music` and `audio_sfx_data` to the right symbols
+directly, so the wrapped exports aren't needed anyway.  If you're
+still seeing this error on a project from before the fix, hit
+**▶ Play in NES** to rebuild — no re-upload needed.
+
 **My sound effect plays silently in-game.**  Check that you uploaded
 a sfx pack on the Audio page — the editor displays it as a card
 with the slot names you exported from FamiStudio.  *(You no longer

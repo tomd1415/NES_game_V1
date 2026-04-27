@@ -179,6 +179,26 @@ def diagnose(asm: str):
             "options — the editor only understands the FamiStudio "
             "Sound Engine one.  Re-export with that option."))
 
+    # 1b. Newer-FamiStudio `.if FAMISTUDIO_CFG_C_BINDINGS` wrapper.
+    # Pupil-reported (2026-04-27): newer FamiStudio versions wrap
+    # their underscore-prefixed exports in this conditional, and
+    # ca65 errors with "Constant expression expected" if the symbol
+    # isn't pre-defined.  The playground server now auto-prepends
+    # `FAMISTUDIO_CFG_C_BINDINGS = 0` to staged audio .s files so
+    # this is no longer a build-blocker, but the diagnostic still
+    # surfaces it as an info-level note so pupils running the tool
+    # on a file directly understand what they're seeing.
+    if re.search(r"^\s*\.if\s+FAMISTUDIO_CFG_C_BINDINGS\b",
+                 asm, re.MULTILINE):
+        findings.append(Finding(
+            'info', 'newer-famistudio-c-bindings',
+            "Newer FamiStudio export — wraps `.export _<sym>` in an "
+            "`.if FAMISTUDIO_CFG_C_BINDINGS` conditional.  Bare ca65 "
+            "would error here with \"Constant expression expected\"; "
+            "the playground server prepends a `FAMISTUDIO_CFG_C_BINDINGS = 0` "
+            "definition before assembly so this builds cleanly.  Nothing "
+            "to fix on your side."))
+
     # 2. Locate the music_data label.
     label, exported = _find_music_data_label(asm)
     if not label:

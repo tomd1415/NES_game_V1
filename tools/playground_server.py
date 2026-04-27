@@ -136,6 +136,51 @@ audio_sfx_data:
 @ntsc:
 \t.byte $00, $00
 """
+
+# Prelude prepended to every staged pupil-uploaded audio .s file
+# before ca65 sees it.  Pupil-reported (2026-04-27): newer
+# FamiStudio versions wrap their `.export _<sym>=<sym>` lines in
+# `.if FAMISTUDIO_CFG_C_BINDINGS ... .endif`, and ca65 errors with
+# "Constant expression expected" when the `.if` symbol isn't
+# pre-defined.  Defining it to 0 here makes ca65 evaluate the .if
+# as false and skip the wrapped exports — harmless because our
+# alias trailer (added by play-pipeline.js) maps
+# `audio_default_music` / `audio_sfx_data` to the right symbol
+# directly without needing those underscore-prefixed aliases.  We
+# preempt a few sibling FAMISTUDIO_CFG_* gates the same way to
+# keep the failure mode from creeping back in if FamiStudio adds
+# more conditional blocks in future exports.
+_AUDIO_ASM_PRELUDE = """\
+; Auto-prepended by playground_server.py — see _AUDIO_ASM_PRELUDE
+; in tools/playground_server.py for the why.  Defines symbols that
+; newer FamiStudio exports test via `.if`, so ca65 can evaluate
+; them as constant 0 instead of erroring with "Constant expression
+; expected".
+.ifndef FAMISTUDIO_CFG_C_BINDINGS
+FAMISTUDIO_CFG_C_BINDINGS = 0
+.endif
+
+"""
+
+
+_FAMISTUDIO_CFG_DEF_RE = re.compile(
+    r"^\s*FAMISTUDIO_CFG_C_BINDINGS\s*=", re.MULTILINE)
+
+
+def _stage_audio_asm(asm: str) -> str:
+    """Prepend the FamiStudio-config prelude to a pupil-uploaded
+    audio .s string so newer-FamiStudio exports' `.if`-wrapped
+    `_music_data_*` exports assemble cleanly.  The prelude itself
+    is `.ifndef`-guarded, so prepending unconditionally is safe.
+    We still skip it when the pupil's file *already* assigns the
+    symbol (`FAMISTUDIO_CFG_C_BINDINGS = N`) so a future
+    upstream-fixed export doesn't end up double-defining via two
+    `.ifndef` blocks evaluating differently."""
+    if not asm:
+        return asm
+    if _FAMISTUDIO_CFG_DEF_RE.search(asm):
+        return asm
+    return _AUDIO_ASM_PRELUDE + asm
 GALLERY_LOCK = threading.Lock()
 GALLERY_MAX_BODY = 4 * 1024 * 1024  # 4 MB — ROM + preview + project state.
 GALLERY_MAX_TITLE = 80
@@ -2012,8 +2057,8 @@ def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
         audio_sfx_path   = STEP_DIR / "src" / "audio_sfx.s"
         make_args = ["make", "-C", str(STEP_DIR)]
         if audio_songs_asm and audio_sfx_asm:
-            audio_songs_path.write_text(audio_songs_asm)
-            audio_sfx_path.write_text(audio_sfx_asm)
+            audio_songs_path.write_text(_stage_audio_asm(audio_songs_asm))
+            audio_sfx_path.write_text(_stage_audio_asm(audio_sfx_asm))
             make_args.append("USE_AUDIO=1")
             make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
         else:
@@ -2070,8 +2115,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
         # when the project ships them.
         make_args = ["make", "-C", str(tmp_root)]
         if audio_songs_asm and audio_sfx_asm:
-            (tmp_root / "src" / "audio_songs.s").write_text(audio_songs_asm)
-            (tmp_root / "src" / "audio_sfx.s").write_text(audio_sfx_asm)
+            (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
+            (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))
             make_args.append("USE_AUDIO=1")
             # Override the Makefile's relative `../../tools/audio/famistudio`
             # default with the real path — the tempdir clone of STEP_DIR
