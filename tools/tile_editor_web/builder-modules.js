@@ -92,15 +92,17 @@
   // --------------------------------------------------------------------
   modules['globals'] = {
     label: 'Globals',
-    description: 'Variables that affect the whole game — start with how ' +
-      'fast objects fall.  Tick this and slide the value to make the world ' +
+    description: 'Variables that affect the whole game — how fast things ' +
+      'fall (gravity) and how fast the player launches off the ground ' +
+      '(jump speed).  Tick this and slide the values to make the world ' +
       'feel heavier or floatier.  More globals (e.g. walk-speed defaults, ' +
       'screen-edge wrap) get added here over time.',
     defaultConfig: {
-      // 1 px/frame matches the historic hardcoded fall rate, so a freshly
+      // Defaults match the historic hardcoded constants, so a freshly
       // ticked module with default values produces the same play feel as
-      // unticked.  Pupils only see a difference when they slide gravityPx.
-      gravityPx: 1,
+      // unticked.  Pupils only see a difference when they slide a value.
+      gravityPx: 1,    // matches `ss_y[i]++` (scene-sprite fall, 1 px/frame)
+      jumpSpeedPx: 2,  // matches `py -= 2` (player rise, 2 px/frame)
     },
     schema: [
       {
@@ -112,24 +114,42 @@
         step: 1,
         help: '0 = floating (no fall), 1 = default lazy drift, 2 = ' +
           'normal platformer feel, 3-4 = heavy/snappy.  Affects scene ' +
-          'sprites (enemies, pickups) — the player\'s jump arc is ' +
-          'controlled separately by Player 1\'s Jump height.',
+          'sprites (enemies, pickups) — the player\'s vertical motion is ' +
+          'controlled by Jump speed (below) and Player 1\'s Jump height.',
+      },
+      {
+        key: 'jumpSpeedPx',
+        label: 'Jump speed (pixels per frame, while rising)',
+        type: 'int',
+        min: 1,
+        max: 6,
+        step: 1,
+        help: 'How many pixels the player rises per frame while a jump ' +
+          'is in progress.  Combined with Player 1\'s Jump height (the ' +
+          'frame budget), this sets total jump height: jump speed × ' +
+          'jump height = pixels lifted.  1 = floaty, 2 = default, 3-4 = ' +
+          'snappy, 5-6 = launch.  Player\'s fall rate is currently fixed ' +
+          'at 2 px/frame.',
       },
     ],
-    // Emit `#define BW_GRAVITY_PX <n>` and an override of the
-    // BW_APPLY_GRAVITY macro into the declarations slot.  Both
-    // platformer.c and Step_Playground/main.c carry a default
-    // `#define BW_APPLY_GRAVITY(y) (y)++` that activates only when
+    // Emit `#define BW_GRAVITY_PX <n>` + `#define BW_JUMP_SPEED_PX <n>`
+    // and overrides of BW_APPLY_GRAVITY / BW_APPLY_JUMP_RISE into the
+    // declarations slot.  Both platformer.c and Step_Playground/main.c
+    // carry default `#ifndef`-gated macros that activate only when
     // this module is *not* ticked, so unticking the module restores
     // the byte-identical baseline.
     applyToTemplate(template, node /*, state */) {
       const c = (node && node.config) || {};
       const g = (typeof c.gravityPx === 'number') ? c.gravityPx : 1;
-      const clamped = Math.max(0, Math.min(4, g | 0));
+      const j = (typeof c.jumpSpeedPx === 'number') ? c.jumpSpeedPx : 2;
+      const clampedG = Math.max(0, Math.min(4, g | 0));
+      const clampedJ = Math.max(1, Math.min(6, j | 0));
       return A.appendToSlot(template, 'declarations', [
-        '/* Builder Globals module — game-wide gravity override. */',
-        `#define BW_GRAVITY_PX ${clamped}`,
+        '/* Builder Globals module — game-wide physics overrides. */',
+        `#define BW_GRAVITY_PX ${clampedG}`,
         '#define BW_APPLY_GRAVITY(y) ((y) += BW_GRAVITY_PX)',
+        `#define BW_JUMP_SPEED_PX ${clampedJ}`,
+        '#define BW_APPLY_JUMP_RISE(y) (y) -= BW_JUMP_SPEED_PX',
       ].join('\n'));
     },
   };

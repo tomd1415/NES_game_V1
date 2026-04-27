@@ -178,6 +178,15 @@ unsigned char attr;
 #define BW_APPLY_GRAVITY(y) (y)++
 #endif
 
+/* Jump-rise application macro — same pattern as BW_APPLY_GRAVITY.
+ * Controls how many pixels the player moves up per frame while
+ * the jump-ascent budget (jmp_up) is being spent.  Default `(y)
+ * -= 2` matches the historic literal `py -= 2`; the Globals
+ * module overrides via the declarations slot when ticked. */
+#ifndef BW_APPLY_JUMP_RISE
+#define BW_APPLY_JUMP_RISE(y) (y) -= 2
+#endif
+
 // Animation playback.  mode: 0=static, 1=walk, 2=jump.  When the mode
 // changes we reset frame/tick so a new animation always plays from its
 // first frame.  anim_base is the byte offset of the current frame inside
@@ -445,7 +454,7 @@ void main(void) {
              || head_r == BEHAVIOUR_SOLID_GROUND || head_r == BEHAVIOUR_WALL) {
                 jmp_up = 0;   // bonk — start falling next frame
             } else {
-                if (py >= 18) py -= 2; else py = 16;
+                if (py >= 18) BW_APPLY_JUMP_RISE(py); else py = 16;
                 jmp_up--;
             }
         } else {

@@ -138,6 +138,42 @@ Overlaps with T2.5 (per-sprite jump speed) — do this first
 because the global default is the natural fallback for the
 per-sprite override.
 
+> **Status (2026-04-27).**  Shipped with `gravityPx` (scene-
+> sprite fall) and `jumpSpeedPx` (player rise).  Player fall
+> rate, climb speed, walk speed defaults, and Player 2's
+> mirrored jump/gravity block are *not* yet macro-ified —
+> they're each a small follow-up using the same
+> `BW_APPLY_<thing>` pattern.  See the changelog entry for
+> 2026-04-27 for what landed.
+>
+> **Future direction (note from user, 2026-04-27).**  As pupils'
+> games get more sophisticated, this module will need to grow in
+> two directions:
+>
+> 1. **More physics constants exposed** — player fall rate, P2
+>    mirrors, walk/climb defaults, friction-style decay etc.
+>    Each is a ~30-line addition (default macro in the templates,
+>    schema entry in `builder-modules.js`, no test churn) once
+>    the macro pattern is in place — which it now is.
+> 2. **Game-type-aware schema.**  Each game style (platformer,
+>    top-down, future Geometry-Dash T3.4, future racing T3.5)
+>    has different physics knobs.  Top-down has no gravity at
+>    all (the scene-sprite gravity loop is already gated behind
+>    `#if BW_GAME_STYLE == 0`); racing wants angle + velocity
+>    rather than fall rate.  When T3.4 / T3.5 land, the Globals
+>    module's `schema` should branch on
+>    `state.builder.modules.game.config.type` so pupils only see
+>    the controls that matter for the style they picked, and the
+>    `applyToTemplate` should emit a different macro set per
+>    style.  That's a structural change to `builder-modules.js`
+>    (schemas can already be functions of state — see the
+>    `'sprite' | 'animation'` types in the catalogue intro), so
+>    no engine work is required to enable it.
+>
+> Tracking these inline rather than spinning out a separate plan
+> doc — they're refinements of the same module, not a new
+> feature.
+
 ### T1.7 Better gallery thumbnail *(item 25)*
 
 Currently the gallery captures frame 0 which is almost always

@@ -3427,27 +3427,39 @@ guard all landed in one session, completing Tier 1 of the plan.
   already handled the wiring.  Help-tab tutorial copy updated
   to mention the button.
 - **T1.6 — Globals Builder module** *(item 22)*.
-  New `globals` module in `builder-modules.js` exposing a
-  `gravityPx` integer (0-4, default 1) that overrides scene-
-  sprite fall rate game-wide.  Implementation uses a macro
-  pattern that preserves the byte-identical baseline:
+  New `globals` module in `builder-modules.js` exposing two
+  integers: `gravityPx` (0-4, default 1, scene-sprite fall rate)
+  and `jumpSpeedPx` (1-6, default 2, player rise rate while a
+  jump is in progress).  The user paired these as "gravity"
+  (how fast things fall) and "jump speed" (how fast the player
+  launches) — pupils can tune both independently.
+  Implementation uses a macro pattern that preserves the
+  byte-identical baseline:
   - Both `steps/Step_Playground/src/main.c` and
     `tools/tile_editor_web/builder-templates/platformer.c` gain
-    a default `#ifndef BW_APPLY_GRAVITY / #define
-    BW_APPLY_GRAVITY(y) (y)++ / #endif`.  The literal `(y)++`
-    expansion compiles to the same ROM bytes cc65 used to emit
-    for `ss_y[i]++`, verified by sha1sum'ing the resulting
-    `.nes` before and after the change.
+    a pair of default `#ifndef`-gated macros: `BW_APPLY_GRAVITY(y)`
+    defaulting to `(y)++` and `BW_APPLY_JUMP_RISE(y)` defaulting
+    to `(y) -= 2`.  Each default expansion compiles to the same
+    ROM bytes cc65 used to emit for the historic literal
+    (`ss_y[i]++` and `py -= 2` respectively), verified by
+    sha1sum'ing the resulting `.nes` before and after.
   - The scene-sprite gravity site changes from `ss_y[i]++` to
-    `BW_APPLY_GRAVITY(ss_y[i])` in both files.
+    `BW_APPLY_GRAVITY(ss_y[i])` in both files; the player
+    jump-rise site changes from `py -= 2` to
+    `BW_APPLY_JUMP_RISE(py)` in both files.
   - When the module ticks, its `applyToTemplate` writes
-    `#define BW_GRAVITY_PX <n>` and
-    `#define BW_APPLY_GRAVITY(y) ((y) += BW_GRAVITY_PX)` into
-    the `declarations` slot, which sits *above* the default
-    `#ifndef`, so the override wins.
+    `#define BW_GRAVITY_PX <n>`, `BW_APPLY_GRAVITY` override,
+    `#define BW_JUMP_SPEED_PX <n>`, and `BW_APPLY_JUMP_RISE`
+    override into the `declarations` slot, which sits *above*
+    the default `#ifndef`s so the overrides win.
   - `MODULE_ORDER` in `builder-assembler.js` gains `'globals'`
     immediately after `'game'` so its declarations land near
     the top of the customMainC.
+  - **Player fall rate is currently fixed at 2 px/frame** — only
+    the player's *rise* uses the new macro.  Help text on
+    `jumpSpeedPx` calls this out.  Adding a player-fall knob
+    is a small follow-up if pupils want it; tracked informally
+    here.
 
   T2.5 (per-sprite tuning) will plug per-instance overrides into
   this same macro infrastructure when it ships.
