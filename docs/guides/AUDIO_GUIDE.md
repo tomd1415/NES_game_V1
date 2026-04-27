@@ -218,9 +218,80 @@ area overflow.  You're over budget — remove a song or compress one
 in FamiStudio (fewer instruments, no slides/vibrato).
 
 **My sound effect plays silently in-game.**  Check that you uploaded
-both a song *and* an sfx pack — the engine needs both to start up.
-The Audio page won't enable audio in the build until both are
-present.
+a sfx pack on the Audio page — the editor displays it as a card
+with the slot names you exported from FamiStudio.  *(You no longer
+need to upload BOTH a song and a sfx pack for audio to engage —
+upload either one and the editor auto-stubs the other side.  But
+you do need the sfx pack present if you want to actually hear
+sound effects.)*
+
+**My uploaded music doesn't play, but the starter pack does.**
+This is the most common pupil-reported audio bug.  Causes, in
+the order to check.
+
+1. **You uploaded music but no sound effects (pre-2026-04-27 only).**
+   In an earlier version, audio only engaged when a project had
+   *both* a song and a sound-effects pack uploaded — a pupil
+   uploading just music got silence.  This is now auto-fixed: the
+   editor stubs in a silent sfx pack for you when one is missing,
+   so a music-only project plays its music.  If you're hearing
+   silence on a project from before the fix, just hit **▶ Play
+   in NES** to rebuild — no re-upload needed.
+2. **Multiple songs in your FamiStudio project, with the leftover
+   empty default at song 0.**  When you create a new FamiStudio
+   project it ships with a default song called *NewSong* (or
+   similar).  If you compose your music in a *second* song instead
+   of overwriting that one, the export contains both, with the
+   empty NewSong as song 0.  Our editor currently always plays
+   song 0, so you hear silence.
+
+   **Fix.**  Open your project in FamiStudio.  Look at the
+   **Songs** panel on the left.  If there's more than one song,
+   either:
+
+   - Drag the song you want to play to the **top** of the list,
+     **or**
+   - Right-click any extra empty songs and choose **Delete song**.
+
+   Then re-export.  Best practice: keep one song per FamiStudio
+   project so this can't happen.
+
+3. **Wrong "machine" target on export.**  FamiStudio's project
+   properties has a *Machine* setting — NTSC, PAL, or Dual.  Our
+   sound engine is NTSC-only.  If the project (or the export
+   dialog) is set to PAL, the song's tempo header tells the
+   engine "this is a PAL song" and our NTSC engine throttles
+   itself to match — making playback very slow and often
+   inaudibly quiet because envelopes don't tick fast enough to
+   hear.
+
+   **Fix.**  In FamiStudio: **File → Project Properties → Machine
+   → NTSC** (or, in the export dialog, pick the NTSC machine
+   target).  Re-export.
+
+4. **Wrong export type.**  FamiStudio has two engine exports —
+   *FamiStudio Sound Engine* (the one we want) and *FamiTone2*
+   (the older format).  Both produce `.s` files that look
+   superficially similar.  If you exported FamiTone2 by mistake,
+   the file uploads fine but the runtime engine reads the bytes
+   the wrong way and the song plays as silence or noise.
+
+   **Fix.**  Re-export with **File → Export → FamiStudio Sound
+   Engine assembly**, format = ca65.
+
+If you'd rather not guess: there's a diagnostic script under
+`tools/audio/diagnose_song.py` that scans a `.s` file for all of
+the above and tells you exactly what's wrong.  From a
+terminal in the project directory:
+
+```bash
+python3 tools/audio/diagnose_song.py path/to/pupil_song.s
+```
+
+It prints `OK` if nothing obvious is wrong, or specific warnings
+with fix steps if it finds one of the failure modes above.
+Teachers can pipe a folder of pupil exports through it to triage
+quickly.
 
 **The music tempo speeds up or slows down when lots of stuff is
 moving on-screen.**  This happens in both the in-browser preview

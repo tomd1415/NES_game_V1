@@ -162,13 +162,27 @@ try {
   }
   console.log(`✓ audio ROM differs from stock (stock=${stockHash.slice(0,12)}, audio=${audioHash.slice(0,12)})`);
 
-  // Case 4 — only one blob: server should silently fall back to
-  // no-audio.  The resulting ROM hashes the same as stock.
+  // Case 4 — only one blob: pre-2026-04-27 the server fell back
+  // silently to no-audio (link couldn't satisfy both `extern`s).
+  // Pupils uploading just a song expected music to play and got
+  // silence.  Now the server auto-stubs the missing side so the
+  // audio engine engages either way.  The song-only build must
+  // therefore produce a *different* ROM from stock (audio engine +
+  // pupil's song are linked in) and from the both-sides-uploaded
+  // case (different sfx blob).
   const songOnlyRom = await build({ audioSongsAsm: STUB_SONGS_ASM });
-  if (sha1(songOnlyRom) !== stockHash) {
-    fail('song-only build should match stock hash — asymmetric audio inputs must fall back to no-audio');
+  const songOnlyHash = sha1(songOnlyRom);
+  if (songOnlyHash === stockHash) {
+    fail('song-only build matches stock hash — auto-sfx-stub did not engage');
   }
-  console.log('✓ asymmetric audio (song without sfx) falls back to no-audio');
+  console.log(`✓ song-only build engages audio via auto-sfx-stub (${songOnlyHash.slice(0,12)})`);
+  // Sfx-only is the symmetric case — auto-songs-stub kicks in.
+  const sfxOnlyRom = await build({ audioSfxAsm: STUB_SFX_ASM });
+  const sfxOnlyHash = sha1(sfxOnlyRom);
+  if (sfxOnlyHash === stockHash) {
+    fail('sfx-only build matches stock hash — auto-songs-stub did not engage');
+  }
+  console.log(`✓ sfx-only build engages audio via auto-songs-stub (${sfxOnlyHash.slice(0,12)})`);
 
   // Case 5 — invalid audio fields (not strings) get a 400.
   const r = await fetch(`http://127.0.0.1:${PORT}/play`, {

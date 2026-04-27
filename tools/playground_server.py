@@ -90,6 +90,52 @@ AUDIO_STARTER_SFX = ("Starter sfx pack", "sfx_pack.s")
 # because the engine's `.include` / `.incbin` paths are all
 # relative to the engine source, not the Makefile.
 AUDIO_ENGINE_DIR = ROOT / "tools" / "audio" / "famistudio"
+
+# Auto-stubs used when a pupil uploads only one side of the audio
+# pair (a song without an sfx pack, or vice versa).  Without these,
+# main.c's `extern audio_default_music[]` / `extern audio_sfx_data[]`
+# would fail to link and the build fell back to USE_AUDIO=0 entirely
+# — pupils saw silence even though they'd uploaded music.  These
+# stubs are the minimum-viable blobs the FamiStudio engine accepts:
+# the song stub is one channel of immediate end-of-song markers
+# (silent), and the sfx stub is a single null entry.  Both lifted
+# from tools/builder-tests/audio.mjs's STUB_*_ASM constants which
+# the regression suite already proves compile + link cleanly.
+_AUTO_SONGS_STUB_ASM = """\
+.export _audio_default_music:=audio_default_music
+.export audio_default_music
+audio_default_music:
+\t.byte 1
+\t.word @instruments
+\t.word @samples-4
+\t.word @song0ch0
+\t.word @song0ch1
+\t.word @song0ch2
+\t.word @song0ch3
+\t.word @song0ch4
+\t.byte .lobyte(@tempo_env_1_mid), .hibyte(@tempo_env_1_mid), 0, 0
+@instruments:
+\t.byte 0
+@samples:
+@song0ch0:
+@song0ch1:
+@song0ch2:
+@song0ch3:
+@song0ch4:
+\t.byte $00
+@tempo_env_1_mid:
+\t.byte 6, 6, 6, 6, $00
+"""
+
+_AUTO_SFX_STUB_ASM = """\
+.export _audio_sfx_data:=audio_sfx_data
+.export audio_sfx_data
+audio_sfx_data:
+\t.word @ntsc
+\t.word @ntsc
+@ntsc:
+\t.byte $00, $00
+"""
 GALLERY_LOCK = threading.Lock()
 GALLERY_MAX_BODY = 4 * 1024 * 1024  # 4 MB — ROM + preview + project state.
 GALLERY_MAX_TITLE = 80
@@ -1812,11 +1858,26 @@ def _build_rom(body):
             raise ValueError(f"'audioSfxAsm' too large (>{AUDIO_MAX_BYTES} bytes)")
         if not audio_sfx.strip():
             audio_sfx = None
-    # Audio is only enabled when *both* are present — main.c needs
-    # both symbols to link.  Asymmetric uploads (song without sfx
-    # or vice versa) silently fall back to no-audio rather than
-    # erroring, with a hint in the build log so pupils know.
+    # main.c imports both `audio_default_music` and `audio_sfx_data`
+    # symbols — without them the link fails.  Pre-2026-04-27 we
+    # required pupils to upload BOTH a song and an sfx pack before
+    # audio engaged at all, and asymmetric uploads silently fell
+    # back to no-audio.  Pupil-reported (2026-04-27): pupils
+    # uploading just a song expected music to play and got silence
+    # because the editor quietly dropped audio entirely.
+    #
+    # Fix: when only one side is provided, auto-stub the other so
+    # the link succeeds and the audio engine engages.  The stubs
+    # below are the minimum-viable blobs (lifted from audio.mjs's
+    # STUB_*_ASM constants which the smoke suite already proves
+    # compile + link).  The stub song is silent, the stub sfx pack
+    # has a single null entry — pupils get whatever asset they
+    # uploaded plus a no-op for the other side.
     audio_kwargs = {}
+    if audio_songs and not audio_sfx:
+        audio_sfx = _AUTO_SFX_STUB_ASM
+    elif audio_sfx and not audio_songs:
+        audio_songs = _AUTO_SONGS_STUB_ASM
     if audio_songs and audio_sfx:
         audio_kwargs = {"audio_songs_asm": audio_songs,
                         "audio_sfx_asm":   audio_sfx}
