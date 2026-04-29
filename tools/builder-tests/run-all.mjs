@@ -261,6 +261,24 @@ console.log('');
 // the IIFE, and pupils saw "No project yet" even when projects
 // existed (because state stayed null).  Cheap text-level guard so
 // the same mistake can't ship undetected on a future page.
+// 2026-04-27 — link from audio.html (and any future editor page) to
+// pupil-facing docs goes through `/docs/<path>`, served by a custom
+// branch in playground_server.py's do_GET because the static handler's
+// directory is `tools/tile_editor_web/`, not the project root.  Guard
+// so the route can't get accidentally removed: assert the server file
+// has the `/docs/` branch + the `_docs_static` helper.
+check('invariant: playground_server.py exposes /docs/ route for editor doc links', () => {
+  const py = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
+  if (!/parsed\.path\.startswith\(["']\/docs\/["']\)/.test(py)) {
+    throw new Error("playground_server.py do_GET no longer matches '/docs/' — " +
+      "audio.html's <a href=\"/docs/guides/AUDIO_GUIDE.md\"> will 404 again");
+  }
+  if (!/def _docs_static\(self,/.test(py)) {
+    throw new Error("playground_server.py is missing _docs_static() — " +
+      "the /docs/ route handler that serves files from project-root docs/");
+  }
+}) || (anyFail = true);
+
 check('invariant: every page that loads storage.js calls createTileEditorStorage', () => {
   const pages = ['index.html', 'sprites.html', 'behaviour.html',
                  'builder.html', 'code.html', 'audio.html', 'gallery.html'];

@@ -2622,7 +2622,57 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             served = self._gallery_static(parsed.path)
             if served is not None:
                 return served
+        if parsed.path.startswith("/docs/"):
+            # 2026-04-27 — Editor-page links to pupil-facing docs
+            # (e.g. audio.html -> ../../docs/guides/AUDIO_GUIDE.md)
+            # resolve at the BROWSER to the URL `/docs/guides/...`.
+            # The static handler below serves out of `WEB_DIR`
+            # (`tools/tile_editor_web/`), so it would 404 — the
+            # docs tree lives at the *project root* (`docs/`).
+            # This branch maps `/docs/*` requests to that real
+            # location with a defensive path-traversal check.
+            served = self._docs_static(parsed.path)
+            if served is not None:
+                return served
         return super().do_GET()
+
+    def _docs_static(self, url_path):
+        """Serve files under the project-root `docs/` directory."""
+        # Strip the `/docs/` prefix (with leading slash already
+        # consumed) and resolve against ROOT/docs.  resolve() +
+        # is_relative_to() guards against `/docs/../foo` escapes.
+        rel = unquote(url_path[len("/docs/"):])
+        target = (ROOT / "docs" / rel).resolve()
+        try:
+            target.relative_to((ROOT / "docs").resolve())
+        except ValueError:
+            self.send_error(404)
+            return True
+        if not target.is_file():
+            return None  # 404 fall-through to default handler
+        # Pick a sensible content type — Markdown gets text/plain so
+        # browsers display it inline rather than offering a download.
+        suffix = target.suffix.lower()
+        content_types = {
+            ".md": "text/plain; charset=utf-8",
+            ".txt": "text/plain; charset=utf-8",
+            ".html": "text/html; charset=utf-8",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+            ".json": "application/json",
+        }
+        ctype = content_types.get(suffix, "application/octet-stream")
+        try:
+            data = target.read_bytes()
+        except OSError:
+            self.send_error(404)
+            return True
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+        return True
 
     def _lessons_index(self):
         metas = [m for m, _p in _scan_lessons()]
