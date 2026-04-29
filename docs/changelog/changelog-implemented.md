@@ -3576,3 +3576,87 @@ invariant including the byte-identical baseline (T2.1/T2.2 only
 touch the doors-active path; no-modules-ticked is unchanged), the
 T1.3 sprite-duplicate guard, and all 16 smoke suites.
 
+## Audio robustness pass — 2026-04-27
+
+Source: pupil-reported audio failures collected on 2026-04-27.
+Three independent issues all surfacing as the same end-user
+symptom ("uploaded music doesn't play, starter pack does").  Each
+fix small, but together they unblock every pupil who'd hit any of
+the three traps below.
+
+- **Asymmetric upload silently dropped audio.**  The editor's
+  `play-pipeline.js` only passed `audioSongsAsm` + `audioSfxAsm`
+  to the server when *both* were present; pupils who'd uploaded
+  music but no sfx pack saw `USE_AUDIO=0` builds with no engine
+  linked at all.  Fix: split the gate into two independent
+  conditions — songs and sfx are now sent through whenever the
+  pupil has them, and the server fills in whichever side is
+  missing (see next bullet).  Defensive guard: alias trailer is
+  only emitted when the pupil's stored `symbol` matches the
+  strict ca65 identifier regex `[A-Za-z_][A-Za-z0-9_]*`, so an
+  empty/corrupt symbol can't slip through and produce
+  `.export _audio_default_music:=` (empty rhs → "Constant
+  expression expected").
+- **Server-side auto-stubbing for missing audio side.**  Pre-fix,
+  the server's `audio_songs and audio_sfx` gate dropped audio
+  entirely on asymmetric uploads.  Now `playground_server.py`
+  carries `_AUTO_SONGS_STUB_ASM` and `_AUTO_SFX_STUB_ASM`
+  constants (lifted from `audio.mjs`'s known-good
+  `STUB_*_ASM` blobs) and fills in whichever side the pupil
+  didn't upload.  Result: any project with at least one audio
+  asset gets the engine linked in.  Project with neither still
+  builds clean as no-audio.  Audio.mjs Case 4 inverted: the test
+  used to assert song-only matches no-audio hash; now it
+  asserts song-only and sfx-only each produce a *different* hash
+  from baseline (auto-stub engaging).
+- **Newer-FamiStudio `.if FAMISTUDIO_CFG_C_BINDINGS` build error.**
+  Newer FamiStudio versions wrap their `.export _<sym>=<sym>`
+  lines in `.if FAMISTUDIO_CFG_C_BINDINGS ... .endif`.  ca65
+  (which has no concept of cc65 C bindings on its own) errors
+  with "Constant expression expected" because the `.if`
+  predicate symbol isn't defined.  This was hitting pupils as
+  `audio_songs.s(3): Error: Constant expression expected` and
+  blocking the build entirely.  Fix: the server prepends
+  `_AUDIO_ASM_PRELUDE` (an `.ifndef`-guarded
+  `FAMISTUDIO_CFG_C_BINDINGS = 0` definition) to every staged
+  audio `.s` before assembly via the new `_stage_audio_asm()`
+  helper, called from both `_build_in_shared_dir` and
+  `_build_in_tempdir`.  The `.if` evaluates to 0 → wrapped
+  exports are skipped, but our editor's own alias trailer maps
+  `audio_default_music` / `audio_sfx_data` to the right symbols
+  directly so the wrapped exports were never needed.  Skipped
+  cleanly when the pupil's file already assigns
+  `FAMISTUDIO_CFG_C_BINDINGS`, so a future upstream-fixed
+  FamiStudio export won't double-define.
+- **New diagnostic tool — `tools/audio/diagnose_song.py`.**  Stand-
+  alone Python script that reads a `.s` file (or stdin) and
+  reports likely-silent / likely-build-fail patterns:
+  - Multi-song export where song 0 is likely empty.
+  - Non-NTSC machine target byte.
+  - FamiTone2 export instead of FamiStudio Sound Engine.
+  - Newer-FamiStudio `.if FAMISTUDIO_CFG_C_BINDINGS` shape
+    (info-level — not a build-blocker since the server now
+    auto-handles it, but surfacing the pattern means anyone
+    running the tool on a raw export understands what they're
+    seeing).
+  Each finding includes the specific FamiStudio menu path the
+  pupil should follow to fix.  Exits 0 when nothing's flagged,
+  1 if any error/warn fires, so teachers can pipe a folder of
+  pupil exports through the tool to triage in one go.
+- **AUDIO_GUIDE.md** gained a *"My uploaded music doesn't play,
+  but the starter pack does"* sub-section listing all four causes
+  in detection order, plus a *"build fails with `audio_songs.s(3):
+  Error: Constant expression expected`"* entry naming the C-
+  bindings fix specifically so future hits are self-diagnosable.
+
+**Tests.**  Full `run-all.mjs` regression suite green
+throughout.  `audio.mjs` Case 4 rewritten to assert the new
+auto-stub behaviour (song-only ROM ≠ stock; sfx-only ROM ≠
+stock).  All 16 smoke suites, every invariant, byte-identical
+baseline holds.
+
+**ROM-size impact.**  None — auto-stubs are ~30 bytes each, well
+under any meaningful threshold.  Pupils who upload only music get
+the engine linked (≈3.5 KB) where they previously got nothing,
+which is the whole point.
+

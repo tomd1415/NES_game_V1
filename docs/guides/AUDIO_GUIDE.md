@@ -112,12 +112,17 @@ clicking **🗑 Remove** on the sfx card and uploading a new one.
 ### Builder pupils
 
 If you're using the **🧱 Builder**, audio is part of your project
-the moment you've uploaded a song *and* an sfx pack.  The default
-song plays when the game starts.  *Coming in a follow-up: an Audio
-module in the Builder lets you map sound effects to specific events
-(jump, hit, pickup, land) and switch background music when the scene
-or HP changes.*  For now, you can preview the audio with the **▶
-Play in NES** button on the Audio page itself.
+the moment you've uploaded *either* a song or an sfx pack — the
+editor fills in a silent default for whichever side you skipped.
+Most pupils want music, so just uploading a song is the typical
+path.  The default song plays when the game starts.
+
+*Coming in a follow-up: an Audio module in the Builder lets you
+map sound effects to specific events (jump, hit, pickup, land)
+and switch background music when the scene or HP changes — see
+[plan §T2.6](../plans/current/2026-04-26-fixes-and-features.md).*
+For now, you can preview the audio with the **▶ Play in NES**
+button on the Audio page itself.
 
 ### Code-page pupils
 

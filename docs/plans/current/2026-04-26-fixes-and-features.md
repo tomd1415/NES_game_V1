@@ -329,6 +329,19 @@ project on the Sprites page.  **Risk:** small — the starter
 pack is already a server endpoint, just needs to be fetched
 on first project create.
 
+> **Status note (2026-04-27).**  The audio robustness pass
+> partially addresses this: pupils who upload music *without*
+> an sfx pack now get audio engaged anyway (the server
+> auto-stubs a silent sfx, see the changelog).  So a pupil who
+> ignores the sfx side entirely still hears their music.
+> T2.7 is still worth shipping for the "I want sfx slots
+> available without manual setup" UX — but the urgency is
+> down, and the user explicitly answered (in the original
+> Decisions section) that the starter pack should default for
+> every new project.  Sequencing-wise, do this AFTER T2.6 so
+> the auto-seeded sfx slots can be wired to events out of the
+> box.
+
 ### T2.8 More enemy path options *(item 13)*
 
 The current `enemies.walker` module supports horizontal
@@ -572,6 +585,17 @@ addressed holistically rather than per-feature.
   to [`docs/feedback/recently-observed-bugs.md`](../../feedback/recently-observed-bugs.md)
   *and* link from the matching tier item here, rather than
   starting a new plan doc.
+- **Audio robustness pass — shipped 2026-04-27.**  Three
+  pupil-reported audio failures (silent music, asymmetric
+  upload dropping audio, `audio_songs.s(3)` build error from
+  newer-FamiStudio `.if FAMISTUDIO_CFG_C_BINDINGS` exports) all
+  fixed in one pass.  See the *Audio robustness pass* entry in
+  [`docs/changelog/changelog-implemented.md`](../../changelog/changelog-implemented.md)
+  and the new
+  [`tools/audio/diagnose_song.py`](../../../tools/audio/diagnose_song.py)
+  diagnostic.  No new tier item — these are bug fixes against
+  existing functionality, but recording here so the audio
+  workstream's history is followable.
 
 ---
 
