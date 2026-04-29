@@ -4,7 +4,7 @@
 
 This project builds a NES ROM using the **cc65 toolchain** (a C compiler and assembler targeting the 6502 CPU). The game is written primarily in C with a small amount of 65xx assembly for graphics data loading. The cc65 library (`nes.lib`) provides the startup code (crt0), C runtime, and hardware abstraction.
 
-> **Pupil feedback log:** log and triage pupil-testing feedback in [PUPIL_FEEDBACK.md](PUPIL_FEEDBACK.md). Append new items as they come in; don't wait for a formal review.
+> **Pupil feedback log:** log and triage pupil-testing feedback in [PUPIL_FEEDBACK.md](../feedback/PUPIL_FEEDBACK.md). Append new items as they come in; don't wait for a formal review.
 >
 > **In-editor feedback form:** pupils can submit feedback from inside each editor page via the `?` help dialog (💬 Feedback tab on Backgrounds / Sprites, or the expandable section on Behaviour / Code). Submissions land in `feedback.jsonl` in the repo root. Open `http://<server>:8765/feedback` for a read-back page with ✓ handled toggles — the handled-set persists in `feedback-handled.json`. Both files are `.gitignore`d.
 

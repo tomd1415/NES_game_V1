@@ -1,7 +1,23 @@
 # Implemented UI improvements — Sprites & Backgrounds pages
 
-Companion to `changelog-planned.md`. Records what actually shipped, what
-was unnecessary, and what was deferred.
+Companion to `changelog-planned.md` (now archived as
+[`docs/plans/archive/2026-04-13-changelog-planned.md`](../plans/archive/2026-04-13-changelog-planned.md)).
+Records what actually shipped, what was unnecessary, and what was
+deferred.
+
+> **Note on broken links in older entries.**  Entries below dated
+> *before 2026-04-26* were written when the project's `.md` files
+> all lived at the repo root (`PUPIL_GUIDE.md`, `BUILDER_GUIDE.md`,
+> `audio-plan.md`, etc.).  They were moved into a structured
+> `docs/` tree on 2026-04-26 — see [`docs/README.md`](../README.md)
+> for the full old→new path table.  Inline links in those older
+> entries that read `[X.md](X.md)` are deliberately *not* rewritten
+> to point to the new locations: they describe the state of the
+> world *at the time the change shipped*, and chasing every one
+> would be high churn for low value.  Use the lookup table in
+> `docs/README.md` if you click an old link and hit a 404 — the
+> file you wanted is in `docs/guides/`, `docs/plans/archive/`, or
+> `docs/feedback/`.
 
 ---
 

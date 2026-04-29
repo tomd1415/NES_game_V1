@@ -217,10 +217,10 @@ behaviour" — much more than "it flickers."
 
 ## See also
 
-- [changelog-implemented.md](changelog-implemented.md) — recent
+- [changelog-implemented.md](../changelog/changelog-implemented.md) — recent
   vblank-timing fixes (OAM DMA, scroll_stream cap, scroll_apply_ppu
   ordering).  Provides context on what we've already addressed.
 - [BUILDER_GUIDE.md](BUILDER_GUIDE.md) §8 — known limitations
   including the horizontal-mirroring caveat.
-- [next-steps-plan.md](next-steps-plan.md) Phase 1.1 / C2 — the
+- [2026-04-26-next-steps.md](../plans/archive/2026-04-26-next-steps.md) Phase 1.1 / C2 — the
   parked scroll-flicker investigation this guide supports.

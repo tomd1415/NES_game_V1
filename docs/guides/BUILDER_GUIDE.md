@@ -8,7 +8,7 @@ ships today, the shared machinery underneath them, and the
 conventions pupils need to know.
 
 For the underlying design + history see
-[builder-plan.md](builder-plan.md) (the original proposal) and the
+[2026-04-23-builder.md](../plans/archive/2026-04-23-builder.md) (the original proposal) and the
 chunk-by-chunk plan + implementation docs it cross-references.
 
 ---
@@ -349,7 +349,7 @@ player walk/jump animation contract.
 ## 6. Testing and verification
 
 The Builder ships with a regression test suite at
-[tools/builder-tests/](tools/builder-tests/).  Run it from the
+[tools/builder-tests/](../../tools/builder-tests/).  Run it from the
 repo root:
 
 ```
@@ -435,7 +435,7 @@ If you're adding a new module:
 5. **Documentation** — add a row to §2 above + update the
    tests reference in §6 if you added a smoke suite.
 6. **Tests** — add a `.mjs` file to
-   [tools/builder-tests/](tools/builder-tests/).  At minimum:
+   [tools/builder-tests/](../../tools/builder-tests/).  At minimum:
    assembler-level output checks (does the emitted C contain the
    expected markers?) + an end-to-end `/play` build.
 
@@ -470,5 +470,5 @@ this automatically.
   (one-way rebuild).
 
 See the `Deferred from …` sections in
-[changelog-implemented.md](changelog-implemented.md) for the full
+[changelog-implemented.md](../changelog/changelog-implemented.md) for the full
 running list and context.

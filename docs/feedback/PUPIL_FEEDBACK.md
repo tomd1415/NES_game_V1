@@ -248,12 +248,12 @@ Use pupil initials (not full names) for anonymity.
   strip. Add a one-line "What's an animation?" tooltip that links to
   the matching lesson.
 - **Status / date:** [done] 2026-04-24 — shipped as Phase 2.3 of
-  [next-steps-plan.md](next-steps-plan.md).  Strip sits above the
+  [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md).  Strip sits above the
   composition canvas with frame thumbnails + **+ Add frame** + a
   `full editor →` link that opens the collapsed Animations panel
   below.  Full editor stays put for power users.  See the
   "Phase 2.3" entry in
-  [changelog-implemented.md](changelog-implemented.md).
+  [changelog-implemented.md](../changelog/changelog-implemented.md).
 
 ---
 
@@ -353,7 +353,7 @@ Use pupil initials (not full names) for anonymity.
   Each template seeds the correct starter tileset, sprite, background and
   `main.c`.
 - **Status / date:** [done] 2026-04-25 — shipped as Phase 3.1 of
-  [next-steps-plan.md](next-steps-plan.md).  The Builder's `game`
+  [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md).  The Builder's `game`
   module's "Top-down (four-way, no gravity)" radio is now live;
   picking it emits `#define BW_GAME_STYLE 1` which the template's
   `#if BW_GAME_STYLE == 1` blocks pick up to swap player physics.
@@ -362,7 +362,7 @@ Use pupil initials (not full names) for anonymity.
   keeping the byte-identical-baseline test passing.  Damage,
   dialogue, doors, pickups, HUD, win conditions, scene-instance AI
   all work unchanged in either style.  See the "Phase 3.1" entry
-  in [changelog-implemented.md](changelog-implemented.md).
+  in [changelog-implemented.md](../changelog/changelog-implemented.md).
 
 ---
 
@@ -385,7 +385,7 @@ Use pupil initials (not full names) for anonymity.
   instead.  Fixed by writing the just-built ROM to a dedicated
   `steps/Step_Playground/_play_latest.nes` and pointing fceux at
   that.  See the "native fceux now runs the SAME ROM as the browser"
-  entry in [changelog-implemented.md](changelog-implemented.md).
+  entry in [changelog-implemented.md](../changelog/changelog-implemented.md).
   Sprint-6 also added `built_iso` / `build_time_ms` stamps on
   every `/play` response so pupils can tell which build they're
   looking at regardless of emulator.
@@ -395,7 +395,7 @@ Use pupil initials (not full names) for anonymity.
 ### Gameplay snippets
 
 The Code page already ships a snippet library (see
-[snippets/](snippets/)); pupils want it wider so they can build more
+[snippets/](../../snippets/)); pupils want it wider so they can build more
 of a game without writing new C themselves.
 
 #### Enemy sprite that moves around
@@ -418,7 +418,7 @@ of a game without writing new C themselves.
   overlaps a sprite with `role === 'npc'` and presses **A**, pauses the
   main loop and renders a 2-line text box at the bottom of the screen.
   Requires a small text-draw helper (`draw_text(x, y, "...")`) added to
-  [src/](src/). The snippet takes the dialogue string as a commented
+  [src/](../../src/). The snippet takes the dialogue string as a commented
   knob the pupil can edit.
 - **Status / date:** [new] 2026-04-20
 
@@ -454,12 +454,12 @@ of a game without writing new C themselves.
   Sprint 9 (Pencil, Fill, Line, Rect outline, Circle outline,
   Select with marquee + Delete + drag-to-move + clipboard copy/
   paste).  Phase 2.1 of
-  [next-steps-plan.md](next-steps-plan.md) closed the rest:
+  [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md) closed the rest:
   **Rect fill** + **Circle fill** as dedicated tools (■ / ● icons
   in the Tools popover) + Alt+P/F/L/R/C/S keyboard shortcuts
   (Alt+Shift+R / Alt+Shift+C for the filled variants).  See the
   "Phase 2.1" entry in
-  [changelog-implemented.md](changelog-implemented.md).  **Still
+  [changelog-implemented.md](../changelog/changelog-implemented.md).  **Still
   deferred:** Select → resize drag handles — filed as a separate
   follow-up for when a pupil specifically asks; the rest of the
   workflow (marquee, delete, move, copy/paste) is in place.
@@ -479,7 +479,7 @@ of a game without writing new C themselves.
   the last 8 picks above the master grid so common edits are one
   click.
 - **Status / date:** [done] 2026-04-24 — shipped as Phase 2.2 of
-  [next-steps-plan.md](next-steps-plan.md).  Hover-to-preview:
+  [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md).  Hover-to-preview:
   hovering a master-grid cell (or a recent-colour swatch) while a
   palette slot is selected temporarily recolours that slot so
   pupils see the effect before committing.  Drag-and-drop from the
@@ -488,7 +488,7 @@ of a game without writing new C themselves.
   the last 8 picks (persisted in `prefs.recentColours`, shared
   across projects).  Both Backgrounds and Sprites pages.  See the
   "Phase 2.2" entry in
-  [changelog-implemented.md](changelog-implemented.md).
+  [changelog-implemented.md](../changelog/changelog-implemented.md).
 
 ---
 
@@ -620,7 +620,7 @@ of a game without writing new C themselves.
   data model, module catalogue, assembly algorithm, validator
   spec, UI layout, phasing (MVP → richer content → events →
   polish) and open questions is in
-  [builder-plan.md](builder-plan.md).
+  [builder-plan.md](../plans/archive/2026-04-23-builder.md).
 - **Status / date:** [planned] 2026-04-23 — plan documented; MVP
   is effort M (2–4 focused sessions). Awaiting teacher green-light
   on phase A.
@@ -793,10 +793,10 @@ Things no pupil has raised yet, but worth having on the list:
 
 ## Proposed roadmap — next sprints
 
-The original [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) worked
+The original [IMPLEMENTATION_PLAN.md](../plans/archive/2026-04-20-implementation.md) worked
 through Sprints 1–5 aimed at the 2026-04-13 feedback; large parts of
 Sprints 1, 3 and 4 have shipped (see
-[changelog-implemented.md](changelog-implemented.md)). The plan below
+[changelog-implemented.md](../changelog/changelog-implemented.md)). The plan below
 folds the remaining 2026-04-13 items together with the fresh
 2026-04-20 ideas into four focused sprints. Each sprint is
 independently shippable and ends with a manual pupil walkthrough
@@ -807,7 +807,7 @@ Effort key: **S** ≈ under a day, **M** ≈ 1–3 days, **L** ≈ a week.
 ### Sprint 6 — Close the 2026-04-13 gaps (effort: M)
 
 Finishes the Sprints 1 / 4 / 5 items that never landed. **Status:
-shipped 2026-04-20 — see [changelog-implemented.md](changelog-implemented.md#sprint-6--2026-04-20-gap-fillers).**
+shipped 2026-04-20 — see [changelog-implemented.md](../changelog/changelog-implemented.md#sprint-6--2026-04-20-gap-fillers).**
 
 - **6.1 Tile 0 lock + BG-colour swatch (S).** [done] Padlock +
   explainer on the Sprites page's read-only BG palettes; BG-colour
@@ -930,21 +930,21 @@ sub-item so a half-baked piece never blocks a pupil session.
 - 2026-04-23 — logged the most-common pupil request: a simpler,
   reliable, module-based alternative to the Code page ("tick
   platformer, pick sprites, fill in attributes, play"). Detailed
-  design lives in [builder-plan.md](builder-plan.md); summary row
+  design lives in [builder-plan.md](../plans/archive/2026-04-23-builder.md); summary row
   and entry added under a new *Code page — no-C module builder*
   theme.
 - 2026-04-24 — Builder shipped in full across Phase A (chunks 1–5,
   Player 2), Phase B (chunks 1–4, scene editor + animations +
   teleport doors + polish), and Phase B+ (rounds 1–3, P2 HP + P2
   animation + multi-pair animations + dialogue + multi-background
-  doors).  See [BUILDER_GUIDE.md](BUILDER_GUIDE.md) for the pupil
+  doors).  See [BUILDER_GUIDE.md](../guides/BUILDER_GUIDE.md) for the pupil
   reference.  Marked the following earlier requests as `[done]`:
   the "Simpler, no-C module builder" ask, scene-transition
   triggers (now delivered via multi-background doors), and added
   three new `[done]` rows covering the Phase B+ additions
   (co-op, in-Builder NPC dialogue, room transitions).
 - 2026-04-24 (later) — post-pupil-session fix pass captured in
-  [plan-batches.md](plan-batches.md).  Shipped: unified Play
+  [plan-batches.md](../plans/archive/2026-04-24-plan-batches.md).  Shipped: unified Play
   pipeline across every editor page (one helper, one set of
   controls, sensible fallbacks so empty projects still build);
   ▶ Play + ⬇ ROM + In-browser/Local-fceux dropdown now on
@@ -1002,7 +1002,7 @@ sub-item so a half-baked piece never blocks a pupil session.
   banks; shipped an alert+revert gate on the dropdown
   ([index.html:4148-4170](tools/tile_editor_web/index.html#L4148-L4170))
   and queued the proper fix (4-screen-VRAM cartridge config) as
-  Phase 4.4 of [next-steps-plan.md](next-steps-plan.md).
+  Phase 4.4 of [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md).
 - 2026-04-25 (Phase 4.1) — accessibility pass shipped.  New shared
   [a11y.js](tools/tile_editor_web/a11y.js) module auto-injects two
   controls into every editor page's header: a Text-size dropdown
@@ -1030,7 +1030,7 @@ sub-item so a half-baked piece never blocks a pupil session.
   `PlayPipeline.play()` and captures a 30-frame preview via a hidden
   jsnes instance.  Gallery nav link added to all five editor pages.
   Forward-compatible with the planned pupil/teacher accounts (Phase
-  4.6 of [next-steps-plan.md](next-steps-plan.md)): metadata schema
+  4.6 of [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md)): metadata schema
   reserves an `owner` slot, pupil_handle is already first-class,
   Remove will become teacher-gated.  No personal info collected today
   or planned for the accounts work — handles are pseudonymous, no
@@ -1046,7 +1046,7 @@ sub-item so a half-baked piece never blocks a pupil session.
   any vertical scroll overwrites the visible screen).  Extended the
   Backgrounds-page size-selector gate to alert + revert on *both*
   vertical sizes, and merged the 1×N case into Phase 4.4 of
-  [next-steps-plan.md](next-steps-plan.md) (one 4-screen-VRAM fix
+  [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md) (one 4-screen-VRAM fix
   closes both).
 - 2026-04-25 (Phase 1.3) — project-menu parity shipped.  Behaviour,
   Builder and Code now expose **Recover from snapshot** and
@@ -1094,7 +1094,7 @@ sub-item so a half-baked piece never blocks a pupil session.
   *Scrolling* (with leading hypotheses around initial PPU_CTRL
   state and `scroll_follow` clamp tightness), and added them to
   Phase 4.4's *Outstanding* list in
-  [next-steps-plan.md](next-steps-plan.md).  Pupil is gathering
+  [next-steps-plan.md](../plans/archive/2026-04-26-next-steps.md).  Pupil is gathering
   FCEUX captures before we dig in — no code change today.
 - 2026-04-25 (audit) — sweep of long-standing `[new]` 2026-04-13
   pupil items.  Eight already-shipped features identified and

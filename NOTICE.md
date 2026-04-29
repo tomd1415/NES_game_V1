@@ -25,11 +25,16 @@ and the matching `codemirror-*.min.js` / `codemirror.min.css` files.
 - Licence: MIT
 - Used by the Code editor page.
 
-### FamiStudio sound engine — *planned, see [audio-plan.md](audio-plan.md)*
+### FamiStudio sound engine
 
-When Phase 4.3 ships, `tools/audio/famistudio/famistudio_ca65.s` and
-`tools/audio/famistudio/famistudio_cc65.h` will be vendored verbatim
-from <https://github.com/BleuBleu/FamiStudio> (`SoundEngine/`).
+`tools/audio/famistudio/famistudio_ca65.s` and
+`tools/audio/famistudio/famistudio_cc65.h` are vendored verbatim from
+<https://github.com/BleuBleu/FamiStudio> (`SoundEngine/`).  Shipped in
+Phase 4.3 — see
+[`docs/plans/archive/2026-04-26-audio.md`](docs/plans/archive/2026-04-26-audio.md)
+for the implementation plan and
+[`docs/guides/AUDIO_GUIDE.md`](docs/guides/AUDIO_GUIDE.md) for the
+pupil-facing walkthrough.
 
 - Upstream: <https://famistudio.org/>
 - Author: Mathieu Gauthier (with substantial code from Shiru's
