@@ -30,6 +30,22 @@ was a massive improvement.
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
 26. The top down code has not been tested as much as the platform based code so that will need updating with everything that was discovered in the platform builder code writing and then testing. All should be documented. Again the NES is a very old system so there are probably many solutions to these problems already you should carry out a detailed search for sources of information to aid in writing this application and a suitable way of recording the information needed.
 27. It is not clear where the sound effects are linked to events or how to do that currently.
+28. NPC dialogue is misbehaving in pupil projects.  Re-reported
+    2026-04-27 — symptoms not yet captured in detail; please add to
+    the diagnosis-notes section below when next observed (does the
+    dialogue box not open at all, does it open with wrong text,
+    does it freeze the game, does it lock player input, does it
+    show stale text from a previous NPC, …?).
+29. Vertical scrolling still not behaving as it should.  Originally
+    item 9; re-reported 2026-04-27 — pupils are still seeing
+    glitches in 1×2 / 2×2 backgrounds even after the multi-bg
+    door bundle (T2.1 / T2.2 — those addressed *behaviour* and
+    *which nametable bytes get loaded*, not the scroll engine
+    itself).  Architectural fix is tracked as plan §T3.1.  Symptom
+    detail still needed for diagnosis (jitter at the scroll
+    boundary?  ghost row appearing 12 tiles above / below where
+    it should?  visible top scanline mid-scroll?  player drifts
+    past world bottom into garbage?).
 
 ---
 
@@ -117,3 +133,86 @@ expected colours?
 Until at least one step has been run, **do not start writing a
 fix.**  See plan §T1.8 for the rationale (avoids burning a
 session on a phantom case).
+
+### Item 28 — NPC dialogue (status: NEEDS DETAIL, 2026-04-27)
+
+User reported the dialogue is "still playing up" without a more
+specific symptom.  Capture below when next observed so the next
+session can triage rather than chase.
+
+#### Item 28 — Reproduction questions
+
+- [ ] **Game style?** *(platformer / top-down)*: _____
+- [ ] **Is the dialogue Builder module ticked?** *(check the
+      Builder page → Dialogue)*: _____
+- [ ] **Is there at least one NPC sprite tagged with `role: npc`
+      on the Sprites page?**: _____
+- [ ] **What's the dialogue text in the module config?**: _____
+- [ ] **Multi-line (BW_DIALOG_ROW_COUNT > 1) or single-line?**: _____
+- [ ] **Per-NPC override text on any scene instance?**: _____
+
+#### Item 28 — Behavioural questions
+
+- [ ] Does the dialogue box appear at all?  *(yes / no / sometimes)*
+- [ ] If yes, is the text correct, or is it text from a different
+      NPC, or garbage tiles?
+- [ ] Is player input locked while the box is up, or does the
+      player keep moving?
+- [ ] Does pressing B again close the box, or is it stuck open?
+- [ ] Does the bug show in the in-browser jsnes preview, the
+      *Local (fceux)* mode, or both?
+
+#### Item 28 — Likely fix locations
+
+| Symptom | Where to start |
+| ------- | -------------- |
+| Box never opens | `platformer.c` dialogue trigger block (search for `BEHAVIOUR_NPC` / `bw_dialog_cmd`) |
+| Wrong text per NPC | `bw_dialogue_text_table` emission in `playground_server.py` and per-instance override path in `builder-assembler.js` |
+| Garbage tiles | font-tile convention (see `BUILDER_GUIDE.md` §dialogue) — pupil's project may not have the dialogue font tiles painted |
+| Game freezes | `vblank_writes` slot — dialogue draw is per-row across multiple vblanks, may be hanging |
+
+Until a real symptom is captured, **don't start writing a fix.**
+
+### Item 29 — Vertical scroll glitches (status: NEEDS DETAIL, 2026-04-27)
+
+T2.1 / T2.2 (multi-bg door bundle) were *not* about scrolling — they
+fixed the *what nametable bytes get loaded post-door* path.  The
+scroll engine itself (`scroll.c`) is the area to examine for this
+item.  T3.1 in the plan tracks the architectural work; this entry
+captures the symptoms pupils are seeing right now so when T3.1 starts
+we have real reproduction data.
+
+#### Item 29 — Reproduction questions
+
+- [ ] **World shape?**  *(2×1 horizontal-only, 1×2 vertical-only,
+      2×2)*: _____
+- [ ] **In-browser preview, FCEUX, or both?**: _____
+- [ ] **Is iNES 4-screen mirroring enabled?**  Hex-dump byte 6 of
+      the ROM — bit 3 should be set for any project that scrolls
+      vertically: _____
+
+#### Item 29 — Behavioural questions (tick all that apply)
+
+- [ ] Tear / flicker at the scanline where the scroll boundary
+      sits.
+- [ ] Ghost row appears ~12 tiles above or below where the camera
+      is — classic "PPU scroll register set after the T→V copy
+      window" symptom.
+- [ ] Stale tiles from before the camera moved persist in the
+      newly-revealed region.
+- [ ] Player can walk past the world bottom edge into garbage
+      tiles (collision wrong on the boundary screen).
+- [ ] Other: _____________
+
+#### Item 29 — Likely fix locations
+
+| Symptom | Where to start |
+| ------- | -------------- |
+| Tear / flicker at boundary | `scroll.c`'s `scroll_apply_ppu` ordering + `scroll_stream` row burst |
+| Ghost row 12 tiles offset | scroll-stream timing — check `scroll_stream_prepare` / `scroll_stream` cycle budget vs vblank end |
+| Stale tiles in newly-revealed region | row burst in `scroll_stream` may not fire; check the `prev_cam_y` boundary-crossing logic |
+| Wrong collision past world edge | `behaviour_at()` bounds in `behaviour.c` — `world_row >= WORLD_ROWS` check should already reject, confirm it does |
+
+T3.1 in the plan is the umbrella architectural task; this entry
+captures what pupils are seeing *today* so the spike at the start
+of T3.1 has real failure cases to chase.
