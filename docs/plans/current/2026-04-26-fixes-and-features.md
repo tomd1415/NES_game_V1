@@ -67,7 +67,7 @@ Order within tier: do the four sprite/background-page items
 together (one editor sweep), then the layout/UX nudges, then the
 two scoped diagnostic fixes.
 
-### T1.1 Background-tile fill option *(item 1)*
+### T1.1 Background-tile fill option *(item 1)*  ✓ **DONE 2026-04-27**
 
 Add a "fill area" tool on the Backgrounds page next to the
 existing pencil/picker.  Bucket-fill replaces every contiguous
@@ -79,7 +79,7 @@ new helper in `sprite-render.js` or a sibling.  **Test:**
 extend an existing painting smoke-suite case to fill a region
 and assert the resulting `bgWorld.tiles` array.
 
-### T1.2 Pixel grid overlay on sprite top view *(item 19)*
+### T1.2 Pixel grid overlay on sprite top view *(item 19)*  ✓ **DONE 2026-04-27**
 
 The per-tile pixel editor already has a faint pixel grid; the
 sprite top view (composition canvas) doesn't.  Add the same
@@ -87,7 +87,7 @@ grid as a CSS overlay or canvas-stroke pass, with a toggle in
 the existing view-options menu so it can be hidden.  **Files:**
 `sprites.html` + a couple of lines in `sprite-render.js`.
 
-### T1.3 Duplicate-sprite copies tiles *(item 18)*
+### T1.3 Duplicate-sprite copies tiles *(item 18)*  ✓ **DONE 2026-04-27**
 
 Right now duplicating a sprite gives you a new sprite cell-list
 that points at the *same* tile indices, so editing the duplicate
@@ -98,14 +98,14 @@ in `storage.js` or `sprites.html`.  **Test:** duplicate, edit
 the duplicate's pixels, assert the original's pixels are
 unchanged.
 
-### T1.4 Behaviour editor — wider sprite-reactions box *(item 20)*
+### T1.4 Behaviour editor — wider sprite-reactions box *(item 20)*  ✓ **DONE 2026-04-27**
 
 The Sprite reactions panel is currently in the right-hand
 column and feels cramped.  Move it into a row *under* the
 background canvas, full width.  Pure CSS / DOM-shuffle.
 **Files:** `behaviour.html` only.
 
-### T1.5 Make sfx-event linkage discoverable *(item 27)*
+### T1.5 Make sfx-event linkage discoverable *(item 27)*  ✓ **PART 1 DONE 2026-04-26** (part 2 still gates on T2.6)
 
 Pupils don't currently see how sound effects connect to game
 events because the wiring is implicit (the audio Builder module
@@ -124,7 +124,7 @@ isn't shipped yet).  Two-step:
 
 The doc patch can ship today; the UI hint waits on T2.6.
 
-### T1.6 Game-wide variables in Builder *(item 22)*
+### T1.6 Game-wide variables in Builder *(item 22)*  ✓ **DONE 2026-04-27** (partial — see Status block below)
 
 Add a "Globals" Builder module exposing a small set of
 top-level numeric overrides: `gravity`, `walk_speed`,
@@ -174,7 +174,7 @@ per-sprite override.
 > doc — they're refinements of the same module, not a new
 > feature.
 
-### T1.7 Better gallery thumbnail *(item 25)*
+### T1.7 Better gallery thumbnail *(item 25)*  ✓ **DONE 2026-04-26** (shipped at frame 60, not 30 — see Decisions)
 
 Currently the gallery captures frame 0 which is almost always
 the background palette colour with no sprites yet.  Capture
@@ -187,7 +187,7 @@ actually representative — pick a frame number after the player
 has settled on the ground and at least one animation cycle has
 played.
 
-### T1.8 Scoped palette diagnosis *(item 16)*
+### T1.8 Scoped palette diagnosis *(item 16)*  ✓ **DONE 2026-04-26** (framework only — no reproduction run yet)
 
 "The palettes on the background and for the sprites sometimes
 do not match what they should be and the ones that are selected
@@ -206,7 +206,7 @@ under item 16.  Only then triage the actual mismatch — could
 be storage round-trip, UI display, or assembler emit.  **Risk
 of doing this blind:** wasted session chasing a phantom case.
 
-### T1.9 NES dev resources collected *(item 4)*
+### T1.9 NES dev resources collected *(item 4)*  ✓ **DONE 2026-04-26**
 
 Add a new file `docs/reference/nes-resources.md` curating the
 canonical references we already lean on plus the ones we should:
@@ -227,7 +227,7 @@ prerequisites for several others (any feature touching
 multi-screen behaviour benefits from getting the Builder's
 scene-instance model fully reliable first).
 
-### T2.1 Door / scene-transition wrong background *(item 2)*
+### T2.1 Door / scene-transition wrong background *(item 2)*  ✓ **DONE 2026-04-27** (bundled with T2.2)
 
 When a project has a multi-screen background and the player
 walks through a door into a different background, *one* of the
@@ -248,7 +248,7 @@ nametable for non-zero `screen_idx` values.  Approach:
 that builds a multi-screen door pair and asserts ROM bytes for
 the second nametable region.
 
-### T2.2 Door transition uses wrong behaviour blocks *(item 3)*
+### T2.2 Door transition uses wrong behaviour blocks *(item 3)*  ✓ **DONE 2026-04-27** (bundled with T2.1)
 
 Symmetric problem to T2.1 but on the behaviour map: after a
 door, the destination scene's behaviour map shows blocks from
@@ -596,29 +596,65 @@ addressed holistically rather than per-feature.
   diagnostic.  No new tier item — these are bug fixes against
   existing functionality, but recording here so the audio
   workstream's history is followable.
+- **Diagnostic-pending bugs (re-reported 2026-04-27).**  Items
+  28 (NPC dialogue misbehaving) and 29 (vertical scroll
+  glitches) in
+  [`docs/feedback/recently-observed-bugs.md`](../../feedback/recently-observed-bugs.md)
+  need symptom capture before triage.  The bug-list file
+  carries question-frameworks for both — whoever runs the
+  next pupil session should fill in the `[ ]` checkboxes as
+  symptoms surface.  Item 29 will feed T3.1's spike when
+  it starts (the symptom data is what determines whether the
+  fix is a small ordering tweak in `scroll.c` or a deeper
+  rework).  Item 28's tier assignment depends on what the
+  symptoms turn out to be — could be a quick T2.x fix
+  (e.g. assembler-side per-NPC text mapping bug), could be
+  T3.6 dialogue-parity territory if it's a top-down-specific
+  regression.
 
 ---
 
 ## Sequencing summary
 
-Recommended near-term order:
+The first three sessions are already done — Tier 1 + the
+door-bug bundle, plus the (unnumbered) Audio robustness pass —
+see
+[changelog-implemented.md](../../changelog/changelog-implemented.md)
+for full write-ups.  Sessions are listed below in order;
+struck-through items are shipped, the rest are the
+recommended order from here.
 
-1. **Session 1** — T1.1, T1.2, T1.3, T1.4 (sprite/background
-   page sweep).  Single PR, single regression run.
-2. **Session 2** — T1.5, T1.6, T1.7, T1.8, T1.9 (UX nudges +
-   research note).  Open the issues for items pulled in by
-   T2.6.
-3. **Session 3** — T2.1 + T2.2 together (door bug bundle).
-4. **Session 4** — T2.6 + T1.5 part 2 (audio events module
-   + the deferred Audio page UI hint).
-5. **Sessions 5-8** — T2.3, T2.4, T2.5, T2.7, T2.8, T2.9, T2.10
-   (Builder module sweep).  Aim for one Builder module per
-   session.
-6. **Session 9** — T2.11, T2.12 (research + docs follow-up).
-   No code; produces the input that Tier 3 needs.
-7. **Tier 3 spikes.**  T3.1 → T3.2 (scroll-area work cluster)
-   in one pair of sessions; T3.3 in another; T3.4 design note
-   before any T3.4 code.
+1. ~~**Session 1** — T1.1, T1.2, T1.3, T1.4 (sprite/background
+   page sweep).~~ Shipped 2026-04-27.
+2. ~~**Session 2** — T1.5 part 1, T1.6, T1.7, T1.8, T1.9
+   (UX nudges + research note).~~ Shipped 2026-04-26 / 27.
+3. ~~**Session 3** — T2.1 + T2.2 (door bug bundle).~~ Shipped
+   2026-04-27.
+4. **Session 4 (next)** — T2.6 + T1.5 part 2 (audio events
+   module + the deferred Audio page UI hint).  Highest
+   near-term pupil value: maps the existing sfx slots to game
+   events from a Builder dropdown, and finishes off the T1.5
+   half that was waiting on T2.6.
+5. **Session 5** — T2.3 (place enemies/players on every
+   screen) + T2.9 (per-instance trigger / door effects)
+   bundled, since both touch the scene-instance state machine
+   so doing them together avoids re-reading the same code
+   twice.
+6. **Sessions 6-7** — T2.4 (stomp first), T2.5 (per-sprite
+   tuning, builds on T1.6's macro infrastructure), T2.10
+   (animations for enemies / pickups).  Roughly one Builder
+   module per session.
+7. **Session 8** — T2.7 (default sfx seeded into new
+   projects — note the audio robustness pass relieved the
+   urgency, see Decisions section), T2.8 (more enemy paths).
+8. **Session 9** — T2.11 + T2.12 (audio tempo workflow doc +
+   NES-research follow-through).  No code; produces the
+   input Tier 3 needs.
+9. **Tier 3 spikes.**  T3.1 (vertical / 2×2 scroll fixes —
+   bug item 29 needs symptom capture *before* this starts) →
+   T3.2 (worlds beyond 2 screens) in one pair of sessions;
+   T3.3 (C → asm) in another; T3.4 (Geometry Dash) design
+   note before any T3.4 code.
 
 Tier 4 is on hold pending design conversations the user
 initiates.
@@ -627,13 +663,24 @@ initiates.
 
 ## Decisions (answers from 2026-04-26)
 
-- **T1.7 gallery thumbnail.**  Capture **frame 30** — confirmed.
+- **T1.7 gallery thumbnail.**  Capture **frame 60** — initially
+  tried 30 (per the original answer) but the resulting thumbnails
+  were still blank because cc65's startup + the main loop's first
+  iteration takes longer than 30 jsnes frames.  60 covers boot +
+  at least one animation cycle on the player sprite, and is what
+  shipped (2026-04-27).
 - **T2.4 enemy defeat.**  Ship **stomp first**, defer projectile —
   confirmed.
 - **T2.7 default sfx.**  **Yes, default for every new project for
   the time being.**  Re-evaluate (and possibly switch to "default
   for platformer preset only") once the top-down preset's
   audio-event vocabulary is in.
+  *Status (2026-04-27): the audio robustness pass partially
+  relieved this — pupils with no sfx pack uploaded now hear their
+  music anyway because the server auto-stubs a silent sfx side.
+  Default-sfx-seeding is still queued for T2.7 (so the slots are
+  available for the audio events module to wire up), but it's no
+  longer blocking pupils from hearing audio.*
 - **T3.2 beyond-2-screens.**  **Add an MMC1 path, keep the
   existing mapper-0 path as a per-project opt-out.**  Net effect:
   default new projects to whichever is *currently* simplest (most
