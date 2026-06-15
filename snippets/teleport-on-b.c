@@ -11,5 +11,6 @@
         if ((pad & 0x40) && !(prev_pad & 0x40)) {
             px = 16;
             py = 24;
-            ground_y = 24;
+            jumping = 1;
+            jmp_up = 0;
         }

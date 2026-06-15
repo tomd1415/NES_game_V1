@@ -290,13 +290,4 @@ void main(void) {
     }
 }
 
-// =============================================================================
-// INTERRUPT VECTORS
-// =============================================================================
-// The NES processor looks at address $FFFA to know what to do.
-// We must point these to our main function.
-const void *vectors[] = {
-    (void *) 0,    // NMI Vector (unused for now)
-    (void *) main, // Reset Vector (Start the game here!)
-    (void *) 0     // IRQ Vector (unused)
-};
+// The CPU interrupt vectors (NMI/RESET/IRQ at $FFFA-$FFFF) are defined in reset.s under .segment "VECTORS".

@@ -3,7 +3,7 @@
   "id": "follower-npc",
   "title": "NPC follows the player",
   "summary": "An NPC-tagged sprite trails the player a few frames behind.",
-  "description": "Every frame, records the player's (px, py) into a ring buffer and places the first ROLE_NPC scene sprite at the position the player was at FOLLOW_LAG frames ago. Result: a companion that tracks your movement with a small delay. Tag the sprite you want to follow as 'NPC' in the Sprites editor. Change FOLLOW_LAG for a closer or more distant follower. Put this inside the main loop.",
+  "description": "Every frame, records the player's (px, py) into a ring buffer and places the first ROLE_NPC scene sprite at the position the player was at FOLLOW_LAG frames ago. Result: a companion that tracks your movement with a small delay. Tag the sprite you want to follow as 'NPC' in the Sprites editor. Change FOLLOW_LAG for a closer or more distant follower. Put this inside the main loop. Single-screen only — scene sprites live in screen-1 (0-255) space; in a scrolling project the follower cannot track the player past x=255.",
   "regions": ["magic_button"],
   "tags": ["npc", "follower", "movement", "ai"]
 }
@@ -20,7 +20,7 @@
             trail_head = (trail_head + 1) & 31;
             if (!trail_primed && trail_head == 0) trail_primed = 1;
             if (trail_primed) {
-                tail = (trail_head + (32 - FOLLOW_LAG)) & 31;
+                tail = (trail_head + (32 - FOLLOW_LAG) - 1) & 31;
                 for (i = 0; i < NUM_STATIC_SPRITES; i++) {
                     if (ss_role[i] != ROLE_NPC) continue;
                     ss_x[i] = trail_x[tail];

@@ -358,8 +358,15 @@ void draw_text(unsigned char row, unsigned char col,
         PPU_DATA = text[j];
         j++;
     }
+#ifdef SCROLL_BUILD
+    /* Restore the camera scroll + nametable-select bits instead of snapping
+       the view to (0,0): the unconditional PPU_SCROLL=0 made every dialogue
+       frame jerk the camera back to the world origin on scrolling games. */
+    scroll_apply_ppu();
+#else
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
+#endif
     PPU_MASK = 0x1E;
 }
 
@@ -374,8 +381,15 @@ void clear_text_row(unsigned char row, unsigned char col, unsigned char width) {
     for (j = 0; j < width; j++) {
         PPU_DATA = 0x00;
     }
+#ifdef SCROLL_BUILD
+    /* Restore the camera scroll + nametable-select bits instead of snapping
+       the view to (0,0): the unconditional PPU_SCROLL=0 made every dialogue
+       frame jerk the camera back to the world origin on scrolling games. */
+    scroll_apply_ppu();
+#else
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
+#endif
     PPU_MASK = 0x1E;
 }
 
@@ -405,6 +419,24 @@ static void load_background_n(unsigned char n) {
 #endif
 #if BG_COUNT > 3
         case 3: src = bg_nametable_3; break;
+#endif
+#if BG_COUNT > 4
+        case 4: src = bg_nametable_4; break;
+#endif
+#if BG_COUNT > 5
+        case 5: src = bg_nametable_5; break;
+#endif
+#if BG_COUNT > 6
+        case 6: src = bg_nametable_6; break;
+#endif
+#if BG_COUNT > 7
+        case 7: src = bg_nametable_7; break;
+#endif
+#if BG_COUNT > 8
+        case 8: src = bg_nametable_8; break;
+#endif
+#if BG_COUNT > 9
+        case 9: src = bg_nametable_9; break;
 #endif
         default:
 #if BG_COUNT > 0
@@ -617,7 +649,7 @@ void main(void) {
             // collision tie so pupils can build "rope through the ceiling"
             // puzzles.  Mirrors the tie-break used by the on_ladder probe.
             if (pad & 0x08) {                 // UP
-                unsigned char new_top = (py >= climb_speed) ? (py - climb_speed) : 0;
+                pxcoord_t new_top = (py >= climb_speed) ? (py - climb_speed) : 0;
                 unsigned char up_row  = new_top >> 3;
                 unsigned char up_l = behaviour_at((unsigned int)(px >> 3),
                                                   (unsigned int)up_row);
@@ -633,7 +665,7 @@ void main(void) {
                 if (up_ladder || !up_solid) py = new_top;
             }
             if (pad & 0x04) {                 // DOWN
-                unsigned char new_foot = py + climb_speed + (PLAYER_H << 3);
+                pxcoord_t new_foot = py + climb_speed + (PLAYER_H << 3);
                 unsigned char dn_row   = new_foot >> 3;
                 unsigned char dn_l = behaviour_at((unsigned int)(px >> 3),
                                                   (unsigned int)dn_row);
@@ -702,7 +734,7 @@ void main(void) {
                 // Snap to the top of the landed tile so the player's body
                 // does not overlap the ground row (which would otherwise
                 // make the horizontal walk check fail on every step).
-                py = (unsigned char)((foot_row << 3) - (PLAYER_H << 3));
+                py = ((pxcoord_t)foot_row << 3) - (PLAYER_H << 3);
                 jumping = 0;   // feet on a surface — stop falling
             } else {
                 if (py < (WORLD_H_PX - 8)) py += 2;
@@ -804,13 +836,21 @@ void main(void) {
 #if BW_GAME_STYLE == 0
 //>> gravity: Scene sprites fall until they land on solid_ground or platform. Tick 🕊 Flying on the Sprites page to make a sprite hover instead.
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
-            unsigned char foot_b;
+            unsigned char foot_row, foot_l, foot_r;
             if (ss_flying[i]) continue;
-            foot_b = behaviour_at(
-                (unsigned int)(ss_x[i] >> 3),
-                (unsigned int)((ss_y[i] + (ss_h[i] << 3)) >> 3));
-            if (foot_b == BEHAVIOUR_SOLID_GROUND || foot_b == BEHAVIOUR_WALL
-             || foot_b == BEHAVIOUR_PLATFORM) {
+            // Probe BOTH the left and right foot columns so a multi-tile-wide
+            // sprite rests on a platform edge instead of falling through when
+            // only its left column happens to be over solid ground.
+            foot_row = (unsigned char)((ss_y[i] + (ss_h[i] << 3)) >> 3);
+            foot_l = behaviour_at((unsigned int)(ss_x[i] >> 3),
+                                  (unsigned int)foot_row);
+            foot_r = behaviour_at(
+                (unsigned int)((ss_x[i] + (ss_w[i] << 3) - 1) >> 3),
+                (unsigned int)foot_row);
+            if (foot_l == BEHAVIOUR_SOLID_GROUND || foot_l == BEHAVIOUR_WALL
+             || foot_l == BEHAVIOUR_PLATFORM
+             || foot_r == BEHAVIOUR_SOLID_GROUND || foot_r == BEHAVIOUR_WALL
+             || foot_r == BEHAVIOUR_PLATFORM) {
                 continue;  // resting on a surface — don't fall further
             }
             if (ss_y[i] < 232) BW_APPLY_GRAVITY(ss_y[i]);  // fall 1 px/frame by default; Globals module can override
@@ -889,7 +929,7 @@ void main(void) {
              || fl2 == BEHAVIOUR_PLATFORM
              || fr2 == BEHAVIOUR_SOLID_GROUND || fr2 == BEHAVIOUR_WALL
              || fr2 == BEHAVIOUR_PLATFORM) {
-                py2 = (unsigned char)((foot_row2 << 3) - (PLAYER2_H << 3));
+                py2 = ((pxcoord_t)foot_row2 << 3) - (PLAYER2_H << 3);
                 jumping2 = 0;
             } else {
                 if (py2 < (WORLD_H_PX - 8)) py2 += 2;
@@ -1126,6 +1166,7 @@ void main(void) {
             for (hud_h = 0; hud_h < player_hp; hud_h++) {
                 for (hud_r = 0; hud_r < HUD_H; hud_r++) {
                     for (hud_c = 0; hud_c < HUD_W; hud_c++) {
+                        if (oam_idx > 252) break;   /* OAM full (64 hw sprites) */
                         oam_buf[oam_idx++] =hud_y + (hud_r << 3);
                         oam_buf[oam_idx++] =hud_tiles[hud_r * HUD_W + hud_c];
                         oam_buf[oam_idx++] =hud_attrs[hud_r * HUD_W + hud_c];
@@ -1151,6 +1192,7 @@ void main(void) {
             for (hud_h = 0; hud_h < player2_hp; hud_h++) {
                 for (hud_r = 0; hud_r < HUD_H; hud_r++) {
                     for (hud_c = 0; hud_c < HUD_W; hud_c++) {
+                        if (oam_idx > 252) break;   /* OAM full (64 hw sprites) */
                         oam_buf[oam_idx++] =hud_y + (hud_r << 3);
                         oam_buf[oam_idx++] =hud_tiles[hud_r * HUD_W + hud_c];
                         oam_buf[oam_idx++] =hud_attrs[hud_r * HUD_W + hud_c];
@@ -1272,6 +1314,8 @@ void main(void) {
 #endif
             for (r = 0; r < sh; r++) {
                 for (c = 0; c < sw; c++) {
+                    /* OAM bound — see the static-sprite loop below. */
+                    if (oam_idx <= 252) {
 #ifdef SCROLL_BUILD
                     oam_buf[oam_idx++] =world_to_screen_y(
                         (unsigned int)ss_y[i] + (r << 3));
@@ -1285,6 +1329,7 @@ void main(void) {
                     oam_buf[oam_idx++] =src_attrs[r * sw + c];
                     oam_buf[oam_idx++] =ss_x[i] + (c << 3);
 #endif
+                    }
                 }
             }
         }
@@ -1295,6 +1340,11 @@ void main(void) {
             sh = ss_h[i];
             for (r = 0; r < sh; r++) {
                 for (c = 0; c < sw; c++) {
+                    // The NES only displays 64 hardware sprites (256 OAM
+                    // bytes).  Guard every 4-byte write so a scene with more
+                    // sprite tiles than that drops the overflow instead of
+                    // scribbling past oam_buf into adjacent RAM.
+                    if (oam_idx <= 252) {
 #ifdef SCROLL_BUILD
                     oam_buf[oam_idx++] =world_to_screen_y(
                         (unsigned int)ss_y[i] + (r << 3));
@@ -1308,6 +1358,7 @@ void main(void) {
                     oam_buf[oam_idx++] =ss_attrs[off + r * sw + c];
                     oam_buf[oam_idx++] =ss_x[i] + (c << 3);
 #endif
+                    }
                 }
             }
         }

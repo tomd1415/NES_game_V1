@@ -281,6 +281,7 @@ input[type=file] { display: none; }
     migrateState: (s) => s,
     validateState: () => null,
   });
+  window.Storage = Storage;
 
   const grid       = document.getElementById('songs-grid');
   const sfxHost    = document.getElementById('sfx-card-host');
@@ -594,6 +595,25 @@ input[type=file] { display: none; }
   document.getElementById('file-sfx').addEventListener('change', (e) => {
     handleSfxUpload(e.target.files && e.target.files[0]);
     e.target.value = '';
+  });
+
+  // Drag-and-drop: the quick-start says "Drag the .s file onto this page",
+  // so wire up document-level handlers that route the dropped file to the
+  // existing upload handlers by filename heuristic.  Without preventDefault
+  // the browser navigates away and the pupil's work is lost.
+  document.addEventListener('dragover', (e) => { e.preventDefault(); });
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file) return;
+    if (!requireState()) return;            // reuse existing no-project guard
+    if (!/\.(s|asm)$/i.test(file.name)) {
+      setStatus('Drop a FamiStudio-exported .s file (got "' + file.name + '").', 'warn');
+      return;
+    }
+    // sfx exports are conventionally named sfx_*.s here; everything else is a song.
+    if (/(^|[_-])sfx/i.test(file.name)) handleSfxUpload(file);
+    else handleSongUpload(file);
   });
 
   document.getElementById('btn-load-starter').addEventListener('click', async () => {

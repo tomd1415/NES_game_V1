@@ -187,6 +187,7 @@ main { padding: 16px; }
     migrateState: (s) => s,
     validateState: () => null,
   });
+  window.Storage = Storage;
 
   const grid       = document.getElementById('gallery-grid');
   const emptyState = document.getElementById('gallery-empty');

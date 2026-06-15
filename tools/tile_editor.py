@@ -211,7 +211,8 @@ def parse(text: str) -> Document:
                 )
                 continue
             slot = int(m.group(1))
-            val = int(m.group(2), 0)
+            raw_val = m.group(2)
+            val = int(raw_val, 16) if raw_val.lower().startswith("0x") else int(raw_val, 10)
             if val < 0 or val > 0x3F:
                 doc.errors.append(
                     f"line {lineno}: palette byte {val:#x} is out of range — "

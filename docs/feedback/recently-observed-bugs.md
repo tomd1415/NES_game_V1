@@ -216,3 +216,111 @@ we have real reproduction data.
 T3.1 in the plan is the umbrella architectural task; this entry
 captures what pupils are seeing *today* so the spike at the start
 of T3.1 has real failure cases to chase.
+
+---
+
+## Codebase-wide bug sweep — 2026-06-15
+
+A multi-agent review of the whole platform (Python build server,
+browser editor, NES C/asm engine, pupil example code) surfaced 57
+verified defects.  51 were fixed this session; 5 are deferred (see
+below).  The full `tools/builder-tests/run-all.mjs` suite stays
+green, including the byte-identical-ROM invariant, after every fix.
+
+### Vertical / 2×2 scrolling + palette glitches (items 9, 16, 29)
+
+Three separate root causes, now fixed:
+
+- **`scroll.c` `scroll_apply_ppu`** used a 256-px vertical
+  nametable boundary (`cam_y & 0x100`) and wrote an illegal
+  Y-scroll of 240–255.  NES nametables are 240 px tall — the
+  bottom screen was never selected and rendered garbage.  Now
+  folds `cam_y` into a 0–239 offset + a 240-px band whose low bit
+  selects NT2.
+- **`scroll.c` `scroll_stream_prepare`** row streamer used mod-32
+  row maths (`(row & 0x20)`, `(row & 0x1F)*32`), writing tile rows
+  into the **attribute table** ($23C0+) and the wrong NT row as the
+  camera scrolled down — corrupting palettes.  Now maps rows 0–29 →
+  NT0 and 30–59 → NT2 to match `load_world_bg`.
+- **`playground_server.py` `_world_nametable`** sized the world
+  attribute table as `(rows+3)//4` rows, so a 1×2 / 2×2 world's
+  bottom screen read **past the array end** and from mis-aligned
+  rows → wrong palettes.  Now emits a full 8-attr-row band per
+  screen, each derived from that screen's own tile rows.  Verified
+  byte-identical for 1×1 and 2×1 worlds (the baseline test still
+  passes); only the previously-broken 1×2 / 2×2 layouts change.
+
+Within the 2×2 cap `load_world_bg` pre-loads every visible
+nametable, so with the three fixes above the streamer only ever
+re-writes already-correct data into the correct NT.  Resolved for
+all worlds the editor can currently produce.
+
+### Player teleport on vertically-scrolled screens (multi-bg / tall worlds)
+
+`main.c` / `platformer.c` truncated world-Y to 8 bits in the
+landing snap (`py = (unsigned char)(...)`) and in the ladder
+climb temporaries (`unsigned char new_top/new_foot`), teleporting
+the player to the top of the world once `py > 255`.  Now computed
+in `pxcoord_t` (u16 under `SCROLL_BUILD`, u8 otherwise → still
+byte-identical on 1×1).  Player 2's landing snap fixed the same way.
+
+### Other engine fixes (`main.c` + `platformer.c`, kept byte-identical)
+
+- **OAM overflow**: the scene-sprite / HUD / animated-sprite OAM
+  fill loops wrote with no upper bound, scribbling past the
+  256-byte `oam_buf` into adjacent RAM when a scene exceeded 64
+  hardware sprites.  Each 4-byte group is now guarded.
+- **Dialogue snap** (item 28, partial): `draw_text` / `clear_text_row`
+  unconditionally reset `PPU_SCROLL` to 0, jerking the camera to
+  the world origin every dialogue frame on scrolling games.  Now
+  restore the camera via `scroll_apply_ppu()` under `SCROLL_BUILD`.
+  (Text still lands in NT0 fixed coords — making it follow the
+  camera in a scrolled view is left for the dialogue rework.)
+- **Multi-tile scene-sprite gravity**: gravity probed only the left
+  foot column, so wide sprites fell through platform edges; now
+  probes both columns like the player.
+- **Doors to backgrounds 4–9**: `load_background_n` only had
+  `case 0..3`, so doors targeting rooms 4–9 silently loaded room 0;
+  added the missing `#if BG_COUNT > N` cases.
+
+### Editor / tools / pupil-code fixes (highlights)
+
+- **Code page "Play in NES" was completely broken** — it fed jsnes
+  a base64 string instead of ROM bytes, so every browser run threw
+  "Not a valid NES ROM" (`code.html`).
+- Code-page redirect read a deleted legacy storage key, always
+  bouncing pupils with custom C back to the Builder (`code.html`).
+- Background delete/duplicate didn't remap door targets; switching
+  to a size-mismatched background crashed the renderer; rename
+  flooded the undo history (`index.html`).
+- Sprite duplicate/delete now keeps `behaviour_reactions`
+  index-aligned; undo mid-drag no longer re-stamps lifted pixels
+  (`sprites.html`).
+- Doors starting on a non-zero background (`builder-modules.js`);
+  HP=0 co-op validator false positive (`builder-validators.js`);
+  emulator audio pitch / sample-rate mismatch (`emulator.js`).
+- Python: leading-zero palette parse crash (`tile_editor.py`),
+  destructive `png2chr --into`, CHR padding, FamiStudio song
+  diagnostics, `/play` body-size cap, attribute-table `None`
+  deref (`playground_server.py`).
+- Snippets that referenced an undefined `ground_y` and never
+  compiled; `wrap-screen` double-wrap; CHR-copy pointer bug in
+  `graphics.s`.
+
+### Deferred (tracked, not fixed this session)
+
+- **Beyond the 2×2 cap** — the scroll *streamer* (mid-game column/
+  row fetch, attribute streaming, per-bg tile swap after a door)
+  is still incomplete for worlds larger than 2×2.  This is the
+  plan's T3.1 / T3.2 architectural work; the fixes above make
+  everything ≤2×2 correct, which is all the editor can produce
+  today.
+- **`screen-shake-on-landing` snippet** — needs a shared shake
+  offset the engine consumes in its post-vblank scroll write;
+  deferred to avoid threading engine state through the
+  byte-identical baseline for a cosmetic effect.
+- **`Step_Playground/cfg/nes.cfg` CHR-bank/header mismatch** — the
+  ROM declares 8 KB CHR but emits 16 KB (8 KB of it the unused
+  NESfont).  The ROM runs in every emulator/flashcart we use; a
+  conformance clean-up (drop NESfont or correct the header byte)
+  is lower-value than the link/crt0 risk, so deferred.

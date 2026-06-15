@@ -8,7 +8,7 @@
   "tags": ["movement", "autopilot"]
 }
 */
-        if (px < (256 - PLAYER_W * 8)) {
+        if (px < (WORLD_W_PX - (PLAYER_W << 3))) {
             px += walk_speed;
         }
         plrdir = 0x00;

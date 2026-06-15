@@ -10,7 +10,6 @@
 */
         if (py < 16) {
             py = 200;
-            ground_y = 200;
             jumping = 0;
         }
         if (py > 210 && py < 240) {

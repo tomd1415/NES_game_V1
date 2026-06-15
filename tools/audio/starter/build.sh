@@ -13,6 +13,7 @@
 # `dotnet build /home/duguid/git-stuff/FamiStudio/FamiStudio/FamiStudio.Linux.csproj`
 # produces.  Builds the C# CLI on the fly if the DLL is missing.
 set -eu
+shopt -s nullglob
 
 DLL="${1:-/tmp/famistudio-build/FamiStudio.dll}"
 HERE="$(dirname "$(readlink -f "$0")")"
@@ -26,6 +27,7 @@ if [ ! -f "$DLL" ]; then
     fi
     echo "Building FamiStudio CLI from $REPO ..."
     dotnet build "$REPO/FamiStudio/FamiStudio.Linux.csproj" -c Release -o "$(dirname "$DLL")" >/dev/null
+    [ -f "$DLL" ] || { echo "build succeeded but did not produce $DLL" >&2; exit 1; }
 fi
 
 build_song() {
@@ -45,10 +47,16 @@ build_sfx() {
 }
 
 echo "Building starter audio assets via FamiStudio CLI ($DLL):"
-for f in "$HERE"/song_*.fmstxt; do
+songs=("$HERE"/song_*.fmstxt)
+sfx=("$HERE"/sfx_*.fmstxt)
+if [ ${#songs[@]} -eq 0 ] && [ ${#sfx[@]} -eq 0 ]; then
+    echo "No song_*.fmstxt or sfx_*.fmstxt sources found in $HERE." >&2
+    exit 1
+fi
+for f in "${songs[@]}"; do
     build_song "$(basename "$f")"
 done
-for f in "$HERE"/sfx_*.fmstxt; do
+for f in "${sfx[@]}"; do
     build_sfx "$(basename "$f")"
 done
 

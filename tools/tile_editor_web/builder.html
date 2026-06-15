@@ -754,6 +754,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
     migrateState: (s) => s,
     validateState: () => null,
   });
+  window.Storage = Storage;
 
   let state = null;
   let templateText = null;    // fetched once at init

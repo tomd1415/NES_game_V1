@@ -1742,6 +1742,14 @@ function migrateState(s) {
     bg.dimensions.screens_x = Math.max(1, bg.dimensions.screens_x | 0 || 1);
     bg.dimensions.screens_y = Math.max(1, bg.dimensions.screens_y | 0 || 1);
     if (!Array.isArray(bg.nametable)) bg.nametable = emptyNametable();
+    const cols = SCREEN_W * bg.dimensions.screens_x;
+    const rows = SCREEN_H * bg.dimensions.screens_y;
+    if (!Array.isArray(bg.nametable[0]) || bg.nametable.length !== rows || bg.nametable[0].length !== cols) {
+      const old = bg.nametable;
+      bg.nametable = Array.from({length: rows}, (_, r) =>
+        Array.from({length: cols}, (_, c) =>
+          (old && old[r] && old[r][c]) ? old[r][c] : { tile: 0, palette: 0 }));
+    }
   }
   delete s.nametable;
   delete s.dimensions;
@@ -3269,8 +3277,11 @@ function renderNametable() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (let y = 0; y < rows; y++) {
+    const ntRow = activeBg().nametable[y];
+    if (!ntRow) continue;
     for (let x = 0; x < cols; x++) {
-      const cell = activeBg().nametable[y][x];
+      const cell = ntRow[x];
+      if (!cell) continue;
       const tile = state.bg_tiles[cell.tile];
       const pal = state.bg_palettes[cell.palette & 3];
       const pOverride = {
@@ -3609,8 +3620,9 @@ function init() {
   });
 
   // --- Wire header buttons ---
-  document.getElementById('project-name').addEventListener('input', e => {
-    pushUndo();
+  const projNameEl = document.getElementById('project-name');
+  projNameEl.addEventListener('focus', () => pushUndo());
+  projNameEl.addEventListener('input', e => {
     state.name = e.target.value || 'untitled';
     Storage.renameProject(Storage.getActiveProjectId(), state.name);
     document.getElementById('active-project-label').textContent = state.name;
@@ -3987,8 +3999,9 @@ function init() {
   });
 
   // --- Tile controls ---
-  document.getElementById('tile-name').addEventListener('input', e => {
-    pushUndo();
+  const tileNameEl = document.getElementById('tile-name');
+  tileNameEl.addEventListener('focus', () => pushUndo());
+  tileNameEl.addEventListener('input', e => {
     state.bg_tiles[selectedTileIdx].name = e.target.value;
     markDirty();
   });
@@ -4084,6 +4097,16 @@ function init() {
   });
 
   // --- Background list controls ---
+  // Keep the doors module's targetBgIdx pointing at the right room when
+  // backgrounds are inserted/removed (otherwise doors lead to the wrong screen).
+  function remapDoorTargetBg(fn) {
+    const mods = state.builder && state.builder.modules;
+    const cfg = mods && mods.doors && mods.doors.config;
+    if (!cfg || cfg.targetBgIdx == null) return;
+    const t = cfg.targetBgIdx | 0;
+    if (t < 0) return; // -1 = same room, leave alone
+    cfg.targetBgIdx = fn(t);
+  }
   document.getElementById('bg-select').addEventListener('change', e => {
     const idx = Math.max(0, Math.min(state.backgrounds.length - 1, parseInt(e.target.value, 10) || 0));
     if (idx === state.selectedBgIdx) return;
@@ -4112,7 +4135,9 @@ function init() {
       dimensions: { ...src.dimensions },
       nametable: src.nametable.map(row => row.map(c => ({ ...c }))),
     };
-    state.backgrounds.splice(state.selectedBgIdx + 1, 0, copy);
+    const insPos = state.selectedBgIdx + 1;
+    state.backgrounds.splice(insPos, 0, copy);
+    remapDoorTargetBg(t => (t >= insPos ? t + 1 : t));
     state.selectedBgIdx += 1;
     markDirty();
     refreshBgUi();
@@ -4136,7 +4161,9 @@ function init() {
     }
     if (!confirm('Delete background "' + activeBg().name + '"? (Undoable with Ctrl+Z)')) return;
     pushUndo();
-    state.backgrounds.splice(state.selectedBgIdx, 1);
+    const delIdx = state.selectedBgIdx;
+    state.backgrounds.splice(delIdx, 1);
+    remapDoorTargetBg(t => (t === delIdx ? -1 : (t > delIdx ? t - 1 : t)));
     if (state.selectedBgIdx >= state.backgrounds.length) {
       state.selectedBgIdx = state.backgrounds.length - 1;
     }

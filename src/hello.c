@@ -18,7 +18,7 @@ void main(void) {
 
     // 4. Write the color "Blue" (Hex $11) to the first palette slot.
     // This sets the "Universal Background Color" we discussed earlier.
-    PPU.vram.data = 0x27; 
+    PPU.vram.data = 0x11;
 
     // 5. Turn rendering back ON
     // Enable Backgrounds (bit 3) and Sprites (bit 4) -> Hex 0x1E is standard

@@ -215,7 +215,7 @@
       const node = moduleNode(state, 'scene');
       const instances = (node && node.config && node.config.instances) || [];
       for (const inst of instances) {
-        if (inst.x < 0 || inst.x > 240 || inst.y < 0 || inst.y > 216) {
+        if (inst.x < 0 || inst.x > 240 || inst.y < 16 || inst.y > 216) {
           return {
             id: 'scene-off-screen',
             severity: 'warn',
@@ -258,14 +258,29 @@
     function hpZeroWithDamage(state) {
       if (!moduleEnabled(state, 'damage')) return null;
       const p1 = moduleNode(state, 'players.player1');
-      const maxHp = (p1 && p1.config && p1.config.maxHp) | 0;
-      if (maxHp > 0) return null;
+      const p1Hp = (p1 && p1.config && p1.config.maxHp) | 0;
+      if (p1Hp > 0) return null;            // P1 mortal — nothing to flag here
+      // P1 is invincible. Only an error if P2 can't take damage either.
+      const p2On = moduleEnabled(state, 'players.player2');
+      const p2 = p2On ? moduleNode(state, 'players.player2') : null;
+      const p2Hp = (p2 && p2.config && p2.config.maxHp) | 0;
+      const p2Mortal = p2On && p2Hp > 0;
+      if (p2Mortal) {
+        // Assist mode: P1 invincible, P2 takes damage. Valid — warn only.
+        return {
+          id: 'hp-zero-with-damage',
+          severity: 'warn',
+          message: 'Damage is on and Player 1’s Max HP is 0 — Player 1 is invincible (only Player 2 can be hurt).',
+          fix: 'Raise Player 1 → Max HP if you want P1 to take damage too, or leave it at 0 for an "assist mode" co-op feel.',
+          jumpTo: null,
+        };
+      }
+      // Neither player can take damage: the whole Damage module is a no-op.
       return {
         id: 'hp-zero-with-damage',
         severity: 'error',
-        message: 'Damage is on but Player 1\'s Max HP is 0 — enemies ' +
-          'will never hurt anyone.',
-        fix: 'Raise Player 1 → Max HP above 0, or turn Damage off.',
+        message: 'Damage is on but no player can take damage — enemies will never hurt anyone.',
+        fix: 'Raise Player 1 → Max HP above 0 (or Player 2’s if P2 is on), or turn Damage off.',
         jumpTo: null,
       };
     },

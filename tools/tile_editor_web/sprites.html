@@ -3875,7 +3875,7 @@ function startAnimationWithCurrentSprite() {
     name: baseName,
     fps: 8,
     frames: [selectedSpriteIdx],
-    role: '', style: '',
+    role: 'player', style: 'custom',
   });
   selectedAnimId = id;
   markDirty();
@@ -7095,6 +7095,12 @@ function openRecoveryDialog() {
 }
 
 function afterStateReplaced() {
+  // Any in-flight selection overlay points at the pre-swap state and is
+  // now stale — drop it so a pending mouseup can't re-stamp lifted pixels.
+  floatingSelection = null;
+  toolDrag = null;
+  selectedRegion = null;
+  selectedRegionSpriteIdx = -1;
   // Clamp selection
   if (selectedSpriteIdx >= state.sprites.length) {
     selectedSpriteIdx = state.sprites.length ? 0 : -1;
@@ -8019,6 +8025,12 @@ function init() {
         '● Tile sheet is full — duplicate shares pixels with the original');
     }
     state.sprites.splice(selectedSpriteIdx + 1, 0, copy);
+    if (!Array.isArray(state.behaviour_reactions)) state.behaviour_reactions = [];
+    const srcReact = state.behaviour_reactions[selectedSpriteIdx];
+    const dupReact = (srcReact && typeof srcReact === 'object')
+      ? Object.assign({}, srcReact)
+      : defaultReactionMap(copy, selectedSpriteIdx + 1);
+    state.behaviour_reactions.splice(selectedSpriteIdx + 1, 0, dupReact);
     selectedSpriteIdx = selectedSpriteIdx + 1;
     markDirty();
     renderAll();
@@ -8034,6 +8046,7 @@ function init() {
       pushUndo();
       const removed = selectedSpriteIdx;
       state.sprites.splice(removed, 1);
+      if (Array.isArray(state.behaviour_reactions)) state.behaviour_reactions.splice(removed, 1);
       // Animations reference sprite indices — drop the removed one and
       // decrement every later index by 1 so references stay valid.
       for (const an of state.animations) {

@@ -35,34 +35,34 @@ def png_to_chr_tiles(image_path):
 
     Returns a list of bytes objects, each 16 bytes (one NES tile).
     """
-    img = Image.open(image_path)
+    with Image.open(image_path) as img:
+        # Convert to indexed if needed
+        if img.mode == 'RGBA' or img.mode == 'RGB':
+            print(f"WARNING: Image is {img.mode} mode, not indexed.")
+            print("Converting to indexed with 4 colors...")
+            # Remove alpha if RGBA
+            if img.mode == 'RGBA':
+                # Treat fully transparent pixels as color 0
+                alpha = img.split()[3]
+                img = img.convert('RGB')
+                img = img.quantize(colors=4)
+                # Restore transparency as color 0
+                # (This is approximate - best to use indexed mode in Aseprite)
+            else:
+                img = img.quantize(colors=4)
 
-    # Convert to indexed if needed
-    if img.mode == 'RGBA' or img.mode == 'RGB':
-        print(f"WARNING: Image is {img.mode} mode, not indexed.")
-        print("Converting to indexed with 4 colors...")
-        # Remove alpha if RGBA
-        if img.mode == 'RGBA':
-            # Treat fully transparent pixels as color 0
-            alpha = img.split()[3]
-            img = img.convert('RGB')
-            img = img.quantize(colors=4)
-            # Restore transparency as color 0
-            # (This is approximate - best to use indexed mode in Aseprite)
-        else:
-            img = img.quantize(colors=4)
+        if img.mode != 'P':
+            print(f"ERROR: Image must be indexed color mode (got '{img.mode}')")
+            print("In Aseprite: Sprite > Color Mode > Indexed")
+            sys.exit(1)
 
-    if img.mode != 'P':
-        print(f"ERROR: Image must be indexed color mode (got '{img.mode}')")
-        print("In Aseprite: Sprite > Color Mode > Indexed")
-        sys.exit(1)
+        width, height = img.size
+        if width % 8 != 0 or height % 8 != 0:
+            print(f"ERROR: Image dimensions ({width}x{height}) must be multiples of 8")
+            sys.exit(1)
 
-    width, height = img.size
-    if width % 8 != 0 or height % 8 != 0:
-        print(f"ERROR: Image dimensions ({width}x{height}) must be multiples of 8")
-        sys.exit(1)
+        pixels = list(img.getdata())
 
-    pixels = list(img.getdata())
     tiles_across = width // 8
     tiles_down = height // 8
     tiles = []
@@ -101,7 +101,8 @@ def write_chr(tiles, output_path, offset=None, existing_chr=None):
         if not os.path.exists(existing_chr):
             print(f"ERROR: Existing CHR file not found: {existing_chr}")
             sys.exit(1)
-        data = bytearray(open(existing_chr, 'rb').read())
+        with open(existing_chr, 'rb') as f:
+            data = bytearray(f.read())
         # Pad to at least the needed size
         needed = (offset + len(tiles)) * 16
         while len(data) < needed:
@@ -109,11 +110,10 @@ def write_chr(tiles, output_path, offset=None, existing_chr=None):
         for i, tile in enumerate(tiles):
             pos = (offset + i) * 16
             data[pos:pos + 16] = tile
-        # Pad to standard CHR size
-        if len(data) <= 4096:
-            data.extend(b'\x00' * (4096 - len(data)))
-        elif len(data) <= 8192:
-            data.extend(b'\x00' * (8192 - len(data)))
+        # Pad up to the next 4KB CHR boundary
+        remainder = len(data) % 4096
+        if remainder:
+            data.extend(b'\x00' * (4096 - remainder))
     else:
         data = bytearray()
         for tile in tiles:
@@ -166,6 +166,12 @@ def main():
             print(f"Unknown option: {sys.argv[i]}")
             sys.exit(1)
 
+    if existing_chr is not None and offset is None:
+        print("ERROR: --into requires --offset (e.g. --offset 0x01).")
+        print("       Refusing to run: without --offset the existing file would be ignored")
+        print("       and overwritten with only the new tiles.")
+        sys.exit(1)
+
     if not os.path.exists(input_path):
         print(f"ERROR: Input file not found: {input_path}")
         sys.exit(1)
@@ -173,9 +179,7 @@ def main():
     print(f"Converting {input_path}...")
     tiles = png_to_chr_tiles(input_path)
 
-    img = Image.open(input_path)
-    w, h = img.size
-    print(f"  Image: {w}x{h} pixels = {w//8}x{h//8} tiles ({len(tiles)} total)")
+    print(f"  {len(tiles)} tiles total")
 
     write_chr(tiles, output_path, offset, existing_chr)
     print("Done!")

@@ -11,7 +11,7 @@
         {
             static signed char auto_dir = 1;
             if (auto_dir == 1) {
-                if (px < (256 - PLAYER_W * 8)) {
+                if (px < (WORLD_W_PX - (PLAYER_W << 3))) {
                     px += walk_speed;
                 } else {
                     auto_dir = -1;

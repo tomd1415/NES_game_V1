@@ -89,11 +89,19 @@ void scroll_apply_ppu(void) {
        resets auto-increment to +1 (row walk) in case scroll_stream()
        left it at +32. */
     unsigned char ctrl = PPU_CTRL_BASE;
-    if (cam_x & 0x100) ctrl |= 0x01;
-    if (cam_y & 0x100) ctrl |= 0x02;
+    unsigned int cy = cam_y;
+    unsigned char band = 0;            /* which 240-px vertical band (NT row group) */
+    /* NES nametables are 240 px (30 tiles) tall, NOT 256.  The previous
+       `cam_y & 0x100` test used a 256-px boundary, so the bottom screen of a
+       1x2 world was never selected and a Y scroll of 240..255 (illegal) was
+       written, rendering garbage.  Fold cam_y into a 0..239 offset plus a
+       band index whose low bit toggles the vertical nametable. */
+    while (cy >= 240) { cy -= 240; band++; }
+    if (cam_x & 0x100) ctrl |= 0x01;   /* horizontal nametable from cam_x bit 8 */
+    if (band & 1)      ctrl |= 0x02;   /* vertical nametable toggles every 240-px band */
     PPU_CTRL = ctrl;
     PPU_SCROLL = (unsigned char)(cam_x & 0xFF);
-    PPU_SCROLL = (unsigned char)(cam_y & 0xFF);
+    PPU_SCROLL = (unsigned char)cy;    /* always 0..239 — never the illegal 240..255 */
 }
 
 /* Column / row streaming — split into a prepare phase (runs outside
@@ -181,9 +189,18 @@ void scroll_stream_prepare(void) {
             for (cc = 0; cc < 32; cc++) {
                 row_buf[cc] = bg_world_tiles[row * BG_WORLD_COLS + cc];
             }
-            /* Bit 5 of the row id picks vertical nametable via H-mirror. */
-            row_addr = ((row & 0x20) ? 0x2800 : 0x2000) +
-                       (unsigned int)(row & 0x1F) * 32;
+            /* World rows 0..29 live in NT0 ($2000), rows 30..59 in NT2
+               ($2800).  A nametable is 30 tile rows tall (NOT 32), so the
+               old `(row & 0x20)` / `(row & 0x1F) * 32` math wrote tile data
+               into the attribute table ($23C0+) and the wrong NT row,
+               corrupting palettes as the camera scrolled vertically.  Within
+               the 2x2 cap only screens 0 and 1 occur, so a subtract suffices
+               and avoids cc65's software divide.  Matches load_world_bg(). */
+            if (row < 30) {
+                row_addr = 0x2000 + (unsigned int)row * 32;
+            } else {
+                row_addr = 0x2800 + (unsigned int)(row - 30) * 32;
+            }
             row_pending = 1;
         }
     }

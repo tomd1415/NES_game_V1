@@ -208,9 +208,10 @@
       try {
         const parsed = JSON.parse(raw);
         const s = migrateState ? migrateState(parsed) : parsed;
-        if (validateState && validateState(s)) return null;
+        const err = validateState && validateState(s);
+        if (err) { console.warn('storage: discarding invalid slot:', err); return null; }
         return s;
-      } catch { return null; }
+      } catch (e) { console.warn('storage: failed to parse slot JSON:', e && e.message); return null; }
     }
 
     function touchProject(id) {
@@ -253,7 +254,7 @@
           const id = activeId();
           const meta = readProjectMeta(id);
           const ts = Date.now();
-          const key = projectSnapPrefix(id) + ts;
+          const key = projectSnapPrefix(id) + ts + '_' + Math.random().toString(36).slice(2, 6);
           localStorage.setItem(key, JSON.stringify(state));
           meta.snapshots.push({ key, ts, reason, name: state.name });
           while (meta.snapshots.length > MAX_SNAPSHOTS) {
@@ -269,7 +270,7 @@
           const id = activeId();
           const meta = readProjectMeta(id);
           const ts = Date.now();
-          const key = projectBackupPrefix(id) + ts;
+          const key = projectBackupPrefix(id) + ts + '_' + Math.random().toString(36).slice(2, 6);
           localStorage.setItem(key, JSON.stringify(state));
           meta.backups.push({ key, ts, name: state.name });
           while (meta.backups.length > MAX_BACKUPS) {

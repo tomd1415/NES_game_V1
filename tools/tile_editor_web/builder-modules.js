@@ -737,6 +737,13 @@
           '#define BW_DOORS_MULTIBG_ENABLED 1',
           '#define BW_DOOR_TARGET_BG ' + rawTarget,
         ].join('\n'));
+        // current_bg must reflect the room the game actually boots into
+        // (the selected bg), not the engine's hard-coded 0, or a door
+        // targeting bg 0 from a non-zero start never fires.
+        let startBg = (state && state.selectedBgIdx) | 0;
+        if (!(startBg >= 0 && startBg < bgs.length)) startBg = 0;
+        template = A.appendToSlot(template, 'init',
+          '    current_bg = ' + startBg + ';');
       }
       const swap = multiBg
         ? '                if (current_bg != BW_DOOR_TARGET_BG) load_background_n(BW_DOOR_TARGET_BG);'

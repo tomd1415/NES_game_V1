@@ -48,8 +48,10 @@ PAL_BYTE_OFFSET_IN_SONG = 12        # 0-indexed within the per-song block
 #   3 = PAL  song on PAL engine  → 1 frame per update
 PAL_FLAG_DESCRIPTIONS = {
     0: "NTSC machine target — correct for our engine.",
-    1: ("NTSC song expecting a PAL engine — pupil ticked PAL while "
-        "exporting; tempo will be ~20% faster than intended."),
+    1: ("Song header says PAL engine — on our NTSC-only engine this byte "
+        "maps to tempo_frame_num = 2, so the engine advances the song an "
+        "extra (double) frame on each tempo tick and it plays noticeably "
+        "faster than intended."),
     2: ("PAL song expecting an NTSC engine — pupil composed in PAL "
         "mode; tempo will run very slow on our NTSC engine."),
     3: ("PAL song on PAL engine — completely PAL-targeted; will "
@@ -125,8 +127,10 @@ def _byte_stream_after(text: str, label: str):
             if re.match(rf"^{re.escape(label)}\s*:\s*$", s):
                 started = True
             continue
-        # Stop when a different top-level label starts.
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:\s*$", s):
+        # Stop at the next label of any kind (FamiStudio's ca65 export
+        # uses cheap local labels prefixed with '@' — e.g. @instruments:,
+        # @env0:, @song0ch0: — for everything after the header table).
+        if re.match(r"^@?[A-Za-z_][A-Za-z0-9_]*\s*:", s):
             return
         m = _BYTE_RE.match(s)
         if m:
@@ -199,6 +203,21 @@ def diagnose(asm: str):
             "definition before assembly so this builds cleanly.  Nothing "
             "to fix on your side."))
 
+    # 1c. FamiStudio SFX export (not a song).  These start with
+    # `.export _sounds=sounds` and a `sounds:` .word pointer table
+    # rather than a music_data_* song-count header.  diagnose_song
+    # only understands song exports, so name the situation clearly
+    # instead of failing later with a confusing song-count message.
+    if (re.search(r"^\s*\.export\s+_sounds\b", asm, re.MULTILINE)
+            and re.search(r"^\s*sounds\s*:", asm, re.MULTILINE)):
+        findings.append(Finding(
+            'error', 'sfx-not-song',
+            "This looks like a FamiStudio *sound-effects* export "
+            "(`.export _sounds` / `sounds:`), not a song.  Upload it "
+            "in the Audio page's Sfx section, not Songs.  This tool "
+            "only diagnoses song exports."))
+        return findings
+
     # 2. Locate the music_data label.
     label, exported = _find_music_data_label(asm)
     if not label:
@@ -231,6 +250,20 @@ def diagnose(asm: str):
             f"`{first[2]}`.  Diagnostic skipped from here."))
         return findings
     song_count = first[2]
+
+    # The engine reads this as a single unsigned byte (famistudio_ca65.s
+    # cmp/bcc against the count). ca65 stores `.byte -1` as $FF, so mask
+    # to match the real assembled value, then sanity-check the range
+    # (engine comment: 17 songs max for the 5-channel layout).
+    song_count &= 0xFF
+    if song_count == 0 or song_count > 17:
+        findings.append(Finding(
+            'warn', 'implausible-song-count',
+            f"Song-count byte at line {first[0]} is {song_count}, "
+            f"which is outside the expected 1-17 range a FamiStudio "
+            f"export produces. The file is likely corrupt or not a "
+            f"valid FamiStudio Sound Engine export; re-export."))
+        return findings
 
     # 4. Multi-song with empty song-0 is the most common
     #    "music doesn't play" cause.  The editor's boot calls

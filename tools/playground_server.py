@@ -193,6 +193,8 @@ FEEDBACK_CATEGORIES = ("feature", "broken", "general")
 FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code")
 # 1 MB body cap — a project snapshot is typically 30-100 kB.
 FEEDBACK_MAX_BODY = 1024 * 1024
+# 4 MB body cap for /play — project state + custom C/asm source + audio asm.
+PLAY_MAX_BODY = 4 * 1024 * 1024
 FEEDBACK_MAX_MESSAGE = 500
 FEEDBACK_MAX_NAME = 80
 FEEDBACK_MAX_PROJECT = 80
@@ -623,7 +625,7 @@ def _nametable_bytes_for(nt):
                 tr = ar * 4 + qr * 2
                 tc = ac * 4 + qc * 2
                 pal = 0
-                if tr < len(nt) and tc < len(nt[tr]):
+                if tr < len(nt) and tc < len(nt[tr]) and isinstance(nt[tr][tc], dict):
                     pal = int(nt[tr][tc].get("palette", 0)) & 3
                 byte |= pal << (quad * 2)
             attr_out[ar * 8 + ac] = byte
@@ -1655,28 +1657,37 @@ def _world_nametable(state):
             if isinstance(cell, dict):
                 tiles[base + c] = int(cell.get("tile", 0)) & 0xFF
 
-    # Attribute table: each byte covers a 4x4 tile region split into four 2x2
-    # tile quads.  Matches the NES PPU layout per screen; we just emit it
-    # tiled across the whole world so streaming can copy one attr column per
-    # 16 px of horizontal travel.
-    acols = (cols + 3) // 4
-    arows = (rows + 3) // 4
+    # Attribute table: 8 attr rows x 8 attr cols per screen.  A NES screen is
+    # 30 tiles tall = 7.5 attribute rows, so each screen still occupies a full
+    # 8-row band (the 8th row's bottom quads cover the unused tile rows 30-31).
+    # Emit one 8x8 block per screen, each derived from THAT screen's own tile
+    # rows, laid out as a full-world grid of stride acols.  The scroll core
+    # reads bg_world_attrs[(sy*8 + rr) * acols + sx*8 + cc], so screen (sx, sy)
+    # must live at attr rows sy*8..sy*8+7 / cols sx*8..sx*8+7 — NOT a tightly
+    # packed (rows+3)//4 grid, which mis-aligned the bottom screens of
+    # vertical / 2x2 worlds and read one screen-row past the array end.
+    acols = 8 * sx
+    arows = 8 * sy
     attrs = bytearray(acols * arows)
-    for ar in range(arows):
-        for ac in range(acols):
-            byte = 0
-            for quad in range(4):
-                qr = (quad >> 1) & 1
-                qc = quad & 1
-                tr = ar * 4 + qr * 2
-                tc = ac * 4 + qc * 2
-                pal = 0
-                if tr < len(nt):
-                    row = nt[tr]
-                    if tc < len(row) and isinstance(row[tc], dict):
-                        pal = int(row[tc].get("palette", 0)) & 3
-                byte |= pal << (quad * 2)
-            attrs[ar * acols + ac] = byte
+    for screen_y in range(sy):
+        for screen_x in range(sx):
+            tile_row0 = screen_y * SCREEN_ROWS
+            tile_col0 = screen_x * SCREEN_COLS
+            for sr in range(8):
+                for sc in range(8):
+                    byte = 0
+                    for quad in range(4):
+                        qr = (quad >> 1) & 1
+                        qc = quad & 1
+                        tr = tile_row0 + sr * 4 + qr * 2
+                        tc = tile_col0 + sc * 4 + qc * 2
+                        pal = 0
+                        if tr < len(nt):
+                            row = nt[tr]
+                            if tc < len(row) and isinstance(row[tc], dict):
+                                pal = int(row[tc].get("palette", 0)) & 3
+                        byte |= pal << (quad * 2)
+                    attrs[(screen_y * 8 + sr) * acols + (screen_x * 8 + sc)] = byte
     return bytes(tiles), bytes(attrs), cols, rows, acols, arows
 
 
@@ -2741,7 +2752,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path == "/play":
-            length = int(self.headers.get("Content-Length", "0") or "0")
+            try:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+            except ValueError:
+                return self._json(400, {"ok": False, "stage": "input", "log": "bad Content-Length"})
+            if length <= 0 or length > PLAY_MAX_BODY:
+                return self._json(400, {"ok": False, "stage": "input", "log": "bad payload size"})
             raw = self.rfile.read(length)
             try:
                 body = json.loads(raw.decode("utf-8"))

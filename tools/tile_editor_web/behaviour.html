@@ -1406,10 +1406,7 @@ function renderReactions() {
   const tbody = document.createElement('tbody');
   for (let i = 0; i < state.sprites.length; i++) {
     const sp = state.sprites[i];
-    if (!state.behaviour_reactions[i]) {
-      state.behaviour_reactions[i] = defaultReactionMap(sp, i);
-    }
-    const rmap = state.behaviour_reactions[i];
+    const rmap = state.behaviour_reactions[i] || defaultReactionMap(sp, i);
     const tr = document.createElement('tr');
     tr.className = 'reactions-sprite-row';
     const nameTd = document.createElement('td');

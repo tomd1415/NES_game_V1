@@ -18,7 +18,7 @@
                 if (plrdir == 0x40) {
                     if (px >= 4) px -= 4;
                 } else {
-                    if (px < (256 - PLAYER_W * 8 - 4)) px += 4;
+                    if (px < (WORLD_W_PX - (PLAYER_W << 3) - 4)) px += 4;
                 }
                 dash_frames--;
             }

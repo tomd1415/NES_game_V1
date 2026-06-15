@@ -118,7 +118,7 @@ def read_chr(path):
 def tile_at(chr_data, tile_index):
     """Return 16 bytes for tile N (tile 0 starts at byte 0, tile 1 at byte 16, ...)."""
     offset = tile_index * 16
-    return chr_data[offset:offset + 16]
+    return bytes(chr_data[offset:offset + 16]).ljust(16, b"\x00")
 
 
 def render_sprite_frame(chr_data, tile_indices, palette_rgb, scale=12):

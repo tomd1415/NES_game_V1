@@ -26,7 +26,7 @@ src = 0
   lda #<mytiles_chr  ; load the source address into a pointer in zero page
   sta src
   lda #>mytiles_chr
-  sta src+8
+  sta src+1
 
   ldy #0       ; starting index into the first page
   sty PPUMASK  ; turn off rendering just in case

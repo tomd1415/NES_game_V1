@@ -67,6 +67,20 @@ reset:
         bit PPU_STATUS
         bpl @wait2
 
+        ; Park all 64 sprites off-screen (Y=$FF) so the 63 slots we
+        ; don't use each frame draw nothing.
+        lda #0
+        sta OAM_ADDR
+        ldx #64
+        lda #$FF
+@clr:
+        sta OAM_DATA        ; Y -> off-screen
+        sta OAM_DATA        ; tile (don't care)
+        sta OAM_DATA        ; attr (don't care)
+        sta OAM_DATA        ; X    (don't care)
+        dex
+        bne @clr
+
         jsr write_palettes
         jsr _load_background
 

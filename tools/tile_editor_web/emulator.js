@@ -191,7 +191,18 @@
     let writeIdx = 0;
     let readIdx  = 0;
 
+    // Web Audio output.  Best-effort — if the browser refuses
+    // (very old WebKit, locked-down WebView, or AudioContext
+    // creation fails) the game still runs silently.  Create the
+    // context BEFORE constructing the NES so we can pin jsnes to the
+    // context's actual granted sample rate (browsers may ignore the
+    // requested 44100 and hand back e.g. 48000); a 1:1 ring-buffer copy
+    // is only correct when producer and consumer rates match.
+    const ac = ensureAudioContext();
+    const nesSampleRate = ac ? ac.sampleRate : 44100; // deterministic default if no audio
+
     const nes = new jsnes.NES({
+      sampleRate: nesSampleRate,
       onFrame(buf) {
         for (let i = 0; i < buf.length; i++) frame[i] = 0xff000000 | buf[i];
         ctx.putImageData(img, 0, 0);
@@ -206,10 +217,6 @@
     for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
     nes.loadROM(romStr);
 
-    // Web Audio output.  Best-effort — if the browser refuses
-    // (very old WebKit, locked-down WebView, or AudioContext
-    // creation fails) the game still runs silently.
-    const ac = ensureAudioContext();
     let scriptNode = null;
     if (ac) {
       // open() always runs from a click handler, which is the

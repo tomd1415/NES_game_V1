@@ -387,7 +387,13 @@
     // Browser mode: we get rom_b64 back.  Either download or hand to
     // the page's emulator.
     if (body.rom_b64) {
-      const rom = decodeRomBase64(body.rom_b64);
+      let rom;
+      try {
+        rom = decodeRomBase64(body.rom_b64);
+      } catch (e) {
+        onStatus('error', '⚠ Server returned a corrupt ROM.');
+        return { ok: false, stage: 'decode', error: String(e) };
+      }
       if (opts.download) {
         const name = (state && state.name ? state.name : 'game')
           .replace(/[^a-zA-Z0-9_-]+/g, '_') + '.nes';

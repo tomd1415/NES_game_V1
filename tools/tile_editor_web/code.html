@@ -663,7 +663,24 @@ li.CodeMirror-hint-active {
 (function maybeRedirectToBuilder() {
   try {
     if (/[?&]stay=1\b/.test(location.search)) return;
-    const raw = localStorage.getItem('nes_tile_editor.current.v1');
+
+    // Resolve current state via the v2 catalog (storage.js migrates the
+    // legacy 'nes_tile_editor.current.v1' key into
+    // 'nes_tile_editor.project.<activeId>.current' and deletes the legacy
+    // key, so we must NOT read the legacy key directly here).
+    let raw = null;
+    try {
+      const catRaw = localStorage.getItem('nes_tile_editor.projects.v2');
+      if (catRaw) {
+        const cat = JSON.parse(catRaw);
+        if (cat && cat.activeId) {
+          raw = localStorage.getItem('nes_tile_editor.project.' + cat.activeId + '.current');
+        }
+      }
+    } catch (_) { /* fall through to legacy */ }
+    // Pre-migration fallback (first ever boot, catalog not yet created).
+    if (raw == null) raw = localStorage.getItem('nes_tile_editor.current.v1');
+
     if (!raw) {
       // No project yet — Builder is the better landing page.
       location.replace('builder.html');
@@ -1617,11 +1634,12 @@ async function play(opts) {
         }
       },
       // The Code page receives a Uint8Array directly (pipeline decoded
-      // it) whereas the existing openEmulator() takes a base64 string;
-      // re-encode to keep the emulator untouched.
+      // it).  openEmulator() / jsnes want a binary string, so convert the
+      // bytes directly — no wasteful base64 round-trip.
       onRom(rom) {
-        const b64 = romToB64(rom);
-        openEmulator(b64);
+        let romStr = '';
+        for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
+        openEmulator(romStr);
       },
     };
     if (codeLang === 'asm') pipelineOpts.customMainAsm = src;
@@ -1653,14 +1671,6 @@ async function play(opts) {
   }
 }
 
-// openEmulator on this page takes a base64 ROM string; the pipeline
-// gives us the decoded Uint8Array, so re-encode.
-function romToB64(bytes) {
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s);
-}
-
 // Click a "file(line)" span in the log to jump to that line.
 function onLogClick(e) {
   const loc = e.target.closest('.loc');
@@ -1677,7 +1687,6 @@ function onLogClick(e) {
 // because the two pages are standalone single-file apps)
 // ================================================================
 const emu = { nes: null, canvas: null, ctx: null, image: null, imgBuf32: null, running: false, paused: false, rafId: 0, currentRom: null };
-function decodeRomBase64(b64) { return atob(b64); }
 function emuFitCanvasCtx() {
   emu.ctx = emu.canvas.getContext('2d');
   emu.image = emu.ctx.getImageData(0, 0, 256, 240);
