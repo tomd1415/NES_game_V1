@@ -434,7 +434,11 @@ input[type=file] { display: none; }
         if (idx === defIdx) opt.selected = true;
         previewSel.appendChild(opt);
       });
-      previewBtn.disabled = !state.audio.sfx;
+      // Songs exist -> preview is allowed.  The build pipeline auto-stubs
+      // the missing sfx side, so a song-only project can compile and play;
+      // gating Preview on an sfx pack (the old `!state.audio.sfx`) wrongly
+      // blocked music-only previews.
+      previewBtn.disabled = false;
     }
 
     if (!state.audio.sfx) {

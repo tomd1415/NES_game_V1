@@ -7169,6 +7169,12 @@ const emu = {
   paused: false,
   rafId: 0,
   currentRom: null,     // keep so Reset can reload
+  // Audio (mirrors the shared emulator.js ring-buffer path).
+  audioCtx: null,
+  scriptNode: null,
+  sampleBuf: null,
+  writeIdx: 0,
+  readIdx: 0,
 };
 
 function decodeRomBase64(b64) {
@@ -7198,13 +7204,61 @@ function onEmuFrame(framebuffer_24) {
   emu.ctx.putImageData(emu.image, 0, 0);
 }
 
+// Audio: jsnes pushes stereo samples into a ring buffer that a
+// ScriptProcessor drains — mirrors the shared emulator.js path so audio
+// projects are no longer silent in the Sprites-page Playground preview.
+// Best-effort: with no AudioContext the game still runs (silently).
+function emuEnsureAudioContext() {
+  if (emu.audioCtx) return emu.audioCtx;
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return null;
+  try { emu.audioCtx = new Ctor({ sampleRate: 44100 }); }
+  catch (_) { try { emu.audioCtx = new Ctor(); } catch (__) { emu.audioCtx = null; } }
+  return emu.audioCtx;
+}
+
 function emuInitCore() {
   if (emu.nes) return;
+  // Pin jsnes to the context's actual sample rate (browsers may grant
+  // 48000 instead of the requested 44100); a 1:1 ring copy needs them equal.
+  emuEnsureAudioContext();
+  const rate = emu.audioCtx ? emu.audioCtx.sampleRate : 44100;
+  emu.sampleBuf = new Float32Array(8192);  // 4096 stereo frames (~93 ms @ 44.1 kHz)
+  emu.writeIdx = 0;
+  emu.readIdx = 0;
   emu.nes = new jsnes.NES({
+    sampleRate: rate,
     onFrame: onEmuFrame,
     onStatusUpdate: (s) => { /* ignored */ },
-    // onAudioSample: silence for v1 — adds an AudioContext later.
+    onAudioSample(left, right) {
+      emu.sampleBuf[emu.writeIdx] = left;
+      emu.sampleBuf[emu.writeIdx + 1] = right;
+      emu.writeIdx = (emu.writeIdx + 2) % 8192;
+    },
   });
+}
+
+// Start audio output.  Called from openEmulator, which runs inside the
+// Play-button click — the user gesture the autoplay policy requires.
+function emuStartAudio() {
+  if (!emu.audioCtx) return;
+  if (emu.audioCtx.state === 'suspended') { try { emu.audioCtx.resume(); } catch (_) {} }
+  if (emu.scriptNode) return;
+  emu.scriptNode = emu.audioCtx.createScriptProcessor(2048, 0, 2);
+  emu.scriptNode.onaudioprocess = (e) => {
+    const out0 = e.outputBuffer.getChannelData(0);
+    const out1 = e.outputBuffer.getChannelData(1);
+    for (let i = 0; i < out0.length; i++) {
+      out0[i] = emu.sampleBuf ? (emu.sampleBuf[emu.readIdx] || 0) : 0;
+      out1[i] = emu.sampleBuf ? (emu.sampleBuf[emu.readIdx + 1] || 0) : 0;
+      emu.readIdx = (emu.readIdx + 2) % 8192;
+    }
+  };
+  emu.scriptNode.connect(emu.audioCtx.destination);
+}
+function emuStopAudio() {
+  if (emu.scriptNode) { try { emu.scriptNode.disconnect(); } catch (_) {} emu.scriptNode = null; }
+  if (emu.audioCtx && emu.audioCtx.state === 'running') { try { emu.audioCtx.suspend(); } catch (_) {} }
 }
 
 const EMU_KEY_MAP = {
@@ -7269,6 +7323,7 @@ function openEmulator(romBinaryString) {
   const dlg = document.getElementById('emu-dialog');
   if (!dlg.open) dlg.showModal();
   emu.canvas.focus();
+  emuStartAudio();
   if (!emu.running) {
     emu.running = true;
     emu.rafId = requestAnimationFrame(emuLoop);
@@ -7280,6 +7335,7 @@ function closeEmulator() {
   if (emu.rafId) cancelAnimationFrame(emu.rafId);
   emu.running = false;
   emu.rafId = 0;
+  emuStopAudio();
   const dlg = document.getElementById('emu-dialog');
   if (dlg.open) dlg.close();
 }

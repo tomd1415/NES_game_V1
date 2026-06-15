@@ -190,7 +190,7 @@ GALLERY_SOURCE_PAGES = ("builder", "code")
 GALLERY_FILES = ("rom.nes", "preview.png", "project.json", "metadata.json")
 
 FEEDBACK_CATEGORIES = ("feature", "broken", "general")
-FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code")
+FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code", "builder")
 # 1 MB body cap — a project snapshot is typically 30-100 kB.
 FEEDBACK_MAX_BODY = 1024 * 1024
 # 4 MB body cap for /play — project state + custom C/asm source + audio asm.
@@ -785,6 +785,7 @@ def build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y):
         ".define ROLE_PROJECTILE 7",
         ".define ROLE_DECORATION 8",
         ".define ROLE_OTHER      9",
+        ".define ROLE_HUD        10",
     ]
     if n == 0:
         data += [
@@ -2778,16 +2779,30 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._gallery_remove_response()
         return self.send_error(404)
 
-    def _feedback(self):
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        if length <= 0 or length > FEEDBACK_MAX_BODY:
-            return self._json(400, {"ok": False, "error": "bad payload size"})
+    def _read_json_body(self, max_bytes):
+        """Read and JSON-parse a POST body, returning (dict, None) on
+        success or (None, error_message) on failure.  Guards a malformed
+        or out-of-range Content-Length the same way the /play branch does,
+        so the feedback/gallery handlers return clean 400 JSON instead of
+        throwing on a non-numeric Content-Length."""
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            return None, "bad payload size"
+        if length <= 0 or length > max_bytes:
+            return None, "bad payload size"
         try:
             body = json.loads(self.rfile.read(length).decode("utf-8"))
         except Exception:
-            return self._json(400, {"ok": False, "error": "bad JSON"})
+            return None, "bad JSON"
         if not isinstance(body, dict):
-            return self._json(400, {"ok": False, "error": "bad JSON"})
+            return None, "bad JSON"
+        return body, None
+
+    def _feedback(self):
+        body, err = self._read_json_body(FEEDBACK_MAX_BODY)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
 
         category = body.get("category")
         if category not in FEEDBACK_CATEGORIES:
@@ -2837,15 +2852,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(html)
 
     def _feedback_toggle_handled(self):
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        if length <= 0 or length > 4096:
-            return self._json(400, {"ok": False, "error": "bad payload size"})
-        try:
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
-        except Exception:
-            return self._json(400, {"ok": False, "error": "bad JSON"})
-        if not isinstance(body, dict):
-            return self._json(400, {"ok": False, "error": "bad JSON"})
+        body, err = self._read_json_body(4096)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
         try:
             idx = int(body.get("index"))
         except Exception:
@@ -2909,15 +2918,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return True
 
     def _gallery_publish_response(self):
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        if length <= 0 or length > GALLERY_MAX_BODY:
-            return self._json(400, {"ok": False, "error": "bad payload size"})
-        try:
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
-        except Exception:
-            return self._json(400, {"ok": False, "error": "bad JSON"})
-        if not isinstance(body, dict):
-            return self._json(400, {"ok": False, "error": "bad JSON"})
+        body, err = self._read_json_body(GALLERY_MAX_BODY)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
         try:
             with GALLERY_LOCK:
                 meta = _gallery_publish(body)
@@ -2929,15 +2932,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self._json(200, {"ok": True, "slug": meta["slug"], "metadata": meta})
 
     def _gallery_remove_response(self):
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        if length <= 0 or length > 4096:
-            return self._json(400, {"ok": False, "error": "bad payload size"})
-        try:
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
-        except Exception:
-            return self._json(400, {"ok": False, "error": "bad JSON"})
-        if not isinstance(body, dict):
-            return self._json(400, {"ok": False, "error": "bad JSON"})
+        body, err = self._read_json_body(4096)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
         slug = _gallery_safe_slug(body.get("slug"))
         if slug is None:
             return self._json(400, {"ok": False, "error": "bad slug"})

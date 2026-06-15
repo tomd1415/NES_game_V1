@@ -636,6 +636,7 @@ li.CodeMirror-hint-active {
       <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> D-pad</span>
       <span><kbd>Z</kbd> B · <kbd>X</kbd> A</span>
       <span><kbd>Enter</kbd> Start · <kbd>Shift</kbd> Select</span>
+      <span>P2: <kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd> · <kbd>U</kbd> B · <kbd>O</kbd> A · <kbd>1</kbd>/<kbd>2</kbd></span>
       <span><kbd>F</kbd> fullscreen · <kbd>P</kbd> pause · <kbd>R</kbd> reset</span>
     </div>
     <div class="emu-actions">
@@ -1563,8 +1564,8 @@ function renderBuildLog(log) {
   const esc = (s) => s.replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   const lines = (log || '').split('\n');
   const out = lines.map((raw) => {
-    // src/main.c(42): Error: some message
-    const m = raw.match(/^(.*?\.(?:c|h|inc))\((\d+)\):\s*(Error|Warning|Note):\s*(.*)$/);
+    // src/main.c(42): Error: some message  (also src/main.s, src/scene.asminc, …)
+    const m = raw.match(/^(.*?\.(?:asminc|asm|inc|c|h|s))\((\d+)\):\s*(Error|Warning|Note):\s*(.*)$/);
     if (m) {
       const [, file, ln, kind, msg] = m;
       const klass = kind === 'Error' ? 'err' : (kind === 'Warning' ? 'warn' : '');
@@ -1686,7 +1687,8 @@ function onLogClick(e) {
 // In-browser emulator (same as sprites.html — shared logic, duplicated
 // because the two pages are standalone single-file apps)
 // ================================================================
-const emu = { nes: null, canvas: null, ctx: null, image: null, imgBuf32: null, running: false, paused: false, rafId: 0, currentRom: null };
+const emu = { nes: null, canvas: null, ctx: null, image: null, imgBuf32: null, running: false, paused: false, rafId: 0, currentRom: null,
+              audioCtx: null, scriptNode: null, sampleBuf: null, writeIdx: 0, readIdx: 0 };
 function emuFitCanvasCtx() {
   emu.ctx = emu.canvas.getContext('2d');
   emu.image = emu.ctx.getImageData(0, 0, 256, 240);
@@ -1697,23 +1699,91 @@ function onEmuFrame(fb) {
   for (let i = 0; i < fb.length; i++) emu.imgBuf32[i] = 0xFF000000 | fb[i];
   emu.ctx.putImageData(emu.image, 0, 0);
 }
+// Audio: jsnes pushes stereo samples into a ring buffer that a
+// ScriptProcessor drains — mirrors the shared emulator.js path so audio
+// projects are no longer silent in the Code-page preview.  Best-effort:
+// if the browser has no AudioContext the game still runs (silently).
+function emuEnsureAudioContext() {
+  if (emu.audioCtx) return emu.audioCtx;
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return null;
+  try { emu.audioCtx = new Ctor({ sampleRate: 44100 }); }
+  catch (_) { try { emu.audioCtx = new Ctor(); } catch (__) { emu.audioCtx = null; } }
+  return emu.audioCtx;
+}
 function emuInitCore() {
   if (emu.nes) return;
-  emu.nes = new jsnes.NES({ onFrame: onEmuFrame, onStatusUpdate: () => {} });
+  // Pin jsnes to the context's *actual* sample rate (browsers may ignore
+  // the requested 44100 and grant 48000); a 1:1 ring-buffer copy is only
+  // correct when producer and consumer rates match.
+  emuEnsureAudioContext();
+  const rate = emu.audioCtx ? emu.audioCtx.sampleRate : 44100;
+  emu.sampleBuf = new Float32Array(8192);  // 4096 stereo frames (~93 ms @ 44.1 kHz)
+  emu.writeIdx = 0;
+  emu.readIdx = 0;
+  emu.nes = new jsnes.NES({
+    sampleRate: rate,
+    onFrame: onEmuFrame,
+    onStatusUpdate: () => {},
+    onAudioSample(left, right) {
+      emu.sampleBuf[emu.writeIdx] = left;
+      emu.sampleBuf[emu.writeIdx + 1] = right;
+      emu.writeIdx = (emu.writeIdx + 2) % 8192;
+    },
+  });
+}
+// Start audio output.  Called from openEmulator, which runs inside the
+// Play-button click — the user gesture the autoplay policy requires.
+function emuStartAudio() {
+  if (!emu.audioCtx) return;
+  if (emu.audioCtx.state === 'suspended') { try { emu.audioCtx.resume(); } catch (_) {} }
+  if (emu.scriptNode) return;
+  emu.scriptNode = emu.audioCtx.createScriptProcessor(2048, 0, 2);
+  emu.scriptNode.onaudioprocess = (e) => {
+    const out0 = e.outputBuffer.getChannelData(0);
+    const out1 = e.outputBuffer.getChannelData(1);
+    for (let i = 0; i < out0.length; i++) {
+      out0[i] = emu.sampleBuf ? (emu.sampleBuf[emu.readIdx] || 0) : 0;
+      out1[i] = emu.sampleBuf ? (emu.sampleBuf[emu.readIdx + 1] || 0) : 0;
+      emu.readIdx = (emu.readIdx + 2) % 8192;
+    }
+  };
+  emu.scriptNode.connect(emu.audioCtx.destination);
+}
+function emuStopAudio() {
+  if (emu.scriptNode) { try { emu.scriptNode.disconnect(); } catch (_) {} emu.scriptNode = null; }
+  if (emu.audioCtx && emu.audioCtx.state === 'running') { try { emu.audioCtx.suspend(); } catch (_) {} }
 }
 const EMU_KEY_MAP = {
-  'ArrowUp': jsnes.Controller.BUTTON_UP, 'ArrowDown': jsnes.Controller.BUTTON_DOWN,
-  'ArrowLeft': jsnes.Controller.BUTTON_LEFT, 'ArrowRight': jsnes.Controller.BUTTON_RIGHT,
-  'KeyW': jsnes.Controller.BUTTON_UP, 'KeyS': jsnes.Controller.BUTTON_DOWN,
-  'KeyA': jsnes.Controller.BUTTON_LEFT, 'KeyD': jsnes.Controller.BUTTON_RIGHT,
-  'KeyZ': jsnes.Controller.BUTTON_B, 'KeyX': jsnes.Controller.BUTTON_A,
-  'Enter': jsnes.Controller.BUTTON_START,
-  'ShiftLeft': jsnes.Controller.BUTTON_SELECT, 'ShiftRight': jsnes.Controller.BUTTON_SELECT,
+  // Player 1 — arrows or WASD to move, X = A, Z = B.
+  'ArrowUp':    { pad: 1, button: jsnes.Controller.BUTTON_UP },
+  'ArrowDown':  { pad: 1, button: jsnes.Controller.BUTTON_DOWN },
+  'ArrowLeft':  { pad: 1, button: jsnes.Controller.BUTTON_LEFT },
+  'ArrowRight': { pad: 1, button: jsnes.Controller.BUTTON_RIGHT },
+  'KeyW': { pad: 1, button: jsnes.Controller.BUTTON_UP },
+  'KeyS': { pad: 1, button: jsnes.Controller.BUTTON_DOWN },
+  'KeyA': { pad: 1, button: jsnes.Controller.BUTTON_LEFT },
+  'KeyD': { pad: 1, button: jsnes.Controller.BUTTON_RIGHT },
+  'KeyZ': { pad: 1, button: jsnes.Controller.BUTTON_B },
+  'KeyX': { pad: 1, button: jsnes.Controller.BUTTON_A },
+  'Enter': { pad: 1, button: jsnes.Controller.BUTTON_START },
+  'ShiftLeft':  { pad: 1, button: jsnes.Controller.BUTTON_SELECT },
+  'ShiftRight': { pad: 1, button: jsnes.Controller.BUTTON_SELECT },
+  // Player 2 — matches the shared emulator (emulator.js mapCode):
+  // IJKL to move, O = A, U = B, 1 = Start, 2 = Select.
+  'KeyI': { pad: 2, button: jsnes.Controller.BUTTON_UP },
+  'KeyK': { pad: 2, button: jsnes.Controller.BUTTON_DOWN },
+  'KeyJ': { pad: 2, button: jsnes.Controller.BUTTON_LEFT },
+  'KeyL': { pad: 2, button: jsnes.Controller.BUTTON_RIGHT },
+  'KeyO': { pad: 2, button: jsnes.Controller.BUTTON_A },
+  'KeyU': { pad: 2, button: jsnes.Controller.BUTTON_B },
+  'Digit1': { pad: 2, button: jsnes.Controller.BUTTON_START },
+  'Digit2': { pad: 2, button: jsnes.Controller.BUTTON_SELECT },
 };
 function onEmuKey(e, down) {
-  const btn = EMU_KEY_MAP[e.code];
-  if (btn !== undefined) { e.preventDefault();
-    if (down) emu.nes.buttonDown(1, btn); else emu.nes.buttonUp(1, btn);
+  const m = EMU_KEY_MAP[e.code];
+  if (m !== undefined) { e.preventDefault();
+    if (down) emu.nes.buttonDown(m.pad, m.button); else emu.nes.buttonUp(m.pad, m.button);
     return;
   }
   if (down && e.code === 'KeyP') { e.preventDefault(); toggleEmuPause(); }
@@ -1734,6 +1804,7 @@ function openEmulator(rom) {
   const dlg = document.getElementById('emu-dialog');
   if (!dlg.open) dlg.showModal();
   emu.canvas.focus();
+  emuStartAudio();
   if (!emu.running) {
     emu.running = true;
     emu.rafId = requestAnimationFrame(emuLoop);
@@ -1743,6 +1814,7 @@ function openEmulator(rom) {
 function closeEmulator() {
   if (emu.rafId) cancelAnimationFrame(emu.rafId);
   emu.running = false; emu.rafId = 0;
+  emuStopAudio();
   const dlg = document.getElementById('emu-dialog');
   if (dlg.open) dlg.close();
 }
