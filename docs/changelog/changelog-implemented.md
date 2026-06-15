@@ -21,6 +21,17 @@ deferred.
 
 ---
 
+## Bug sweep — 2026-06-15
+
+Whole-platform review fixed 51 of 57 verified defects (incl. the
+reported vertical/2×2 scrolling + palette corruption, a totally broken
+Code-page "Play in NES", world-Y player teleport on tall screens, OAM
+overflow, and many editor/tool/snippet bugs). Full detail, verification
+status, and the deferred §T3.1/§T3.2 scroll-streamer work:
+[`2026-06-15-bug-sweep.md`](2026-06-15-bug-sweep.md).
+
+---
+
 ## Done
 
 ### Layout & proximity (Sprites page)
