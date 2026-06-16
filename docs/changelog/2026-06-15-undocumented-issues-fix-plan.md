@@ -58,6 +58,31 @@ with no headless harness — syntax-checked and code-reviewed; manual
 browser confirmation recommended (preview a song-only project; play an
 audio project from Code and Sprites; drive P2 from the Code preview).
 
+### Follow-up (user-reported, 2026-06-15): Sprites-page "Play in NES" → "not a valid NES ROM"
+
+Clicking **Play** in the Sprites-page "Play in NES" dialog failed with
+*"Emulator callback failed: not a valid NES ROM"*.
+
+- **Cause:** the shared play pipeline's `decodeRomBase64`
+  (`play-pipeline.js`) returns a **Uint8Array**, but `sprites.html`'s
+  private `openEmulator` passed it straight to `jsnes.loadROM`, which
+  needs a **binary string** — jsnes does `data.indexOf("NES")`, which
+  returns -1 on a typed array, so it throws "Not a valid NES ROM."  (Same
+  bug class as the Code-page critical in `2026-06-15-bug-sweep.md`; the
+  Sprites page was missed there because its `openEmulator` *parameter is
+  named* `romBinaryString` while actually receiving bytes.)
+- **Fix:** `openEmulator` now converts the bytes to a binary string via
+  `String.fromCharCode` (tolerating a string too) and stores the string in
+  `emu.currentRom`, so both **Play** and **Reset** load a valid ROM.
+- **Verified:** reproduced the throw with a Uint8Array and confirmed the
+  converted binary string loads + runs frames in jsnes (Node, real
+  `game.nes`).  Audited every page: all others use the shared
+  `NesEmulator.open` (which converts) or already convert inline
+  (`builder.html` thumbnail path); `code.html` was fixed in the earlier
+  sweep.  Added a `run-all.mjs` guard ("private-emulator pages convert ROM
+  bytes to a binary string for jsnes") so a regression on either page
+  fails the suite.
+
 ---
 
 The remainder of this document is the original repair plan (kept for the

@@ -7313,10 +7313,21 @@ function emuLoop() {
   emu.rafId = requestAnimationFrame(emuLoop);
 }
 
-function openEmulator(romBinaryString) {
+function openEmulator(rom) {
   emuInitCore();
-  emu.currentRom = romBinaryString;
-  emu.nes.loadROM(romBinaryString);
+  // jsnes.loadROM wants a *binary string* (one char per byte).  The shared
+  // play pipeline hands us a Uint8Array (decodeRomBase64 -> Uint8Array),
+  // which jsnes rejects with "Not a valid NES ROM." because it does
+  // data.indexOf("NES") — that returns -1 on a typed array.  Convert here
+  // (tolerating a string too) and stash the string so Reset reloads a valid
+  // ROM as well.
+  let romStr = rom;
+  if (typeof rom !== 'string') {
+    romStr = '';
+    for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
+  }
+  emu.currentRom = romStr;
+  emu.nes.loadROM(romStr);
   emu.paused = false;
   document.getElementById('btn-emu-pause').textContent = '⏸ Pause';
 

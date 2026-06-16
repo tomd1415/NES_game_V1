@@ -332,6 +332,29 @@ check('invariant: btn-sprite-dup handler clones tile pixels (not just sprite str
   }
 }) || (anyFail = true);
 
+// Private emulators must convert the ROM bytes to a binary string.
+//
+// The shared play pipeline (play-pipeline.js `decodeRomBase64`) hands the
+// page's `onRom` callback a *Uint8Array*.  jsnes `loadROM` wants a *binary
+// string* — internally it does `data.indexOf("NES")`, which returns -1 on a
+// typed array, so it throws "Not a valid NES ROM." (surfaced in the UI as
+// "Emulator callback failed: not a valid NES ROM").  Pages that drive their
+// own jsnes instance instead of `NesEmulator.open(...)` (sprites.html and
+// code.html) must convert via String.fromCharCode before loadROM.  Both
+// regressed here once: openEmulator received the raw Uint8Array.  Pure
+// source-text guard until a JSDOM/emulator harness exists.
+check('invariant: private-emulator pages convert ROM bytes to a binary string for jsnes', () => {
+  for (const p of ['sprites.html', 'code.html']) {
+    const html = fs.readFileSync(path.join(WEB, p), 'utf8');
+    if (!/\.loadROM\s*\(/.test(html)) continue;   // no private emulator → nothing to guard
+    if (!/String\.fromCharCode\(/.test(html)) {
+      throw new Error(`${p}: drives its own jsnes.loadROM but never converts the ROM ` +
+        'Uint8Array to a binary string (String.fromCharCode) — the in-browser ' +
+        '"Play in NES" will throw "Not a valid NES ROM."');
+    }
+  }
+}) || (anyFail = true);
+
 // --- Step 3: byte-identical ROM invariant ------------------------------
 //
 // Step_Playground's stock main.c compiles to a baseline ROM.  Swapping
