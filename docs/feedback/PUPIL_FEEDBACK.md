@@ -1118,3 +1118,20 @@ sub-item so a half-baked piece never blocks a pupil session.
   most likely the pupil's edit produces a compile error not
   obvious because the build-log pane doesn't auto-scroll on
   failure.  Left as `[new]` pending repro.
+- 2026-06-17 — **discovered an untranscribed feedback stream.**  The
+  in-editor *💬 Leave feedback* form (`POST /feedback`, viewable at
+  `spritemaker.co.uk/feedback`) had 25 pupil submissions dated
+  2026-04-25 → 2026-06-16 that were never recorded in the repo
+  (separate from the teacher-collected lists here).  Captured all 25
+  verbatim with per-item triage in
+  [web-feedback-2026-06.md](web-feedback-2026-06.md); filed the new
+  bugs as items 30–38 in
+  [recently-observed-bugs.md](recently-observed-bugs.md); wrote the
+  check-and-fix + new-feature plan in
+  [2026-06-17-web-feedback-fixes.md](../plans/current/2026-06-17-web-feedback-fixes.md).
+  Headline open bugs: enemies ignore solid tiles (bug 30), gallery
+  dialogue garbage (bug 31), trigger green-screen `PPU_MASK` (bug 33),
+  jump animation silently plays walk on a size mismatch (bug 38).
+  Headline new features: spawn-on-hit (T2.9), enemy speed (T2.5),
+  checkpoints, background region copy/paste, character bob, infinite
+  runner (T3.4).

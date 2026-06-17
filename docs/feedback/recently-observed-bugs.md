@@ -324,3 +324,146 @@ byte-identical on 1×1).  Player 2's landing snap fixed the same way.
   NESfont).  The ROM runs in every emulator/flashcart we use; a
   conformance clean-up (drop NESfont or correct the header byte)
   is lower-value than the link/crt0 risk, so deferred.
+
+---
+
+## Web-form feedback bugs — 2026-06-17 (items 30–38)
+
+Filed from the in-editor *💬 Leave feedback* form (the live
+`/feedback` viewer), which had never been transcribed into the repo.
+Full verbatim quotes + per-item triage are in
+[`web-feedback-2026-06.md`](web-feedback-2026-06.md); the fix plan is
+[`../plans/current/2026-06-17-web-feedback-fixes.md`](../plans/current/2026-06-17-web-feedback-fixes.md).
+Root causes below were verified against the current code on 2026-06-17.
+
+30. **Enemy sprites pass through solids and through each other; jitter
+    "one to the side".**  (Feedback F1a + F10, reporter K.)  Walker /
+    chaser AI in `tools/tile_editor_web/builder-modules.js` (`scene`
+    module, lines ~409–434) steps `ss_x`/`ss_y` by a hard-coded `+= 1`
+    and **never calls `behaviour_at()`**, so enemies ignore
+    SOLID_GROUND / WALL / PLATFORM.  Walkers only reverse at the
+    *screen edge* using a literal `255` (should be `WORLD_W_PX`), which
+    also causes the one-pixel jitter for a sprite spawned near the
+    right edge.  No enemy-vs-enemy test at all.  The "don't bounce off
+    block" half (F10) is the same missing-`behaviour_at()` gap.
+    Status: **OPEN**, plan §B-1.
+
+31. **NPC dialogue glitches the stage, especially on gallery projects.**
+    (Feedback F1b + F23, reporters K and A.)  Dialogue draws text as
+    **raw ASCII tile indices** (`A` = 0x41 …) and restores cleared rows
+    from `bg_nametable_0[]` only.  A gallery-loaded project usually has
+    no glyph tiles painted at 0x41–0x5A, so the box shows garbage; the
+    "split-second glitch" is the `PPU_MASK = 0` render-off window in
+    `draw_text` plus the single-background clear-restore (it always
+    reads bg 0, not the current room).  See `platformer.c`
+    `draw_text` / `clear_text_row` and the `vblank_writes` dialogue
+    block in `builder-modules.js`.  This is the still-open half of the
+    long-standing **item 28**.  Status: **OPEN**, plan §B-2.
+
+32. **Deleting the 2nd sprite animation appears to delete the 1st.**
+    (Feedback F1c, reporter K.)  The delete handlers in `sprites.html`
+    (`removeAnimFrame`, line ~4039; `btn-anim-del`, line ~4145) splice
+    the *selected* item and read index-correct.  The suspicious line is
+    the post-delete re-selection
+    `selectedAnimId = state.animations[Math.max(0, idx - 1)].id`
+    (≈4156): after deleting animation #2 it selects #1, which can *look*
+    like the wrong one was removed.  **Do not fix blind.**  Status:
+    **NEEDS REPRO** — capture the exact pupil steps (frame strip vs the
+    animation list?  Which item was actually gone after?) below before
+    any change.  Plan §B-3.
+
+33. **Trigger / win freeze turns the whole screen green.**  (Feedback
+    F5, reporter K.)  `win_condition` module freeze writes
+    `PPU_MASK = 0x1F | 0x20` (= 0x3F) — the comment intends "greyscale +
+    pale-red emphasis", but jsnes maps `(mask >> 5) & 7 == 1` to a solid
+    **green** backdrop fill.  `builder-modules.js` ≈1305–1309.  The
+    death tint `0x1F | 0x80` (= 0x9F) hits the same path → blue.  Fix:
+    drop the greyscale bit (`0x1E | 0x20` for win, `0x1E | 0x80` for
+    death) and confirm the tint in jsnes, which renders emphasis as a
+    flat fill rather than an NTSC wash.  Status: **OPEN** (high
+    confidence), plan §B-4.
+
+34. **Collision feels "1 pixel across" when pressing Start.**  (Feedback
+    F6, reporter K.)  The engine reads no Start/pause button anywhere,
+    so the button can't move collision.  Most likely the one-time
+    landing-snap (`platformer.c` ≈737 / `main.c` ≈487:
+    `py = (foot_row << 3) - (PLAYER_H << 3)`) that rounds the player to
+    a tile boundary on the first grounded frame, perceived as a shift on
+    the first input.  The 8-bit truncation that *did* teleport tall
+    worlds was fixed in the June sweep.  Status: **NEEDS REPRO** on
+    FCEUX — is it the spawn snap or an emulator input artefact?  Plan
+    §B-5.
+
+35. **Enemy contact can kill the player instantly.**  (Feedback F9,
+    reporter A.)  The current `damage` module (`builder-modules.js`
+    ≈568–644) decrements HP by `DAMAGE_AMOUNT`, sets
+    `player_iframes = INVINCIBILITY_FRAMES` (default 30) and only dies
+    at HP 0, with an `else if (player_iframes > 0) iframes--` gate that
+    blocks repeat hits — so one touch = one hit.  The report predates
+    this i-frame handling.  Only still reproduces if a pupil sets
+    *Invincibility frames* to **0** (schema `min: 0`), where every
+    overlapping frame re-hits.  Status: **VERIFY**, then optionally
+    raise the schema minimum to ~10.  Plan §B-6.
+
+36. **Arrow keys drive both the page and the emulator (focus theft).**
+    (Feedback F12 + F25, reporters D and M.)  Both page-level keydown
+    handlers now bail while the emulator dialog is open — Backgrounds
+    `index.html` ≈4374 and Sprites `sprites.html` ≈8546 both do
+    `if (document.getElementById('emu-dialog')?.open) return;` — and the
+    shared `emulator.js` owns its own window listeners.  The latest
+    commit (`26fbb82` "running game from the sprite page") fixed a
+    *different* bug (ROM byte-format); keyboard capture was resolved
+    earlier.  Status: **VERIFY** closed on both pages; confirm no page
+    that opens a *private* emulator uses a different dialog id than the
+    guard checks.  Plan §B-9.
+
+37. **"My game keeps crashing" / "emulator froze for no reason."**
+    (Feedback F2, F11, F13; reporters D and A.)  Generic, no repro.
+    OAM-overflow guards from the June sweep cover the scene-sprite and
+    HUD fill loops, but the player / Player-2 OAM loops
+    (`platformer.c` ≈999 and ≈1099) are **unguarded** (bounded by sprite
+    size, so only a risk with a very large player), and the in-browser
+    jsnes frame loop (`emulator.js` ≈287) has **no watchdog** — a
+    malformed/oversized ROM or a tight vblank can hang it with no
+    recovery banner.  Status: **NEEDS REPRO** + harden (bound the
+    player loops; add a jsnes try/catch + frame-time watchdog).  Plan
+    §B-10.
+
+38. **A jump animation plays the walk (or another) animation in the
+    air.**  (Feedback F16, reporter T.)  `_resolve_animation` in
+    `tools/playground_server.py` (≈863–892) **silently drops** any
+    animation frame whose sprite size differs from the player's
+    `(PLAYER_W, PLAYER_H)` and returns `None` if none match, so the
+    server emits `JUMP_FRAME_COUNT 0`.  The engine only plays the jump
+    animation when that count `> 0` (`main.c` ≈538 / `platformer.c`
+    ≈790) and otherwise falls through to `anim_mode = 1` (walk).  So a
+    jump animation authored at a different sprite size plays as walk,
+    with no prominent Sprites-page warning.  Status: **OPEN**, plan
+    §B-8.
+
+### Item 32 — animation delete: reproduction questions
+
+- [ ] **Which control?** the per-frame ✕ in the animation's frame strip,
+      or the 🗑 *Delete* button on the whole animation?: _____
+- [ ] **Starting state:** how many animations in the list, how many
+      frames in the one being edited?: _____
+- [ ] **Exact step:** click which item, then which delete?: _____
+- [ ] **After:** which item was actually gone — the one clicked, or the
+      first?  Was it gone from the *list* or just no longer *selected*?: _____
+- [ ] Reproduces in a fresh project, or only this pupil's project?: _____
+
+### Item 34 — collision-on-Start: reproduction questions
+
+- [ ] **Emulator:** in-browser jsnes, FCEUX/local, or both?: _____
+- [ ] **When exactly:** the very first frame after the game boots, or
+      after pressing a specific button mid-game?: _____
+- [ ] Does the shift happen once (settle after) or every time?: _____
+- [ ] Game style (platformer / top-down) and player sprite size?: _____
+
+### Item 37 — random crash/freeze: reproduction questions
+
+- [ ] **Which page** was the game launched from?: _____
+- [ ] Roughly how many sprites on screen (could it exceed 64 OAM)?: _____
+- [ ] Does it freeze on boot, on a transition (door), or randomly?: _____
+- [ ] Is audio enabled?  Does it freeze with audio off?: _____
+- [ ] Same project every time, or different projects?: _____
