@@ -410,33 +410,91 @@
           emitted++;
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
-              ' walks side to side');
+              ' walks side to side, turning at walls and the screen edge');
           parts.push('        {');
           parts.push('            static signed char bw_dir_' + i + ' = 1;');
-          parts.push('            unsigned char bw_ew = ss_w[' + i + '] << 3;');
           parts.push('            if (bw_dir_' + i + ' > 0) {');
-          parts.push('                if (ss_x[' + i + '] + bw_ew + 1 < 255) ss_x[' + i + '] += 1;');
-          parts.push('                else bw_dir_' + i + ' = -1;');
+          parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) bw_dir_' + i + ' = -1;');
+          parts.push('                else ss_x[' + i + '] += 1;');
           parts.push('            } else {');
-          parts.push('                if (ss_x[' + i + '] > 0) ss_x[' + i + '] -= 1;');
-          parts.push('                else bw_dir_' + i + ' = 1;');
+          parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) bw_dir_' + i + ' = 1;');
+          parts.push('                else ss_x[' + i + '] -= 1;');
           parts.push('            }');
           parts.push('        }');
         } else if (sp.role === 'enemy' && ai === 'chaser') {
           emitted++;
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
-              ' chases the player');
-          parts.push('        if (ss_x[' + i + '] + 1 <= px) ss_x[' + i + '] += 1;');
-          parts.push('        else if (ss_x[' + i + '] >= px + 1) ss_x[' + i + '] -= 1;');
-          parts.push('        if (ss_y[' + i + '] + 1 <= py) ss_y[' + i + '] += 1;');
-          parts.push('        else if (ss_y[' + i + '] >= py + 1) ss_y[' + i + '] -= 1;');
+              ' chases the player, stopping at solid tiles');
+          parts.push('        if (ss_x[' + i + '] + 1 <= px) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ss_x[' + i + '] += 1;');
+          parts.push('        } else if (ss_x[' + i + '] >= px + 1) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ss_x[' + i + '] -= 1;');
+          parts.push('        }');
+          parts.push('        if (ss_y[' + i + '] + 1 <= py) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 2)) ss_y[' + i + '] += 1;');
+          parts.push('        } else if (ss_y[' + i + '] >= py + 1) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= 1;');
+          parts.push('        }');
         }
         // `static` and non-enemy roles: nothing to emit.  Pickups and
         // decorations just sit where they were placed.
       }
       if (emitted === 0) return template;  // only static instances
-      return A.appendToSlot(template, 'per_frame', parts.join('\n'));
+      // Shared collision probe for walker/chaser AI.  Emitted once into
+      // file scope (only when at least one enemy moves) so both AI kinds
+      // turn at SOLID_GROUND / WALL tiles instead of walking through them
+      // — fixes "enemies go through stuff" / "don't bounce off block".
+      const blockedHelper = [
+        '/* [builder] scene — is this scene sprite blocked from stepping 1px',
+        ' * in `dir` (0=right 1=left 2=down 3=up) by a SOLID_GROUND / WALL',
+        ' * tile or the screen edge?  Probes the whole leading edge across',
+        ' * the sprite body so a multi-tile enemy turns at a wall like the',
+        ' * player does, mirroring the player walk-collision test. */',
+        'static unsigned char bw_sprite_blocked(unsigned char sx, unsigned char sy,',
+        '                                       unsigned char sw, unsigned char sh,',
+        '                                       unsigned char dir) {',
+        '    unsigned char wpx = sw << 3;',
+        '    unsigned char hpx = sh << 3;',
+        '    unsigned char col, row, lo, hi, k, bb;',
+        '    if (dir == 0) {            /* moving right */',
+        '        if ((unsigned int)sx + wpx >= 255) return 1;',
+        '        col = (unsigned char)((sx + wpx) >> 3);',
+        '        lo = sy >> 3; hi = (unsigned char)((sy + hpx - 1) >> 3);',
+        '        for (k = lo; k <= hi; k++) {',
+        '            bb = behaviour_at((unsigned int)col, (unsigned int)k);',
+        '            if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;',
+        '        }',
+        '    } else if (dir == 1) {     /* moving left */',
+        '        if (sx == 0) return 1;',
+        '        col = (unsigned char)((sx - 1) >> 3);',
+        '        lo = sy >> 3; hi = (unsigned char)((sy + hpx - 1) >> 3);',
+        '        for (k = lo; k <= hi; k++) {',
+        '            bb = behaviour_at((unsigned int)col, (unsigned int)k);',
+        '            if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;',
+        '        }',
+        '    } else if (dir == 2) {     /* moving down */',
+        '        if ((unsigned int)sy + hpx >= 240) return 1;',
+        '        row = (unsigned char)((sy + hpx) >> 3);',
+        '        lo = sx >> 3; hi = (unsigned char)((sx + wpx - 1) >> 3);',
+        '        for (k = lo; k <= hi; k++) {',
+        '            bb = behaviour_at((unsigned int)k, (unsigned int)row);',
+        '            if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;',
+        '        }',
+        '    } else {                   /* moving up */',
+        '        if (sy == 0) return 1;',
+        '        row = (unsigned char)((sy - 1) >> 3);',
+        '        lo = sx >> 3; hi = (unsigned char)((sx + wpx - 1) >> 3);',
+        '        for (k = lo; k <= hi; k++) {',
+        '            bb = behaviour_at((unsigned int)k, (unsigned int)row);',
+        '            if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;',
+        '        }',
+        '    }',
+        '    return 0;',
+        '}',
+      ].join('\n');
+      const withHelper = A.appendToSlot(template, 'declarations', blockedHelper);
+      return A.appendToSlot(withHelper, 'per_frame', parts.join('\n'));
     },
   };
 
@@ -631,13 +689,15 @@
         '#endif',
         '        /* Game-over tint fires when every HP-enabled player is',
         '         * dead.  Single-player: P1 dead alone triggers it.  Two-',
-        '         * player: both must be down. */',
+        '         * player: both must be down.  0x1E not 0x1F — the',
+        '         * greyscale bit makes jsnes flood the screen blue here',
+        '         * (see the win_condition tint for the full explanation). */',
         '#if PLAYER_HP_ENABLED && PLAYER2_HP_ENABLED',
-        '        if (player_dead && player2_dead) PPU_MASK = 0x1F | 0x80;',
+        '        if (player_dead && player2_dead) PPU_MASK = 0x1E | 0x80;',
         '#elif PLAYER_HP_ENABLED',
-        '        if (player_dead) PPU_MASK = 0x1F | 0x80;',
+        '        if (player_dead) PPU_MASK = 0x1E | 0x80;',
         '#elif PLAYER2_HP_ENABLED',
-        '        if (player2_dead) PPU_MASK = 0x1F | 0x80;',
+        '        if (player2_dead) PPU_MASK = 0x1E | 0x80;',
         '#endif',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame', body);
@@ -1302,11 +1362,15 @@
         '            jmp_up2 = 0;',
         '            prev_pad2 = 0xFF;',
         '#endif',
-        '            // Greyscale + red emphasis via PPU_MASK: the scene',
-        '            // desaturates and tints pale red so the pupil can',
-        '            // see the game has ended.  Needs no extra art; works',
-        '            // on every NES project regardless of palette.',
-        '            PPU_MASK = 0x1F | 0x20;',
+        '            // Red emphasis via PPU_MASK tints the frozen scene',
+        '            // pale red so the pupil can see the game has ended.',
+        '            // NB: 0x1E, NOT 0x1F — bit 0 is the greyscale bit, and',
+        '            // jsnes floods the whole screen solid green when',
+        '            // greyscale + emphasis are set together (its startFrame',
+        '            // takes a switch(f_color) path only when f_dispType=1).',
+        '            // With greyscale off, emphasis is the correct subtle',
+        '            // wash on both jsnes and hardware.  Needs no extra art.',
+        '            PPU_MASK = 0x1E | 0x20;',
         '        }',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame',

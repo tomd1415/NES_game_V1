@@ -25,45 +25,50 @@ viewer on 2026-06-17 so the web stream is tracked alongside the others.
 
 ## Triage summary
 
-Legend — **OPEN**: reproduces / not addressed · **VERIFY**: very likely
-already fixed, confirm and close · **REPRO**: real but needs a reproduction
-before any code · **SHIPPED**: capability already exists (often a
-discoverability gap) · **HW-LIMIT**: bounded by NES hardware, explain ·
-**NONE**: no action (praise).
+Legend — **FIXED**: fixed 2026-06-17 (see plan + changelog) ·
+**PARTIAL**: first fix shipped, deeper work deferred · **OPEN**:
+reproduces / not addressed · **VERIFY**: very likely already fixed,
+confirm and close · **REPRO**: real but needs a reproduction before any
+code · **SHIPPED**: capability already exists (often a discoverability
+gap) · **HW-LIMIT**: bounded by NES hardware, explain · **NONE**: no
+action (praise).
 
 | #   | Date       | Who | Kind    | One-line                                            | Verdict | Plan ref |
 | --- | ---------- | --- | ------- | --------------------------------------------------- | ------- | -------- |
-| F1a | 2026-06-16 | K   | bug     | Enemies pass through solid ground / others          | OPEN    | B-1 (bug 30) |
-| F1b | 2026-06-16 | K   | bug     | Glitch when enabling NPC "talk" on a gallery project| OPEN    | B-2 (bug 31) |
+| F1a | 2026-06-16 | K   | bug     | Enemies pass through solid ground / others          | FIXED   | B-1 (bug 30) |
+| F1b | 2026-06-16 | K   | bug     | Glitch when enabling NPC "talk" on a gallery project| PARTIAL | B-2 (bug 31) |
 | F1c | 2026-06-16 | K   | bug     | Deleting the 2nd sprite animation removes the 1st   | REPRO   | B-3 (bug 32) |
 | F2  | 2026-05-19 | D   | bug     | "My game keeps crashing!"                           | REPRO   | B-10 (bug 37) |
 | F3  | 2026-05-15 | K   | feature | Scene should move to the second one (stuck on 1st)  | SHIPPED | R-1 |
 | F4  | 2026-05-15 | K   | feature | "make the squares hafe" (sub-tile / smaller squares)| HW-LIMIT| R-2 |
-| F5  | 2026-05-15 | K   | bug     | Trigger weird — the screen turns green              | OPEN    | B-4 (bug 33) |
+| F5  | 2026-05-15 | K   | bug     | Trigger weird — the screen turns green              | FIXED   | B-4 (bug 33) |
 | F6  | 2026-05-15 | K   | bug     | Collision "1 pixel across" when pressing Start      | REPRO   | B-5 (bug 34) |
 | F7  | 2026-05-15 | K   | feature | Hit a block/sprite → spawn another sprite           | NEW     | R-3 |
 | F8  | 2026-05-15 | K   | feature | Change the speed for enemies                        | NEW     | R-4 |
 | F9  | 2026-05-15 | A   | bug     | Enemy attack kills you instantly                    | VERIFY  | B-6 (bug 35) |
-| F10 | 2026-05-15 | K   | bug     | Enemies don't bounce off blocks                     | OPEN    | B-1 (bug 30) |
+| F10 | 2026-05-15 | K   | bug     | Enemies don't bounce off blocks                     | FIXED   | B-1 (bug 30) |
 | F11 | 2026-05-12 | D   | bug     | "My game keeps crashing!"                           | REPRO   | B-10 (bug 37) |
 | F12 | 2026-05-08 | D   | bug     | Froze — arrow keys went to the website not emulator | VERIFY  | B-9 (bug 36) |
 | F13 | 2026-05-08 | A   | bug     | Emulator froze for no reason                        | REPRO   | B-10 (bug 37) |
 | F14 | 2026-05-05 | DD  | feature | Add more colours                                    | HW-LIMIT| R-5 |
 | F15 | 2026-05-01 | K   | general | "I like NES, very good! good job"                   | NONE    | —   |
-| F16 | 2026-05-01 | T   | bug     | Jump animation plays a different animation          | OPEN    | B-8 (bug 38) |
+| F16 | 2026-05-01 | T   | bug     | Jump animation plays a different animation          | FIXED   | B-8 (bug 38) |
 | F17 | 2026-05-01 | K   | feature | Adjust your / a sprite's speed                      | PARTIAL | R-4 |
 | F18 | 2026-05-01 | K   | feature | On hit, a sprite plays an animation that stays      | NEW     | R-6 |
 | F19 | 2026-05-01 | K   | feature | Press a button to play an animation (attack)        | NEW     | R-7 |
 | F20 | 2026-05-01 | A   | feature | Make checkpoints work                               | NEW     | R-8 |
 | F21 | 2026-05-01 | A   | feature | Copy and paste background elements                  | NEW     | R-9 |
 | F22 | 2026-05-01 | D   | feature | Character bob when walking                          | NEW     | R-10 |
-| F23 | 2026-04-29 | A   | bug     | Dialogue glitches the stage when adding letters     | OPEN    | B-2 (bug 31) |
+| F23 | 2026-04-29 | A   | bug     | Dialogue glitches the stage when adding letters     | PARTIAL | B-2 (bug 31) |
 | F24 | 2026-04-28 | A   | feature | Infinite-runner game mode                           | NEW     | R-11 (=T3.4) |
 | F25 | 2026-04-25 | M   | bug     | Movement keys navigate tileset when run from Backgrounds | VERIFY | B-9 (bug 36) |
 
 **Counts:** 12 bug reports (collapsing to 9 distinct defects), 12 feature
-requests, 1 praise.  Of the bugs: **4 OPEN** (enemy collision, gallery
-dialogue, green-screen trigger, jump-animation), **3 REPRO**, **2 VERIFY**.
+requests, 1 praise.  Of the bugs: **3 FIXED 2026-06-17** (enemy collision
+bug 30, green-screen trigger bug 33, jump-animation bug 38), **1 PARTIAL**
+(gallery dialogue bug 31 — a no-font warning shipped, font rework deferred),
+**3 REPRO**, **2 VERIFY**.  The fixes all keep `run-all.mjs` green including
+the byte-identical-ROM invariant.
 
 ---
 

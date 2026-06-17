@@ -140,7 +140,11 @@ function makeState({ withEnemy = true, withHud = false, maxHp = 0, damage = fals
     ['iframes',            /^#define INVINCIBILITY_FRAMES 30\s*$/m],
     ['collision loop',     /\[builder\] damage/],
     ['player_hp decrement',/player_hp - DAMAGE_AMOUNT/],
-    ['blue tint on death', /PPU_MASK = 0x1F \| 0x80/],
+    // 0x1E not 0x1F: the greyscale bit (0x01) makes jsnes flood the whole
+    // screen solid blue (its startFrame takes a switch(f_color) path only
+    // when f_dispType=1).  With greyscale off, 0x80 is a correct blue
+    // emphasis on both jsnes and hardware.  See docs bug 33 / web-feedback F5.
+    ['blue tint on death', /PPU_MASK = 0x1E \| 0x80/],
   ]) {
     if (!re.test(out)) {
       console.error('FAIL A2: missing ' + label); process.exit(1);

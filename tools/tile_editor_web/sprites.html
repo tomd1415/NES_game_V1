@@ -539,6 +539,9 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
   align-items: center;
 }
 .anim-assignments select { max-width: 110px; }
+.anim-assign-warn { margin-top: 6px; color: var(--warn); font-size: 0.85em;
+  line-height: 1.4; max-width: 360px; }
+.anim-assign-warn div { margin-top: 3px; }
 
 /* --- Composite sprite canvas ------------------------------ */
 .sprite-canvas-wrap {
@@ -1939,6 +1942,7 @@ details.collapsible > summary .sub-count {
             <select id="anim-assign-jump" title="Which animation to play while jumping (UP held) in the Play-in-NES test. Auto-filled by Player + Jump tagged animations."></select>
           </label>
         </div>
+        <div id="anim-assign-warn" class="anim-assign-warn" style="display:none" role="status"></div>
       </div>
     </details>
   </section>
@@ -4046,6 +4050,34 @@ function removeAnimFrame(frameIdx) {
   renderAnimations();
 }
 
+// The player sprite the build resolves PLAYER_W/PLAYER_H from.  Mirrors the
+// server default (playerSpriteIdx 0) but prefers a role==='player' sprite so
+// the size we warn against matches what actually gets built.
+function playerSpriteForAnim() {
+  const sprites = state.sprites || [];
+  if (!sprites.length) return null;
+  const byRole = sprites.findIndex(s => s.role === 'player');
+  return sprites[byRole >= 0 ? byRole : 0] || null;
+}
+
+// Count an animation's frames whose sprite footprint differs from the
+// player's.  The server's _resolve_animation silently DROPS those frames
+// (all frames must share PLAYER_W×PLAYER_H), so a jump animation built at a
+// different size compiles to JUMP_FRAME_COUNT 0 and the engine falls back to
+// the walk/standing pose — which pupils report as "jump plays a different
+// animation."  Surfacing the mismatch turns a silent drop into a fixable hint.
+function animFrameSizeMismatch(anim, player) {
+  if (!anim || !player) return 0;
+  const sprites = state.sprites || [];
+  let bad = 0;
+  for (const fi of (anim.frames || [])) {
+    const sp = sprites[fi];
+    if (!sp) continue;
+    if (sp.width !== player.width || sp.height !== player.height) bad++;
+  }
+  return bad;
+}
+
 function renderAnimationAssignments() {
   for (const kind of ['walk', 'jump']) {
     const sel = document.getElementById('anim-assign-' + kind);
@@ -4064,6 +4096,36 @@ function renderAnimationAssignments() {
       sel.appendChild(opt);
     }
     sel.value = current == null ? '' : String(current);
+  }
+  // Warn when an assigned animation has frames that aren't the player size —
+  // those frames are dropped at build time, so the animation won't play.
+  const warnEl = document.getElementById('anim-assign-warn');
+  if (warnEl) {
+    const player = playerSpriteForAnim();
+    const msgs = [];
+    for (const kind of ['walk', 'jump']) {
+      const aid = state.animation_assignments[kind];
+      if (aid == null) continue;
+      const anim = state.animations.find(a => a.id === aid);
+      const bad = animFrameSizeMismatch(anim, player);
+      if (bad > 0) {
+        const one = bad === 1;
+        msgs.push('⚠ The ' + kind + ' animation has ' + bad + ' frame' +
+          (one ? '' : 's') + ' that ' + (one ? "isn't" : "aren't") +
+          ' the player size (' + player.width + '×' + player.height +
+          ' tiles). ' + (one ? 'That frame is' : 'Those frames are') +
+          ' skipped when you Play, so ' + kind +
+          ' falls back to standing/walking. Make every ' + kind +
+          ' frame the same size as the player sprite.');
+      }
+    }
+    warnEl.innerHTML = '';
+    warnEl.style.display = msgs.length ? '' : 'none';
+    for (const m of msgs) {
+      const d = document.createElement('div');
+      d.textContent = m;
+      warnEl.appendChild(d);
+    }
   }
 }
 

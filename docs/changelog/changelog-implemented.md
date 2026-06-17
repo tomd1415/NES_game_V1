@@ -21,6 +21,48 @@ deferred.
 
 ---
 
+## Web-form feedback fixes — 2026-06-17
+
+Triaged 25 previously-untranscribed pupil submissions from the in-editor
+feedback form (`spritemaker.co.uk/feedback`) — see
+[`docs/feedback/web-feedback-2026-06.md`](../feedback/web-feedback-2026-06.md),
+bugs 30–38 in
+[`docs/feedback/recently-observed-bugs.md`](../feedback/recently-observed-bugs.md),
+and the plan
+[`docs/plans/current/2026-06-17-web-feedback-fixes.md`](../plans/current/2026-06-17-web-feedback-fixes.md).
+Shipped the four highest-confidence bug fixes; `tools/builder-tests/run-all.mjs`
+stays green including the byte-identical-ROM invariant, with a new guard per fix.
+
+- **Trigger / game-over screen turned solid green (bug 33, feedback F5).**
+  The win-freeze and player-death tints wrote `PPU_MASK = 0x1F | 0x20` /
+  `0x1F | 0x80`.  The `0x01` greyscale bit sends jsnes down a
+  `switch(f_color)` screen-flood path (verified in `jsnes.min.js`), painting
+  the whole screen green (win) / blue (death).  Now `0x1E | 0x20` /
+  `0x1E | 0x80` — greyscale off — so the intended subtle red/blue emphasis
+  renders correctly in jsnes (`setEmphasis`) and on hardware.
+  (`builder-modules.js`; `chunk-a-hp-hud.mjs` expectation updated.)
+- **Enemies walked through walls / didn't bounce off blocks (bug 30,
+  feedback F1a + F10).**  Walker + chaser scene-AI stepped position with no
+  `behaviour_at()` probe.  Added a shared `bw_sprite_blocked()` helper
+  (emitted into the file-scope `declarations` slot only when an enemy moves,
+  so the byte-identical baseline is untouched); walkers reverse and chasers
+  stop at SOLID_GROUND / WALL tiles and the screen edge.  (`builder-modules.js`.)
+- **A jump animation silently played the walk animation (bug 38,
+  feedback F16).**  The server drops animation frames whose size ≠ the
+  player's, emitting `JUMP_FRAME_COUNT 0` → engine falls back to walk.  The
+  Sprites page now warns under the walk/jump assignment dropdowns when an
+  assigned animation has wrong-size frames, naming how many are skipped.
+  (`sprites.html` — `animFrameSizeMismatch`.)
+- **NPC dialogue showed garbage on gallery projects (bug 31, feedback
+  F1b + F23) — partial.**  Dialogue renders text as raw ASCII tile indices,
+  so a project with no font painted at 0x41–0x5A shows garbage.  Added a
+  `dialogue-no-font` validator that warns (naming the blank-tile count) when
+  dialogue is enabled without the needed glyph tiles.  The deeper fix
+  (auto-seed a CHR font; restore the current room's nametable on close) stays
+  deferred with items 11 / 28.  (`builder-validators.js`.)
+
+---
+
 ## Bug sweep — 2026-06-15
 
 Whole-platform review fixed 51 of 57 verified defects (incl. the

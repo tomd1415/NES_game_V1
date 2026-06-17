@@ -346,7 +346,16 @@ Root causes below were verified against the current code on 2026-06-17.
     also causes the one-pixel jitter for a sprite spawned near the
     right edge.  No enemy-vs-enemy test at all.  The "don't bounce off
     block" half (F10) is the same missing-`behaviour_at()` gap.
-    Status: **OPEN**, plan §B-1.
+    **Resolved 2026-06-17:** walker + chaser AI now probe the leading
+    edge across the sprite body via a shared `bw_sprite_blocked()`
+    helper (emitted once into the `declarations` slot), reversing
+    (walker) / stopping (chaser) at SOLID_GROUND / WALL tiles and the
+    screen edge instead of walking through them.  The literal `255`
+    screen clamp was kept (correct — `ss_x` is a u8 single-screen
+    coord, not a world coord).  Guarded in `run-all.mjs`; byte-identical
+    baseline unaffected (helper only emits when an enemy moves).
+    Enemy-vs-enemy overlap remains a follow-up (needs an AABB pass).
+    Plan §B-1.
 
 31. **NPC dialogue glitches the stage, especially on gallery projects.**
     (Feedback F1b + F23, reporters K and A.)  Dialogue draws text as
@@ -358,7 +367,14 @@ Root causes below were verified against the current code on 2026-06-17.
     reads bg 0, not the current room).  See `platformer.c`
     `draw_text` / `clear_text_row` and the `vblank_writes` dialogue
     block in `builder-modules.js`.  This is the still-open half of the
-    long-standing **item 28**.  Status: **OPEN**, plan §B-2.
+    long-standing **item 28**.  **Partially resolved 2026-06-17:** a new
+    `dialogue-no-font` validator (`builder-validators.js`) now warns —
+    naming how many tiles are blank — when dialogue is enabled but the
+    glyph tiles its text needs aren't painted, turning silent garbage
+    into a clear "paint a font at 0x41–0x5A" message.  The deeper fix
+    (auto-seeding a font into CHR and restoring the *current* room's
+    nametable on close) stays deferred as item 11 / 28 territory.
+    Guarded in `run-all.mjs`.  Plan §B-2.
 
 32. **Deleting the 2nd sprite animation appears to delete the 1st.**
     (Feedback F1c, reporter K.)  The delete handlers in `sprites.html`
@@ -380,8 +396,14 @@ Root causes below were verified against the current code on 2026-06-17.
     death tint `0x1F | 0x80` (= 0x9F) hits the same path → blue.  Fix:
     drop the greyscale bit (`0x1E | 0x20` for win, `0x1E | 0x80` for
     death) and confirm the tint in jsnes, which renders emphasis as a
-    flat fill rather than an NTSC wash.  Status: **OPEN** (high
-    confidence), plan §B-4.
+    flat fill rather than an NTSC wash.  **Resolved 2026-06-17:** win
+    freeze now emits `PPU_MASK = 0x1E | 0x20` and death `0x1E | 0x80` —
+    dropping the greyscale bit (0x01), which is the bit that sent jsnes
+    down its `f_dispType=1` screen-flood path.  With greyscale off the
+    intended subtle red/blue emphasis renders correctly via jsnes
+    `setEmphasis` and on hardware.  Verified against the jsnes source;
+    `chunk-a-hp-hud.mjs` updated + a `run-all.mjs` guard added.  Plan
+    §B-4.
 
 34. **Collision feels "1 pixel across" when pressing Start.**  (Feedback
     F6, reporter K.)  The engine reads no Start/pause button anywhere,
@@ -438,8 +460,14 @@ Root causes below were verified against the current code on 2026-06-17.
     animation when that count `> 0` (`main.c` ≈538 / `platformer.c`
     ≈790) and otherwise falls through to `anim_mode = 1` (walk).  So a
     jump animation authored at a different sprite size plays as walk,
-    with no prominent Sprites-page warning.  Status: **OPEN**, plan
-    §B-8.
+    with no prominent Sprites-page warning.  **Resolved 2026-06-17:**
+    the Sprites page now shows a warning under the walk/jump assignment
+    dropdowns when an assigned animation has frames that aren't the
+    player size, naming how many will be skipped and why — so the silent
+    drop becomes a fixable hint (`renderAnimationAssignments` /
+    `animFrameSizeMismatch`).  Rendering a differently-sized jump pose
+    in-engine stays a deferred enhancement.  Guarded in `run-all.mjs`.
+    Plan §B-8.
 
 ### Item 32 — animation delete: reproduction questions
 

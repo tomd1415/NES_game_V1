@@ -27,7 +27,13 @@ three are concrete fixes ready to write; the middle two are verify-then-
 close; the last four need a reproduction with the pupil before any code (the
 project's standing rule — see item 16's "don't fix blind" note).
 
-### B-4 — Trigger / win freeze turns the screen green  ⭐ do first
+### B-4 — Trigger / win freeze turns the screen green  ✅ DONE 2026-06-17
+
+> **Shipped 2026-06-17.**  Win freeze → `PPU_MASK = 0x1E | 0x20`, death →
+> `0x1E | 0x80` (dropped the greyscale bit 0x01 that triggered jsnes's
+> screen-flood path; the intended red/blue emphasis now renders correctly
+> via jsnes `setEmphasis` + on hardware).  `chunk-a-hp-hud.mjs` expectation
+> updated; `run-all.mjs` guard added; suite green.
 
 - **Feedback:** F5 (K).  **Bug item:** 33.  **Status:** OPEN, high confidence.
 - **Root cause:** `tools/tile_editor_web/builder-modules.js` ≈1305–1309 —
@@ -49,7 +55,15 @@ project's standing rule — see item 16's "don't fix blind" note).
 - **Success:** stepping on a trigger shows a readable end-state tint (not
   full green) in the browser preview; death tint likewise.
 
-### B-1 — Enemies pass through solids / don't bounce off blocks  ⭐
+### B-1 — Enemies pass through solids / don't bounce off blocks  ✅ DONE 2026-06-17
+
+> **Shipped 2026-06-17.**  Walker + chaser AI now probe the leading edge
+> across the sprite body via a shared `bw_sprite_blocked()` helper (emitted
+> into the `declarations` slot), reversing/stopping at SOLID_GROUND / WALL
+> and the screen edge.  Kept the literal `255` clamp (`ss_x` is a u8
+> single-screen coord — `WORLD_W_PX` would overflow it).  Enemy-vs-enemy
+> overlap is the remaining follow-up.  `run-all.mjs` guard added; suite
+> green incl. byte-identical.
 
 - **Feedback:** F1a + F10 (K).  **Bug item:** 30.  **Status:** OPEN, high
   confidence.  Two pupil reports → one root cause.
@@ -75,7 +89,15 @@ project's standing rule — see item 16's "don't fix blind" note).
   solids; no one-pixel edge jitter.  (Enemy-vs-enemy overlap is out of scope
   here — note it as a follow-up; needs an AABB pass.)
 
-### B-8 — A "jump" animation plays the walk animation in the air  ⭐
+### B-8 — A "jump" animation plays the walk animation in the air  ✅ DONE 2026-06-17
+
+> **Shipped 2026-06-17 (part 1 — the warning).**  The Sprites page now shows
+> a warning under the walk/jump assignment dropdowns when an assigned
+> animation has frames that aren't the player size (it names how many are
+> skipped and why), so the server's silent frame-drop becomes a fixable
+> hint.  `renderAnimationAssignments` / `animFrameSizeMismatch` in
+> `sprites.html`; `run-all.mjs` guard added.  Part 2 (rendering a
+> differently-sized jump pose in-engine) stays a deferred enhancement.
 
 - **Feedback:** F16 (T).  **Bug item:** 38.  **Status:** OPEN, high confidence.
 - **Root cause:** `tools/playground_server.py` `_resolve_animation`
@@ -105,7 +127,17 @@ project's standing rule — see item 16's "don't fix blind" note).
 - **Success:** a pupil who builds a jump animation either sees it play, or is
   told *why* it didn't — never a silent swap to walk.
 
-### B-2 — NPC dialogue glitches the stage, esp. on gallery projects
+### B-2 — NPC dialogue glitches the stage, esp. on gallery projects  ✅ PARTIAL 2026-06-17
+
+> **Shipped 2026-06-17 (the warning half).**  A new `dialogue-no-font`
+> validator (`builder-validators.js`) inspects the bg tile pool and warns —
+> naming how many glyph tiles are blank — when dialogue is enabled but the
+> letters its text needs aren't painted at 0x41–0x5A, so the silent garbage
+> becomes an actionable "paint a font" message.  `run-all.mjs` guard added.
+> The deeper rework below (auto-seed a font into CHR; restore the *current*
+> room's nametable on close) is **still deferred** — it overlaps the
+> deferred dialogue/CHR items (11 / 28) and needs the font-asset + a careful
+> ROM-byte review.
 
 - **Feedback:** F1b + F23 (K, A).  **Bug item:** 31.  **Status:** OPEN.  This
   is the still-open half of the long-standing **item 28** / the June sweep's
@@ -317,11 +349,11 @@ respawn half overlaps R-8.
 
 ## Part C — Recommended sequencing
 
-1. **Session 1 — three concrete bug fixes (one editor/codegen sweep):**
-   **B-4** (green screen — tiny, highest confidence) → **B-1** (enemy
-   collision/bounce — two reports) → **B-8** part 1 (jump-animation warning).
-   All three touch `builder-modules.js` / `playground_server.py` and ship
-   with `run-all.mjs` guards.
+1. ~~**Session 1 — three concrete bug fixes (one editor/codegen sweep):**
+   **B-4** (green screen) → **B-1** (enemy collision/bounce) → **B-8** part 1
+   (jump-animation warning).~~  ✅ **Shipped 2026-06-17**, plus **B-2** part 1
+   (the dialogue-no-font warning) brought forward from Session 3.  All four
+   ship with `run-all.mjs` guards; suite green incl. byte-identical.
 2. **Session 2 — verify-and-close + a quick win:** **B-6** (confirm + harden
    i-frame schema), **B-9** (confirm keyboard focus on Backgrounds), **R-10**
    (character bob).  Low-risk, closes three feedback items and ships a
@@ -330,8 +362,10 @@ respawn half overlaps R-8.
    checklists for **B-3**, **B-5**, **B-10** (and ask K for the "and others"
    from F1).  Apply the B-10 hardening (player-loop OAM bound + jsnes
    watchdog) regardless, since it's repro-independent.
-4. **Session 3 — dialogue:** **B-2** (font-guarantee + current-room restore),
-   which also advances long-standing item 28 and deferred item 11.
+4. **Session 3 — dialogue (remaining half):** **B-2** font-guarantee
+   (auto-seed a CHR font when dialogue is on) + current-room nametable
+   restore.  The no-font *warning* already shipped in Session 1; this is the
+   deeper rework that advances long-standing item 28 and deferred item 11.
 5. **Feature track (slot alongside the above):** **R-1**/**R-5** nudges
    (cheap, high pupil value), then the Tier-2 builds **R-4 → R-3 → R-6/R-7**,
    then **R-8**, **R-9**.  **R-11** (infinite runner) and the R-2 metatile

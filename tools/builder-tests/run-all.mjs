@@ -355,6 +355,73 @@ check('invariant: private-emulator pages convert ROM bytes to a binary string fo
   }
 }) || (anyFail = true);
 
+// --- Web-feedback fixes 2026-06-17 -------------------------------------
+//
+// Guards for the three "ready to fix" web-form feedback bugs.  See
+// docs/feedback/web-feedback-2026-06.md and
+// docs/plans/current/2026-06-17-web-feedback-fixes.md.
+
+// B-4 (feedback F5, bug 33): the win / death tint must never set the
+// greyscale bit (0x01) together with a colour-emphasis bit (0x20 / 0x80).
+// jsnes floods the whole screen solid green/blue in that combination —
+// its startFrame takes a `switch(f_color)` path only when f_dispType=1 —
+// so 0x1F|0x20 turned every trigger green.  0x1E (rendering on, no
+// greyscale) keeps the intended subtle red/blue emphasis on jsnes + hardware.
+check('invariant: builder win/death tint uses 0x1E (no greyscale bit with emphasis)', () => {
+  const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
+  const bad = mods.match(/PPU_MASK = 0x1F \| 0x[0-9A-Fa-f]+/g) || [];
+  if (bad.length) {
+    throw new Error('builder-modules.js emits ' + bad.length +
+      ' `PPU_MASK = 0x1F | 0xNN` tint(s) — the greyscale bit makes jsnes flood ' +
+      'the screen; use 0x1E | 0xNN (web-feedback bug 33)');
+  }
+  if (!/PPU_MASK = 0x1E \| 0x20/.test(mods) || !/PPU_MASK = 0x1E \| 0x80/.test(mods)) {
+    throw new Error('builder-modules.js is missing the corrected win (0x1E|0x20) / ' +
+      'death (0x1E|0x80) tint — did the win_condition / damage tint change shape?');
+  }
+}) || (anyFail = true);
+
+// B-1 (feedback F1 + F10, bug 30): walker + chaser enemy AI must probe
+// solid tiles via bw_sprite_blocked() so enemies turn at walls instead of
+// walking through them.  The helper goes into the declarations slot; both
+// AI kinds call it.
+check('invariant: scene enemy AI probes solids via bw_sprite_blocked', () => {
+  const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
+  if (!/static unsigned char bw_sprite_blocked\(/.test(mods)) {
+    throw new Error('builder-modules.js no longer emits the bw_sprite_blocked() helper — ' +
+      'walker/chaser enemies will walk through walls again (web-feedback bug 30)');
+  }
+  if (!/bw_sprite_blocked\(ss_x\[/.test(mods)) {
+    throw new Error('scene walker/chaser AI no longer calls bw_sprite_blocked(...) — ' +
+      'enemies will ignore SOLID_GROUND / WALL tiles (web-feedback bug 30)');
+  }
+}) || (anyFail = true);
+
+// B-8 (feedback F16, bug 38): the Sprites page must warn when an assigned
+// walk/jump animation has frames that aren't the player size, because the
+// server silently drops those frames (JUMP_FRAME_COUNT 0 → jump plays walk).
+check('invariant: sprites.html warns on player-size animation frame mismatch', () => {
+  const html = fs.readFileSync(path.join(WEB, 'sprites.html'), 'utf8');
+  if (!/animFrameSizeMismatch\s*\(/.test(html) || !/anim-assign-warn/.test(html)) {
+    throw new Error('sprites.html no longer computes the animation size-mismatch warning — ' +
+      'a wrong-size jump animation will silently play as walk (web-feedback bug 38)');
+  }
+}) || (anyFail = true);
+
+// B-2 (feedback F1b + F23, bug 31): the Builder must warn when dialogue is
+// enabled but the project has no font glyphs painted at the ASCII tile slots,
+// because the dialogue box renders raw ASCII tile indices and shows garbage
+// on a project (e.g. from the gallery) that never painted a font.
+check('invariant: builder-validators.js flags dialogue with no painted font', () => {
+  const v = fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8');
+  if (!/dialogue-no-font/.test(v) || !/function dialogueNoFont\(/.test(v)) {
+    throw new Error('builder-validators.js no longer has the dialogue-no-font validator — ' +
+      'dialogue on a project with no font shows garbage with no warning (web-feedback bug 31)');
+  }
+}) || (anyFail = true);
+
+console.log('');
+
 // --- Step 3: byte-identical ROM invariant ------------------------------
 //
 // Step_Playground's stock main.c compiles to a baseline ROM.  Swapping

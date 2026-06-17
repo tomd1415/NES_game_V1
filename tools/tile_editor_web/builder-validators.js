@@ -333,6 +333,70 @@
       };
     },
 
+    // V17b (web-feedback F1b / F23, bug 31): dialogue is on but the letter
+    // tiles its text needs aren't painted on the Backgrounds page.  Dialogue
+    // renders each character as the background tile at its ASCII index
+    // (A = 0x41 … Z = 0x5A), so a project with no font in those slots — which
+    // is most gallery projects — shows garbage tiles / a flicker instead of
+    // words.  Warn (not error) so a pupil mid-build can still Play, but knows
+    // exactly why the box looks broken.
+    function dialogueNoFont(state) {
+      if (!moduleEnabled(state, 'dialogue')) return null;
+      const d = moduleNode(state, 'dialogue');
+      const cfg = (d && d.config) || {};
+      const texts = [cfg.text, cfg.text2, cfg.text3];
+      // Per-NPC override text lives on NPC-role scene instances as `text`.
+      const sceneNode = moduleNode(state, 'scene');
+      const insts = (sceneNode && sceneNode.config &&
+        Array.isArray(sceneNode.config.instances))
+        ? sceneNode.config.instances : [];
+      const sprites = state.sprites || [];
+      for (const inst of insts) {
+        if (!inst) continue;
+        const sp = sprites[inst.spriteIdx];
+        if (sp && sp.role === 'npc' && typeof inst.text === 'string') {
+          texts.push(inst.text);
+        }
+      }
+      // The distinct glyph tiles the text needs (space 0x20 is the blank
+      // background tile, which is correctly empty — skip it).
+      const needed = new Set();
+      for (const t of texts) {
+        if (!t) continue;
+        for (let i = 0; i < t.length; i++) {
+          const code = t.charCodeAt(i) & 0xFF;
+          if (code !== 0x20) needed.add(code);
+        }
+      }
+      if (needed.size === 0) return null;   // blank text → V17 covers it
+      const bgTiles = state.bg_tiles || [];
+      function tileBlank(idx) {
+        const tile = bgTiles[idx];
+        if (!tile || !Array.isArray(tile.pixels)) return true;
+        for (const rowPx of tile.pixels) {
+          if (Array.isArray(rowPx)) {
+            for (const p of rowPx) { if (p) return false; }
+          }
+        }
+        return true;
+      }
+      let missing = 0;
+      needed.forEach(idx => { if (tileBlank(idx)) missing++; });
+      if (missing === 0) return null;       // a font is painted — all good
+      const one = missing === 1;
+      return {
+        id: 'dialogue-no-font',
+        severity: 'warn',
+        message: 'Dialogue is on but ' + missing + ' of the letter tiles it ' +
+          'needs ' + (one ? 'is' : 'are') + ' blank — the text box will show ' +
+          'garbage instead of words.',
+        fix: 'On the Backgrounds page, paint a letter font in the ASCII tile ' +
+          'slots (A = tile 0x41 … Z = 0x5A, 0 = 0x30 … 9 = 0x39). Each glyph ' +
+          'goes in the slot that matches its code.',
+        jumpTo: 'index.html',
+      };
+    },
+
     // V18: doors with targetBgIdx set beyond the painted
     // backgrounds → room swap would reference a nonexistent
     // bg_nametable_<n>[].  Error because the build will actually
