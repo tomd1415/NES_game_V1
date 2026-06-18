@@ -8,3 +8,7 @@ scene.inc
 # Pupil feedback log + handled-set (local teacher state)
 feedback.jsonl
 feedback-handled.json
+
+# Python bytecode cache
+__pycache__/
+*.pyc

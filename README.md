@@ -200,11 +200,13 @@ storage. The other formats are there for the cc65 build.
 | `.nam` / `.pal` | backgrounds | Nametable + palette bytes for cc65 |
 | `sprites.inc` / `sprites.h` | sprites | C arrays compiled into the game |
 
-### 📝 Or: text editor (type digits)
+### 📝 Or: text editor (type digits — legacy)
 
-If you prefer typing, edit `assets/pupil/my_tiles.txt` directly. Open it
-alongside `preview.png` and run **Tasks: Run Task → Start Live Tile
-Preview** — every save refreshes the preview image.
+The visual editor is the main path. The older text-file workflow still works
+if you prefer typing: edit `assets/pupil/my_tiles.txt` directly, open it
+alongside `preview.png`, and in a terminal run
+`python3 tools/tile_editor.py assets/pupil/my_tiles.txt --watch` — every save
+refreshes the preview image.
 
 To move a text-format file into the visual editor, run
 `python3 tools/convert_my_tiles.py` and then on each page click

@@ -30,7 +30,8 @@
         "editor.renderWhitespace": "none",
         "editor.minimap.enabled": true,
         "files.associations": {
-            "*.s": "asm-collection",
+            "*.s": "ca65",
+            "*.inc": "c",
             "*.chr": "binary",
             "*.nam": "binary",
             "*.pal": "binary"

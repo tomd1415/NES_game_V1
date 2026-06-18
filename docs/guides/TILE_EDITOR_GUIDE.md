@@ -114,13 +114,18 @@ If you see _"is the server running?"_ in the status bar, run the
 
 ---
 
-## Text editor — the 60-second version
+## Text editor — the 60-second version (legacy)
 
-Prefer typing? Edit `assets/pupil/my_tiles.txt` directly.
+The visual editor above is the main path.  This older text-file workflow
+still works if you prefer typing — edit `assets/pupil/my_tiles.txt` directly.
 
 1. Open **`my_tiles.txt`** and **`preview.png`** side-by-side.
-2. Press **Ctrl+Shift+P → "Tasks: Run Task" → "Start Live Tile Preview"**.
+2. In a terminal, run
+   `python3 tools/tile_editor.py assets/pupil/my_tiles.txt --watch`.
 3. Every **Ctrl+S** refreshes the preview image.
+
+To bring a text file into the visual editor, run
+`python3 tools/convert_my_tiles.py` (see TEACHER_GUIDE.md).
 
 ### What the file looks like
 

@@ -42,7 +42,8 @@
         "workbench.tree.indent": 16,
 
         "files.associations": {
-            "*.s": "asm-collection",
+            "*.s": "ca65",
+            "*.inc": "c",
             "*.chr": "binary",
             "*.nam": "binary",
             "*.pal": "binary"
@@ -63,15 +64,20 @@
             "**/*.o": true,
             "**/.git": true,
             "**/.gitignore": true,
+            "**/.vscode": true,
+            "**/.claude": true,
             "**/Makefile": true,
-            "**/nes.cfg": true,
             "**/cfg": true,
             "**/tools": true,
             "**/assets/palettes": true,
             "**/reset.s": true,
             "**/*.code-workspace": true,
             "**/TEACHER_GUIDE.md": true,
-            "**/ASEPRITE_WORKFLOW.md": true
+            "**/ASEPRITE_WORKFLOW.md": true,
+            "docs/plans": true,
+            "docs/changelog": true,
+            "docs/feedback": true,
+            "docs/reference": true
         },
 
         "better-comments.tags": [
