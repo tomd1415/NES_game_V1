@@ -98,7 +98,9 @@ function makeEverythingState() {
   // Scene AI: enemy walks, npc + pickup sit (index-aligned with sceneSprites).
   m.scene.config.instances = [
     { id: 'e', spriteIdx: 2, x: 96,  y: 120, ai: 'walker' },
-    { id: 'n', spriteIdx: 3, x: 140, y: 120, ai: 'static' },
+    // Per-NPC override text → exercises BW_DIALOG_PER_NPC=1 (the dialogue
+    // vblank path that had a cc65 declaration-after-statement bug).
+    { id: 'n', spriteIdx: 3, x: 140, y: 120, ai: 'static', text: 'HELLO THERE' },
     { id: 'p', spriteIdx: 4, x: 180, y: 120, ai: 'static' },
   ];
   return s;

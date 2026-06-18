@@ -58,6 +58,20 @@ frame-model rework, 16×16 metatiles, asm-path reconciliation.
   half of B-2 — the "split-second stage glitch" from `draw_text`'s main-loop
   forced-blank — is the deferred frame-model rework, Sprint 5.)*
 
+### Follow-up — per-NPC dialogue cc65 build error (2026-06-18)
+
+A pupil project with **per-NPC override dialogue text** failed to build with
+`src/main.c(NNNN): Error: Expression expected … Undefined symbol: 'dlg_total'`.
+Cause: the dialogue vblank block declared `dlg_total` *after* the
+`#if BW_DIALOG_PER_NPC` block, which emits an `if (...)` statement — and cc65's
+default standard is C89, where a declaration may not follow a statement in the
+same block.  It only triggered when `BW_DIALOG_PER_NPC` was 1 (an NPC has its
+own text), so existing tests (whose NPC had no override) never hit it.  Fixed
+by declaring `dlg_total` up front with the other locals and assigning it later
+(`builder-modules.js`).  `all-modules.mjs` now gives its NPC override text so
+the per-NPC path is compiled every run.  **Note for future codegen work: keep
+all C declarations before the first statement in any emitted block.**
+
 ---
 
 ## Web-form feedback fixes — 2026-06-17
