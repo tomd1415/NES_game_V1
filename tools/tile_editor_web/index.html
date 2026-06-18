@@ -2623,11 +2623,12 @@ function renderFloatingTileset() {
     const cy = Math.floor(i / cols) * cell;
     const tile = state.bg_tiles[i];
     const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
+    const isGlyphSlot = dialogueModuleOn() && DIALOGUE_GLYPH_SLOTS.has(i);
     if (!anyPixel) {
-      ctx.fillStyle = '#1a1630';
+      ctx.fillStyle = isGlyphSlot ? '#3a1822' : '#1a1630';   // red = reserved letter slot
       ctx.fillRect(cx, cy, cell, cell);
       if (cell >= 14) {
-        ctx.fillStyle = '#4a4270';
+        ctx.fillStyle = isGlyphSlot ? '#a35068' : '#4a4270';
         ctx.font = Math.max(8, Math.floor(cell * 0.4)) + 'px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -2658,6 +2659,22 @@ function renderFloatingTileset() {
       ctx.strokeStyle = 'rgba(60,60,80,0.6)';
       ctx.lineWidth = 1;
       ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
+    }
+    // Conflict: a letter slot painted over but not confirmed as the pupil's own.
+    if (isGlyphSlot && anyPixel && !glyphConfirmed(i)) {
+      ctx.strokeStyle = '#ff5575';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx + 1, cy + 1, cell - 2, cell - 2);
+      if (cell >= 10) {
+        const f = Math.max(5, Math.min(9, Math.floor(cell * 0.4)));
+        ctx.fillStyle = '#ff5575';
+        ctx.beginPath();
+        ctx.moveTo(cx + cell - f, cy);
+        ctx.lineTo(cx + cell, cy);
+        ctx.lineTo(cx + cell, cy + f);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
     if (i === 0 && cell >= 12) {
       const badgeH = Math.max(9, Math.floor(cell * 0.36));

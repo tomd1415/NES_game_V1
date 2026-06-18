@@ -374,11 +374,18 @@ Root causes below were verified against the current code on 2026-06-17.
     no painting (pupil art in an occupied slot is preserved); the assembler
     uppercases text at emit so lowercase input matches, and the old
     `dialogue-no-font` warning became `dialogue-unsupported-chars`.  Verified
-    by `dialogue-font.mjs` (inspects the built ROM's CHR).  **Still deferred:**
-    the "split-second stage glitch" — `draw_text`/`clear_text_row` force-blank
-    from the *main loop* instead of the engine's single vblank window — is the
-    frame-model rework (codegen plan Sprint 5 / item 11).  Plan §B-2; codegen
-    plan `2026-06-18-codegen-rework-implementation.md`.
+    by `dialogue-font.mjs` (inspects the built ROM's CHR).  **Scrolling
+    visibility resolved 2026-06-18 (was item 11):** a pupil with a multi-screen
+    background saw the box open but no text — the dialogue drew to *fixed* NT0
+    coords, which fall off a scrolled screen.  The vblank draw now anchors to
+    the live camera under `#ifdef SCROLL_BUILD` (world tile `(cam_x>>3)+col,
+    (cam_y>>3)+row`; nametable flip at col 32 / row 30; restore from
+    `bg_world_tiles[]`); `pauseOnOpen` keeps the camera still while open.
+    Verified by address math (on-screen x 12 vs the old off-screen −156) +
+    `dialogue-scroll.mjs` (2×1 compile) + round2 A9b.  **Still deferred (minor):**
+    the brief forced-blank flash when the box opens (the vblank `PPU_MASK=0`
+    window) — cosmetic, part of the frame-model rework (codegen plan Sprint 5).
+    Plan §B-2; codegen plan `2026-06-18-codegen-rework-implementation.md`.
 
 32. **Deleting the 2nd sprite animation appears to delete the 1st.**
     (Feedback F1c, reporter K.)  The delete handlers in `sprites.html`

@@ -440,6 +440,36 @@ check('invariant: dialogue ships a built-in font + uppercases + warns on unsuppo
   }
 }) || (anyFail = true);
 
+// 2026-06-18 — the dialogue font character set is defined in THREE places that
+// must agree: `_DIALOGUE_FONT` (playground_server.py — the actual CHR font),
+// `DIALOGUE_GLYPH_CHARS` (index.html — the editor's reserved-letter-tile
+// marking), and `SUPPORTED` (builder-validators.js — the unsupported-char
+// warning).  The editor set omits space (the blank background tile); the other
+// two include it.  Guard that the NON-SPACE sets are identical so they can't
+// silently drift (e.g. adding a glyph to the font but not reserving its tile).
+check('invariant: dialogue font char set agrees across server, editor + validator', () => {
+  const server = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
+  const idx = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
+  const val = fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8');
+  const serverChars = new Set();
+  let m; const re = /"(.)"\s*:\s*_glyph\(/g;
+  while ((m = re.exec(server))) serverChars.add(m[1]);
+  const idxM = idx.match(/DIALOGUE_GLYPH_CHARS\s*=\s*"([^"]*)"/);
+  const valM = val.match(/SUPPORTED\s*=\s*"([^"]*)"/);
+  if (serverChars.size === 0 || !idxM || !valM) {
+    throw new Error('could not locate _DIALOGUE_FONT / DIALOGUE_GLYPH_CHARS / SUPPORTED ' +
+      '— did one get renamed?');
+  }
+  const norm = chars => Array.from(chars).filter(c => c !== ' ').sort().join('');
+  const a = norm(serverChars), b = norm(idxM[1]), c = norm(valM[1]);
+  if (a !== b || a !== c) {
+    throw new Error('dialogue font char sets drifted (non-space):\n' +
+      '  _DIALOGUE_FONT       = ' + a + '\n' +
+      '  DIALOGUE_GLYPH_CHARS = ' + b + '\n' +
+      '  SUPPORTED            = ' + c);
+  }
+}) || (anyFail = true);
+
 console.log('');
 
 // --- Step 3: byte-identical ROM invariant ------------------------------

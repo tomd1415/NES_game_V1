@@ -564,6 +564,12 @@ def _encode_pool(tiles, label):
 #
 # Glyphs are an 8x8, 5x7 letterform drawn here as readable bitmaps; '#' is an
 # on pixel (colour 1), '.' is off (colour 0 / transparent).
+#
+# Sync note: these keys define the dialogue character set, which is mirrored in
+# two other places that must agree (enforced by a run-all.mjs guard):
+# `DIALOGUE_GLYPH_CHARS` in tools/tile_editor_web/index.html (the editor's
+# reserved-letter-tile marking, minus space) and `SUPPORTED` in
+# tools/tile_editor_web/builder-validators.js (the unsupported-char warning).
 
 def _glyph(*rows):
     """8 rows of up-to-8 chars -> an 8x8 pixel grid (0/1), padded/truncated."""

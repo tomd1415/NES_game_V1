@@ -85,10 +85,34 @@ dialogue using that character would show their art instead, with a
 **"✓ it's my letter X"** button per slot (persisted in
 `state.bg_glyph_confirmed`) or the option to move the art.  Files: `index.html`
 (`renderTileset` red marking, `updateGlyphBanner`, `confirmGlyphTile`).
-`DIALOGUE_GLYPH_CHARS` there mirrors `_DIALOGUE_FONT` (`playground_server.py`)
-and the `dialogue-unsupported-chars` validator — **keep the three in sync.**
-Editor-only; no ROM/build change (the build seed already fills blank slots and
-preserves painted ones).  *Browser UI — verify the red tint + banner visually.*
+The marking is mirrored in both the main and the floating tile palettes.
+The font character set now lives in three places — `_DIALOGUE_FONT`
+(`playground_server.py`), `DIALOGUE_GLYPH_CHARS` (`index.html`) and `SUPPORTED`
+(`builder-validators.js`) — kept honest by a `run-all.mjs` guard that fails if
+their (non-space) sets drift.  Editor-only; no ROM/build change (the build seed
+already fills blank slots and preserves painted ones).  *Browser UI — verify
+the red tint + banner visually.*
+
+### Follow-up — dialogue text invisible on scrolling maps (2026-06-18)
+
+A pupil with a **multi-screen (scrolling)** background reported the dialogue
+box opened (game paused) but **no text appeared**.  Cause: the dialogue draw
+wrote to *fixed* nametable-0 coordinates (`0x2000 + row*32 + col`); on a
+scrolled screen that lands off the visible area (e.g. at `cam_x=172` the box
+fell at screen x −156).  This is the long-deferred item 11.  Fixed by anchoring
+the box to the **current camera** under `#ifdef SCROLL_BUILD`: the world tile is
+`(cam_x>>3)+col, (cam_y>>3)+row`, mapped to the right nametable (horizontal flip
+at world col 32 → +$400, vertical at row 30 → +$800), re-pointing `PPU_ADDR` at
+the 32-tile boundary so a box straddling two screens still draws, and restoring
+cleared cells from `bg_world_tiles[]` instead of `bg_nametable_0[]`.
+`pauseOnOpen` freezes the camera while the box is up, so the computed position
+stays valid.  1×1 (non-scroll) projects keep the exact old `bg_nametable_0`
+path (byte-identical; round2 A9 unchanged).  Verified: the camera-relative
+address now lands on-screen (x 12 vs the old −156); a new
+`tools/builder-tests/dialogue-scroll.mjs` compiles a 2×1 dialogue project
+(incl. per-NPC); round2 gained an A9b guard for the `bg_world_tiles` restore.
+*The on-screen render was confirmed by the address math + compile; a live
+visual check on a scrolling game is still worth doing.*
 
 ---
 

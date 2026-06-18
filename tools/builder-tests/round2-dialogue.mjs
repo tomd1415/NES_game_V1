@@ -121,11 +121,18 @@ function mkState({ withNpc = true, dialogueOn = false, text = 'HELLO' } = {}) {
       '— restore from bg_world_tiles instead.');
     process.exit(1);
   }
-  if (!/PPU_DATA = bg_nametable_0\[dlg_src \+ dlg_j\];/.test(out)) {
-    console.error('FAIL A9: dialogue clear should write bg_nametable_0[] ' +
-      'back, not spaces or stale data.'); process.exit(1);
+  if (!/bg_nametable_0\[dlg_src_base \+ dlg_j\]/.test(out)) {
+    console.error('FAIL A9: dialogue clear (non-scroll) should restore from ' +
+      'bg_nametable_0[], not spaces or stale data.'); process.exit(1);
   }
-  console.log('✓ A dialogue assembler: HELLO → bytes emit, bg_nametable_0 restore used');
+  // Scroll builds anchor the box to the camera and restore the cleared cells
+  // from bg_world_tiles[] at the camera-relative position (web-feedback:
+  // "dialogue text not visible on a scrolling map").
+  if (!/bg_world_tiles\[dlg_src_base \+ dlg_j\]/.test(out)) {
+    console.error('FAIL A9b: dialogue clear (scroll) should restore from ' +
+      'bg_world_tiles[] at the camera-relative position.'); process.exit(1);
+  }
+  console.log('✓ A dialogue assembler: HELLO → bytes emit, bg_nametable_0 / bg_world_tiles restore used');
 }
 
 // ----- autoClose + pauseOnOpen combinations -----------------------------
