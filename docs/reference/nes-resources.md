@@ -8,8 +8,25 @@
 > each answers.  Pupils, teachers, and future contributors —
 > when something feels stuck, check here before reinventing.
 
+## Architecture & best-practice review (read this first)
+
+- **[Codegen & NES architecture review](codegen-and-nes-architecture-review.md)**
+  (2026-06-17) — how the Builder turns pupil choices into a ROM, where the
+  engine deviates from NES best practice (the NMI/frame model, metatiles, CHR
+  fonts, the vblank budget), the "should we rewrite in assembly?" verdict
+  (no — and why), and a prioritised roadmap.  The references below are the
+  evidence behind it.
+
 ## Hardware reference (start here for "why does X behave that way?")
 
+- **NESdev wiki — The frame and NMIs** — <https://www.nesdev.org/wiki/The_frame_and_NMIs>.
+  The canonical NES game-loop structure: build a VRAM-update buffer in the
+  main loop, flush it to the PPU *inside* the NMI handler during vblank, and
+  never write `$2006`/`$2007` mid-frame.  The playground engine uses a
+  simpler `waitvsync()` model instead — see the architecture review §N1/N2.
+- **NESdev wiki — PPU frame timing** — <https://www.nesdev.org/wiki/PPU_frame_timing>.
+  The ~2273-cycle NTSC vblank budget — how much you can write per frame
+  before writes spill into active render (the dialogue glitch, review §N5).
 - **NESdev wiki — PPU rendering** — <https://www.nesdev.org/wiki/PPU_rendering>.
   Authoritative cycle-accurate diagram of when the PPU fetches
   tiles, when sprite evaluation happens, and what scanline
@@ -45,6 +62,15 @@
 - **ld65 user guide** — <https://cc65.github.io/doc/ld65.html>.
   How memory areas + segments + the `.cfg` file fit together.
   Read this before debugging "memory area overflow" errors.
+- **cc65 — coding for size/speed** — <https://cc65.github.io/doc/coding.html>
+  and **ilmenit's CC65 advanced optimisations** —
+  <https://github.com/ilmenit/CC65-Advanced-Optimizations>.
+  How to write cc65 C that compiles tight (zeropage, no recursion, static
+  locals, struct-of-arrays).  Relevant to the no-optimisation tradeoff the
+  engine currently makes for byte-identical builds — review §N7/§3.1.
+- **Shiru — Programming NES games in C** — <https://shiru.untergrund.net/articles/programming_nes_games_in_c.htm>.
+  The reference write-up for the cc65-plus-neslib approach this project uses;
+  good background on where C is fine and where you drop to asm.
 
 ## Emulators / debugging
 
@@ -84,6 +110,16 @@
 - **NESdev wiki — OAM** — <https://www.nesdev.org/wiki/PPU_OAM>.
   64 sprite slots, 4 bytes each, $4014 DMA timing.  Read before
   touching the OAM build loop in `main.c` / `platformer.c`.
+- **nesdoug — Metatiles** — <https://nesdoug.com/2018/09/05/11-metatiles/>.
+  Why backgrounds are usually authored as 16×16 metatiles (2×2 tiles): a
+  metatile aligns 1:1 with attribute-table colour granularity, so palettes
+  stay correct by construction and maps shrink ~75 %.  The engine does *not*
+  do this yet — review §N4; it's the right answer to "bigger worlds" + "make
+  the squares half".
+- **NESdev wiki — Fonts** — <https://www.nesdev.org/wiki/Fonts>.
+  A font must physically exist in CHR before you can print text; reserve a
+  fixed glyph range and convert `tile = ascii − offset` at emit time.  The
+  dialogue garbage bug (web-feedback 31) is exactly this missing — review §N3.
 
 ## Tutorials worth reading end-to-end (optional, for deeper context)
 
