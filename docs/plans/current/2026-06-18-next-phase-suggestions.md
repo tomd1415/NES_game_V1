@@ -1,5 +1,12 @@
 # Next-phase suggestions — 2026-06-18
 
+> **Detailed plan.** This is the high-level set of suggestions.  The full,
+> code-grounded implementation plan to complete all of them lives in
+> [`2026-06-18-next-phase-master-plan.md`](2026-06-18-next-phase-master-plan.md)
+> (the entry point) and the five per-arc docs it links (Arc A render harness,
+> Arc B dialogue box, Arc C Tier-2 features, Arc D codegen sprints, Arc E
+> metatiles + game styles).
+
 A prioritised set of suggestions for where to take the project next, grounded
 in the recent work and the standing backlog.  Cross-references:
 [`codegen-and-nes-architecture-review.md`](../../reference/codegen-and-nes-architecture-review.md),

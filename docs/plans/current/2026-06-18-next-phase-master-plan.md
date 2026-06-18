@@ -1,0 +1,170 @@
+# Next-phase master plan — 2026-06-18
+
+The detailed, sequenced plan to complete every suggestion in
+[`2026-06-18-next-phase-suggestions.md`](2026-06-18-next-phase-suggestions.md).
+This is the **entry point**: it gives the cross-arc sequence, dependencies,
+milestones, effort, and cross-cutting work, and links to the per-arc detail.
+
+## Per-arc detailed plans
+
+| Arc | Theme | Detailed plan |
+|-----|-------|---------------|
+| **A** | Visual render-test harness | [`2026-06-18-arc-a-render-test-harness.md`](2026-06-18-arc-a-render-test-harness.md) |
+| **B** | Readable dialogue box | [`2026-06-18-arc-b-readable-dialogue-box.md`](2026-06-18-arc-b-readable-dialogue-box.md) |
+| **C** | Pupil feature backlog (Tier 2) | [`2026-06-18-arc-c-tier2-backlog.md`](2026-06-18-arc-c-tier2-backlog.md) |
+| **D** | Codegen architecture follow-through | [`2026-06-18-arc-d-codegen-followthrough.md`](2026-06-18-arc-d-codegen-followthrough.md) |
+| **E** | Metatiles + new game styles | [`2026-06-18-arc-e-metatiles-and-game-styles.md`](2026-06-18-arc-e-metatiles-and-game-styles.md) |
+
+Builds on the earlier codegen rework
+([`2026-06-18-codegen-rework-implementation.md`](2026-06-18-codegen-rework-implementation.md),
+Sprints 1–3 done) and the web-feedback fixes
+([`2026-06-17-web-feedback-fixes.md`](2026-06-17-web-feedback-fixes.md)).
+
+## Guiding rules (apply to every arc)
+1. **The byte-identical-ROM invariant is sacred.** Every engine change is
+   `#if`-gated so a no-modules ROM equals the `Step_Playground` baseline; macros
+   self-default via `#ifndef`. New module logic moves *into* the compiled engine
+   (the data-driven direction), not into emitted strings.
+2. **Verify before shipping anything visual.** The recurring failure mode is
+   visual bugs reaching pupils because the suite can't see the screen. Arc A
+   removes that — so it comes first, and every later visual change ships with a
+   render test.
+3. **One concern per change, suite green at each step.** `run-all.mjs` (incl.
+   byte-identical + the new render suites) stays green throughout.
+
+## Cross-arc dependency graph
+
+```
+            ┌─────────────────────────────────────────────┐
+            │  Arc A — render-test harness  ⭐ FIRST        │
+            │  (deterministic-spawn helper = T4)           │
+            └──────┬───────────────┬───────────────┬───────┘
+                   │ verifies       │ verifies      │ verifies
+                   ▼                ▼               ▼
+      ┌────────────────────┐  ┌──────────────┐  ┌─────────────────────┐
+      │ Arc B — dialogue   │  │ Arc C — Tier-2│  │ Arc E — metatiles + │
+      │ box (palette)      │  │ features      │  │ new game styles     │
+      └────────────────────┘  └──────┬───────┘  └──────────┬──────────┘
+                                      │ R-9 copy/paste       │ needs Arc A spawn
+                                      │ lands better on ─────┘ + (racer) -Os
+                                      ▼ the metatile grid
+      ┌──────────────────────────────────────────────────────────────┐
+      │ Arc D — codegen sprints (runs alongside; not gated by A)      │
+      │  S4 -Os (quick win) · S7 migration+asm · S5 NMI frame model   │
+      │  S7 migration makes B/C/E engine work cleaner; -Os helps racer │
+      └──────────────────────────────────────────────────────────────┘
+```
+
+**Hard dependencies:**
+- Arc B, the visual parts of Arc C (R-10 bob, R-3/R-6 spawn), and Arc E all
+  depend on **Arc A's deterministic-spawn helper** (task A-T4) to be testable.
+- Arc C **R-6** (hurt sprite) hard-depends on **R-3** (the spawn pool).
+- Arc E **racer** depends on Arc A + **`-Os` (D-S4)** + **metatiles (E §1)**.
+
+**Soft dependencies (cheaper-after, not blocking):**
+- Arc E authoring (runner tracks, racer tracks, R-9 copy/paste) is much nicer
+  **after metatiles**.
+- Arc B/C/E engine work is cleaner **after the Arc D Sprint-7 migration** (engine
+  owns the loops), but none is blocked by it.
+- Arc D Sprint 4 (`-Os`)'s *regression* side is automated by Arc A; its *visual*
+  side still wants an FCEUX/Mesen pass.
+
+## Milestones (waves)
+
+### Wave 0 — Land the current work (do first, ~0.5 day)
+A large, valuable batch is **uncommitted** (the web-feedback fixes, the dialogue
+scroll + per-NPC fixes, the editor letter-tile UI, codegen Sprints 1–3, all the
+plan docs). Branch off `main`, group into a few logical commits, land it. See
+**Cross-cutting** below.
+
+### Wave 1 — Foundation: Arc A (~4–4.5 days)
+The render-test harness + the deterministic-spawn helper + backfill render
+regressions for the four recent visual fixes (dialogue-on-scroll, tint-not-flood,
+font glyph, walker-wall-stop). **Everything after Wave 1 is verifiable.**
+
+### Wave 2 — Finish dialogue + quick wins (parallelisable, ~1–1.5 weeks)
+- **Arc B** — the readable dialogue box (verified by Arc A). Decisions to confirm:
+  full-width attribute-aligned banner (avoids palette bleed); ship "white text,
+  box body = universal_bg" now, defer the backdrop-independent dark box.
+- **Arc C quick wins in parallel:** **R-10 character bob** (Quick), **R-4 enemy
+  speed** (JS-only), **R-9 background copy/paste** (editor-only, isolated). Also
+  **Arc D Sprint 4 (`-Os`)** — a contained quick win once the byte-identical test
+  is re-founded on a golden hash; needs your FCEUX pass.
+
+### Wave 3 — The meaty features (~1.5–2 weeks)
+- **Arc C R-7** (button → attack animation) — proves the tagged-animation art
+  path; then **R-3** (spawn pool, the one new engine subsystem) + **R-6** (hurt
+  sprite, its first consumer) together; then **R-8** (checkpoints, coordinate the
+  death-tint suppression with B-4).
+- **Arc D Sprint 7** — finish the data-driven migration (`pickups`/`damage`/
+  `doors`/`scene` loops into the engine), retire the dead `events` id, reconcile
+  the asm `/play` path. Incremental, one module per change.
+
+### Wave 4 — Bigger reach (multi-week)
+- **Arc E §1 Metatiles** — server-side expansion first (E1-0 spike → E1-3), the
+  NES-side compact storage (E1-4) later/with T3.1–2.
+- **Arc E §2 Infinite-runner** — cheap once Arc A + (ideally) metatiles are in.
+- **Arc D Sprint 5 (NMI frame model)** — the deeper rework; a VRAM ring buffer is
+  *already linked* via nes.lib (`ppubuf_flush`), just bypassed — decompose into
+  (1) per-frame byte budget on the in-window Builder dialogue, (2) safe snippet
+  primitives, (3) the architecture change. Design-first.
+
+### Wave 5 — Largest initiative (own design doc)
+- **Arc E §3 Top-down racer** — angle-based velocity, rotated art, laps. Write
+  `docs/plans/current/<date>-topdown-racer.md` first; needs Arc A + `-Os` +
+  metatiles. Last.
+
+## Rough effort
+- Wave 0: ~0.5 d. Wave 1: ~4–4.5 d. Wave 2: ~1–1.5 wk. Wave 3: ~1.5–2 wk.
+- Wave 4: multi-week (metatiles is the big one; runner is small). Wave 5: its own
+  initiative.
+- **Through Wave 3 ≈ 4–5 focused weeks**; Waves 4–5 are open-ended by design.
+
+## Cross-cutting work
+
+### Commit cadence (Wave 0 — urgent)
+Everything from the recent sessions is in the working tree, uncommitted. Suggested
+grouping into commits on a branch off `main`:
+1. Web-feedback triage + bug fixes (B-1 enemy collision, B-4 tint, B-8 animation
+   warning, B-2 dialogue font) + the docs.
+2. Dialogue: per-NPC build fix + camera-relative scroll fix + the font-set sync
+   guard + tests.
+3. Editor: the letter-tile reservation UI (`index.html` + the validator + sync).
+4. Codegen rework Sprints 1–3 + the all-modules test.
+5. Config tidy-up (`.vscode`, `.code-workspace`, `.claude/settings.json`,
+   `.gitignore`, the `.pyc` untrack, the ca65 extension swap).
+6. The plan docs (this set + the architecture review + suggestions).
+End commit messages with the standard co-author trailer.
+
+### Feedback-intake cadence
+The web-form stream went untranscribed for ~2 months. Adopt a light routine — a
+periodic pass over `spritemaker.co.uk/feedback`, or a scheduled reminder — and
+record verbatim into `docs/feedback/` (per the
+[`project_web_feedback_stream`] memory). "Handled" in the viewer ≠ fixed.
+
+### Parked (Tier 4 — own design conversation, not in this plan)
+- **Tablet/mobile UX** (T4.1) — the editor assumes pointer + keyboard; in-browser
+  play assumes a keyboard.
+- **Optional accounts + cloud-saved projects** (T4.2) — biggest item; start with
+  the anonymous per-browser gallery-deletion nonce.
+Listed so they're not forgotten; each needs its own doc before code.
+
+## Open decisions flagged by the arc plans (worth settling early)
+- **Arc B:** adopt the full-width attribute-aligned banner (Option A)? Ship white
+  text now, defer the dark box?
+- **Arc C:** R-3 spawn — first trigger as damage-driven (avoids the 3-bit
+  behaviour-id-space question) before a tile/block trigger? Build R-7 before R-3
+  to prove the art path?
+- **Arc D:** Sprint 4 — re-found the byte-identical test on a frozen golden hash
+  (recommended) vs unify `main.c` with the template? Sprint 7 — generate both
+  scene includes from one source vs scope the asm path to an honest "no modules"
+  mode?
+- **Arc E:** metatiles server-side-expansion-first (recommended) before the
+  NES-side compact storage?
+
+## Suggested first three steps
+1. **Wave 0** — commit the working tree (branch off `main`).
+2. **Arc A tasks T1–T4** — the harness library + the deterministic-spawn spike
+   (the single highest-leverage thing; unblocks verifiable everything).
+3. **Arc B** + **Arc C R-10/R-4** in parallel — finish dialogue and ship two
+   visible pupil wins, all now render-tested.
