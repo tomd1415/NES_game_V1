@@ -648,6 +648,29 @@ def _dialogue_module_enabled(state):
         return False
 
 
+# Arc B — reserved dialogue box palette.  When the dialogue module is on the
+# server overrides BG sub-palette 3 (the least-used "sky" default; matches
+# BW_DIALOG_PALETTE in builder-modules.js) so the dialogue box has a KNOWN
+# readable text colour independent of whatever art the pupil painted.  The
+# emitted palette row is [universal_bg, slot0, slot1, slot2] (colour 0 is the
+# shared universal_bg), and the font's "on" pixels are colour 1 == slot0 — so
+# slot0 is the text colour.  slot0 = 0x30 (white) → white text on the
+# universal_bg box body; slot1/slot2 reserved for a future border/accent.
+DIALOGUE_BG_PALETTE = 3
+DIALOGUE_BG_PALETTE_SLOTS = [0x30, 0x16, 0x0F]   # [text=white, accent=red, 0x0F]
+
+
+def _palette_slots_for(state, group, i):
+    """Like _palette_slots, but substitutes the reserved dialogue palette for
+    BG sub-palette 3 when the dialogue module is on.  Used by the palette
+    emitters so the box text colour is guaranteed.  No-op when dialogue is off
+    (→ byte-identical baseline unaffected)."""
+    if (group == "bg_palettes" and i == DIALOGUE_BG_PALETTE
+            and _dialogue_module_enabled(state)):
+        return list(DIALOGUE_BG_PALETTE_SLOTS)
+    return _palette_slots(state, group, i)
+
+
 def _seed_dialogue_font(state):
     """Fill blank bg tiles at the font's ASCII indices with the built-in
     glyphs when the dialogue module is on.  Only blank slots are written, so
@@ -789,7 +812,7 @@ def build_palettes_inc(state):
 
     def emit(group):
         for i in range(4):
-            s = _palette_slots(state, group, i)
+            s = _palette_slots_for(state, group, i)
             row = [ubg, s[0] & 0x3F, s[1] & 0x3F, s[2] & 0x3F]
             lines.append("    " + ", ".join(f"0x{b:02X}" for b in row) + ",")
 
@@ -815,7 +838,7 @@ def build_palettes_asminc(state):
 
     def emit(group):
         for i in range(4):
-            s = _palette_slots(state, group, i)
+            s = _palette_slots_for(state, group, i)
             row = [ubg, s[0] & 0x3F, s[1] & 0x3F, s[2] & 0x3F]
             rows.append(_hex_row(row))
 

@@ -2881,6 +2881,12 @@ function renderPaletteEditor() {
   document.querySelectorAll('.pe-kind-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.kind === kindForUI);
   });
+  // Arc B: BG sub-palette 3 (shown as P3) is reserved for the dialogue box
+  // while the Dialogue module is on — the server overrides it with white text
+  // so dialogue stays readable on any project.  Surface that here so pupils
+  // don't edit it expecting an effect (mirrors the reserved letter-tile UI).
+  const DLG_RESERVED_P = 3;
+  const dlgReservesP3 = (kindForUI === 'bg' && dialogueModuleOn());
   // P0..P3 buttons (rebuild so handlers are fresh)
   const picker = document.getElementById('palette-p-picker');
   picker.innerHTML = '';
@@ -2889,8 +2895,11 @@ function renderPaletteEditor() {
     b.type = 'button';
     b.className = 'pe-p-btn';
     b.dataset.p = String(i);
-    b.textContent = 'P' + i;
-    b.title = 'Switch to ' + (kindForUI === 'bg' ? 'BG' : 'SP') + i;
+    const reservedBtn = dlgReservesP3 && i === DLG_RESERVED_P;
+    b.textContent = reservedBtn ? 'P' + i + ' 🔒' : 'P' + i;   // 🔒
+    b.title = reservedBtn
+      ? 'Reserved for the dialogue box (white text) while Dialogue is on — edits are ignored'
+      : 'Switch to ' + (kindForUI === 'bg' ? 'BG' : 'SP') + i;
     if (i === selectedPaletteIdx) b.classList.add('active');
     b.addEventListener('click', () => {
       selectedPaletteIdx = i;
@@ -2909,6 +2918,7 @@ function renderPaletteEditor() {
   // Four big slots for the active palette
   const slotsHost = document.getElementById('palette-editor-slots');
   slotsHost.innerHTML = '';
+  const slotsReserved = dlgReservesP3 && selectedPaletteIdx === DLG_RESERVED_P;
   for (let s = 0; s < 4; s++) {
     let colour;
     let readonly = false;
@@ -2916,6 +2926,7 @@ function renderPaletteEditor() {
     if (kindForUI === 'bg') {
       if (s === 0) { colour = state.universal_bg; readonly = true; }
       else colour = state.bg_palettes[selectedPaletteIdx].slots[s - 1];
+      if (slotsReserved) readonly = true;   // reserved for the dialogue box
       slot = makePaletteSlot('bg', selectedPaletteIdx, s, colour, readonly);
     } else {
       if (s === 0) { colour = -1; readonly = true; }
@@ -2925,6 +2936,15 @@ function renderPaletteEditor() {
     }
     slot.classList.add('palette-editor-slot');
     slotsHost.appendChild(slot);
+  }
+  if (slotsReserved) {
+    const note = document.createElement('div');
+    note.className = 'palette-reserved-note';
+    note.style.cssText = 'grid-column:1/-1;margin-top:6px;font-size:12px;'
+      + 'color:#cdd;background:#243;border:1px solid #486;border-radius:4px;padding:6px 8px;';
+    note.textContent = '🔒 Palette 4 is reserved for the dialogue box (white text) '
+      + 'while Dialogue is on, so text stays readable on any project. Edits here are ignored.';
+    slotsHost.appendChild(note);
   }
 }
 

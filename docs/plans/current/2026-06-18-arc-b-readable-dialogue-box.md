@@ -1,10 +1,30 @@
 # Arc B — A Readable Dialogue Box (implementation plan)
 
 *Target: `/home/duguid/projects/nesgame/attempt1` — the browser NES game maker (cc65).*
-*Status: plan only. Depends on Arc A (render-test harness) for verification.*
+*Status: ✅ IMPLEMENTED (2026-06-19). See the changelog entry. Verified with the
+Arc A render harness (`render-dialogue-box.mjs`, updated `render-dialogue-visible`,
+`round2-dialogue` guards); `run-all.mjs` green, byte-identical intact.*
 *Author context: the dialogue text was just made camera-relative for scrolling
 maps; the remaining gap is colour control. See
 `docs/plans/current/2026-06-18-next-phase-suggestions.md` §"Arc B".*
+
+> **Deviations from this plan (as built):**
+> - **User chose the full-width banner (Option A)** over the narrow box.
+> - **No dedicated box-fill tile** (as the plan's "revised, simpler"
+>   recommendation foresaw): blank `0x20` cells render colour 0 = `universal_bg`
+>   in any palette, so the box body is uniform and only the *text* cells need
+>   the reserved palette.
+> - **The banner is snapped to the attribute grid in world space** (it spans the
+>   1–2 attribute rows the text occupies, filled in full), which makes the
+>   recolour/​fill footprints identical and lets the attribute writes be
+>   whole-byte — no read-modify-write, even on scroll builds.
+> - **Verification reads the nametable + decoded attribute table + loaded
+>   palette, not the framebuffer.** jsnes mis-restores the PPU scroll after the
+>   banner's many mid-vblank writes (correct on real hardware), so the rendered
+>   framebuffer is unreliable for dialogue — but "text tiles present + region in
+>   palette 3 + palette 3 = white" proves legibility exactly.
+> - The §4.1 framebuffer pixel-sampling / contrast-threshold plan was therefore
+>   replaced by the attribute/palette assertions above.
 
 ---
 

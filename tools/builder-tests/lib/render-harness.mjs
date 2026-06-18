@@ -122,6 +122,15 @@ export function ntTile(nes, n, row, col) {
   return nt && nt.tile ? nt.tile[row * 32 + col] : undefined;
 }
 
+// Decoded BG sub-palette (0..3) selected for the tile at (row,col) of nametable
+// n.  jsnes decodes attribute writes into nameTable[n].attrib[] as palette<<2;
+// this returns the palette id.  Reliable + scroll-independent (unlike the
+// framebuffer, which jsnes mis-positions after the engine's mid-vblank writes).
+export function bgPalette(nes, n, row, col) {
+  const nt = nes.ppu.nameTable && nes.ppu.nameTable[n];
+  return nt && nt.attrib ? (nt.attrib[row * 32 + col] >> 2) : undefined;
+}
+
 // OAM sprite i (0..63): { y, tile, attr, x }.  Off-screen sprites clamp to 0xFF.
 export function oamSprite(nes, i) {
   const m = nes.ppu.spriteMem, b = i * 4;

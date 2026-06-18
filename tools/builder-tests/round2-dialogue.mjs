@@ -238,18 +238,25 @@ function assembleWithDialog(overrides) {
   if (!/static const unsigned char bw_dialogue_text_1\[\]/.test(out2)) {
     console.error('FAIL B6e: two-line config should emit bw_dialogue_text_1[]'); process.exit(1);
   }
-  // The vblank loop must iterate rows now, not bake in a single
-  // BW_DIALOG_ROW.  Look for the dlg_r-driven structure (Phase 3.3
-  // changed the bound from BW_DIALOG_ROW_COUNT to dlg_total to
-  // accommodate single-row per-NPC overrides; the BW_DIALOG_ROW_COUNT
-  // initialisation lives one line above and is checked separately).
-  if (!/for \(dlg_r = 0; dlg_r < dlg_total; dlg_r\+\+\)/.test(out2)) {
-    console.error('FAIL B6f: vblank loop should iterate dlg_total rows'); process.exit(1);
+  // The vblank loop must iterate the banner's world rows (Arc B replaced the
+  // per-text-row draw with a full-width banner spanning the text's attribute
+  // rows), and the text-row span is still bounded by dlg_total (so single-row
+  // per-NPC overrides and multi-line both work).
+  if (!/for \(dlg_wr = \(unsigned char\)0\b|for \(dlg_wr = \(unsigned int\)dlg_alo/.test(out2)) {
+    console.error('FAIL B6f: vblank loop should iterate the banner world rows (dlg_wr/dlg_alo)'); process.exit(1);
+  }
+  if (!/dlg_wr < dlg_twr0 \+ dlg_total/.test(out2)) {
+    console.error('FAIL B6f2: banner text-row span should be bounded by dlg_total'); process.exit(1);
   }
   if (!/dlg_draw_rows = BW_DIALOG_ROW_COUNT/.test(out2)) {
     console.error('FAIL B6g: vblank should default dlg_draw_rows to BW_DIALOG_ROW_COUNT'); process.exit(1);
   }
-  console.log('✓ B6 multi-line dialogue: 1- and 2-row emissions + per-row vblank loop');
+  // Arc B: the banner recolours its attribute rows to the reserved palette so
+  // the text colour is fixed (white) regardless of the scenery palette.
+  if (!/BW_DIALOG_PALETTE/.test(out2) || !/0x3C0/.test(out2)) {
+    console.error('FAIL B6h: banner should write the reserved palette to the attribute table'); process.exit(1);
+  }
+  console.log('✓ B6 multi-line dialogue: 1- and 2-row emissions + banner vblank loop + palette');
 }
 
 // Phase 3.3 — per-NPC dialogue text.

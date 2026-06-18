@@ -21,6 +21,48 @@ deferred.
 
 ---
 
+## Arc B — a readable dialogue box — 2026-06-19
+
+Implements Wave 2's "finish dialogue" item
+([`docs/plans/current/2026-06-18-arc-b-readable-dialogue-box.md`](../plans/current/2026-06-18-arc-b-readable-dialogue-box.md)).
+Closes the last dialogue gap: text used to render in whatever BG palette the
+pupil's scenery happened to use under the box, so on many projects it was
+low-contrast or invisible. Now the text colour is fixed (white) on any project.
+`run-all.mjs` green, byte-identical invariant intact. Verified with the Arc A
+render harness.
+
+- **Full-width banner (the box).** On open, the dialogue draws a solid
+  full-width band spanning the whole attribute row(s) the text occupies — every
+  cell becomes a glyph or a blank box tile (`0x20`). Because a blank cell shows
+  colour 0 = the shared `universal_bg` in *any* palette, the box body is uniform
+  without a dedicated fill tile, and because the band is fully filled, the next
+  step can recolour it with no bleed onto scenery. (Chosen over a narrow box by
+  the user — the NES 16×16 attribute granularity forces one or the other.)
+- **Reserved BG sub-palette 3 = white text.** The server overrides
+  `bg_palettes[3]` with `[0x30, 0x16, 0x0F]` when the dialogue module is on
+  (`_palette_slots_for` in `playground_server.py`), and the banner points its
+  attribute rows at palette 3. So the text is white regardless of the scenery
+  palette. Whole-byte attribute writes (the band is snapped to the 4×4 attribute
+  grid); camera-relative on scrolling maps; tiles AND attribute bytes restore on
+  close from the ROM-resident `bg_nametable_0` / `bg_world_attrs` arrays (never a
+  VRAM read-back). Gated behind `BW_DIALOGUE_ENABLED` → byte-identical-safe.
+- **Editor.** BG palette **P3** is shown reserved (🔒 + read-only slots + a
+  notice) while the Dialogue module is on, so pupils don't edit it expecting an
+  effect — mirrors the reserved letter-tile UI.
+- **Verification.** New `render-dialogue-box.mjs` drives a deliberately hostile
+  background and asserts the text is recoloured to palette 3, that palette's
+  text colour is genuinely white (jsnes `imgPalette` → `0xffffff`), the banner
+  overwrote the scenery, scenery outside the banner is untouched, and it all
+  round-trips on close — plus a 2×1 scroll-build case. `render-dialogue-visible`
+  and the `round2-dialogue` guards were updated for the banner.
+- **Harness note.** The banner issues many more mid-vblank `$2006` writes than
+  the old text path, and jsnes mis-restores the PPU scroll afterwards (correct on
+  real hardware), so the rendered framebuffer is unreliable for dialogue. The
+  render tests therefore assert on the nametable + decoded attribute table +
+  loaded palette (all exact), which together prove legibility. A separate
+  observation logged for follow-up: on a scroll build the player settles ~32px
+  higher than on a non-scroll build (a collision quirk, unrelated to dialogue).
+
 ## Arc A — render-test harness + 4 backfill suites — 2026-06-18
 
 Implements Wave 1 of the next-phase master plan
