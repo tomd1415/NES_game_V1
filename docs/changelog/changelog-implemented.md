@@ -21,6 +21,47 @@ deferred.
 
 ---
 
+## Arc A — render-test harness + 4 backfill suites — 2026-06-18
+
+Implements Wave 1 of the next-phase master plan
+([`docs/plans/current/2026-06-18-arc-a-render-test-harness.md`](../plans/current/2026-06-18-arc-a-render-test-harness.md)).
+Closes the gap that let every recent *visual* bug reach pupils: the suite
+could prove a project *compiled* and stayed *byte-identical*, but it couldn't
+*see the screen*.  `tools/builder-tests/run-all.mjs` green throughout,
+byte-identical invariant intact.
+
+- **The harness — `tools/builder-tests/lib/render-harness.mjs`.**  Boots a
+  compiled pupil ROM in jsnes headless (in Node) and reads the *rendered*
+  output: nametable tiles, OAM sprites, the RGB framebuffer, and CHR straight
+  from the ROM.  Helpers for server/build lifecycle, controller input, fixture
+  construction, and frame metrics (`countNonBg`, `dominantColor`,
+  `saturatedFraction`, `frameDiffFraction`, `chrTile`).  Lives in `lib/` so the
+  runner's `*.mjs` glob never treats it as a suite.
+- **Four backfill render regressions** for bugs that recently reached pupils:
+  `render-dialogue-visible` (B-2 — box opens on B, "HELLO" reaches the
+  nametable + screen, clears on close), `render-tint-not-flood` (B-4 — win tint
+  fires but keeps its colour; the greyscale wash-out drops the saturated-pixel
+  fraction from 0.66 to 0.22), `render-font-glyph` (B-2 — the seeded font lands
+  in the CHR and matches the engine font), and `render-walker-wall-stop` (B-1 —
+  a walker enemy bounces at a wall instead of passing through).
+- **Engine fix surfaced by the harness — dialogue VRAM burst now disables
+  rendering on non-scroll builds.**  The non-scroll dialogue path wrote its
+  vblank tile burst with rendering left on; a multi-row dialog (up to 3×28 PPU
+  writes) can overrun vblank and corrupt the PPU pointer — the bug shows as only
+  part of the text appearing.  The dialogue module now brackets the burst with
+  `PPU_MASK = 0` / `0x1E`, gated `#ifndef SCROLL_BUILD` (the scroll path already
+  clears `PPU_MASK` around the whole window) and only on draw/clear frames — so
+  it's byte-identical-safe (dialogue-off projects are unchanged).
+- **Two jsnes-fidelity findings, documented in the harness README** so future
+  render suites don't re-learn them: (1) a **one-frame input latency** — a press
+  must be held ≥2 frames before release or the engine never sees it; (2) jsnes
+  doesn't restore the PPU scroll after the engine's mid-vblank `$2006`/`$2005`
+  writes, so dialogue text renders at the wrong *scanline* (correct on real
+  hardware) — assert on nametable/OAM/CHR or scroll-independent framebuffer
+  facts, never on a fixed pixel box.  Also confirmed: `playerStart` is ignored
+  on the customMainC build path (player always spawns at `(60,120)`), so
+  positioning leans on the deterministic spawn + fall.
+
 ## Codegen rework — Sprints 1–3 — 2026-06-18
 
 Acting on the architecture review

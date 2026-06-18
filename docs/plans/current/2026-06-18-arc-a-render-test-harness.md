@@ -6,6 +6,28 @@
 > OAM sprites, and the RGB framebuffer — closing the gap where
 > `tools/builder-tests/run-all.mjs` only proves "the C compiled."
 
+**✅ Status: IMPLEMENTED (2026-06-18).** Shipped as
+`tools/builder-tests/lib/render-harness.mjs` + four suites
+(`render-dialogue-visible`, `render-tint-not-flood`, `render-font-glyph`,
+`render-walker-wall-stop`), all green in `run-all.mjs` with the byte-identical
+invariant intact. See the changelog entry and `tools/builder-tests/README.md`.
+Deviations from this plan, all empirically forced:
+
+- **T4 deterministic positioning** was solved by the *default spawn + fall* (a
+  flying NPC parked at the player's resting spot), not a teleport hook —
+  because `playerStart` turned out to be ignored on the customMainC path.
+- A **one-frame jsnes input latency** had to be encoded into `tap()` (hold ≥2
+  frames before release) — this, not positioning, was why the earlier dialogue
+  repro was "inconclusive": the press never registered.
+- The harness immediately **caught a real engine bug**: the non-scroll dialogue
+  vblank burst didn't disable rendering, so only part of the text landed. Fixed
+  in the dialogue module (`PPU_MASK=0`/`0x1E`, `#ifndef SCROLL_BUILD`,
+  draw/clear frames only — byte-identical-safe).
+- Dialogue **framebuffer-position** assertions were dropped in favour of
+  nametable/OAM/CHR + scroll-independent pixel facts: jsnes doesn't restore the
+  PPU scroll after the engine's mid-vblank `$2006`/`$2005` writes (the text
+  renders at the wrong scanline headless, but correctly on hardware).
+
 ## 1. Goal & scope
 
 ### What the current suite proves
