@@ -367,17 +367,26 @@ check('invariant: private-emulator pages convert ROM bytes to a binary string fo
 // its startFrame takes a `switch(f_color)` path only when f_dispType=1 —
 // so 0x1F|0x20 turned every trigger green.  0x1E (rendering on, no
 // greyscale) keeps the intended subtle red/blue emphasis on jsnes + hardware.
-check('invariant: builder win/death tint uses 0x1E (no greyscale bit with emphasis)', () => {
+// Updated 2026-06-18 (Sprint 2): the win/death tints moved OUT of the modules
+// and INTO the engine (platformer.c "[engine] Game-over tint") — so the
+// PPU_MASK constant lives in compiled, reviewable code, not an emitted string.
+// Guard both halves: no module string-emits a tint any more, and the engine's
+// tint keeps the greyscale bit OFF (0x1E, never 0x1F).
+check('invariant: game-over tint is engine-owned and uses 0x1E (no greyscale bit)', () => {
   const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
-  const bad = mods.match(/PPU_MASK = 0x1F \| 0x[0-9A-Fa-f]+/g) || [];
-  if (bad.length) {
-    throw new Error('builder-modules.js emits ' + bad.length +
-      ' `PPU_MASK = 0x1F | 0xNN` tint(s) — the greyscale bit makes jsnes flood ' +
-      'the screen; use 0x1E | 0xNN (web-feedback bug 33)');
+  const tpl = fs.readFileSync(TEMPLATE, 'utf8');
+  if (/PPU_MASK\s*=\s*0x1[EF]\s*\|\s*0x[0-9A-Fa-f]+/.test(mods)) {
+    throw new Error('builder-modules.js still string-emits a PPU_MASK tint — the ' +
+      'win/death tint moved into the engine (platformer.c) so the constant is ' +
+      'compiled, not typed into a string (architecture review §S1/§S2)');
   }
-  if (!/PPU_MASK = 0x1E \| 0x20/.test(mods) || !/PPU_MASK = 0x1E \| 0x80/.test(mods)) {
-    throw new Error('builder-modules.js is missing the corrected win (0x1E|0x20) / ' +
-      'death (0x1E|0x80) tint — did the win_condition / damage tint change shape?');
+  if (/PPU_MASK\s*=\s*0x1F\s*\|\s*0x[0-9A-Fa-f]+/.test(tpl)) {
+    throw new Error('platformer.c sets the greyscale bit (0x1F) with emphasis — ' +
+      'jsnes floods the whole screen green/blue; use 0x1E | 0xNN (web-feedback bug 33)');
+  }
+  if (!/PPU_MASK = 0x1E \| 0x20/.test(tpl) || !/PPU_MASK = 0x1E \| 0x80/.test(tpl)) {
+    throw new Error('platformer.c is missing the engine-owned win (0x1E|0x20) / ' +
+      'death (0x1E|0x80) game-over tint');
   }
 }) || (anyFail = true);
 
@@ -408,15 +417,26 @@ check('invariant: sprites.html warns on player-size animation frame mismatch', (
   }
 }) || (anyFail = true);
 
-// B-2 (feedback F1b + F23, bug 31): the Builder must warn when dialogue is
-// enabled but the project has no font glyphs painted at the ASCII tile slots,
-// because the dialogue box renders raw ASCII tile indices and shows garbage
-// on a project (e.g. from the gallery) that never painted a font.
-check('invariant: builder-validators.js flags dialogue with no painted font', () => {
+// B-2 (feedback F1b + F23, bug 31): dialogue must render real letters, not
+// garbage, on any project.  As of 2026-06-18 the server seeds a built-in font
+// into blank bg tiles when dialogue is on (Sprint 3), the assembler uppercases
+// text to match it, and a validator warns about characters outside the font.
+// Guard all three so the fix can't silently regress.
+check('invariant: dialogue ships a built-in font + uppercases + warns on unsupported chars', () => {
+  const server = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
+  if (!/_seed_dialogue_font\(/.test(server) || !/_DIALOGUE_FONT/.test(server)) {
+    throw new Error('playground_server.py no longer seeds a dialogue font — dialogue on a ' +
+      'project with no painted font will show garbage again (web-feedback bug 31)');
+  }
+  const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
+  if (!/toUpperCase\(\)/.test(mods.slice(mods.indexOf('function strToBytes')))) {
+    throw new Error('builder-modules.js strToBytes no longer uppercases dialogue text — ' +
+      'lowercase input will miss the uppercase built-in font and render as garbage');
+  }
   const v = fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8');
-  if (!/dialogue-no-font/.test(v) || !/function dialogueNoFont\(/.test(v)) {
-    throw new Error('builder-validators.js no longer has the dialogue-no-font validator — ' +
-      'dialogue on a project with no font shows garbage with no warning (web-feedback bug 31)');
+  if (!/dialogue-unsupported-chars/.test(v) || !/function dialogueUnsupportedChars\(/.test(v)) {
+    throw new Error('builder-validators.js no longer warns about unsupported dialogue ' +
+      'characters (web-feedback bug 31 follow-up)');
   }
 }) || (anyFail = true);
 

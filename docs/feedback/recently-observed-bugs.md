@@ -367,14 +367,18 @@ Root causes below were verified against the current code on 2026-06-17.
     reads bg 0, not the current room).  See `platformer.c`
     `draw_text` / `clear_text_row` and the `vblank_writes` dialogue
     block in `builder-modules.js`.  This is the still-open half of the
-    long-standing **item 28**.  **Partially resolved 2026-06-17:** a new
-    `dialogue-no-font` validator (`builder-validators.js`) now warns —
-    naming how many tiles are blank — when dialogue is enabled but the
-    glyph tiles its text needs aren't painted, turning silent garbage
-    into a clear "paint a font at 0x41–0x5A" message.  The deeper fix
-    (auto-seeding a font into CHR and restoring the *current* room's
-    nametable on close) stays deferred as item 11 / 28 territory.
-    Guarded in `run-all.mjs`.  Plan §B-2.
+    long-standing **item 28**.  **Garbage half resolved 2026-06-18:** the
+    server now ships a built-in UPPERCASE 8×8 font (`_DIALOGUE_FONT`) and
+    `build_chr()` seeds it into the *blank* bg tile slots at their ASCII
+    indices whenever dialogue is on, so dialogue renders real letters with
+    no painting (pupil art in an occupied slot is preserved); the assembler
+    uppercases text at emit so lowercase input matches, and the old
+    `dialogue-no-font` warning became `dialogue-unsupported-chars`.  Verified
+    by `dialogue-font.mjs` (inspects the built ROM's CHR).  **Still deferred:**
+    the "split-second stage glitch" — `draw_text`/`clear_text_row` force-blank
+    from the *main loop* instead of the engine's single vblank window — is the
+    frame-model rework (codegen plan Sprint 5 / item 11).  Plan §B-2; codegen
+    plan `2026-06-18-codegen-rework-implementation.md`.
 
 32. **Deleting the 2nd sprite animation appears to delete the 1st.**
     (Feedback F1c, reporter K.)  The delete handlers in `sprites.html`

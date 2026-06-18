@@ -974,6 +974,27 @@ void main(void) {
 
         //@ insert: per_frame
 
+        /* [engine] Game-over tint.  The modules set the flags — the damage
+         * module sets player_dead / player2_dead, win_condition sets bw_won —
+         * and the engine owns the PPU_MASK write so the constant lives in
+         * compiled, reviewable code instead of an emitted JS string (that is
+         * exactly where the 0x1F green-screen bug hid).  0x1E, NOT 0x1F: the
+         * greyscale bit (0x01) makes jsnes flood the whole screen with a solid
+         * emphasis colour (green for 0x20, blue for 0x80); with greyscale off,
+         * emphasis is the correct subtle wash on jsnes and hardware.  Every
+         * block is #if-gated, so a no-modules ROM stays byte-identical — the
+         * flags and the bw_won symbol only exist when the module is on. */
+#if PLAYER_HP_ENABLED && PLAYER2_HP_ENABLED
+        if (player_dead && player2_dead) PPU_MASK = 0x1E | 0x80;
+#elif PLAYER_HP_ENABLED
+        if (player_dead) PPU_MASK = 0x1E | 0x80;
+#elif PLAYER2_HP_ENABLED
+        if (player2_dead) PPU_MASK = 0x1E | 0x80;
+#endif
+#if BW_WIN_ENABLED
+        if (bw_won) PPU_MASK = 0x1E | 0x20;
+#endif
+
 #ifdef SCROLL_BUILD
         // Pull the camera toward the player's centre.  Clamped at world
         // edges and held steady inside the deadzone by scroll_follow()

@@ -551,6 +551,121 @@ def _encode_pool(tiles, label):
     return bytes(chunk)
 
 
+# --- Built-in dialogue font ------------------------------------------------
+#
+# Dialogue renders text as raw background tile indices (A = tile 0x41 ...),
+# so the glyphs must physically exist in the bg pattern table.  Most projects
+# (especially gallery loads) never paint a font there, which is the "dialogue
+# shows garbage" bug.  When the dialogue module is on, build_chr() seeds these
+# glyphs into the *blank* bg tile slots at their ASCII indices, so dialogue
+# "just works" without the pupil painting a font.  Pupil art already in a slot
+# is left untouched (see _seed_dialogue_font).  See the architecture review §N3
+# and docs/plans/current/2026-06-18-codegen-rework-implementation.md (Sprint 3).
+#
+# Glyphs are an 8x8, 5x7 letterform drawn here as readable bitmaps; '#' is an
+# on pixel (colour 1), '.' is off (colour 0 / transparent).
+
+def _glyph(*rows):
+    """8 rows of up-to-8 chars -> an 8x8 pixel grid (0/1), padded/truncated."""
+    out = []
+    for r in range(8):
+        row = rows[r] if r < len(rows) else ""
+        out.append([1 if c == "#" else 0 for c in row.ljust(8, ".")[:8]])
+    return out
+
+
+_DIALOGUE_FONT = {
+    " ": _glyph(),
+    "A": _glyph(".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "B": _glyph("####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."),
+    "C": _glyph(".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."),
+    "D": _glyph("####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."),
+    "E": _glyph("#####", "#....", "#....", "###..", "#....", "#....", "#####"),
+    "F": _glyph("#####", "#....", "#....", "###..", "#....", "#....", "#...."),
+    "G": _glyph(".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."),
+    "H": _glyph("#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "I": _glyph(".###.", "..#..", "..#..", "..#..", "..#..", "..#..", ".###."),
+    "J": _glyph("..###", "...#.", "...#.", "...#.", "#..#.", "#..#.", ".##.."),
+    "K": _glyph("#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"),
+    "L": _glyph("#....", "#....", "#....", "#....", "#....", "#....", "#####"),
+    "M": _glyph("#...#", "##.##", "#.#.#", "#...#", "#...#", "#...#", "#...#"),
+    "N": _glyph("#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"),
+    "O": _glyph(".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "P": _glyph("####.", "#...#", "#...#", "####.", "#....", "#....", "#...."),
+    "Q": _glyph(".###.", "#...#", "#...#", "#...#", "#.#.#", "#..#.", ".##.#"),
+    "R": _glyph("####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"),
+    "S": _glyph(".####", "#....", "#....", ".###.", "....#", "....#", "####."),
+    "T": _glyph("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."),
+    "U": _glyph("#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "V": _glyph("#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."),
+    "W": _glyph("#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"),
+    "X": _glyph("#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"),
+    "Y": _glyph("#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."),
+    "Z": _glyph("#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"),
+    "0": _glyph(".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."),
+    "1": _glyph("..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."),
+    "2": _glyph(".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"),
+    "3": _glyph("####.", "....#", "....#", ".###.", "....#", "....#", "####."),
+    "4": _glyph("...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."),
+    "5": _glyph("#####", "#....", "####.", "....#", "....#", "#...#", ".###."),
+    "6": _glyph(".###.", "#....", "#....", "####.", "#...#", "#...#", ".###."),
+    "7": _glyph("#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."),
+    "8": _glyph(".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."),
+    "9": _glyph(".###.", "#...#", "#...#", ".####", "....#", "....#", ".###."),
+    ".": _glyph("", "", "", "", "", ".##..", ".##.."),
+    ",": _glyph("", "", "", "", ".##..", ".##..", ".#..."),
+    "!": _glyph("..#..", "..#..", "..#..", "..#..", "..#..", "", "..#.."),
+    "?": _glyph(".###.", "#...#", "...#.", "..#..", "..#..", "", "..#.."),
+    "'": _glyph("..#..", "..#..", "..#..", "", "", "", ""),
+    "-": _glyph("", "", "", "#####", "", "", ""),
+    ":": _glyph("", ".##..", ".##..", "", ".##..", ".##..", ""),
+}
+
+
+def _pixels_blank(px):
+    """True if a tile's pixel grid is all zero (a paintable empty slot)."""
+    if not isinstance(px, list):
+        return True
+    for row in px:
+        if isinstance(row, list):
+            for p in row:
+                if p:
+                    return False
+    return True
+
+
+def _dialogue_module_enabled(state):
+    try:
+        mods = (state.get("builder") or {}).get("modules") or {}
+        return bool((mods.get("dialogue") or {}).get("enabled"))
+    except AttributeError:
+        return False
+
+
+def _seed_dialogue_font(state):
+    """Fill blank bg tiles at the font's ASCII indices with the built-in
+    glyphs when the dialogue module is on.  Only blank slots are written, so
+    pupil art in an occupied slot is never overwritten (the dialogue-font
+    validator warns about that case separately).  Mutates the request-scoped
+    `state` in place; a no-op when dialogue is off, so non-dialogue ROMs are
+    unchanged (and the byte-identical baseline never runs this — it builds
+    Step_Playground via make, not build_chr)."""
+    if not _dialogue_module_enabled(state):
+        return
+    bg = state.get("bg_tiles")
+    if not isinstance(bg, list):
+        return
+    for ch, glyph in _DIALOGUE_FONT.items():
+        idx = ord(ch)
+        if not (0 <= idx < len(bg)):
+            continue
+        tile = bg[idx]
+        if not isinstance(tile, dict):
+            continue
+        if _pixels_blank(tile.get("pixels")):
+            tile["pixels"] = [row[:] for row in glyph]
+
+
 def build_chr(state):
     """Two independent 256-tile pools -> 8KB CHR.
 
@@ -558,7 +673,12 @@ def build_chr(state):
     table at $1000 (second 4KB) -- matches PPU_CTRL bit 4 = 1 set by the
     step's init code. Old saves with a single `tiles` pool fall back to
     duplicating it across both tables so nothing breaks during migration.
+
+    When the dialogue module is on, a built-in font is seeded into blank bg
+    tile slots first (see _seed_dialogue_font) so dialogue text renders as
+    letters without the pupil painting a font.
     """
+    _seed_dialogue_font(state)
     if "sprite_tiles" in state and "bg_tiles" in state:
         return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
              + _encode_pool(state["bg_tiles"], "bg_tiles")

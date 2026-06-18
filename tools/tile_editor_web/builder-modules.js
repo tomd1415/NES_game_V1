@@ -687,18 +687,9 @@
         '            walk_speed2 = 0;',
         '        }',
         '#endif',
-        '        /* Game-over tint fires when every HP-enabled player is',
-        '         * dead.  Single-player: P1 dead alone triggers it.  Two-',
-        '         * player: both must be down.  0x1E not 0x1F — the',
-        '         * greyscale bit makes jsnes flood the screen blue here',
-        '         * (see the win_condition tint for the full explanation). */',
-        '#if PLAYER_HP_ENABLED && PLAYER2_HP_ENABLED',
-        '        if (player_dead && player2_dead) PPU_MASK = 0x1E | 0x80;',
-        '#elif PLAYER_HP_ENABLED',
-        '        if (player_dead) PPU_MASK = 0x1E | 0x80;',
-        '#elif PLAYER2_HP_ENABLED',
-        '        if (player2_dead) PPU_MASK = 0x1E | 0x80;',
-        '#endif',
+        '        // The game-over death tint (PPU_MASK) is engine-owned now —',
+        '        // see the "[engine] Game-over tint" block in platformer.c.',
+        '        // This module only sets player_dead / player2_dead above.',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame', body);
     },
@@ -957,6 +948,11 @@
       const pauseOn = (c.pauseOnOpen === undefined) ? true : !!c.pauseOnOpen;
       const lineDecls = [];
       function strToBytes(s) {
+        // Uppercase at emit: the built-in dialogue font (seeded by the
+        // server when dialogue is on) is UPPERCASE, so lowercase input would
+        // otherwise hit unpainted tile slots and render as garbage.  This
+        // makes "hello" render as "HELLO" instead of nothing.
+        s = (s || '').toUpperCase();
         const bytes = [];
         for (let i = 0; i < s.length; i++) {
           bytes.push('0x' + (s.charCodeAt(i) & 0xFF)
@@ -1301,6 +1297,7 @@
       // Declarations slot — a single flag, named so it can't clash
       // with pupil code if they later eject to the Code page.
       template = A.appendToSlot(template, 'declarations',
+        '#define BW_WIN_ENABLED 1\n' +
         'unsigned char bw_won = 0;     // [builder] win_condition');
 
       let detectBlock;
@@ -1362,15 +1359,10 @@
         '            jmp_up2 = 0;',
         '            prev_pad2 = 0xFF;',
         '#endif',
-        '            // Red emphasis via PPU_MASK tints the frozen scene',
-        '            // pale red so the pupil can see the game has ended.',
-        '            // NB: 0x1E, NOT 0x1F — bit 0 is the greyscale bit, and',
-        '            // jsnes floods the whole screen solid green when',
-        '            // greyscale + emphasis are set together (its startFrame',
-        '            // takes a switch(f_color) path only when f_dispType=1).',
-        '            // With greyscale off, emphasis is the correct subtle',
-        '            // wash on both jsnes and hardware.  Needs no extra art.',
-        '            PPU_MASK = 0x1E | 0x20;',
+        '            // The win tint (PPU_MASK) is engine-owned now — see the',
+        '            // "[engine] Game-over tint" block in platformer.c, gated',
+        '            // on BW_WIN_ENABLED.  This module only sets bw_won + the',
+        '            // freeze above.',
         '        }',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame',

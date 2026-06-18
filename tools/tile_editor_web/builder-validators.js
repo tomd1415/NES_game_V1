@@ -333,15 +333,17 @@
       };
     },
 
-    // V17b (web-feedback F1b / F23, bug 31): dialogue is on but the letter
-    // tiles its text needs aren't painted on the Backgrounds page.  Dialogue
-    // renders each character as the background tile at its ASCII index
-    // (A = 0x41 … Z = 0x5A), so a project with no font in those slots — which
-    // is most gallery projects — shows garbage tiles / a flicker instead of
-    // words.  Warn (not error) so a pupil mid-build can still Play, but knows
-    // exactly why the box looks broken.
-    function dialogueNoFont(state) {
+    // V17b (web-feedback F1b / F23, bug 31): dialogue uses characters the
+    // built-in font doesn't include.  As of 2026-06-18 the server auto-seeds
+    // an UPPERCASE font into blank bg tiles whenever dialogue is on, and the
+    // assembler uppercases text at emit — so ordinary words "just work" with
+    // no painting.  What still renders as garbage is a character *outside*
+    // that font set (unusual punctuation, accented letters, …).  Warn (not
+    // error) so the pupil can still Play but knows which characters won't show.
+    function dialogueUnsupportedChars(state) {
       if (!moduleEnabled(state, 'dialogue')) return null;
+      // Mirror the keys of tools/playground_server.py `_DIALOGUE_FONT`.
+      const SUPPORTED = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?'-:";
       const d = moduleNode(state, 'dialogue');
       const cfg = (d && d.config) || {};
       const texts = [cfg.text, cfg.text2, cfg.text3];
@@ -358,42 +360,24 @@
           texts.push(inst.text);
         }
       }
-      // The distinct glyph tiles the text needs (space 0x20 is the blank
-      // background tile, which is correctly empty — skip it).
-      const needed = new Set();
+      const bad = new Set();
       for (const t of texts) {
         if (!t) continue;
-        for (let i = 0; i < t.length; i++) {
-          const code = t.charCodeAt(i) & 0xFF;
-          if (code !== 0x20) needed.add(code);
+        for (const ch of String(t).toUpperCase()) {
+          if (SUPPORTED.indexOf(ch) < 0) bad.add(ch);
         }
       }
-      if (needed.size === 0) return null;   // blank text → V17 covers it
-      const bgTiles = state.bg_tiles || [];
-      function tileBlank(idx) {
-        const tile = bgTiles[idx];
-        if (!tile || !Array.isArray(tile.pixels)) return true;
-        for (const rowPx of tile.pixels) {
-          if (Array.isArray(rowPx)) {
-            for (const p of rowPx) { if (p) return false; }
-          }
-        }
-        return true;
-      }
-      let missing = 0;
-      needed.forEach(idx => { if (tileBlank(idx)) missing++; });
-      if (missing === 0) return null;       // a font is painted — all good
-      const one = missing === 1;
+      if (bad.size === 0) return null;
+      const list = Array.from(bad).map(c => '"' + c + '"').join(' ');
       return {
-        id: 'dialogue-no-font',
+        id: 'dialogue-unsupported-chars',
         severity: 'warn',
-        message: 'Dialogue is on but ' + missing + ' of the letter tiles it ' +
-          'needs ' + (one ? 'is' : 'are') + ' blank — the text box will show ' +
-          'garbage instead of words.',
-        fix: 'On the Backgrounds page, paint a letter font in the ASCII tile ' +
-          'slots (A = tile 0x41 … Z = 0x5A, 0 = 0x30 … 9 = 0x39). Each glyph ' +
-          'goes in the slot that matches its code.',
-        jumpTo: 'index.html',
+        message: 'Dialogue uses character(s) the built-in font does not ' +
+          'include (' + list + ') — those will show as blank or garbage tiles.',
+        fix: 'Stick to letters, numbers, spaces and . , ! ? \' - : — or paint ' +
+          'your own tile for that character at its ASCII slot on the ' +
+          'Backgrounds page.',
+        jumpTo: null,
       };
     },
 

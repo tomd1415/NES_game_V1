@@ -21,6 +21,45 @@ deferred.
 
 ---
 
+## Codegen rework — Sprints 1–3 — 2026-06-18
+
+Acting on the architecture review
+([`docs/reference/codegen-and-nes-architecture-review.md`](../reference/codegen-and-nes-architecture-review.md)),
+implementation plan in
+[`docs/plans/current/2026-06-18-codegen-rework-implementation.md`](../plans/current/2026-06-18-codegen-rework-implementation.md).
+Three sprints shipped; `tools/builder-tests/run-all.mjs` green throughout,
+including the byte-identical-ROM invariant.  Deferred (need FCEUX/visual
+verification or are multi-day): `-Os` optimisation unblock, the NMI/dialogue
+frame-model rework, 16×16 metatiles, asm-path reconciliation.
+
+- **Sprint 1 — all-modules compile test (closes review §S2).**  New
+  `tools/builder-tests/all-modules.mjs` builds one project with *every* module
+  enabled (P1+P2, enemy walker, NPC dialogue, pickup, HUD, doors, trigger,
+  win) and asserts the ROM compiles.  Nothing previously verified module
+  *combinations* — the byte-identical test only ever exercised zero modules.
+- **Sprint 2 — game-over tint moved into the engine (review §S1/§S4).**  The
+  win/death `PPU_MASK` tints were hand-written hex inside emitted JS strings
+  (where the 0x1F green-screen bug hid).  They now live in `platformer.c` as a
+  fixed `#if`-gated "[engine] Game-over tint" block; the `damage` /
+  `win_condition` modules only set the state flags (`player_dead` /
+  `bw_won`) + emit `#define BW_WIN_ENABLED 1`.  Byte-identical-safe (gated off
+  at no-modules).  This is the first proof of the "modules emit data; the
+  compiled engine owns logic" migration the review recommends.
+- **Sprint 3 — dialogue gets a real font (finishes web-feedback bug 31 /
+  B-2 garbage half; review §N3).**  `playground_server.py` now ships a built-in
+  8×8 UPPERCASE font (`_DIALOGUE_FONT`) and `build_chr()` seeds it into the
+  *blank* bg tile slots at their ASCII indices whenever the dialogue module is
+  on — so dialogue renders real letters without the pupil painting a font.
+  Pupil art in an occupied slot is preserved.  The assembler uppercases text
+  at emit so lowercase input matches the font; the old "no-font" validator is
+  replaced by `dialogue-unsupported-chars` (warns only about characters
+  outside the font).  New `tools/builder-tests/dialogue-font.mjs` inspects the
+  built ROM's CHR to prove the glyphs land and pupil art survives.  *(The other
+  half of B-2 — the "split-second stage glitch" from `draw_text`'s main-loop
+  forced-blank — is the deferred frame-model rework, Sprint 5.)*
+
+---
+
 ## Web-form feedback fixes — 2026-06-17
 
 Triaged 25 previously-untranscribed pupil submissions from the in-editor
