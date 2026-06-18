@@ -1119,6 +1119,8 @@ kbd {
     </div>
     <canvas id="tileset-canvas" width="384" height="384"
       title="Click a tile to edit it. Turn on 🔀 Move tile to drag tiles around and swap their slots."></canvas>
+    <div id="glyph-reserve-info" class="tileset-hints" style="display:none"></div>
+    <div id="glyph-conflict-banner" style="display:none"></div>
     <div class="tileset-hints">
       Click a tile to edit it. Empty tiles show the hex index. Use
       <kbd>[</kbd> and <kbd>]</kbd> to step through.
@@ -1654,6 +1656,9 @@ function createDefaultState() {
     // art and background art don't fight over the same 256 CHR slots.
     sprite_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
     bg_tiles: Array.from({length: NUM_TILES}, () => emptyTile()),
+    // bg-tile indices the pupil has confirmed are their own dialogue letters,
+    // so the "you painted on a letter slot" warning stops for them.
+    bg_glyph_confirmed: [],
     // Multiple named backgrounds share the bg_tiles pool, palettes and
     // universal_bg. Pupils can design several scenes (one per background)
     // without needing to redraw the tileset every time.
@@ -1711,6 +1716,7 @@ function migrateState(s) {
   if (!Array.isArray(s.bg_tiles)) {
     s.bg_tiles = Array.from({length: NUM_TILES}, () => emptyTile());
   }
+  if (!Array.isArray(s.bg_glyph_confirmed)) s.bg_glyph_confirmed = [];
   // Old saves had a single top-level `nametable` + `dimensions`. Wrap
   // them into the first entry of the new `backgrounds` array so every
   // existing project keeps working -- and nothing the pupil made is lost.
@@ -2418,6 +2424,95 @@ function renderTileEditor() {
 }
 
 // --- Tileset panel (256 tile grid) ------------------------------
+// --- Dialogue letter-tile reservation -------------------------------------
+//
+// When the dialogue module is on, the server auto-fills these bg-tile slots
+// with a built-in font at build time (see _DIALOGUE_FONT in
+// playground_server.py).  So the editor reserves them: an EMPTY reserved slot
+// gets a red tint ("leave these for letters, they fill in automatically"), and
+// a slot the pupil has painted over without confirming it (a conflict) is
+// flagged — dialogue using that character would otherwise show their art.
+// Space (0x20) is the blank background tile, so it is NOT reserved.  Keep
+// DIALOGUE_GLYPH_CHARS in sync with _DIALOGUE_FONT (server) and the
+// dialogue-unsupported-chars validator.
+const DIALOGUE_GLYPH_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?'-:";
+const DIALOGUE_GLYPH_SLOTS = new Set(
+  Array.from(DIALOGUE_GLYPH_CHARS, c => c.charCodeAt(0)));
+
+function dialogueModuleOn() {
+  const m = state && state.builder && state.builder.modules &&
+    state.builder.modules.dialogue;
+  return !!(m && m.enabled);
+}
+function isBgTileEmpty(t) {
+  return !t || !t.pixels || !t.pixels.some(r => r.some(v => v !== 0));
+}
+function glyphConfirmed(i) {
+  return Array.isArray(state.bg_glyph_confirmed) &&
+    state.bg_glyph_confirmed.indexOf(i) >= 0;
+}
+function confirmGlyphTile(i) {
+  if (!Array.isArray(state.bg_glyph_confirmed)) state.bg_glyph_confirmed = [];
+  if (state.bg_glyph_confirmed.indexOf(i) < 0) {
+    state.bg_glyph_confirmed.push(i);
+    markDirty();
+    renderTileset();
+  }
+}
+
+// Info line + conflict banner under the tileset.  Driven by renderTileset().
+function updateGlyphBanner() {
+  const info = document.getElementById('glyph-reserve-info');
+  const banner = document.getElementById('glyph-conflict-banner');
+  if (!info || !banner) return;
+  if (!dialogueModuleOn()) {
+    info.style.display = 'none';
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+    return;
+  }
+  info.style.display = '';
+  info.textContent = '🔤 Red tiles are dialogue letter slots — leave them ' +
+    'empty and the letters fill in automatically when you Play, or draw your ' +
+    'own letter there.';
+  const conflicts = [];
+  DIALOGUE_GLYPH_SLOTS.forEach(code => {
+    if (!isBgTileEmpty(state.bg_tiles[code]) && !glyphConfirmed(code)) {
+      conflicts.push(code);
+    }
+  });
+  conflicts.sort((a, b) => a - b);
+  banner.innerHTML = '';
+  if (conflicts.length === 0) { banner.style.display = 'none'; return; }
+  banner.style.display = 'block';
+  banner.style.cssText = 'display:block; margin-top:8px; padding:8px 10px; ' +
+    'border:1px solid #ff5575; border-radius:6px; ' +
+    'background:rgba(255,85,117,0.12); color:#ffb3c2; font-size:0.88em; ' +
+    'line-height:1.5;';
+  const many = conflicts.length !== 1;
+  const head = document.createElement('div');
+  head.textContent = '⚠ You have painted on ' + conflicts.length +
+    ' dialogue letter ' + (many ? 'slots' : 'slot') + '. Dialogue using ' +
+    (many ? 'those letters' : 'that letter') + ' will show your art instead. ' +
+    'Move your art to a different tile, or confirm each is your own letter:';
+  banner.appendChild(head);
+  const row = document.createElement('div');
+  row.style.cssText = 'margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;';
+  conflicts.forEach(code => {
+    const ch = String.fromCharCode(code);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = "✓ 0x" + code.toString(16).toUpperCase() +
+      " is my '" + ch + "'";
+    btn.style.cssText = 'font:inherit; font-size:0.92em; cursor:pointer; ' +
+      'padding:2px 8px; border-radius:4px; border:1px solid #ff5575; ' +
+      'background:#2a1620; color:#ffb3c2;';
+    btn.addEventListener('click', () => confirmGlyphTile(code));
+    row.appendChild(btn);
+  });
+  banner.appendChild(row);
+}
+
 function renderTileset() {
   const canvas = document.getElementById('tileset-canvas');
   const ctx = canvas.getContext('2d');
@@ -2434,10 +2529,11 @@ function renderTileset() {
     const cy = Math.floor(i / cols) * cell;
     const tile = state.bg_tiles[i];
     const anyPixel = tile.pixels.some(r => r.some(v => v !== 0));
+    const isGlyphSlot = dialogueModuleOn() && DIALOGUE_GLYPH_SLOTS.has(i);
     if (!anyPixel) {
-      ctx.fillStyle = '#1a1630';
+      ctx.fillStyle = isGlyphSlot ? '#3a1822' : '#1a1630';   // red = reserved letter slot
       ctx.fillRect(cx, cy, cell, cell);
-      ctx.fillStyle = '#4a4270';
+      ctx.fillStyle = isGlyphSlot ? '#a35068' : '#4a4270';
       ctx.font = '8px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -2469,6 +2565,20 @@ function renderTileset() {
       ctx.lineWidth = 1;
       ctx.strokeRect(cx + 0.5, cy + 0.5, cell - 1, cell - 1);
     }
+    // Conflict: a letter slot painted over but not confirmed as the pupil's
+    // own letter — red border + a red corner flag so it stands out.
+    if (isGlyphSlot && anyPixel && !glyphConfirmed(i)) {
+      ctx.strokeStyle = '#ff5575';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx + 1, cy + 1, cell - 2, cell - 2);
+      ctx.fillStyle = '#ff5575';
+      ctx.beginPath();
+      ctx.moveTo(cx + cell - 8, cy);
+      ctx.lineTo(cx + cell, cy);
+      ctx.lineTo(cx + cell, cy + 8);
+      ctx.closePath();
+      ctx.fill();
+    }
     // BG badge on tile 0 — it's the default "empty" fill tile, painting here
     // changes every blank cell across every background.
     if (i === 0) {
@@ -2490,6 +2600,7 @@ function renderTileset() {
   }
   document.getElementById('tileset-stats').textContent =
     used + ' / ' + NUM_TILES + ' tiles used';
+  updateGlyphBanner();
   renderFloatingTileset();
 }
 

@@ -72,6 +72,24 @@ by declaring `dlg_total` up front with the other locals and assigning it later
 the per-NPC path is compiled every run.  **Note for future codegen work: keep
 all C declarations before the first statement in any emitted block.**
 
+### Dialogue letter-tiles visible in the Backgrounds editor (2026-06-18)
+
+The auto-seeded dialogue font (Sprint 3, server-side) is now visible and
+manageable on the Backgrounds page so pupils understand the reserved letter
+tiles instead of them appearing only at build.  When the dialogue module is
+on, the tile palette tints the reserved letter slots (A–Z, 0–9, `. , ! ? ' - :`)
+**red when empty** — they fill with the built-in font automatically at Play, so
+pupils leave them empty (or draw their own letter).  A slot **painted over**
+without confirming it gets a red conflict flag + a banner explaining that
+dialogue using that character would show their art instead, with a
+**"✓ it's my letter X"** button per slot (persisted in
+`state.bg_glyph_confirmed`) or the option to move the art.  Files: `index.html`
+(`renderTileset` red marking, `updateGlyphBanner`, `confirmGlyphTile`).
+`DIALOGUE_GLYPH_CHARS` there mirrors `_DIALOGUE_FONT` (`playground_server.py`)
+and the `dialogue-unsupported-chars` validator — **keep the three in sync.**
+Editor-only; no ROM/build change (the build seed already fills blank slots and
+preserves painted ones).  *Browser UI — verify the red tint + banner visually.*
+
 ---
 
 ## Web-form feedback fixes — 2026-06-17
