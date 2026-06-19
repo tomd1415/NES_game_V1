@@ -1,5 +1,12 @@
 # Arc C — Pupil Feature Backlog (Tier 2) — Implementation Plan
 
+> **Progress (2026-06-19):** ✅ **R-10** (character bob) and ✅ **R-4** (per-sprite
+> enemy speed) shipped — see the changelog. Both render-tested
+> (`render-character-bob.mjs`, `enemy-speed.mjs`), byte-identical intact.
+> R-10 deviated from the plan: it's pad-driven, not `anim_frame`-driven (which
+> only advances when a walk animation is assigned, so it would no-op otherwise).
+> Remaining: R-3, R-7, R-8, R-9, R-6.
+>
 > **Scope.** The seven Tier-2 pupil feature requests from
 > [`2026-06-17-web-feedback-fixes.md`](2026-06-17-web-feedback-fixes.md) Part B:
 > **R-10** (character bob), **R-4** (per-sprite enemy speed), **R-3** (spawn a

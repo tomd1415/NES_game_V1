@@ -185,6 +185,18 @@ unsigned char attr;
 #define BW_APPLY_JUMP_RISE(y) (y) -= 2
 #endif
 
+/* R-10 — character bob.  The Builder's globals module writes
+ * `#define BW_BOB_WHEN_WALKING 1` into the declarations slot above when the
+ * pupil ticks "Bob up and down when walking".  Off by default so the no-module
+ * ROM is byte-identical.  `bob` only exists / is added when the macro is on. */
+#ifndef BW_BOB_WHEN_WALKING
+#define BW_BOB_WHEN_WALKING 0
+#endif
+#if BW_BOB_WHEN_WALKING
+unsigned char bob;        // 1px walk-bob offset, 0 or 1
+unsigned char bob_phase;  // free-running while walking; drives the bob rate
+#endif
+
 #if PLAYER_HP_ENABLED
 /* Phase B finale chunk A — HP + damage.  The Builder's damage module
  * writes `#define PLAYER_HP_ENABLED 1` + `#define PLAYER_MAX_HP <n>`
@@ -1017,10 +1029,28 @@ void main(void) {
         // When facing left, flip every tile horizontally AND draw the
         // columns in reverse order so the two-wide-or-wider sprite mirrors
         // correctly as a whole.
+#if BW_BOB_WHEN_WALKING
+        /* Bob up 1px on alternate ~8-frame phases while walking.  Driven by the
+         * pad directly (not anim_mode, which only exists when a walk animation
+         * is assigned), so the bob works on any project.  A free-running phase
+         * counter gives a steady rate; reset to 0 when not walking. */
+#if BW_GAME_STYLE == 0
+        if ((pad & 0x03) && !jumping) bob_phase++;   /* platformer: LEFT/RIGHT on ground */
+        else                          bob_phase = 0;
+#else
+        if (pad & 0x0F) bob_phase++;                 /* top-down: any direction */
+        else            bob_phase = 0;
+#endif
+        bob = (bob_phase & 8) ? 1 : 0;
+#endif
         for (r = 0; r < PLAYER_H; r++) {
             for (c = 0; c < PLAYER_W; c++) {
 #ifdef SCROLL_BUILD
+#if BW_BOB_WHEN_WALKING
+                sy = world_to_screen_y((unsigned int)py + (r << 3) + bob);
+#else
                 sy = world_to_screen_y((unsigned int)py + (r << 3));
+#endif
                 if (plrdir == 0x40) {
                     sx = world_to_screen_x((unsigned int)px +
                          ((PLAYER_W - 1 - c) << 3));
@@ -1028,7 +1058,11 @@ void main(void) {
                     sx = world_to_screen_x((unsigned int)px + (c << 3));
                 }
 #else
+#if BW_BOB_WHEN_WALKING
+                sy = py + (r << 3) + bob;
+#else
                 sy = py + (r << 3);
+#endif
                 if (plrdir == 0x40) {
                     sx = px + (unsigned char)((PLAYER_W - 1 - c) << 3);
                 } else {

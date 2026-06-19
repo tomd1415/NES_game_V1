@@ -1227,10 +1227,34 @@ body.emu-single-player #emu-p2-controls { display: none; }
     });
     aiSel.value = aiOptions.some(o => o.v === inst.ai) ? inst.ai : 'static';
     if (aiOptions.length === 1) aiSel.disabled = true;
-    aiSel.addEventListener('change', () => {
-      inst.ai = aiSel.value;
+
+    // R-4: per-instance speed (px/frame).  Only meaningful for a moving enemy
+    // (walker/chaser); greyed out otherwise.  Clamped 1..4 (1 = today's feel).
+    const speedIn = document.createElement('input');
+    speedIn.type = 'number';
+    speedIn.min = '1';
+    speedIn.max = '4';
+    speedIn.value = (typeof inst.speed === 'number') ? inst.speed : 1;
+    speedIn.title = 'Speed in pixels per frame for Walker / Chaser (1 = slow, 4 = fast).';
+    speedIn.style.width = '3.2em';
+    const syncSpeed = () => {
+      const moving = role === 'enemy' && (aiSel.value === 'walker' || aiSel.value === 'chaser');
+      speedIn.disabled = !moving;
+      speedIn.style.opacity = moving ? '1' : '0.4';
+    };
+    speedIn.addEventListener('input', () => {
+      let v = parseInt(speedIn.value, 10);
+      if (Number.isNaN(v)) return;
+      v = Math.max(1, Math.min(4, v));
+      inst.speed = v;
       scheduleSave();
     });
+    aiSel.addEventListener('change', () => {
+      inst.ai = aiSel.value;
+      syncSpeed();
+      scheduleSave();
+    });
+    syncSpeed();
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
@@ -1244,12 +1268,18 @@ body.emu-single-player #emu-p2-controls { display: none; }
       scheduleSave();
     });
 
+    // AI dropdown + speed share one grid cell so the row keeps its column count.
+    const aiCell = document.createElement('span');
+    aiCell.style.cssText = 'display:flex;gap:4px;align-items:center;';
+    aiCell.appendChild(aiSel);
+    aiCell.appendChild(speedIn);
+
     row.appendChild(thumb);
     row.appendChild(spSel);
     row.appendChild(roleBadge);
     row.appendChild(xIn);
     row.appendChild(yIn);
-    row.appendChild(aiSel);
+    row.appendChild(aiCell);
     row.appendChild(delBtn);
 
     // Phase 3.3: NPC instances get an optional dialogue-text input

@@ -21,6 +21,38 @@ deferred.
 
 ---
 
+## Arc C quick wins — R-10 character bob + R-4 enemy speed — 2026-06-19
+
+Wave 2's two quick, visible pupil features
+([`docs/plans/current/2026-06-18-arc-c-tier2-backlog.md`](../plans/current/2026-06-18-arc-c-tier2-backlog.md)).
+`run-all.mjs` green, byte-identical invariant intact, both render-tested.
+
+- **R-10 — character bob (opt-in).** The Globals module gains a "Bob up and down
+  when walking" tick.  When on, the player sprite hops 1px on alternate ~8-frame
+  phases while walking.  Engine: `#if BW_BOB_WHEN_WALKING` (default 0 → the
+  no-module ROM is byte-identical; the `bob`/`bob_phase` symbols and the `+ bob`
+  on the OAM-Y writes only exist when on, via `#if/#else`).  **Deviation from the
+  plan:** driven by the **pad input** (a move direction + grounded), not
+  `anim_mode`/`anim_frame` — those only advance when a walk *animation* is
+  assigned (`WALK_FRAME_COUNT > 0`), so the planned approach would no-op on
+  projects without one.  The pad-driven version bobs on any project; game-style
+  aware (LEFT/RIGHT on a platformer, any direction top-down).  Verified by
+  `render-character-bob.mjs` (player OAM Y oscillates 208↔209 while walking,
+  rock-steady when off).
+- **R-4 — per-instance enemy speed.** The scene module's walker/chaser AI took a
+  hard-coded `+= 1`; each instance now carries a `speed` (px/frame, clamped
+  1..4, default 1 = unchanged feel).  Pure JS (no engine/scene.inc change): the
+  walker steps and the chaser's threshold + steps are all parametrised, so a
+  fast chaser doesn't oscillate around the player.  `builder.html` gains a Speed
+  number input beside the AI dropdown (greyed out for static/non-enemy
+  instances).  Verified by `enemy-speed.mjs` (emit asserts ±3 not ±1; the chaser
+  uses the speed-2 threshold; a running speed-3 walker advances 3px/step) and a
+  `speed: 3` walker added to the all-modules fixture.
+- *Note:* `bw_sprite_blocked` probes 1px ahead, so at speed ≥ 2 a fast enemy can
+  step its body slightly into a wall before reversing the next frame — fine for
+  Tier 2 (it just turns a frame late); the proper fix (a `step`-aware probe) is
+  the natural shared step toward enemy paths (T2.8).
+
 ## Arc B — a readable dialogue box — 2026-06-19
 
 Implements Wave 2's "finish dialogue" item
@@ -62,6 +94,17 @@ render harness.
   loaded palette (all exact), which together prove legibility. A separate
   observation logged for follow-up: on a scroll build the player settles ~32px
   higher than on a non-scroll build (a collision quirk, unrelated to dialogue).
+- **Known follow-up — distinct box body (reported 2026-06-19, FCEUX).** The box
+  body is blank tiles, which render colour 0 = the shared `universal_bg`, so the
+  box is the same colour as the backdrop — the scenery's *detail* in those rows
+  appears to "vanish" into the backdrop rather than reading as a box appearing
+  over it. White text is still readable (the core fix holds). A distinct box
+  body needs the deferred "dark box" route: re-seed the font as colour-1 text on
+  a colour-2 background and set palette 3 colour 2 to a box colour (banner code
+  unchanged — `0x20` then renders as the box body). Since no single colour
+  contrasts with *every* `universal_bg` (a black box blends on a black
+  backdrop), the fully robust version wants a 1-tile border frame. Scoped as a
+  small Arc B polish task.
 
 ## Arc A — render-test harness + 4 backfill suites — 2026-06-18
 

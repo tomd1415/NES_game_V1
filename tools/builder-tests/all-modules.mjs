@@ -97,7 +97,7 @@ function makeEverythingState() {
   m.dialogue.enabled = true;
   // Scene AI: enemy walks, npc + pickup sit (index-aligned with sceneSprites).
   m.scene.config.instances = [
-    { id: 'e', spriteIdx: 2, x: 96,  y: 120, ai: 'walker' },
+    { id: 'e', spriteIdx: 2, x: 96,  y: 120, ai: 'walker', speed: 3 },   // R-4 speed
     // Per-NPC override text → exercises BW_DIALOG_PER_NPC=1 (the dialogue
     // vblank path that had a cc65 declaration-after-statement bug).
     { id: 'n', spriteIdx: 3, x: 140, y: 120, ai: 'static', text: 'HELLO THERE' },

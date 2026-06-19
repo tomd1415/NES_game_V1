@@ -103,6 +103,7 @@
       // unticked.  Pupils only see a difference when they slide a value.
       gravityPx: 1,    // matches `ss_y[i]++` (scene-sprite fall, 1 px/frame)
       jumpSpeedPx: 2,  // matches `py -= 2` (player rise, 2 px/frame)
+      bobWhenWalking: false,   // R-10: 1px walk bob (off = byte-identical)
     },
     schema: [
       {
@@ -131,6 +132,13 @@
           'snappy, 5-6 = launch.  Player\'s fall rate is currently fixed ' +
           'at 2 px/frame.',
       },
+      {
+        key: 'bobWhenWalking',
+        label: 'Bob up and down when walking',
+        type: 'bool',
+        help: 'The player hops 1 pixel on alternate walk frames — a little ' +
+          'life in the step.  Only while walking on the ground.',
+      },
     ],
     // Emit `#define BW_GRAVITY_PX <n>` + `#define BW_JUMP_SPEED_PX <n>`
     // and overrides of BW_APPLY_GRAVITY / BW_APPLY_JUMP_RISE into the
@@ -144,13 +152,20 @@
       const j = (typeof c.jumpSpeedPx === 'number') ? c.jumpSpeedPx : 2;
       const clampedG = Math.max(0, Math.min(4, g | 0));
       const clampedJ = Math.max(1, Math.min(6, j | 0));
-      return A.appendToSlot(template, 'declarations', [
+      template = A.appendToSlot(template, 'declarations', [
         '/* Builder Globals module — game-wide physics overrides. */',
         `#define BW_GRAVITY_PX ${clampedG}`,
         '#define BW_APPLY_GRAVITY(y) ((y) += BW_GRAVITY_PX)',
         `#define BW_JUMP_SPEED_PX ${clampedJ}`,
         '#define BW_APPLY_JUMP_RISE(y) (y) -= BW_JUMP_SPEED_PX',
       ].join('\n'));
+      // R-10: opt-in 1px walk bob.  Absent when off → the template's
+      // #ifndef default (0) keeps the no-module ROM byte-identical.
+      if (c.bobWhenWalking) {
+        template = A.appendToSlot(template, 'declarations',
+          '#define BW_BOB_WHEN_WALKING 1   /* R-10 character bob */');
+      }
+      return template;
     },
   };
 
@@ -406,6 +421,11 @@
         const sp = sprites[inst.spriteIdx];
         if (!sp) continue;
         const ai = inst.ai || 'static';
+        // R-4: per-instance speed (px/frame).  1 = today's feel; clamp 1..4.
+        // NB bw_sprite_blocked probes 1px ahead, so at speed >= 2 a fast enemy
+        // can step its body slightly into a wall before reversing on the next
+        // frame — acceptable for Tier 2 (visually it just turns a frame late).
+        const speed = A.clampInt(inst.speed, 1, 4, 1);
         if (sp.role === 'enemy' && ai === 'walker') {
           emitted++;
           parts.push(
@@ -415,10 +435,10 @@
           parts.push('            static signed char bw_dir_' + i + ' = 1;');
           parts.push('            if (bw_dir_' + i + ' > 0) {');
           parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) bw_dir_' + i + ' = -1;');
-          parts.push('                else ss_x[' + i + '] += 1;');
+          parts.push('                else ss_x[' + i + '] += ' + speed + ';');
           parts.push('            } else {');
           parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) bw_dir_' + i + ' = 1;');
-          parts.push('                else ss_x[' + i + '] -= 1;');
+          parts.push('                else ss_x[' + i + '] -= ' + speed + ';');
           parts.push('            }');
           parts.push('        }');
         } else if (sp.role === 'enemy' && ai === 'chaser') {
@@ -426,15 +446,15 @@
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' chases the player, stopping at solid tiles');
-          parts.push('        if (ss_x[' + i + '] + 1 <= px) {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ss_x[' + i + '] += 1;');
-          parts.push('        } else if (ss_x[' + i + '] >= px + 1) {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ss_x[' + i + '] -= 1;');
+          parts.push('        if (ss_x[' + i + '] + ' + speed + ' <= px) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ss_x[' + i + '] += ' + speed + ';');
+          parts.push('        } else if (ss_x[' + i + '] >= px + ' + speed + ') {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ss_x[' + i + '] -= ' + speed + ';');
           parts.push('        }');
-          parts.push('        if (ss_y[' + i + '] + 1 <= py) {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 2)) ss_y[' + i + '] += 1;');
-          parts.push('        } else if (ss_y[' + i + '] >= py + 1) {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= 1;');
+          parts.push('        if (ss_y[' + i + '] + ' + speed + ' <= py) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 2)) ss_y[' + i + '] += ' + speed + ';');
+          parts.push('        } else if (ss_y[' + i + '] >= py + ' + speed + ') {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= ' + speed + ';');
           parts.push('        }');
         }
         // `static` and non-enemy roles: nothing to emit.  Pickups and
