@@ -197,6 +197,7 @@
       walkSpeed: 1,
       jumpHeight: 20,
       maxHp: 0,   // 0 = no HP system; Phase B wires this up.
+      attackButton: 'none',   // R-7: A/B plays the Attack animation
     },
     schema: [
       {
@@ -243,6 +244,20 @@
         help: '0 = the player never takes damage.  Set 1–9 and tick ' +
           'the Damage module below to let enemies hurt the player.',
       },
+      {
+        key: 'attackButton',
+        label: 'Attack button (plays the Attack animation)',
+        type: 'enum',
+        options: [
+          { value: 'none', label: 'None' },
+          { value: 'a', label: 'A button' },
+          { value: 'b', label: 'B button' },
+        ],
+        help: 'Bind A or B to a one-shot Attack animation (tag a sprite ' +
+          'frame-set as Attack on the Sprites page).  The attack plays once ' +
+          'over the walk/jump pose each press.  B is also used by Dialogue — ' +
+          'pick A if your game has both.',
+      },
     ],
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
@@ -275,6 +290,14 @@
           '#define PLAYER_HP_ENABLED 1',
           '#define PLAYER_MAX_HP ' + maxHp,
         ].join('\n'));
+      }
+      // R-7: bind A/B to the one-shot Attack animation.  The engine also gates
+      // on ATTACK_FRAME_COUNT > 0, so this is a no-op (button does nothing) if
+      // the pupil hasn't tagged an Attack animation — graceful, not an error.
+      if (c.attackButton === 'a' || c.attackButton === 'b') {
+        template = A.appendToSlot(template, 'declarations',
+          '#define BW_ATTACK_BUTTON ' + (c.attackButton === 'a' ? '0x80' : '0x40') +
+          '   /* R-7 attack button (A=0x80, B=0x40) */');
       }
       return template;
     },

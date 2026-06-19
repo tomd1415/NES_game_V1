@@ -572,11 +572,19 @@ def _encode_pool(tiles, label):
 # tools/tile_editor_web/builder-validators.js (the unsupported-char warning).
 
 def _glyph(*rows):
-    """8 rows of up-to-8 chars -> an 8x8 pixel grid (0/1), padded/truncated."""
+    """8 rows of up-to-8 chars -> an 8x8 pixel grid, padded/truncated.
+
+    Arc B box fix: a stroke ("#") is colour 1 (the readable text colour) and
+    every other pixel is colour **2** (the box body), NOT colour 0.  Colour 0 is
+    the shared universal_bg, so an all-0 box body matched the backdrop and the
+    scenery appeared to vanish; colour 2 is a dedicated box colour (navy) the
+    server seeds into BG palette 3, so the box reads as a distinct box on any
+    project.  Knock-on: the space glyph (`_glyph()` with no rows) becomes a
+    solid colour-2 tile — exactly the box-body fill the banner writes."""
     out = []
     for r in range(8):
         row = rows[r] if r < len(rows) else ""
-        out.append([1 if c == "#" else 0 for c in row.ljust(8, ".")[:8]])
+        out.append([1 if c == "#" else 2 for c in row.ljust(8, ".")[:8]])
     return out
 
 
@@ -657,7 +665,11 @@ def _dialogue_module_enabled(state):
 # slot0 is the text colour.  slot0 = 0x30 (white) → white text on the
 # universal_bg box body; slot1/slot2 reserved for a future border/accent.
 DIALOGUE_BG_PALETTE = 3
-DIALOGUE_BG_PALETTE_SLOTS = [0x30, 0x16, 0x0F]   # [text=white, accent=red, 0x0F]
+# [colour1 = text, colour2 = box body, colour3 = spare].  colour1 = white text;
+# colour2 = navy box body (a dark colour that stays visible on light AND dark/
+# black backdrops, unlike colour 0 = the shared universal_bg which matched the
+# backdrop and made the scenery look like it vanished — the Arc B box fix).
+DIALOGUE_BG_PALETTE_SLOTS = [0x30, 0x01, 0x0F]
 
 
 def _palette_slots_for(state, group, i):
@@ -879,6 +891,7 @@ def build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y):
 
     walk = _resolve_animation(state, "walk", pw, ph)
     jump = _resolve_animation(state, "jump", pw, ph)
+    attack = _resolve_animation(state, "attack", pw, ph)   # R-7 attack animation
 
     defines = [
         f".define PLAYER_W {pw}",
@@ -892,7 +905,16 @@ def build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y):
         f"player_attrs: .byte {_hex_row(p_attrs)}",
     ]
 
-    for kind, resolved in (("walk", walk), ("jump", jump)):
+    # R-7: emit the attack tables ONLY when an attack animation is assigned.
+    # walk/jump always emit a {0} placeholder (the engine references them
+    # unconditionally), but the attack code is fully #if-gated, so omitting the
+    # attack arrays when unused keeps a no-attack ROM byte-identical (cc65 emits
+    # even unreferenced const arrays, so an always-present placeholder would
+    # shift the baseline).
+    _anim_kinds = [("walk", walk), ("jump", jump)]
+    if attack is not None:
+        _anim_kinds.append(("attack", attack))
+    for kind, resolved in _anim_kinds:
         if resolved is None:
             defines += [
                 f".define {kind.upper()}_FRAME_COUNT 0",
@@ -1153,6 +1175,7 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
     # player sprite's (pw, ph) so the C loop has a fixed tile count.
     walk = _resolve_animation(state, "walk", pw, ph)
     jump = _resolve_animation(state, "jump", pw, ph)
+    attack = _resolve_animation(state, "attack", pw, ph)   # R-7 attack animation
 
     lines += [
         f"#define PLAYER_W {pw}",
@@ -1212,7 +1235,16 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
     # If an animation isn't set, emit a count of 0 and a 1-element stub
     # (cc65 rejects zero-length arrays); main.c's "if count > 0" gate
     # keeps the stubs unread.
-    for kind, resolved in (("walk", walk), ("jump", jump)):
+    # R-7: emit the attack tables ONLY when an attack animation is assigned.
+    # walk/jump always emit a {0} placeholder (the engine references them
+    # unconditionally), but the attack code is fully #if-gated, so omitting the
+    # attack arrays when unused keeps a no-attack ROM byte-identical (cc65 emits
+    # even unreferenced const arrays, so an always-present placeholder would
+    # shift the baseline).
+    _anim_kinds = [("walk", walk), ("jump", jump)]
+    if attack is not None:
+        _anim_kinds.append(("attack", attack))
+    for kind, resolved in _anim_kinds:
         if resolved is None:
             lines += [
                 f"#define {kind.upper()}_FRAME_COUNT 0",

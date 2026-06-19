@@ -26,9 +26,10 @@ const EXPECT = {
   0x4F: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'], // O
   0x45: ['#####', '#....', '#....', '###..', '#....', '#....', '#####'], // E
 };
-// Glyphs are 7 rows tall in an 8-row tile (row 8 is blank padding); compare
-// the 5-wide stroke mask over the 7 content rows.
-const maskOf = (grid) => grid.slice(0, 7).map(r => r.map(p => (p ? '#' : '.')).join('').slice(0, 5));
+// Glyphs are 7 rows tall in an 8-row tile (row 8 is padding).  Strokes are
+// colour 1 (text); every other pixel is colour 2 (the box body, Arc B fix), so
+// the mask is "colour-1 pixels only".
+const maskOf = (grid) => grid.slice(0, 7).map(r => r.map(p => (p === 1 ? '#' : '.')).join('').slice(0, 5));
 const wantMask = (rows) => rows.slice(0, 7).map(r => r.padEnd(5, '.').slice(0, 5));
 
 const win = H.loadBuilderModules();
@@ -67,9 +68,13 @@ try {
       else bad("glyph '" + ch + "' shape mismatch:\n  got  " + JSON.stringify(got) + "\n  want " + JSON.stringify(want));
     }
 
-    // Control: a space (0x20) must stay blank, and an un-lettered tile too.
-    if (H.chrTileBlank(r.romBytes, 1, 0x20)) ok("space (0x20) stays blank as expected");
-    else bad('space glyph (0x20) unexpectedly has pixels');
+    // The space (0x20) is the box-body fill: a solid colour-2 tile (Arc B
+    // dark-box fix), so a blank box cell renders as the navy box, not the
+    // backdrop.  (No stroke pixels — colour 1 absent.)
+    const space = H.chrTile(r.romBytes, 1, 0x20);
+    const allTwo = space.every((row) => row.every((p) => p === 2));
+    if (allTwo) ok('space (0x20) is the solid box-body fill (all colour 2)');
+    else bad('space glyph (0x20) is not a solid colour-2 box fill: ' + JSON.stringify(H.chrTileArt(r.romBytes, 1, 0x20)));
   }
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));

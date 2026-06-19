@@ -21,6 +21,39 @@ deferred.
 
 ---
 
+## Arc C — R-7 press-a-button-to-attack animation — 2026-06-19
+
+A one-shot "attack" animation bound to A or B
+([`docs/plans/current/2026-06-18-arc-c-tier2-backlog.md`](../plans/current/2026-06-18-arc-c-tier2-backlog.md)
+R-7). `run-all.mjs` green, byte-identical intact, render-tested (`attack.mjs`).
+
+- **Server.** `build_scene_inc` / `build_scene_asminc` now emit
+  `ATTACK_FRAME_COUNT`/`ATTACK_FRAME_TICKS` + `attack_tiles`/`attack_attrs`
+  driven by `animation_assignments.attack` — but **only when an attack animation
+  is assigned**, unlike walk/jump's always-present `{0}` placeholders.  The
+  attack code is fully `#if`-gated, and cc65 emits even *unreferenced* const
+  arrays, so an always-present placeholder would have shifted the no-attack
+  baseline ROM (verified: it does); omitting it keeps the byte-identical
+  baseline at its original hash.
+- **Module.** Player 1 gains an **Attack button** setting (None / A / B) →
+  `#define BW_ATTACK_BUTTON 0x80`/`0x40`. The engine *also* gates on
+  `ATTACK_FRAME_COUNT > 0`, so binding a button with no attack animation tagged
+  is a harmless no-op rather than an error.
+- **Engine.** A new `anim_mode == 3` (attack) takes top priority over walk/jump;
+  it starts on a button **edge** (its own `attack_prev`, since `prev_pad` is
+  already consumed by the jump edge), plays once, and clears when the cycle
+  completes (single-frame attacks hold for the tick budget). Everything is
+  `#if ATTACK_FRAME_COUNT > 0 && BW_ATTACK_BUTTON`-gated → the no-module ROM is
+  byte-identical.
+- **Editor.** `sprites.html` now derives/validates/renders the assignment for
+  `ASSIGN_KINDS = ['walk','jump','attack']` (replacing the hard-coded
+  `['walk','jump']` in ~8 places), so a sprite frame-set tagged **Attack** on the
+  Sprites page is assigned to `animation_assignments.attack` automatically. The
+  `attack` style tag already existed.
+- **Verified.** `attack.mjs`: A→`0x80` / B→`0x40` / None→no macro; and a running
+  ROM where pressing B swaps the player to the attack frames and reverts after
+  one cycle (the one-shot).
+
 ## Arc C quick wins — R-10 character bob + R-4 enemy speed — 2026-06-19
 
 Wave 2's two quick, visible pupil features
@@ -94,17 +127,19 @@ render harness.
   loaded palette (all exact), which together prove legibility. A separate
   observation logged for follow-up: on a scroll build the player settles ~32px
   higher than on a non-scroll build (a collision quirk, unrelated to dialogue).
-- **Known follow-up — distinct box body (reported 2026-06-19, FCEUX).** The box
-  body is blank tiles, which render colour 0 = the shared `universal_bg`, so the
-  box is the same colour as the backdrop — the scenery's *detail* in those rows
-  appears to "vanish" into the backdrop rather than reading as a box appearing
-  over it. White text is still readable (the core fix holds). A distinct box
-  body needs the deferred "dark box" route: re-seed the font as colour-1 text on
-  a colour-2 background and set palette 3 colour 2 to a box colour (banner code
-  unchanged — `0x20` then renders as the box body). Since no single colour
-  contrasts with *every* `universal_bg` (a black box blends on a black
-  backdrop), the fully robust version wants a 1-tile border frame. Scoped as a
-  small Arc B polish task.
+- **Box body fix — distinct dark box (reported 2026-06-19 FCEUX; fixed same
+  day).** The box body was blank tiles = colour 0 = the shared `universal_bg`,
+  so the box matched the backdrop and the scenery's detail in those rows looked
+  like it "vanished" instead of reading as a box. Fixed by re-seeding the font's
+  "off" pixels as colour **2** instead of 0 (one line in `_glyph`): letters
+  become white-on-box and the space glyph becomes a solid colour-2 tile — which
+  is exactly the box-body fill the banner already writes (`0x20`), so the banner
+  code is unchanged. Palette 3 colour 2 = **navy (`0x01`)**, a dark colour that
+  stays visible on light *and* dark/black backdrops (navy ≠ black), so a border
+  frame is not needed for the common cases. `render-dialogue-box.mjs` now also
+  asserts the box body is distinct from the backdrop and darker than the text.
+  Still seed-into-blank-slots only, so byte-identical/no-dialogue ROMs are
+  unaffected.
 
 ## Arc A — render-test harness + 4 backfill suites — 2026-06-18
 

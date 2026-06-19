@@ -111,6 +111,17 @@ try {
       if (textRGB !== hostileRGB) ok('text colour is independent of the hostile scenery palette');
       else bad('text colour equals the hostile palette — recolour had no effect');
 
+      // Dark-box fix: the box BODY (palette 3 colour 2) is a distinct dark
+      // colour, NOT the shared universal_bg (colour 0).  If it matched the
+      // backdrop the scenery would appear to vanish rather than read as a box.
+      const boxBodyRGB = img[3 * 4 + 2] & 0xFFFFFF;
+      const backdropRGB = img[3 * 4 + 0] & 0xFFFFFF;
+      const lum = (v) => ch(v, 0) + ch(v, 8) + ch(v, 16);
+      if (boxBodyRGB !== backdropRGB) ok('box body is a distinct colour from the backdrop (no blend)');
+      else bad('box body colour equals the backdrop — the box would vanish');
+      if (lum(boxBodyRGB) < lum(textRGB)) ok('box body is darker than the text (readable contrast)');
+      else bad('box body is not darker than the text');
+
       // Scenery well outside the banner is untouched (still palette 0).
       const farPal = H.bgPalette(h.nes, 0, 10, 10);
       if (farPal === 0) ok('scenery outside the banner is untouched (palette 0)');

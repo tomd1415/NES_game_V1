@@ -197,6 +197,19 @@ unsigned char bob;        // 1px walk-bob offset, 0 or 1
 unsigned char bob_phase;  // free-running while walking; drives the bob rate
 #endif
 
+/* R-7 — press a button to play a one-shot attack animation.  The players
+ * module writes `#define BW_ATTACK_BUTTON 0x40` (B) / `0x80` (A); the server
+ * emits ATTACK_FRAME_COUNT + attack_tiles/attack_attrs when an attack animation
+ * is assigned.  Off (button undefined or no attack frames) → fully compiled out
+ * → the no-module ROM is byte-identical. */
+#ifndef BW_ATTACK_BUTTON
+#define BW_ATTACK_BUTTON 0
+#endif
+#if ATTACK_FRAME_COUNT > 0 && BW_ATTACK_BUTTON
+unsigned char attack_playing;   // 1 while the one-shot attack is on screen
+unsigned char attack_prev;      // last frame's pad, for the attack-button edge
+#endif
+
 #if PLAYER_HP_ENABLED
 /* Phase B finale chunk A — HP + damage.  The Builder's damage module
  * writes `#define PLAYER_HP_ENABLED 1` + `#define PLAYER_MAX_HP <n>`
@@ -799,6 +812,16 @@ void main(void) {
         // Unassigned animations (count == 0) fall through to the static
         // player_tiles layout.
         anim_mode = 0;
+#if ATTACK_FRAME_COUNT > 0 && BW_ATTACK_BUTTON
+        /* Attack is a one-shot that overrides walk/jump while playing.  Start it
+         * on a fresh attack-button press (edge), restarting from frame 0. */
+        if ((pad & BW_ATTACK_BUTTON) && !(attack_prev & BW_ATTACK_BUTTON)) {
+            attack_playing = 1;
+            anim_frame = 0;
+            anim_tick = 0;
+        }
+        attack_prev = pad;
+#endif
 #if JUMP_FRAME_COUNT > 0 && BW_GAME_STYLE == 0
         if (jumping) anim_mode = 2;
 #endif
@@ -812,7 +835,18 @@ void main(void) {
         if (anim_mode == 0 && (pad & 0x03)) anim_mode = 1;
 #endif
 #endif
+#if ATTACK_FRAME_COUNT > 0 && BW_ATTACK_BUTTON
+        if (attack_playing) anim_mode = 3;   /* top priority: overrides walk/jump */
+#endif
 
+#if ATTACK_FRAME_COUNT > 0 && BW_ATTACK_BUTTON
+        if (anim_mode == 3) {
+            anim_tiles = attack_tiles;
+            anim_attrs = attack_attrs;
+            anim_frame_count = ATTACK_FRAME_COUNT;
+            anim_frame_ticks = ATTACK_FRAME_TICKS;
+        } else
+#endif
         if (anim_mode == 2) {
             anim_tiles = jump_tiles;
             anim_attrs = jump_attrs;
@@ -840,9 +874,21 @@ void main(void) {
             if (anim_tick >= anim_frame_ticks) {
                 anim_tick = 0;
                 anim_frame++;
-                if (anim_frame >= anim_frame_count) anim_frame = 0;
+                if (anim_frame >= anim_frame_count) {
+                    anim_frame = 0;
+#if ATTACK_FRAME_COUNT > 0 && BW_ATTACK_BUTTON
+                    if (anim_mode == 3) attack_playing = 0;   /* one-shot finished */
+#endif
+                }
             }
         }
+#if ATTACK_FRAME_COUNT > 0 && BW_ATTACK_BUTTON
+        else if (anim_mode == 3) {
+            /* single-frame attack: hold for the tick budget, then stop. */
+            anim_tick++;
+            if (anim_tick >= anim_frame_ticks) { anim_tick = 0; attack_playing = 0; }
+        }
+#endif
         anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
 
 #if BW_GAME_STYLE == 0
