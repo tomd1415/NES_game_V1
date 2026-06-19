@@ -95,6 +95,13 @@ function makeEverythingState() {
   m.hud.enabled = true;
   m.doors.enabled = true;
   m.dialogue.enabled = true;
+  // R-3 spawn module + R-6 damage spawn-on-hit — both drive the shared
+  // #if BW_SPAWN_ENABLED pool.  Enabling both exercises the #ifndef coexistence
+  // (spawn module emits BW_SPAWN_ENABLED/SPAWN_TTL first; damage's #ifndef
+  // no-ops) so the combined ROM still compiles.
+  m.spawn.enabled = true;
+  m.spawn.config.spriteIdx = 2;
+  Object.assign(m.damage.config, { spawnOnHit: true, spawnSpriteIdx: 2, spawnTtl: 16 });
   // Scene AI: enemy walks, npc + pickup sit (index-aligned with sceneSprites).
   m.scene.config.instances = [
     { id: 'e', spriteIdx: 2, x: 96,  y: 120, ai: 'walker', speed: 3 },   // R-4 speed

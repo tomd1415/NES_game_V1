@@ -21,6 +21,62 @@ deferred.
 
 ---
 
+## Arc C finale — R-8 checkpoints · R-3/R-6 spawn pool · R-9 region copy/paste — 2026-06-19
+
+The last four Tier-2 pupil requests
+([`docs/plans/current/2026-06-18-arc-c-tier2-backlog.md`](../plans/current/2026-06-18-arc-c-tier2-backlog.md)
+R-8, R-3, R-6, R-9). `run-all.mjs` green, **byte-identical baseline intact**,
+each render- or unit-tested.
+
+### R-8 — checkpoints (Damage module)
+
+Opt-in **Checkpoints** + **HP restored on respawn**. With it on, walking the
+player's centre onto a **Door** tile saves a respawn point; on death the player
+restarts there with restored HP instead of the permanent game-over freeze. The
+engine death-handler is gated `#if BW_CHECKPOINTS` (the `#else` is the old
+freeze), so off → byte-identical. Render-tested end-to-end (`checkpoint.mjs`:
+walk onto a door, die to an enemy, respawn at the door — not the spawn, never
+stuck at `player_dead`).
+
+### R-3 / R-6 — the spawn pool (engine + `spawn` & `damage` modules)
+
+The biggest Arc C lift: a fixed pool of runtime-activated effect sprites in the
+engine, **all behind `#if BW_SPAWN_ENABLED`** (default `0` via `#ifndef`), so a
+no-spawn ROM compiles the whole subsystem out and stays byte-identical.
+
+- **Engine** (`platformer.c`). `spawn_active/_x/_y/_ttl[SPAWN_MAX=4]` + a
+  `bw_spawn(x, y)` activator + a render pass after the scene sprites (same
+  `oam_idx <= 252` guard, `world_to_screen_*` under `SCROLL_BUILD`); ttl
+  decrements each frame and the slot deactivates at 0.
+- **Server** (`playground_server.py`). `_spawn_art_index` / `_spawn_art_lines`
+  emit `SPAWN_W/H` + `SPAWN_TILES/ATTRS` from the chosen sprite — **only when a
+  spawn art is configured** (the R-7 trick: cc65 emits even *unreferenced* const
+  arrays, so an always-present table would shift the baseline).
+- **R-3 — `spawn` module.** "Spawn effect on a trigger tile": when the player's
+  centre first enters a **TRIGGER** tile (rising-edge
+  `behaviour_at == BEHAVIOUR_TRIGGER`, mirroring the doors probe), pop the chosen
+  sprite for a TTL. Registered in `MODULE_ORDER` *before* `damage` so its art +
+  ttl take precedence when both consumers are on.
+- **R-6 — `damage` spawn-on-hit.** "Show an effect sprite when the player is
+  hit": the existing `dmg_hit` fires `bw_spawn(px, py)`. Both consumers
+  `#ifndef`-guard `BW_SPAWN_ENABLED` / `SPAWN_TTL`, so they coexist cleanly.
+- **Tested** (`spawn.mjs`): emit guards + a running ROM asserting on a RAM
+  mirror of the live active-slot count — the pool activates on a hit / trigger
+  entry and **drains to zero between events** (not a stuck sprite).
+
+### R-9 — background region copy/paste (`index.html`, editor-only)
+
+A new **"Select region (drag)"** nametable tool: drag a tile-accurate marquee,
+**Copy region** (or Ctrl+C in select mode), hover the destination, **Paste
+here** (or Ctrl+V). Pure editor — zero engine/codegen. Copy deep-clones each
+`{tile, palette}`; paste snaps its anchor to the 2×2 attribute block (palette is
+a block property on NES — matches every other palette tool) and is a single undo
+step. Unit-tested headless (`region-copy-paste.mjs`) by extracting the R-9 block
+straight out of the inline script and exercising copy / clone / snap / undo
+against a synthetic nametable.
+
+---
+
 ## Arc C — R-7 press-a-button-to-attack animation — 2026-06-19
 
 A one-shot "attack" animation bound to A or B

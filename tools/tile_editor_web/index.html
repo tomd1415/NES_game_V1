@@ -805,6 +805,8 @@ body.nt-resizing { cursor: ns-resize; -webkit-user-select: none; user-select: no
 .nt-canvas-wrap[data-mode="erase"] #nt-canvas { cursor: not-allowed; }
 .nt-canvas-wrap[data-mode="palette-rect"] #nt-canvas { cursor: cell; }
 .nt-canvas-wrap[data-mode="fill"] #nt-canvas { cursor: copy; }
+.nt-canvas-wrap[data-mode="select"] #nt-canvas { cursor: crosshair; }
+.nt-region-info { font-size: 12px; color: #9fb3c8; margin-left: 6px; }
 
 .nt-mode-toggle {
   display: inline-flex;
@@ -1276,12 +1278,18 @@ kbd {
         <option value="erase">Erase to tile 0</option>
         <option value="palette-rect">Palette rectangle (drag)</option>
         <option value="fill">Flood-fill tile</option>
+        <option value="select">Select region (drag)</option>
       </select>
     </label>
     <label>Use palette
       <select id="nt-palette"></select>
     </label>
     <button type="button" id="btn-nt-clear" title="Erase every cell back to tile 0 / palette BG0 (undoable)">Clear whole background</button>
+    <span class="nt-region-tools" title="Pick 'Select region (drag)', drag a box on the canvas, Copy region, then hover where you want it and Paste here. Ctrl+C / Ctrl+V also work in Select mode.">
+      <button type="button" id="btn-nt-copy-region">⧉ Copy region</button>
+      <button type="button" id="btn-nt-paste-region">⧉ Paste here</button>
+      <span id="nt-region-info" class="nt-region-info" aria-live="polite"></span>
+    </span>
     <details class="nt-grid-panel" id="nt-grid-panel" title="Show or hide grid lines, tweak their thickness and colour">
       <summary>⊞ Grid ▾</summary>
       <div class="nt-grid-body">
@@ -3510,6 +3518,9 @@ function renderNametable() {
     ctx.stroke();
   }
 
+  // R-9: keep the frozen region marquee visible across redraws.
+  if (ntSelection) drawNtSelectionOverlay(ntSelection);
+
   // Keep the full-screen preview in sync if it's open.
   const previewDlg = document.getElementById('preview-dialog');
   if (previewDlg && previewDlg.open) renderFullPreview();
@@ -3530,6 +3541,10 @@ let ntLastCellKey = null;
 let ntRectStart = null;
 let ntRectEnd = null;
 let ntHoverBlockKey = null;
+// R-9 background region copy/paste (tile-accurate, editor-only).
+let ntSelection = null;        // frozen marquee rect {x0,y0,x1,y1} (tile cells)
+let ntRegionClipboard = null;  // { w, h, cells: [[{tile, palette}, …]] }
+let ntHoverCell = null;        // last hovered {x, y} — the paste anchor
 
 function normalisedBlockRect(a, b) {
   // Snap both corners outward to the 2×2 attribute-block grid.
@@ -3588,6 +3603,88 @@ function drawNtRectOverlay(a, b) {
   ctx.lineWidth = 2;
   ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
   ctx.restore();
+}
+
+// --- R-9: background region copy/paste -------------------------------
+// Tile-accurate (no 2×2 block snapping for the marquee itself — tiles are
+// per-cell on hardware).  Paste snaps its anchor to the attribute-block grid
+// so pasted palettes stay predictable, matching the other palette tooling.
+function normalisedTileRect(a, b) {
+  return {
+    x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y),
+    x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y),
+  };
+}
+
+function drawNtSelectionOverlay(rect) {
+  if (!rect) return;
+  const canvas = document.getElementById('nt-canvas');
+  const ctx = canvas.getContext('2d');
+  const cellPx = 8 * ntZoom();
+  const px = rect.x0 * cellPx, py = rect.y0 * cellPx;
+  const pw = (rect.x1 - rect.x0 + 1) * cellPx, ph = (rect.y1 - rect.y0 + 1) * cellPx;
+  ctx.save();
+  ctx.fillStyle = 'rgba(124, 252, 0, 0.12)';
+  ctx.fillRect(px, py, pw, ph);
+  ctx.strokeStyle = '#7CFC00';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 3]);
+  ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+  ctx.restore();
+}
+
+function setRegionInfo(msg) {
+  const el = document.getElementById('nt-region-info');
+  if (el) el.textContent = msg || '';
+}
+
+function copyNtRegion() {
+  if (!ntSelection) {
+    setRegionInfo('Select a region first (drag with “Select region”).');
+    return;
+  }
+  const { x0, y0, x1, y1 } = ntSelection;
+  const cells = [];
+  for (let y = y0; y <= y1; y++) {
+    const srow = activeBg().nametable[y];
+    const row = [];
+    for (let x = x0; x <= x1; x++) {
+      const c = srow && srow[x];
+      row.push(c ? { tile: c.tile, palette: c.palette } : { tile: 0, palette: 0 });
+    }
+    cells.push(row);
+  }
+  ntRegionClipboard = { w: x1 - x0 + 1, h: y1 - y0 + 1, cells };
+  setRegionInfo(ntRegionClipboard.w + '×' + ntRegionClipboard.h
+    + ' copied — hover the canvas and “Paste here” (or Ctrl+V).');
+}
+
+function pasteNtRegion(anchorX, anchorY) {
+  if (!ntRegionClipboard) { setRegionInfo('Nothing copied yet.'); return; }
+  // Snap the paste origin to the 2×2 attribute-block grid (palette is a block
+  // property on NES — keeps pasted colours landing where the pupil expects).
+  const ax = anchorX & ~1, ay = anchorY & ~1;
+  pushUndo();
+  const { w, h, cells } = ntRegionClipboard;
+  for (let dy = 0; dy < h; dy++) {
+    const drow = activeBg().nametable[ay + dy];
+    if (!drow) continue;
+    for (let dx = 0; dx < w; dx++) {
+      const dst = drow[ax + dx];
+      if (!dst) continue;
+      dst.tile = cells[dy][dx].tile;
+      dst.palette = cells[dy][dx].palette;
+    }
+  }
+  markDirty();
+  renderNametable();
+  setRegionInfo('Pasted ' + w + '×' + h + ' at ' + ax + ',' + ay + ' (Ctrl+Z to undo).');
+}
+
+function pasteNtRegionAtHover() {
+  if (!ntRegionClipboard) { setRegionInfo('Nothing copied yet.'); return; }
+  if (!ntHoverCell) { setRegionInfo('Hover over the canvas where you want it, then Paste.'); return; }
+  pasteNtRegion(ntHoverCell.x, ntHoverCell.y);
 }
 
 function applyNtTool(cx, cy) {
@@ -3670,6 +3767,9 @@ function renderAll() {
 // Rebuild the background picker + sync the size selector to the active bg.
 // Called after anything that changes state.backgrounds or state.selectedBgIdx.
 function refreshBgUi() {
+  // R-9: the marquee is per-background coords; drop it when the active bg
+  // changes (the copied region stays on the clipboard for cross-bg paste).
+  ntSelection = null;
   const sel = document.getElementById('bg-select');
   if (!sel) return;
   sel.innerHTML = '';
@@ -4340,6 +4440,12 @@ function init() {
     modeButtons.forEach(b => {
       b.setAttribute('aria-pressed', b.dataset.mode === tool ? 'true' : 'false');
     });
+    // R-9: leaving Select mode drops the visible marquee (the copied region
+    // stays on the clipboard so you can still Paste).
+    if (tool !== 'select' && ntSelection) {
+      ntSelection = null;
+      if (document.getElementById('nt-canvas')) renderNametable();
+    }
   }
   function setNtMode(tool) {
     ntToolSel.value = tool;
@@ -4357,7 +4463,7 @@ function init() {
     Storage.writePrefs(prefs);
   });
   // Restore persisted mode (default 'paint').
-  const savedMode = prefs.ntMode && ['paint', 'palette', 'erase', 'palette-rect', 'fill']
+  const savedMode = prefs.ntMode && ['paint', 'palette', 'erase', 'palette-rect', 'fill', 'select']
     .includes(prefs.ntMode) ? prefs.ntMode : 'paint';
   ntToolSel.value = savedMode;
   syncModeUi(savedMode);
@@ -4370,6 +4476,9 @@ function init() {
     markDirty();
     renderNametable();
   });
+  // R-9: region copy/paste buttons (Ctrl+C / Ctrl+V mirror these in Select mode).
+  document.getElementById('btn-nt-copy-region').addEventListener('click', copyNtRegion);
+  document.getElementById('btn-nt-paste-region').addEventListener('click', pasteNtRegionAtHover);
   const ntc = document.getElementById('nt-canvas');
   ntc.addEventListener('contextmenu', e => e.preventDefault());
   ntc.addEventListener('mousedown', e => {
@@ -4383,12 +4492,21 @@ function init() {
       drawNtRectOverlay(ntRectStart, ntRectEnd);
       return;
     }
+    if (tool === 'select') {
+      ntSelection = null;            // drop the old marquee while dragging a new one
+      ntRectStart = { x, y };
+      ntRectEnd = { x, y };
+      renderNametable();
+      drawNtSelectionOverlay(normalisedTileRect(ntRectStart, ntRectEnd));
+      return;
+    }
     pushUndo();
     ntLastCellKey = x + ',' + y;
     applyNtTool(x, y);
   });
   ntc.addEventListener('mousemove', e => {
     const { x, y } = ntPointToCell(e);
+    ntHoverCell = { x, y };           // R-9 paste anchor (last hovered cell)
     document.getElementById('nt-info').textContent =
       'Cell (' + x + ', ' + y + ') — screen '
       + Math.floor(x / SCREEN_W) + ',' + Math.floor(y / SCREEN_H)
@@ -4411,7 +4529,11 @@ function init() {
     if (ntRectStart) {
       ntRectEnd = { x, y };
       renderNametable();
-      drawNtRectOverlay(ntRectStart, ntRectEnd);
+      if (document.getElementById('nt-tool').value === 'select') {
+        drawNtSelectionOverlay(normalisedTileRect(ntRectStart, ntRectEnd));
+      } else {
+        drawNtRectOverlay(ntRectStart, ntRectEnd);
+      }
       return;
     }
     const key = x + ',' + y;
@@ -4427,8 +4549,17 @@ function init() {
   });
   window.addEventListener('mouseup', () => {
     if (ntRectStart && ntRectEnd) {
-      pushUndo();
-      applyPaletteRect(ntRectStart, ntRectEnd);
+      if (document.getElementById('nt-tool').value === 'select') {
+        // Freeze the marquee — do NOT mutate the model (copy is a read).
+        ntSelection = normalisedTileRect(ntRectStart, ntRectEnd);
+        const w = ntSelection.x1 - ntSelection.x0 + 1;
+        const h = ntSelection.y1 - ntSelection.y0 + 1;
+        setRegionInfo(w + '×' + h + ' selected — “Copy region” (or Ctrl+C).');
+        renderNametable();
+      } else {
+        pushUndo();
+        applyPaletteRect(ntRectStart, ntRectEnd);
+      }
     }
     ntRectStart = null;
     ntRectEnd = null;
@@ -4533,6 +4664,13 @@ function init() {
       dirty = false;
       setStatus('saved', '● Saved + snapshot');
       return;
+    }
+    // R-9: region copy/paste — only while the "Select region" tool is active,
+    // so plain-key c/v (tile-pixel copy) and native copy elsewhere still work.
+    if (e.ctrlKey && !e.shiftKey && document.getElementById('nt-tool')
+        && document.getElementById('nt-tool').value === 'select') {
+      if (e.key.toLowerCase() === 'c') { e.preventDefault(); copyNtRegion(); return; }
+      if (e.key.toLowerCase() === 'v') { e.preventDefault(); pasteNtRegionAtHover(); return; }
     }
     if (!e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.key === 'z') { e.preventDefault(); undo(); return; }

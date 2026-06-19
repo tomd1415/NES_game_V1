@@ -127,7 +127,7 @@
   // ones, so the order matters: `game` picks the template; `players`
   // then fills in player region values.
   const MODULE_ORDER = ['game', 'globals', 'players', 'scene',
-    'behaviour_walls', 'pickups', 'damage', 'hud', 'doors',
+    'behaviour_walls', 'pickups', 'spawn', 'damage', 'hud', 'doors',
     'dialogue', 'events', 'win_condition'];
 
   function assemble(state, templateText) {

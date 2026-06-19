@@ -648,6 +648,11 @@
     defaultConfig: {
       amount: 1,
       invincibilityFrames: 30,
+      checkpoints: false,   // R-8: respawn instead of game over
+      respawnHp: 1,
+      spawnOnHit: false,    // R-6: show an effect sprite where the player is hurt
+      spawnSpriteIdx: 0,
+      spawnTtl: 16,
     },
     schema: [
       {
@@ -665,15 +670,81 @@
         help: 'Player can\'t be hit again for this many frames after ' +
           'each hit.  0 = instant repeat hits.',
       },
+      {
+        key: 'checkpoints',
+        label: 'Checkpoints (respawn instead of game over)',
+        type: 'bool',
+        help: 'Walk Player 1 onto a Door tile (Behaviour page) to save your ' +
+          'spot.  On death you restart there with some HP instead of the game ' +
+          'freezing.  (Uses the Door tile — avoid teleport Doors in the same ' +
+          'project.)',
+      },
+      {
+        key: 'respawnHp',
+        label: 'HP restored on respawn',
+        type: 'int',
+        min: 1, max: 9,
+        help: 'How much health you get back when you respawn at a checkpoint.',
+      },
+      {
+        key: 'spawnOnHit',
+        label: 'Show an effect sprite when the player is hit',
+        type: 'bool',
+        help: 'When Player 1 takes a hit, a sprite pops up where they were ' +
+          '(a spark, a puff…).  Choose which sprite below.',
+      },
+      {
+        key: 'spawnSpriteIdx',
+        label: 'Effect sprite number (which sprite to show)',
+        type: 'int',
+        min: 0, max: 31,
+        help: 'The sprite number (order on the Sprites page, starting at 0) ' +
+          'to use as the hit effect.',
+      },
+      {
+        key: 'spawnTtl',
+        label: 'Effect lasts (frames — 60 = 1 sec)',
+        type: 'int',
+        min: 1, max: 120,
+        help: 'How long the effect sprite stays on screen after each hit.',
+      },
     ],
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
       const amount = A.clampInt(c.amount, 1, 9, 1);
       const iframes = A.clampInt(c.invincibilityFrames, 0, 120, 30);
-      template = A.appendToSlot(template, 'declarations', [
+      const checkpoints = !!c.checkpoints;
+      const respawnHp = A.clampInt(c.respawnHp, 1, 9, 1);
+      const spawnOnHit = !!c.spawnOnHit;
+      const spawnTtl = A.clampInt(c.spawnTtl, 1, 120, 16);
+      const decls = [
         '#define DAMAGE_AMOUNT ' + amount,
         '#define INVINCIBILITY_FRAMES ' + iframes,
-      ].join('\n'));
+      ];
+      if (spawnOnHit) {
+        // R-6: turn on the shared spawn pool (the engine #if-gates it) + set its
+        // lifetime.  #ifndef-guarded so it coexists with the spawn (R-3) module.
+        decls.push(
+          '#ifndef BW_SPAWN_ENABLED',
+          '#define BW_SPAWN_ENABLED 1',
+          '#endif',
+          '#ifndef SPAWN_TTL',
+          '#define SPAWN_TTL ' + spawnTtl,
+          '#endif');
+      }
+      if (checkpoints) {
+        // R-8: respawn state.  cp_x/cp_y default to the player start so a death
+        // before touching any checkpoint respawns at the spawn point.
+        decls.push(
+          '#define BW_CHECKPOINTS 1',
+          '#define BW_RESPAWN_HP ' + respawnHp,
+          'pxcoord_t cp_x, cp_y;');
+      }
+      template = A.appendToSlot(template, 'declarations', decls.join('\n'));
+      if (checkpoints) {
+        template = A.appendToSlot(template, 'init',
+          '    cp_x = PLAYER_X; cp_y = PLAYER_Y;');
+      }
       const body = [
         '        // [builder] damage — enemies hurt the player(s) on touch.',
         '#if PLAYER_HP_ENABLED',
@@ -693,13 +764,36 @@
         '                          ? (player_hp - DAMAGE_AMOUNT) : 0;',
         '                player_iframes = INVINCIBILITY_FRAMES;',
         '                if (player_hp == 0) player_dead = 1;',
+        '#if BW_SPAWN_ENABLED',
+        '                bw_spawn(px, py);   /* R-6 — hurt effect at the player */',
+        '#endif',
         '            }',
         '        } else if (player_iframes > 0) {',
         '            player_iframes--;',
         '        }',
+        '#if BW_CHECKPOINTS',
+        '        /* R-8: save the respawn point while the player\'s centre is on a',
+        '         * checkpoint (DOOR) tile. */',
+        '        if (behaviour_at((unsigned int)((px + (PLAYER_W << 2)) >> 3),',
+        '                         (unsigned int)((py + (PLAYER_H << 2)) >> 3))',
+        '                == BEHAVIOUR_DOOR) {',
+        '            cp_x = px; cp_y = py;',
+        '        }',
+        '#endif',
         '        if (player_dead) {',
+        '#if BW_CHECKPOINTS',
+        '            /* Respawn at the last checkpoint with restored HP instead of',
+        '             * a permanent freeze.  player_dead is cleared THIS frame —',
+        '             * before the engine game-over tint (after this slot) reads',
+        '             * it — so there is no blue flash. */',
+        '            px = cp_x; py = cp_y;',
+        '            player_hp = BW_RESPAWN_HP; player_dead = 0;',
+        '            player_iframes = INVINCIBILITY_FRAMES;',
+        '            jumping = 0; jmp_up = 0;',
+        '#else',
         '            jumping = 0; jmp_up = 0; prev_pad = 0xFF;',
         '            walk_speed = 0; climb_speed = 0;',
+        '#endif',
         '        }',
         '#endif',
         '#if PLAYER2_HP_ENABLED',
@@ -735,6 +829,71 @@
         '        // This module only sets player_dead / player2_dead above.',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame', body);
+    },
+  };
+
+  // --------------------------------------------------------------------
+  // Spawn (R-3) — pop a short-lived effect sprite when the player steps
+  // onto a TRIGGER tile (painted on the Behaviour page).  Uses the shared
+  // engine spawn pool (platformer.c, #if BW_SPAWN_ENABLED — byte-identical
+  // when off).  The damage module's "spawn on hit" (R-6) drives the SAME
+  // pool; this module is the rising-edge tile trigger.  The effect art is
+  // the chosen sprite, emitted as SPAWN_TILES by the server.
+  // --------------------------------------------------------------------
+  modules['spawn'] = {
+    label: 'Spawn effect (on trigger tile)',
+    description: 'When the player walks onto a TRIGGER tile (paint TRIGGER ' +
+      'tiles on the Behaviour page), pop up an effect sprite there for a ' +
+      'moment — a spark, a puff of smoke, a star.',
+    defaultConfig: { spriteIdx: 0, ttl: 24 },
+    schema: [
+      {
+        key: 'spriteIdx',
+        label: 'Effect sprite number (which sprite to show)',
+        type: 'int',
+        min: 0, max: 31,
+        help: 'The sprite number (order on the Sprites page, starting at 0) ' +
+          'to pop up as the effect.',
+      },
+      {
+        key: 'ttl',
+        label: 'Effect lasts (frames — 60 = 1 sec)',
+        type: 'int',
+        min: 1, max: 120,
+        help: 'How long the effect sprite stays on screen each time it fires.',
+      },
+    ],
+    applyToTemplate(template, node, state) {
+      const c = (node && node.config) || {};
+      const ttl = A.clampInt(c.ttl, 1, 120, 24);
+      // Turn on the shared engine pool + its lifetime.  #ifndef-guarded so it
+      // coexists with the damage module's spawn-on-hit (R-6) when both are on.
+      template = A.appendToSlot(template, 'declarations', [
+        '#ifndef BW_SPAWN_ENABLED',
+        '#define BW_SPAWN_ENABLED 1',
+        '#endif',
+        '#ifndef SPAWN_TTL',
+        '#define SPAWN_TTL ' + ttl,
+        '#endif',
+        'unsigned char spawn_was_on;   /* R-3 rising-edge latch */',
+      ].join('\n'));
+      template = A.appendToSlot(template, 'init', '    spawn_was_on = 0;');
+      // Fire once when the player's centre first enters a TRIGGER tile (mirrors
+      // how the doors module probes behaviour_at == BEHAVIOUR_DOOR).
+      template = A.appendToSlot(template, 'per_frame', [
+        '        // [builder] spawn (R-3) — drop an effect when the player steps',
+        '        // onto a TRIGGER tile (rising edge, so it fires once per entry).',
+        '#if BW_SPAWN_ENABLED',
+        '        {',
+        '            unsigned char on_trig = (behaviour_at(',
+        '                (unsigned int)((px + (PLAYER_W << 2)) >> 3),',
+        '                (unsigned int)((py + (PLAYER_H << 2)) >> 3)) == BEHAVIOUR_TRIGGER);',
+        '            if (on_trig && !spawn_was_on) bw_spawn(px, py);',
+        '            spawn_was_on = on_trig;',
+        '        }',
+        '#endif',
+      ].join('\n'));
+      return template;
     },
   };
 
@@ -1564,6 +1723,10 @@
         pickups: {
           enabled: false,
           config: {},
+        },
+        spawn: {
+          enabled: false,
+          config: Object.assign({}, modules['spawn'].defaultConfig),
         },
         damage: {
           enabled: false,

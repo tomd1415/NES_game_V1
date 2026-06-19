@@ -1,15 +1,30 @@
 # Arc C — Pupil Feature Backlog (Tier 2) — Implementation Plan
 
-> **Progress (2026-06-19):** ✅ **R-10** (character bob), ✅ **R-4** (per-sprite
-> enemy speed), and ✅ **R-7** (button → one-shot attack animation) shipped — see
-> the changelog. All render-tested (`render-character-bob.mjs`, `enemy-speed.mjs`,
-> `attack.mjs`), byte-identical intact.
-> R-10 deviated from the plan: it's pad-driven, not `anim_frame`-driven (which
-> only advances when a walk animation is assigned, so it would no-op otherwise).
-> R-7's attack edge uses its own `attack_prev` (not `prev_pad`, which the jump
-> edge already consumes) and `ASSIGN_KINDS` centralises the editor's
-> walk/jump/attack assignment lists.
-> Remaining: R-3, R-8, R-9, R-6.
+> **Progress (2026-06-19): ✅ ALL SEVEN SHIPPED.** ✅ **R-10** (character bob),
+> ✅ **R-4** (per-sprite enemy speed), ✅ **R-7** (button → one-shot attack
+> animation), ✅ **R-8** (checkpoints), ✅ **R-3** (spawn on a trigger tile),
+> ✅ **R-6** (hurt effect on hit), ✅ **R-9** (background region copy/paste) —
+> see the changelog. `run-all.mjs` green, **byte-identical baseline intact**.
+> Each is render- or unit-tested (`render-character-bob.mjs`, `enemy-speed.mjs`,
+> `attack.mjs`, `checkpoint.mjs`, `spawn.mjs`, `region-copy-paste.mjs`).
+>
+> Notable deviations from the plan as written:
+>
+> - **R-10** is pad-driven, not `anim_frame`-driven (which only advances when a
+>   walk animation is assigned, so it would no-op otherwise).
+> - **R-7**'s attack edge uses its own `attack_prev` (not `prev_pad`, which the
+>   jump edge already consumes); `ASSIGN_KINDS` centralises the editor's
+>   walk/jump/attack assignment lists.
+> - **R-3/R-6** share one engine pool behind `#if BW_SPAWN_ENABLED`. R-6 (the
+>   recommended first consumer) shipped via the `damage` module; R-3 added a
+>   dedicated `spawn` module using a rising-edge
+>   `behaviour_at == BEHAVIOUR_TRIGGER` probe (the "spawn module" path the plan
+>   recommended over widening the 3-bit behaviour-id space). The art table is
+>   emitted only when configured, keeping the no-spawn ROM byte-identical (same
+>   cc65 unreferenced-const-array trick as R-7).
+> - **R-9** shipped as a `select` nametable tool with Copy/Paste buttons +
+>   Ctrl+C/V; paste snaps to the attribute block. Headless-tested by extracting
+>   the inline-script block (no full DOM needed).
 >
 > **Scope.** The seven Tier-2 pupil feature requests from
 > [`2026-06-17-web-feedback-fixes.md`](2026-06-17-web-feedback-fixes.md) Part B:

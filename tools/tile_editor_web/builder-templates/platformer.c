@@ -210,6 +210,40 @@ unsigned char attack_playing;   // 1 while the one-shot attack is on screen
 unsigned char attack_prev;      // last frame's pad, for the attack-button edge
 #endif
 
+/* R-3 / R-6 — runtime spawn pool.  A small fixed pool of effect sprites the
+ * engine turns on in response to a collision (R-3: player touches a spawner
+ * tile; R-6: the player is hurt).  The `spawn` / `damage` modules write
+ * `#define BW_SPAWN_ENABLED 1` + `#define SPAWN_TTL <n>`; the server emits
+ * SPAWN_TILES/SPAWN_ATTRS/SPAWN_W/SPAWN_H from a chosen sprite.  Off → fully
+ * compiled out → the no-module ROM is byte-identical.  spawn_active/_ttl are
+ * zero-initialised (BSS) = all slots free at boot. */
+#ifndef BW_SPAWN_ENABLED
+#define BW_SPAWN_ENABLED 0
+#endif
+#if BW_SPAWN_ENABLED
+#ifndef SPAWN_TTL
+#define SPAWN_TTL 24
+#endif
+#define SPAWN_MAX 4
+unsigned char spawn_active[SPAWN_MAX];
+pxcoord_t     spawn_x[SPAWN_MAX];
+pxcoord_t     spawn_y[SPAWN_MAX];
+unsigned char spawn_ttl[SPAWN_MAX];
+/* Activate the first free pool slot at world (bx,by).  No-op if the pool is
+ * full (overflow just drops the effect — NES has only 64 OAM sprites). */
+void bw_spawn(pxcoord_t bx, pxcoord_t by) {
+    unsigned char k;
+    for (k = 0; k < SPAWN_MAX; k++) {
+        if (!spawn_active[k]) {
+            spawn_active[k] = 1;
+            spawn_x[k] = bx; spawn_y[k] = by;
+            spawn_ttl[k] = SPAWN_TTL;
+            return;
+        }
+    }
+}
+#endif
+
 #if PLAYER_HP_ENABLED
 /* Phase B finale chunk A — HP + damage.  The Builder's damage module
  * writes `#define PLAYER_HP_ENABLED 1` + `#define PLAYER_MAX_HP <n>`
@@ -1252,6 +1286,37 @@ void main(void) {
             }
         }
 #endif
+#endif
+
+#if BW_SPAWN_ENABLED
+        /* R-3/R-6 — draw the active spawn-pool effects, tick their TTL, and
+         * free a slot when it expires.  Same oam_idx<=252 overflow guard as the
+         * scene sprites; off-pool slots are skipped. */
+        {
+            unsigned char spk, spr, spc;
+            for (spk = 0; spk < SPAWN_MAX; spk++) {
+                if (!spawn_active[spk]) continue;
+                if (spawn_ttl[spk] == 0) { spawn_active[spk] = 0; continue; }
+                spawn_ttl[spk]--;
+                for (spr = 0; spr < SPAWN_H; spr++) {
+                    for (spc = 0; spc < SPAWN_W; spc++) {
+                        if (oam_idx > 252) break;
+#ifdef SCROLL_BUILD
+                        oam_buf[oam_idx++] = world_to_screen_y(spawn_y[spk] + (spr << 3));
+#else
+                        oam_buf[oam_idx++] = spawn_y[spk] + (spr << 3);
+#endif
+                        oam_buf[oam_idx++] = SPAWN_TILES[spr * SPAWN_W + spc];
+                        oam_buf[oam_idx++] = SPAWN_ATTRS[spr * SPAWN_W + spc];
+#ifdef SCROLL_BUILD
+                        oam_buf[oam_idx++] = world_to_screen_x(spawn_x[spk] + (spc << 3));
+#else
+                        oam_buf[oam_idx++] = spawn_x[spk] + (spc << 3);
+#endif
+                    }
+                }
+            }
+        }
 #endif
 
 #if HUD_ENABLED && PLAYER_HP_ENABLED

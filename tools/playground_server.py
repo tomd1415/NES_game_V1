@@ -1063,6 +1063,60 @@ def _resolve_animation(state, kind, pw, ph):
     return good, fps
 
 
+def _spawn_art_index(state):
+    """The sprite index to use as the spawn-pool art (R-3/R-6), or -1.
+
+    Either the `spawn` module (R-3, its spriteIdx) or the `damage` module with
+    spawn-on-hit (R-6, its spawnSpriteIdx) supplies it.  Returns -1 when neither
+    is configured, so a no-spawn ROM emits no SPAWN_* tables and stays
+    byte-identical (the attack-table pattern)."""
+    try:
+        mods = (state.get("builder") or {}).get("modules") or {}
+    except AttributeError:
+        return -1
+    sp = mods.get("spawn") or {}
+    if sp.get("enabled"):
+        try:
+            return int((sp.get("config") or {}).get("spriteIdx", -1))
+        except (TypeError, ValueError):
+            return -1
+    dmg = mods.get("damage") or {}
+    dcfg = dmg.get("config") or {}
+    if dmg.get("enabled") and dcfg.get("spawnOnHit"):
+        try:
+            return int(dcfg.get("spawnSpriteIdx", -1))
+        except (TypeError, ValueError):
+            return -1
+    return -1
+
+
+def _spawn_art_lines(state, sprites):
+    """C lines for SPAWN_W/H + SPAWN_TILES/SPAWN_ATTRS, or [] when no spawn art."""
+    idx = _spawn_art_index(state)
+    if not (0 <= idx < len(sprites)):
+        return []
+    sp = sprites[idx]
+    w = int(sp.get("width", 0) or 0)
+    h = int(sp.get("height", 0) or 0)
+    if w < 1 or h < 1:
+        return []
+    cells = sp.get("cells") or []
+    tiles = [cell_tile(cells[r][c]) for r in range(h) for c in range(w)]
+    attrs = [cell_attr(cells[r][c]) for r in range(h) for c in range(w)]
+    return [
+        "",
+        f"#define SPAWN_W {w}",
+        f"#define SPAWN_H {h}",
+        f"static const unsigned char SPAWN_TILES[{w*h}] = {{",
+        "    " + ", ".join(f"0x{t:02X}" for t in tiles),
+        "};",
+        f"static const unsigned char SPAWN_ATTRS[{w*h}] = {{",
+        "    " + ", ".join(f"0x{a:02X}" for a in attrs),
+        "};",
+        "",
+    ]
+
+
 def _resolve_tagged_animation(state, role, style):
     """Find the first animation tagged (role, style) and flatten it.
 
@@ -1191,6 +1245,10 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         "};",
         "",
     ]
+
+    # R-3/R-6 spawn-pool art (only when a spawn/damage-on-hit sprite is chosen,
+    # so a no-spawn ROM stays byte-identical).
+    lines += _spawn_art_lines(state, sprites)
 
     # --- Player 2 (optional, Phase B chunk 5) ---------------------------
     # Always emit PLAYER2_ENABLED so the template's #if gate compiles
