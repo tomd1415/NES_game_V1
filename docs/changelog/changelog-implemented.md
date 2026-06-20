@@ -21,6 +21,31 @@ deferred.
 
 ---
 
+## Arc E §1 metatiles — server-side-expansion spike (E1-0) — 2026-06-20
+
+First slice of 16×16 metatiles from
+[`docs/plans/current/2026-06-18-arc-e-metatiles-and-game-styles.md`](../plans/current/2026-06-18-arc-e-metatiles-and-game-styles.md)
+(§1.8).  A metatile = 2×2 tiles + one palette + one behaviour id; a background
+can be authored as a grid of metatile ids over a per-bg library.
+
+- **`_expand_metatiles(state)`** (+ `_expand_metatile_bg`) in
+  `playground_server.py`: expands any `tileMode:'16x16'` background
+  (`metatiles[]` + `mtmap[][]`) into the ordinary 8×8 `nametable`/`behaviour`
+  grids before any emitter reads them, and sizes `dimensions` to span it.  Wired
+  in once at the top of the `/play` build, so every existing path (single
+  nametable, world nametable, behaviour map) is reused **unchanged**.
+- **No engine / `scroll.c` / `platformer.c` / baseline change** — 8×8
+  backgrounds are a no-op, so the byte-identical-ROM invariant stays green.
+- **Kills the §1.2 palette desync at the data layer:** all four 8×8 cells of a
+  metatile share its one palette, so every 16×16 attribute quadrant is uniform
+  *by construction* (the old emitter silently downsampled per-cell palettes).
+- **Test:** `tools/builder-tests/metatiles.mjs` — (A) asserts every attribute
+  quadrant is single-palette against the real server expansion, and (B) builds a
+  hand-authored checkerboard metatile project to a real iNES ROM through `/play`.
+
+Next: **E1-1** (authoring UI + state migration + promote helper) — the state
+shape (`tileMode`, `metatiles[]`, `mtmap[][]`) is now settled by the spike.
+
 ## Arc D Sprint 7 — codegen migration (safe parts) + asm-path reconcile — 2026-06-20
 
 Landed the **additive, headless-verifiable** slices of Sprint 7 from

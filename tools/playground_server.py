@@ -798,6 +798,72 @@ def build_nam(state):
     return _nametable_bytes_for(_active_nametable(state))
 
 
+# --- 16x16 metatiles (Arc E §1, spike E1-0) -----------------------------------
+# A metatile = 2x2 tiles + ONE palette + ONE behaviour id.  The pupil authors a
+# background as a grid of metatile ids (`bg.mtmap`) referencing a per-bg library
+# (`bg.metatiles`).  This spike expands such a background, server-side, into the
+# ordinary 8x8 `nametable` + `behaviour` grids the rest of the pipeline already
+# consumes — so there is NO engine / scroll.c / baseline change, and the result
+# is palette-correct *by construction*: all four 8x8 cells of a metatile share
+# its single palette, so every 16x16 attribute quadrant is uniform (this is the
+# desync §1.2 describes — the old per-8x8-cell palette that the emitter silently
+# downsampled).  Behaviour expands the same way (collision stays 8x8, D4).
+def _expand_metatile_bg(bg):
+    """(nametable, behaviour) 8x8 grids for a 16x16 metatile background.
+
+    `bg.metatiles[i] = {tiles:[TL,TR,BL,BR], palette, behaviour}` and
+    `bg.mtmap[r][c] = <metatile id>` (in metatile units).  An out-of-range or
+    missing id expands to a blank (tile 0, palette 0, behaviour 0) block."""
+    mts = bg.get("metatiles") or []
+    mtmap = bg.get("mtmap") or []
+    mrows = len(mtmap)
+    mcols = max((len(r) for r in mtmap if isinstance(r, list)), default=0)
+    nrows, ncols = mrows * 2, mcols * 2
+    nametable = [[{"tile": 0, "palette": 0} for _ in range(ncols)]
+                 for _ in range(nrows)]
+    behaviour = [[0 for _ in range(ncols)] for _ in range(nrows)]
+    # TL, TR, BL, BR -> (row offset, col offset) within the 2x2 block.
+    quads = ((0, 0), (0, 1), (1, 0), (1, 1))
+    for mr in range(mrows):
+        row = mtmap[mr] if isinstance(mtmap[mr], list) else []
+        for mc in range(len(row)):
+            mid = row[mc]
+            if not isinstance(mid, int) or mid < 0 or mid >= len(mts):
+                continue
+            mt = mts[mid] or {}
+            tiles = mt.get("tiles") or []
+            pal = int(mt.get("palette", 0)) & 3
+            beh = int(mt.get("behaviour", 0)) & 0xFF
+            for k, (dr, dc) in enumerate(quads):
+                t = int(tiles[k]) & 0xFF if k < len(tiles) else 0
+                nametable[mr * 2 + dr][mc * 2 + dc] = {"tile": t, "palette": pal}
+                behaviour[mr * 2 + dr][mc * 2 + dc] = beh
+    return nametable, behaviour
+
+
+def _expand_metatiles(state):
+    """In-place: replace every `tileMode=='16x16'` background's nametable +
+    behaviour with the 8x8 grids expanded from its metatile map, and set its
+    `dimensions` to span the expansion.  No-op for 8x8 (default) backgrounds, so
+    existing projects and the byte-identical baseline are untouched."""
+    bgs = state.get("backgrounds") if isinstance(state, dict) else None
+    if not isinstance(bgs, list):
+        return state
+    for bg in bgs:
+        if not isinstance(bg, dict) or (bg.get("tileMode") or "8x8") != "16x16":
+            continue
+        nametable, behaviour = _expand_metatile_bg(bg)
+        bg["nametable"] = nametable
+        bg["behaviour"] = behaviour
+        nrows, ncols = len(nametable), (len(nametable[0]) if nametable else 0)
+        # 1 screen = 32x30 tiles; size dimensions to cover the expansion.
+        bg["dimensions"] = {
+            "screens_x": max(1, -(-ncols // SCREEN_COLS)),   # ceil-div
+            "screens_y": max(1, -(-nrows // SCREEN_ROWS)),
+        }
+    return state
+
+
 def _palette_slots(state, group, i):
     """Return the 3 colour slots for palette `group[i]`, defaulting to black.
 
@@ -2123,6 +2189,9 @@ def _build_rom(body):
     state = body.get("state")
     if not isinstance(state, dict):
         raise ValueError("missing 'state' in request body")
+    # Arc E §1 (E1-0): expand any 16x16-metatile backgrounds into ordinary 8x8
+    # nametable/behaviour grids before anything reads them.  No-op for 8x8.
+    _expand_metatiles(state)
 
     custom_main_c = body.get("customMainC")
     if custom_main_c is not None and not isinstance(custom_main_c, str):

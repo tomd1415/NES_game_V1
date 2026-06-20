@@ -128,7 +128,9 @@ font glyph, walker-wall-stop). **Everything after Wave 1 is verifiable.**
 
 ### Wave 4 — Bigger reach (multi-week)
 - **Arc E §1 Metatiles** — server-side expansion first (E1-0 spike → E1-3), the
-  NES-side compact storage (E1-4) later/with T3.1–2.
+  NES-side compact storage (E1-4) later/with T3.1–2. *E1-0 spike DONE
+  (2026-06-20): `_expand_metatiles` + `metatiles.mjs`; palette-correct by
+  construction, no baseline change. Next: E1-1 authoring UI + migration.*
 - **Arc E §2 Infinite-runner** — cheap once Arc A + (ideally) metatiles are in.
 - **Arc D Sprint 5 (NMI frame model)** — the deeper rework; a VRAM ring buffer is
   *already linked* via nes.lib (`ppubuf_flush`), just bypassed — decompose into

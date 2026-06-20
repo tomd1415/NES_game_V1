@@ -94,8 +94,23 @@ read-only per metatile** (the UI expression of "correct by construction"); regio
 copy/paste (R-9) is trivial on the metatile grid and should be built here.
 
 ## 1.7 Phase plan
-- **E1-0** — Spike: server-side expansion, no engine change (§1.8).
-- **E1-1** — Authoring UI + state + migration + promote helper.
+- **E1-0** — Spike: server-side expansion, no engine change (§1.8). ✅ **DONE
+  (2026-06-20).** `_expand_metatiles(state)` in `playground_server.py` expands
+  any `tileMode:'16x16'` background (`metatiles[]` library + `mtmap[][]`) into the
+  ordinary 8×8 `nametable`/`behaviour` grids before any emitter reads them, and
+  sets `dimensions` to span it. Called once at the top of the `/play` build, so
+  every path (single nam, world nametable, behaviour map) is reused unchanged —
+  **no `scroll.c`/`platformer.c`/baseline change** (verified: byte-identical
+  invariant still green; 8×8 bgs are a no-op). Test: `tools/builder-tests/
+  metatiles.mjs` — asserts (A) every 16×16 attribute quadrant is single-palette
+  against the real expansion, and (B) a hand-authored checkerboard metatile
+  project builds a real iNES ROM through `/play`. This banks the §1.2 desync kill
+  (palette correct by construction) at the data layer.
+- **E1-1** — Authoring UI + state + migration + promote helper. *(next)* The
+  state shape the spike consumes is settled: per-bg `tileMode`, `metatiles[]`
+  (`{tiles:[TL,TR,BL,BR], palette, behaviour}`), `mtmap[][]`. Still to build:
+  `migrateMetatileFields` (additive, no STATE_VERSION bump), the library +
+  mini-editor + stamping UI in `index.html`, and the one-way promote helper.
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).
