@@ -261,6 +261,22 @@ remain) → E2-4 authoring ergonomics (metatiles; optional level-loop).
 > polish item; authoring long spike ribbons is much nicer once §1 metatiles land
 > (E2-4).
 
+> **Track-length limit (audited 2026-06-20).** The Backgrounds editor only
+> offers up to **2×2** screens (`index.html` `#nt-size`: 1×1 / 2×1 / 1×2 / 2×2 —
+> the Phase 4.4 cap), and `scroll.c load_world_bg` only fully loads 2 screens per
+> axis (wider relies on `scroll_stream`; worlds **beyond 2×2 are T3.2 territory**
+> and not shipped). So a pupil-authored runner is **at most a 2-screen-wide
+> track** today — short, and it loops/respawns quickly. The engine handles
+> wider worlds (the tests use 4×1 via a hand-built state and they scroll), but
+> the editor won't author them until metatiles (§1, ~75% smaller maps) and/or
+> T3.1/T3.2 land. **No ">2×2" validator is warranted** — the editor already caps
+> it; documenting the limit is the honest move. Longer/varied runner tracks are
+> the E2-4 ("metatiles") payoff.
+>
+> **Runner + other modules:** verified to compile + run + keep scrolling with
+> HP/damage/HUD/pickups/win all on — `tools/builder-tests/runner-modules.mjs`.
+> **Dialogue** is auto-disabled in runner builds (pupil-reported glitch).
+
 ## 2.8 Scoped first build
 "A 2×4 horizontal world auto-scrolls, player tap-jumps, touching slot-7 tiles
 snaps to start." `BW_GAME_STYLE 2`, `cam_x += 2`/frame, reused jump,
