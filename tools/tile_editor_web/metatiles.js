@@ -125,5 +125,26 @@
     return bg;
   }
 
-  global.MetatileLib = { migrate: migrate, expand: expand, promote: promote };
+  /* Delete metatile `id` from a 16×16 bg's library and remap the map: cells
+   * that used it fall back to block 0, and higher ids shift down by one to stay
+   * valid.  Refuses to delete the last remaining block.  Returns true on
+   * success.  Pure logic so the editor button is headlessly testable. */
+  function deleteBlock(bg, id) {
+    var mts = (bg && bg.metatiles) || [];
+    if (!Array.isArray(mts) || mts.length <= 1) return false;
+    if (!Number.isInteger(id) || id < 0 || id >= mts.length) return false;
+    mts.splice(id, 1);
+    var map = (bg && bg.mtmap) || [];
+    for (var r = 0; r < map.length; r++) {
+      var row = map[r];
+      if (!Array.isArray(row)) continue;
+      for (var c = 0; c < row.length; c++) {
+        if (row[c] === id) row[c] = 0;          // deleted block → fallback block 0
+        else if (row[c] > id) row[c] -= 1;      // keep remaining ids valid
+      }
+    }
+    return true;
+  }
+
+  global.MetatileLib = { migrate: migrate, expand: expand, promote: promote, deleteBlock: deleteBlock };
 })(typeof window !== 'undefined' ? window : globalThis);

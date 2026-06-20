@@ -144,9 +144,19 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
     preview to set it; palette/behaviour apply to the whole block. Edits apply
     immediately and re-render library + canvas. Built + suite-green; **awaiting
     the user's visual test.**
-  - ⏳ **Remaining UI slice:** Slice 4 — read-only-palette cue (it's already
-    one-per-block) + R-9 region copy/paste on the metatile grid + block delete
-    (with mtmap remap).
+  - **UI Slice 4 (partial) DONE (2026-06-20):** **block delete** —
+    `MetatileLib.deleteBlock(bg, id)` removes a block, falls its usages back to
+    block 0, and shifts higher ids down to stay valid (refuses to delete the
+    last block); wired to a **🗑 Delete block** button. Unit-tested in
+    `metatile-lib.mjs`. The palette select carries a tooltip stating the
+    one-palette-per-block rule (the "read-only-palette" cue). **Metatile block
+    CRUD is now complete** (promote → stamp → edit → +new → delete).
+  - ⏳ **Deferred (own follow-up):** **R-9 region copy/paste on the metatile
+    grid.** The existing select/copy/paste machinery operates on the 8×8
+    nametable and is disabled in metatile mode; adapting it to `mtmap` regions is
+    a self-contained but non-trivial piece — left for a dedicated change rather
+    than rushed into this slice. The per-block editor already covers the common
+    "make a block once, stamp it everywhere" need.
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).

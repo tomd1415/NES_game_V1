@@ -1346,12 +1346,13 @@ kbd {
   <div class="mt-editor" id="mt-editor" style="display:none; gap:12px; align-items:center; flex-wrap:wrap; margin:6px 0; padding:6px; border:1px dashed var(--border,#3a3352); border-radius:6px;">
     <span class="muted" style="font-size:0.9em;">✎ Edit block <b id="mt-editor-id">#0</b> — pick a tile in the tileset, then click a square to set that corner. Palette/behaviour apply to the whole block:</span>
     <canvas id="mt-editor-canvas" width="64" height="64" style="image-rendering:pixelated; cursor:pointer; border:1px solid var(--border,#3a3352); border-radius:3px;"></canvas>
-    <label style="font-size:0.9em;">Palette
+    <label style="font-size:0.9em;" title="One palette per 16×16 block — this is the 'correct by construction' rule that fixes the per-cell palette desync.">Palette
       <select id="mt-editor-palette"><option>0</option><option>1</option><option>2</option><option>3</option></select>
     </label>
     <label style="font-size:0.9em;">Behaviour
       <select id="mt-editor-behaviour"></select>
     </label>
+    <button type="button" id="btn-mt-delete" class="warn" title="Delete this block from the library. Anywhere it was placed falls back to block #0.">🗑 Delete block</button>
   </div>
   <div class="nt-canvas-wrap" data-mode="paint">
     <canvas id="nt-canvas"></canvas>
@@ -4667,6 +4668,20 @@ function init() {
     mt.behaviour = parseInt(e.target.value, 10) & 0xFF;
     markDirty();
     renderNametable();
+  });
+  document.getElementById('btn-mt-delete').addEventListener('click', () => {
+    const bg = activeBg();
+    if (bg.tileMode !== '16x16' || !Array.isArray(bg.metatiles)) return;
+    if (bg.metatiles.length <= 1) { alert('Can\'t delete the last block — a background needs at least one.'); return; }
+    if (!confirm('Delete block #' + selectedMetatileId + '?\n\nAnywhere it was ' +
+                 'placed falls back to block #0.')) return;
+    pushUndo();
+    if (window.MetatileLib && window.MetatileLib.deleteBlock(bg, selectedMetatileId)) {
+      if (selectedMetatileId >= bg.metatiles.length) selectedMetatileId = bg.metatiles.length - 1;
+      markDirty();
+      renderNametable();
+      setStatus('saved', '● Deleted block');
+    }
   });
   document.getElementById('btn-bg-rename').addEventListener('click', () => {
     const cur = activeBg();

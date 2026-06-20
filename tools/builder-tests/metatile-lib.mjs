@@ -126,4 +126,31 @@ function uniformBg() {
   console.log('✓ non-uniform block promotes to its TL palette (correct by construction)');
 }
 
+// ---- 6. deleteBlock remaps the map (fallback to 0; shift higher ids) -----
+{
+  const bg = {
+    tileMode: '16x16',
+    metatiles: [
+      { tiles: [0, 0, 0, 0], palette: 0, behaviour: 0 },   // 0
+      { tiles: [1, 1, 1, 1], palette: 1, behaviour: 0 },   // 1 (to delete)
+      { tiles: [2, 2, 2, 2], palette: 2, behaviour: 0 },   // 2
+    ],
+    mtmap: [[0, 1, 2], [2, 1, 0]],
+  };
+  const okDel = M.deleteBlock(bg, 1);
+  assert(okDel === true, 'deleteBlock should return true');
+  assert(bg.metatiles.length === 2, 'deleteBlock should remove one block');
+  // old 2 → 1; old 1 → 0 (fallback); old 0 → 0
+  assert(JSON.stringify(bg.mtmap) === JSON.stringify([[0, 0, 1], [1, 0, 0]]),
+    'deleteBlock remap wrong: ' + JSON.stringify(bg.mtmap));
+  assert(bg.metatiles[1].palette === 2, 'surviving block 2 should now be id 1');
+  console.log('✓ deleteBlock: removes the block, falls usages back to 0, shifts higher ids');
+
+  // refuses to delete the last block
+  const one = { tileMode: '16x16', metatiles: [{ tiles: [0, 0, 0, 0], palette: 0, behaviour: 0 }], mtmap: [[0]] };
+  assert(M.deleteBlock(one, 0) === false && one.metatiles.length === 1,
+    'deleteBlock must refuse to delete the last block');
+  console.log('✓ deleteBlock: refuses to delete the last remaining block');
+}
+
 console.log('\nmetatile-lib (E1-1 headless half): all checks passed');

@@ -112,6 +112,24 @@ painted) + a Behaviour-page "Spike tile" affordance (E2-1); the A-to-jump remap
 (jump is currently the shared UP, E2-3); nicer spike-ribbon authoring once §1
 metatiles land (E2-4).
 
+## Arc E §1 metatiles — E1-1 UI Slice 4 (block delete) — 2026-06-20
+
+Completes metatile block CRUD (promote → stamp → edit → +new → delete):
+
+- `MetatileLib.deleteBlock(bg, id)` removes a block, falls its placements back
+  to block 0, and shifts higher ids down so the map stays valid; refuses to
+  delete the last remaining block. Unit-tested in `metatile-lib.mjs`.
+- Wired to a **🗑 Delete block** button in the mini-editor (with confirm). The
+  palette select gained a tooltip stating the one-palette-per-16×16-block rule.
+
+**Deferred (own follow-up): R-9 region copy/paste on the metatile grid** — the
+select/copy/paste machinery operates on the 8×8 nametable and is disabled in
+metatile mode; adapting it to `mtmap` regions is self-contained but non-trivial,
+so it's left for a dedicated change. The per-block editor already covers "make a
+block once, stamp it everywhere."
+
+Suite green. Needs a quick visual pass on the delete button.
+
 ## Arc E §1 metatiles — E1-1 UI Slice 3 (block mini-editor) — 2026-06-20
 
 You can now create + edit blocks, not just stamp the auto-built set:
