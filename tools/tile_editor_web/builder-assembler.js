@@ -126,9 +126,12 @@
   // Deterministic module order.  Later modules see the output of earlier
   // ones, so the order matters: `game` picks the template; `players`
   // then fills in player region values.
+  // T7.7: the `events` id was a dead placeholder — no modules['events']
+  // catalogue entry, validator, or emission ever existed, so the assemble loop
+  // silently skipped it every build.  Removed.
   const MODULE_ORDER = ['game', 'globals', 'players', 'scene',
     'behaviour_walls', 'pickups', 'spawn', 'damage', 'hud', 'doors',
-    'dialogue', 'events', 'win_condition'];
+    'dialogue', 'win_condition'];
 
   function assemble(state, templateText) {
     if (!templateText || typeof templateText !== 'string') {

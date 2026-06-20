@@ -10,6 +10,12 @@
 ; Self-contained: this file writes its own iNES header and hardware
 ; vectors, and does NOT link against nes.lib. That makes the boot path
 ; visible - reset: -> initialise PPU -> game_loop -> jmp game_loop.
+;
+; SCOPE: this is the raw 6502 path - single player, NO Builder modules.
+; HUD, Player 2, dialogue, win-conditions, pickups, damage, doors and
+; scene AI are C-only (the Builder emits C, never asm). For those, switch
+; the Code page to the C language mode. The scene.asminc you get here
+; carries the same identifiers as the C scene.inc so the names transfer.
 ; =============================================================================
 
 .include "palettes.asminc"

@@ -116,9 +116,15 @@ font glyph, walker-wall-stop). **Everything after Wave 1 is verifiable.**
   path; then **R-3** (spawn pool, the one new engine subsystem) + **R-6** (hurt
   sprite, its first consumer) together; then **R-8** (checkpoints, coordinate the
   death-tint suppression with B-4).
-- **Arc D Sprint 7** — finish the data-driven migration (`pickups`/`damage`/
-  `doors`/`scene` loops into the engine), retire the dead `events` id, reconcile
-  the asm `/play` path. Incremental, one module per change.
+- **Arc D Sprint 7** — *partly DONE (2026-06-20):* the safe slices landed —
+  dead `events` id retired, role table de-duplicated, asm `/play` path made
+  honest (scope banner + parity guard + first-ever asm smoke test). **The
+  per-frame loop migrations (`pickups`/`damage`/`doors`/`dialogue`/`scene`) are
+  deferred:** they can't be done byte-identically one-at-a-time (the per-frame
+  slot accumulates all modules at one ordered marker, so migrating one reorders
+  the rest). Needs an all-at-once order-preserving migration or per-step
+  re-pin + behavioural review — see the finding in
+  [`2026-06-18-arc-d-codegen-followthrough.md`](2026-06-18-arc-d-codegen-followthrough.md).
 
 ### Wave 4 — Bigger reach (multi-week)
 - **Arc E §1 Metatiles** — server-side expansion first (E1-0 spike → E1-3), the

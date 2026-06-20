@@ -21,6 +21,44 @@ deferred.
 
 ---
 
+## Arc D Sprint 7 — codegen migration (safe parts) + asm-path reconcile — 2026-06-20
+
+Landed the **additive, headless-verifiable** slices of Sprint 7 from
+[`docs/plans/current/2026-06-18-arc-d-codegen-followthrough.md`](../plans/current/2026-06-18-arc-d-codegen-followthrough.md);
+the per-frame module migrations (T7.1–T7.5) are deferred on a design decision
+(see the finding below).  Full `run-all.mjs` green; byte-identical golden intact.
+
+- **T7.7 — dead `events` id removed** from `MODULE_ORDER`
+  (`builder-assembler.js`).  It had no catalogue entry/validator/emission and was
+  silently skipped every build — zero behaviour change.
+- **T7.6a — role table de-duplicated.** `playground_server.py` now renders the
+  11 sprite role codes from one `ROLE_TABLE` source into **both** the C
+  `#define` (`build_scene_inc`) and asm `.define` (`build_scene_asminc`) paths
+  via a shared `_role_defs()`; verified byte-identical to the old hand-written
+  tables, so a single edit can't desync them.
+- **T7.6b — honest asm scope banner.** `build_scene_asminc`'s generated header
+  and `main.s.starter` now state the asm `/play` path is raw 6502 — single
+  player, no Builder modules (HUD/P2/dialogue/win/pickups/damage/doors/scene are
+  C-only).  Comments only → assembled bytes unchanged.
+- **T7.6c — asm/C parity guard** added to `run-all.mjs`: asserts both scene
+  emitters share the role-code source and the `player_tiles`/`NUM_STATIC_SPRITES`/
+  `ss_*` identifiers, so a future rename can't silently break the asm path's
+  "names carry across" pedagogy.
+- **T7.6d — `asm-play.mjs` smoke test:** builds the asm starter through `/play`
+  and asserts a real iNES ROM — the asm path had **zero** coverage before, so it
+  could have silently stopped compiling.
+- **`_rom-equiv.mjs`** standing guard: pins the everything-on ROM hash
+  (`ce62ec47…`) to catch accidental codegen drift.
+
+**Finding (documented in the Arc D plan):** the per-frame module migrations
+(T7.1–T7.5) can't be done **byte-identically one-at-a-time** — `appendToSlot`
+accumulates all modules' per-frame loops at one ordered marker, so migrating a
+single module into a `#if` block reorders it relative to the non-migrated ones
+and changes the emitted-C byte layout.  Byte-identical needs an all-at-once,
+order-preserving migration (incl. the hard `scene` case), which wants the
+behavioural/FCEUX review the plan reserves for that risk class.  Deferred with a
+recommended approach rather than shipping a fragile partial change.
+
 ## Bug-fix sweep — 2026-06-20 report (BR-01 … BR-08) — 2026-06-20
 
 Fixed the eight confirmed defects from

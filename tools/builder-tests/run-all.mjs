@@ -181,6 +181,42 @@ check('invariant: playground_server.py native launch uses _play_latest.nes', () 
   }
 }) || (anyFail = true);
 
+// T7.6c — asm/C scene-emitter parity guard.  The asm /play path is
+// deliberately a subset (single-player, no Builder modules), but the two
+// emitters MUST agree on the shared contract they both keep: the role codes
+// and the player/scene identifier names that "carry across" the pedagogy.
+// This fails loudly if a future rename in one emitter silently desyncs the
+// other (it does NOT force feature parity — that gap is by design).
+check('invariant: asm + C scene emitters share role codes + ss_* identifiers', () => {
+  const py = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
+  // 1) Role codes come from ONE source rendered into both paths (T7.6a):
+  //    a single ROLE_TABLE, and both emitters call _role_defs().
+  if (!/ROLE_TABLE\s*=\s*\[/.test(py)) {
+    throw new Error('ROLE_TABLE single-source role table missing (did T7.6a regress?)');
+  }
+  if ((py.match(/_role_defs\(/g) || []).length < 3) {
+    // 1 def + 2 call sites (asm ".define", C "#define").
+    throw new Error('both scene emitters must render roles via _role_defs() — a path stopped using it');
+  }
+  // The 11 role names must all be present in the shared table.
+  for (const role of ['PLAYER', 'NPC', 'ENEMY', 'ITEM', 'TOOL', 'POWERUP',
+                      'PICKUP', 'PROJECTILE', 'DECORATION', 'OTHER', 'HUD']) {
+    if (!new RegExp('"' + role + '"').test(py)) {
+      throw new Error('role code ' + role + ' missing from ROLE_TABLE');
+    }
+  }
+  // 2) Both emitters must define the shared scene identifiers the pedagogy
+  //    relies on (names carry across asm<->C).  Grep each emitter's body.
+  const asmBody = py.slice(py.indexOf('def build_scene_asminc'), py.indexOf('def build_scene_inc'));
+  const cBody   = py.slice(py.indexOf('def build_scene_inc'));
+  const shared = ['player_tiles', 'player_attrs', 'NUM_STATIC_SPRITES',
+    'ss_x', 'ss_y', 'ss_w', 'ss_h', 'ss_role', 'ss_offset'];
+  for (const id of shared) {
+    if (!asmBody.includes(id)) throw new Error('asm emitter missing shared identifier ' + id);
+    if (!cBody.includes(id))   throw new Error('C emitter missing shared identifier ' + id);
+  }
+}) || (anyFail = true);
+
 // Guard: PlayPipeline.capabilities() probes /health, not /capabilities.
 // The wrong endpoint (/capabilities) 404'd silently and disabled the
 // Local-fceux option on every page — fixed 2026-04-24.

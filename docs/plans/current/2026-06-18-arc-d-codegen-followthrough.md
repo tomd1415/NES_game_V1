@@ -177,7 +177,59 @@ stay green, which it will as long as the optimised engine still links.
 
 ---
 
-# Sprint 7 — finish the data-driven migration + reconcile the asm path  ⏸
+# Sprint 7 — finish the data-driven migration + reconcile the asm path  ⏸ (partly DONE)
+
+> **Status (2026-06-20).** The **safe, additive, headless-verifiable** parts are
+> DONE and suite-green: **T7.7** (dead `events` id removed), **T7.6a** (role
+> table de-duplicated onto one `ROLE_TABLE` source rendered into both asm + C),
+> **T7.6b** (honest asm-scope banner in `build_scene_asminc` output + the asm
+> starter), **T7.6c** (asm/C parity guard in `run-all.mjs`), **T7.6d**
+> (`asm-play.mjs` smoke test — the asm `/play` path now has coverage). A new
+> `tools/builder-tests/_rom-equiv.mjs` standing guard pins the everything-on ROM
+> hash (`ce62ec47…`) so any accidental codegen drift is caught.
+>
+> **The per-frame module migrations (T7.1–T7.5) are DEFERRED pending a design
+> decision — see the finding below.**
+>
+> ### ⚠ Finding: partial per-frame migration is NOT byte-preserving
+>
+> The plan's "ROM-equality diff (module on, before vs after) should be
+> identical" premise does **not** hold for a *partial* migration, because of how
+> the per-frame slot is assembled. `appendToSlot` (`builder-assembler.js`)
+> accumulates **every** enabled module's per-frame loop at the single
+> `//@ insert: per_frame` marker (`platformer.c:1085`), in `MODULE_ORDER`
+> (scene → pickups → spawn → damage → doors → dialogue → win_condition). Moving
+> *one* module's loop into a `#if`-gated block in the engine (a fixed position)
+> while its neighbours stay appended at the marker **reorders** the final
+> statement sequence — e.g. migrating `pickups` (currently 2nd, between `scene`
+> and `spawn`) moves it to one side of the whole appended run. Independent loops
+> so reordering is behaviour-equivalent, but the **emitted C statement order
+> changes → cc65 output bytes change → the everything-on ROM hash changes.**
+>
+> Byte-identical is only achievable if the migrated modules form a **contiguous
+> run** at one end of the per-frame order — in practice, migrating **all** the
+> per-frame-slot modules together (incl. the hard `scene` T7.5 and
+> `win_condition`), which contradicts "one module per change" and is too large to
+> land safely without the FCEUX/behavioural review the plan reserves for visual
+> changes.
+>
+> **Recommended path when picking this up (your call):**
+> 1. **All-at-once, order-preserving (keeps byte-identical):** migrate every
+>    per-frame-slot module in `MODULE_ORDER` in a single change that *replaces*
+>    the marker with the in-engine `#if` blocks in the same order. Verify with
+>    `_rom-equiv.mjs` (hash must stay `ce62ec47…`). Biggest, but provably
+>    behaviour-preserving.
+> 2. **Incremental, re-pin per step (accepts byte drift):** migrate one module
+>    at a time; after each, re-pin `_rom-equiv.mjs`'s `EXPECT` and rely on the
+>    chunk suites + `all-modules.mjs` for behaviour. Loses the "identical ROM"
+>    proof; each step needs a behavioural argument (the loop is independent of
+>    its neighbours, so reordering is safe) and ideally an FCEUX glance.
+> 3. **Leave the per-frame loops string-emitted; only migrate file-scope
+>    helpers** (e.g. `bw_sprite_blocked`, T7.5's reusable part) which don't sit
+>    in the ordered slot. Smallest; banks the cleanup without the ordering risk.
+>
+> The remainder of this section (T7.1–T7.5) is the original task detail, valid
+> once the approach above is chosen.
 
 Three independent threads, each small, each separately gated. Do them in the
 order T7.0 → T7.1 → … (cheapest/safest first). **One module per change**, and
