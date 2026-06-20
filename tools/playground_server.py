@@ -1063,36 +1063,51 @@ def _resolve_animation(state, kind, pw, ph):
     return good, fps
 
 
-def _spawn_art_index(state):
-    """The sprite index to use as the spawn-pool art (R-3/R-6), or -1.
+def _as_sprite_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return -1
 
-    Either the `spawn` module (R-3, its spriteIdx) or the `damage` module with
-    spawn-on-hit (R-6, its spawnSpriteIdx) supplies it.  Returns -1 when neither
-    is configured, so a no-spawn ROM emits no SPAWN_* tables and stays
-    byte-identical (the attack-table pattern)."""
+
+def _spawn_trigger_index(state):
+    """The trigger-effect (kind 0) sprite index when the `spawn` module is on,
+    else None.  BR-05 model B: independent of the hit effect."""
     try:
         mods = (state.get("builder") or {}).get("modules") or {}
     except AttributeError:
-        return -1
+        return None
     sp = mods.get("spawn") or {}
-    if sp.get("enabled"):
-        try:
-            return int((sp.get("config") or {}).get("spriteIdx", -1))
-        except (TypeError, ValueError):
-            return -1
+    if not sp.get("enabled"):
+        return None
+    return _as_sprite_int((sp.get("config") or {}).get("spriteIdx", -1))
+
+
+def _spawn_hit_index(state):
+    """The hit-effect (kind 1) sprite index when the `damage` module's
+    spawn-on-hit is ticked, else None.  Independent of the trigger effect."""
+    try:
+        mods = (state.get("builder") or {}).get("modules") or {}
+    except AttributeError:
+        return None
     dmg = mods.get("damage") or {}
     dcfg = dmg.get("config") or {}
-    if dmg.get("enabled") and dcfg.get("spawnOnHit"):
-        try:
-            return int(dcfg.get("spawnSpriteIdx", -1))
-        except (TypeError, ValueError):
-            return -1
-    return -1
+    if not (dmg.get("enabled") and dcfg.get("spawnOnHit")):
+        return None
+    return _as_sprite_int(dcfg.get("spawnSpriteIdx", -1))
 
 
-def _spawn_art_lines(state, sprites):
-    """C lines for SPAWN_W/H + SPAWN_TILES/SPAWN_ATTRS, or [] when no spawn art."""
-    idx = _spawn_art_index(state)
+def _spawn_required(state):
+    """True when the assembled C will turn the spawn pool on — i.e. either the
+    trigger or the hit effect is configured.  Used to decide whether a valid
+    spawn-art sprite is mandatory (BR-04)."""
+    return (_spawn_trigger_index(state) is not None
+            or _spawn_hit_index(state) is not None)
+
+
+def _spawn_art_one(sprites, idx, suffix):
+    """C lines for one SPAWN<suffix>_W/H + SPAWN<suffix>_TILES/ATTRS art block,
+    or [] when idx is out of range (caller validates / fails early)."""
     if not (0 <= idx < len(sprites)):
         return []
     sp = sprites[idx]
@@ -1105,16 +1120,30 @@ def _spawn_art_lines(state, sprites):
     attrs = [cell_attr(cells[r][c]) for r in range(h) for c in range(w)]
     return [
         "",
-        f"#define SPAWN_W {w}",
-        f"#define SPAWN_H {h}",
-        f"static const unsigned char SPAWN_TILES[{w*h}] = {{",
+        f"#define SPAWN{suffix}_W {w}",
+        f"#define SPAWN{suffix}_H {h}",
+        f"static const unsigned char SPAWN{suffix}_TILES[{w*h}] = {{",
         "    " + ", ".join(f"0x{t:02X}" for t in tiles),
         "};",
-        f"static const unsigned char SPAWN_ATTRS[{w*h}] = {{",
+        f"static const unsigned char SPAWN{suffix}_ATTRS[{w*h}] = {{",
         "    " + ", ".join(f"0x{a:02X}" for a in attrs),
         "};",
         "",
     ]
+
+
+def _spawn_art_lines(state, sprites):
+    """C for the trigger (SPAWN0_*) and hit (SPAWN1_*) effect art tables.  BR-05
+    model B: each enabled source emits its own independent art; a disabled
+    source emits nothing (so a no-spawn ROM stays byte-identical)."""
+    lines = []
+    ti = _spawn_trigger_index(state)
+    if ti is not None:
+        lines += _spawn_art_one(sprites, ti, "0")
+    hi = _spawn_hit_index(state)
+    if hi is not None:
+        lines += _spawn_art_one(sprites, hi, "1")
+    return lines
 
 
 def _resolve_tagged_animation(state, role, style):
@@ -1247,7 +1276,18 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
     ]
 
     # R-3/R-6 spawn-pool art (only when a spawn/damage-on-hit sprite is chosen,
-    # so a no-spawn ROM stays byte-identical).
+    # so a no-spawn ROM stays byte-identical).  BR-04/BR-05 model B: validate the
+    # trigger and hit effects independently and fail here with a clear message
+    # naming the bad index, instead of letting cc65 choke on undefined SPAWN*_*.
+    def _need_sprite(idx, what):
+        if idx is not None and not (0 <= idx < len(sprites)):
+            raise ValueError(
+                f"{what} points at sprite #{idx}, which does not exist (this "
+                f"project has {len(sprites)} sprite(s), numbered "
+                f"0..{len(sprites) - 1}). Pick an existing sprite, or draw it "
+                f"on the Sprites page.")
+    _need_sprite(_spawn_trigger_index(state), "The Spawn effect")
+    _need_sprite(_spawn_hit_index(state), "The Damage hit effect")
     lines += _spawn_art_lines(state, sprites)
 
     # --- Player 2 (optional, Phase B chunk 5) ---------------------------

@@ -21,6 +21,62 @@ deferred.
 
 ---
 
+## Bug-fix sweep — 2026-06-20 report (BR-01 … BR-08) — 2026-06-20
+
+Fixed the eight confirmed defects from
+[`docs/bug-report-2026-06-20.md`](../bug-report-2026-06-20.md).  Plan +
+per-bug solutions:
+[`docs/plans/current/2026-06-20-bug-report-fix-plan.md`](../plans/current/2026-06-20-bug-report-fix-plan.md).
+Each fix ships with a regression test; full `run-all.mjs` (byte-identical
+invariant, all ROM builds, all suites) is green.
+
+- **BR-02 (High) — debounced saves could lose the last edit.** Added a shared
+  flush hook in `storage.js` (`setFlushHook`/`flushPending`/`renameCurrent`),
+  called before every reload/switch (New/Duplicate in `wireBasicProjectActions`,
+  the recovery snapshot in `project-menu.js`).  Each of `code.html`,
+  `builder.html`, `behaviour.html` now defines `flushSave()`, registers it as
+  the hook and on `pagehide`, and routes its bespoke switcher through it.  On
+  Code, `flushSave()` first copies CodeMirror → state (the debounce was the only
+  place that happened).  Test: `flush-save.mjs`.
+- **BR-01 (High) — new Top-down projects assembled as Platformer.**
+  `migrateBuilderFields()` (index + sprites) now seeds the canonical
+  `builder.modules.game.config.type` from the `template` field, and the
+  new-project handlers seed the Builder tree at creation, so Top-down emits
+  `#define BW_GAME_STYLE 1`.  Test: `topdown-new-project.mjs`.
+- **BR-03 (High) — large two-player sprites overran the 256-byte OAM shadow.**
+  Guarded every Player 2 four-byte write (`oam_idx > 252`, outer + inner) in
+  `platformer.c` — inside `#if PLAYER2_ENABLED`, so the byte-identical baseline
+  is untouched.  Added a **blocking** validator when P1+P2 cells exceed 64 and a
+  **warning** for the full player/scene/HUD frame budget.  Test:
+  `player-oam-budget.mjs`.
+- **BR-04 (Med) — invalid spawn-effect index failed late in cc65.** Both effect
+  fields are now sprite **dropdowns** (new `spriteRef` field type bound to the
+  live sprite list); added **blocking** validators for the trigger and damage
+  effect references; `playground_server.py` fails early with a clear message
+  (`_spawn_required` + range check) instead of emitting inconsistent C.  Test:
+  `spawn-effect-refs.mjs`.
+- **BR-05 (Med) — trigger + damage effects silently shared one pool.** Fixed via
+  **model B (independent effects)**.  The engine spawn pool gained a per-slot
+  `spawn_kind` (0 = trigger, 1 = hit), two lifetimes (`SPAWN_TTL_0`/`_1`) and two
+  art tables (`SPAWN0_*`/`SPAWN1_*`); `bw_spawn(x, y, kind)` stamps each slot and
+  the render picks that kind's art.  The spawn module emits kind 0, the damage
+  module kind 1; the server emits the two art tables independently and validates
+  each source's sprite separately.  The UI already had independent fields, so no
+  new UI was needed.  All under `#if BW_SPAWN_ENABLED` → byte-identical baseline
+  preserved.  The interim shared-effect conflict warning was removed (no conflict
+  remains).  Tests: `spawn-effect-refs.mjs`, `spawn.mjs`.
+- **BR-06 (Med) — Player 2 uncontrollable in the Sprites preview.** Ported the
+  `{pad, button}` two-controller map (IJKL/O/U/1/2 → pad 2) into the Sprites
+  private emulator and dispatched via `m.pad` (matching the Code-page fix +
+  `emulator.js`); P2 key hint shown only when P2 is on.  Cross-page guard:
+  `emulator-p2-keys.mjs`.
+- **BR-07 (Low) — Builder/Code rename updated only half the project.** Added
+  `Storage.renameCurrent(state, name)` (updates state + catalog atomically);
+  Builder and Code name handlers now use it.  Test: `rename-project.mjs`.
+- **BR-08 (Low) — checkpoint respawn HP could exceed Max HP.** Generated C now
+  clamps `player_hp` to `PLAYER_MAX_HP` on respawn (spelled out, no `min`
+  macro); added a warning validator for over-max configs.  Test: `respawn-hp.mjs`.
+
 ## Arc C finale — R-8 checkpoints · R-3/R-6 spawn pool · R-9 region copy/paste — 2026-06-19
 
 The last four Tier-2 pupil requests

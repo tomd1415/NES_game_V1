@@ -878,6 +878,23 @@ function scheduleSave() {
   }, 400);
 }
 
+// BR-02: synchronous flush.  The 400 ms debounce above is the only place
+// CodeMirror's contents are copied into `state`, so any exit within that
+// window (project switch, duplicate, recover, import, navigation, tab close)
+// must copy + save immediately or the last edit is lost.  Registered as the
+// shared Storage flush hook and on `pagehide`, and called from the bespoke
+// switcher below.
+function flushSave() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+  if (typeof cm !== 'undefined' && cm) {
+    if (codeLang === 'asm') state.customMainAsm = cm.getValue();
+    else                    state.customMainC   = cm.getValue();
+  }
+  const nameEl = document.getElementById('project-name');
+  if (nameEl) state.name = nameEl.value || 'untitled';
+  saveState(state);
+}
+
 // Starter source is cached per language — the C and asm starters live at
 // different endpoints and the pupil can flip between them.
 const defaultSourceCache = { c: null, asm: null };
@@ -1614,10 +1631,7 @@ async function play(opts) {
   const mode = opts.mode ||
     (document.getElementById('pg-runon')?.value) || 'browser';
   // Flush any pending debounced save first so the server sees this keystroke.
-  const src = cm.getValue();
-  if (codeLang === 'asm') state.customMainAsm = src;
-  else                    state.customMainC   = src;
-  saveState(state);
+  flushSave();
 
   btn.disabled = true;
   setBuildPill('run', 'compiling…');
@@ -1849,7 +1863,13 @@ function setEmuStatus(msg, kind) {
 // Init
 // ================================================================
 document.getElementById('project-name').value = state.name || 'untitled';
-document.getElementById('project-name').addEventListener('input', scheduleSave);
+document.getElementById('project-name').addEventListener('input', (e) => {
+  // BR-07: keep the catalog name in sync, not just state.name (which the
+  // debounced save copies in).  Otherwise the project list / duplicate /
+  // delete keep showing the old name.
+  Storage.renameCurrent(state, e.target.value);
+  scheduleSave();
+});
 
 // Projects list (Phase 1.3 parity) — Duplicate + Delete + a list-of-
 // projects switcher.  "New project" lives on Sprites because this
@@ -1867,7 +1887,7 @@ function renderProjectsList() {
     btn.classList.toggle('active', p.id === activeIdNow);
     btn.addEventListener('click', () => {
       if (p.id === activeIdNow) return;
-      Storage.saveCurrent(state);
+      flushSave();   // BR-02: copy CodeMirror → state before switching away
       Storage.setActiveProjectId(p.id);
       window.location.reload();
     });
@@ -1884,6 +1904,10 @@ if (codeFileMenu) {
   });
 }
 Storage.wireBasicProjectActions({ makeFreshState: () => null });
+// BR-02: register the shared flush so New/Duplicate/Recover persist edits,
+// and flush on navigation/tab-close (no debounce gets to fire otherwise).
+Storage.setFlushHook(flushSave);
+window.addEventListener('pagehide', flushSave);
 // Shared Recover-from-snapshot + Migration-backup buttons.
 // No-op on any button missing or already wired.
 if (window.ProjectMenu) window.ProjectMenu.wire();
@@ -1896,12 +1920,7 @@ document.getElementById('btn-symbols').addEventListener('click', () => document.
 document.getElementById('btn-save-all').addEventListener('click', () => {
   // Flush in-flight editor edits into the state blob first so whatever's
   // on screen is exactly what gets saved (scheduleSave is debounced).
-  if (cm) {
-    if (codeLang === 'asm') state.customMainAsm = cm.getValue();
-    else                    state.customMainC   = cm.getValue();
-  }
-  state.name = document.getElementById('project-name').value || 'untitled';
-  saveState(state);
+  flushSave();
   const text = JSON.stringify(state, null, 2);
   const safe = (state.name || 'untitled').replace(/[^a-z0-9_\-]+/gi, '_') || 'untitled';
   const blob = new Blob([text], { type: 'application/json' });
@@ -1926,6 +1945,7 @@ document.getElementById('file-input-all').addEventListener('change', e => {
         return;
       }
       if (!confirm('Replace the current project with the contents of "' + f.name + '"?\n\nYour current work will be snapshotted first so you can recover it.')) return;
+      flushSave();   // BR-02: capture latest CodeMirror edits in the recovery snapshot
       Storage.saveSnapshot(state, 'before_load_all');
       state = parsed;
       if (typeof state.customMainC   !== 'string') state.customMainC   = null;

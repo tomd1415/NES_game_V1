@@ -799,6 +799,16 @@ body.emu-single-player #emu-p2-controls { display: none; }
     renderAll();
   }
 
+  // BR-02: synchronous flush.  Builder mutates `state` in place but only
+  // writes it to storage after a 150 ms debounce, so any exit within that
+  // window (New/Duplicate/Recover via the shared hook, project switch, or
+  // navigation/tab-close via pagehide) must persist immediately.
+  function flushSave() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = 0; }
+    if (!stateLooksComplete(state)) return;
+    Storage.saveCurrent(state);
+  }
+
   // Render a friendly "no project yet" banner when the Builder is
   // opened and Storage.loadCurrent() returns nothing (or something
   // the other pages would reject).  No UI wired up, no saves — the
@@ -1001,6 +1011,31 @@ body.emu-single-player #emu-p2-controls { display: none; }
       input.addEventListener('change', () => {
         node.config[field.key] = input.value;
         scheduleSave();
+      });
+    } else if (field.type === 'spriteRef') {
+      // BR-04: a dropdown bound to the live sprite list, storing the sprite's
+      // index.  Replaces the old free 0-31 number field so a pupil can never
+      // point an effect at a sprite that doesn't exist (which used to surface
+      // as a late cc65 error rather than a Builder problem).
+      input = document.createElement('select');
+      const spriteList = (state && state.sprites) || [];
+      if (!spriteList.length) {
+        const o = document.createElement('option');
+        o.value = ''; o.disabled = true;
+        o.textContent = '(no sprites yet — draw one on the Sprites page)';
+        input.appendChild(o);
+      }
+      spriteList.forEach((sp, i) => {
+        const o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = '#' + i + ' ' + (sp.name || sp.role || 'sprite');
+        input.appendChild(o);
+      });
+      const cur = node.config[field.key];
+      input.value = String(cur != null ? cur : (spriteList.length ? 0 : ''));
+      input.addEventListener('change', () => {
+        const v = parseInt(input.value, 10);
+        if (!Number.isNaN(v)) { node.config[field.key] = v; scheduleSave(); }
       });
     } else if (field.type === 'bool') {
       input = document.createElement('input');
@@ -2004,7 +2039,9 @@ body.emu-single-player #emu-p2-controls { display: none; }
       scheduleSave();
     });
     document.getElementById('project-name').addEventListener('input', (e) => {
-      state.name = e.target.value || 'untitled';
+      // BR-07: update state.name AND the catalog atomically so the project
+      // list / duplicate / delete don't keep showing the old name.
+      Storage.renameCurrent(state, e.target.value);
       document.getElementById('active-project-label').textContent = state.name;
       scheduleSave();
     });
@@ -2028,7 +2065,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
         btn.classList.toggle('active', p.id === activeIdNow);
         btn.addEventListener('click', () => {
           if (p.id === activeIdNow) return;
-          Storage.saveCurrent(state);
+          flushSave();   // BR-02
           Storage.setActiveProjectId(p.id);
           window.location.reload();
         });
@@ -2047,6 +2084,9 @@ body.emu-single-player #emu-p2-controls { display: none; }
     Storage.wireBasicProjectActions({
       makeFreshState: () => null,   // no fresh-state path here (see hint)
     });
+    // BR-02: shared flush hook + pagehide flush.
+    Storage.setFlushHook(flushSave);
+    window.addEventListener('pagehide', flushSave);
     // Shared Recover-from-snapshot + Migration-backup buttons.
     // No-op on any button missing or already wired.
     if (window.ProjectMenu) window.ProjectMenu.wire();

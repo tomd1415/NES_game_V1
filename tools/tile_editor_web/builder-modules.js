@@ -695,11 +695,9 @@
       },
       {
         key: 'spawnSpriteIdx',
-        label: 'Effect sprite number (which sprite to show)',
-        type: 'int',
-        min: 0, max: 31,
-        help: 'The sprite number (order on the Sprites page, starting at 0) ' +
-          'to use as the hit effect.',
+        label: 'Effect sprite (which sprite to show)',
+        type: 'spriteRef',
+        help: 'Pick the sprite to use as the hit effect.',
       },
       {
         key: 'spawnTtl',
@@ -722,14 +720,15 @@
         '#define INVINCIBILITY_FRAMES ' + iframes,
       ];
       if (spawnOnHit) {
-        // R-6: turn on the shared spawn pool (the engine #if-gates it) + set its
-        // lifetime.  #ifndef-guarded so it coexists with the spawn (R-3) module.
+        // BR-05 (model B): this is the hit effect — kind 1, with its OWN art
+        // (server emits SPAWN1_*) and lifetime (SPAWN_TTL_1).  Independent of
+        // the spawn module's trigger effect (kind 0); either turns the pool on.
         decls.push(
-          '#ifndef BW_SPAWN_ENABLED',
-          '#define BW_SPAWN_ENABLED 1',
+          '#ifndef BW_SPAWN1_ENABLED',
+          '#define BW_SPAWN1_ENABLED 1',
           '#endif',
-          '#ifndef SPAWN_TTL',
-          '#define SPAWN_TTL ' + spawnTtl,
+          '#ifndef SPAWN_TTL_1',
+          '#define SPAWN_TTL_1 ' + spawnTtl,
           '#endif');
       }
       if (checkpoints) {
@@ -764,8 +763,8 @@
         '                          ? (player_hp - DAMAGE_AMOUNT) : 0;',
         '                player_iframes = INVINCIBILITY_FRAMES;',
         '                if (player_hp == 0) player_dead = 1;',
-        '#if BW_SPAWN_ENABLED',
-        '                bw_spawn(px, py);   /* R-6 — hurt effect at the player */',
+        '#if BW_SPAWN1_ENABLED',
+        '                bw_spawn(px, py, 1);   /* R-6 — hit effect at the player */',
         '#endif',
         '            }',
         '        } else if (player_iframes > 0) {',
@@ -787,7 +786,11 @@
         '             * before the engine game-over tint (after this slot) reads',
         '             * it — so there is no blue flash. */',
         '            px = cp_x; py = cp_y;',
-        '            player_hp = BW_RESPAWN_HP; player_dead = 0;',
+        '            /* BR-08: never restore above the configured maximum (no',
+        '             * `min` macro in scope, so spell out the clamp). */',
+        '            player_hp = (BW_RESPAWN_HP < PLAYER_MAX_HP)',
+        '                      ? BW_RESPAWN_HP : PLAYER_MAX_HP;',
+        '            player_dead = 0;',
         '            player_iframes = INVINCIBILITY_FRAMES;',
         '            jumping = 0; jmp_up = 0;',
         '#else',
@@ -836,9 +839,10 @@
   // Spawn (R-3) — pop a short-lived effect sprite when the player steps
   // onto a TRIGGER tile (painted on the Behaviour page).  Uses the shared
   // engine spawn pool (platformer.c, #if BW_SPAWN_ENABLED — byte-identical
-  // when off).  The damage module's "spawn on hit" (R-6) drives the SAME
-  // pool; this module is the rising-edge tile trigger.  The effect art is
-  // the chosen sprite, emitted as SPAWN_TILES by the server.
+  // when off) as the trigger effect, kind 0.  BR-05 model B: this effect is
+  // independent of the damage module's "spawn on hit" (kind 1) — each has its
+  // own art + lifetime.  The art is the chosen sprite, emitted as SPAWN0_TILES
+  // by the server.
   // --------------------------------------------------------------------
   modules['spawn'] = {
     label: 'Spawn effect (on trigger tile)',
@@ -849,11 +853,9 @@
     schema: [
       {
         key: 'spriteIdx',
-        label: 'Effect sprite number (which sprite to show)',
-        type: 'int',
-        min: 0, max: 31,
-        help: 'The sprite number (order on the Sprites page, starting at 0) ' +
-          'to pop up as the effect.',
+        label: 'Effect sprite (which sprite to show)',
+        type: 'spriteRef',
+        help: 'Pick the sprite to pop up as the effect.',
       },
       {
         key: 'ttl',
@@ -866,14 +868,15 @@
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
       const ttl = A.clampInt(c.ttl, 1, 120, 24);
-      // Turn on the shared engine pool + its lifetime.  #ifndef-guarded so it
-      // coexists with the damage module's spawn-on-hit (R-6) when both are on.
+      // BR-05 (model B): this is the trigger effect — kind 0, with its OWN art
+      // (server emits SPAWN0_*) and lifetime (SPAWN_TTL_0).  Independent of the
+      // damage module's hit effect (kind 1).
       template = A.appendToSlot(template, 'declarations', [
-        '#ifndef BW_SPAWN_ENABLED',
-        '#define BW_SPAWN_ENABLED 1',
+        '#ifndef BW_SPAWN0_ENABLED',
+        '#define BW_SPAWN0_ENABLED 1',
         '#endif',
-        '#ifndef SPAWN_TTL',
-        '#define SPAWN_TTL ' + ttl,
+        '#ifndef SPAWN_TTL_0',
+        '#define SPAWN_TTL_0 ' + ttl,
         '#endif',
         'unsigned char spawn_was_on;   /* R-3 rising-edge latch */',
       ].join('\n'));
@@ -883,12 +886,12 @@
       template = A.appendToSlot(template, 'per_frame', [
         '        // [builder] spawn (R-3) — drop an effect when the player steps',
         '        // onto a TRIGGER tile (rising edge, so it fires once per entry).',
-        '#if BW_SPAWN_ENABLED',
+        '#if BW_SPAWN0_ENABLED',
         '        {',
         '            unsigned char on_trig = (behaviour_at(',
         '                (unsigned int)((px + (PLAYER_W << 2)) >> 3),',
         '                (unsigned int)((py + (PLAYER_H << 2)) >> 3)) == BEHAVIOUR_TRIGGER);',
-        '            if (on_trig && !spawn_was_on) bw_spawn(px, py);',
+        '            if (on_trig && !spawn_was_on) bw_spawn(px, py, 0);',
         '            spawn_was_on = on_trig;',
         '        }',
         '#endif',

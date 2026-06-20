@@ -892,6 +892,14 @@ function markDirty() {
     }
   }, 150);
 }
+// BR-02: synchronous flush.  State is mutated in place but only written
+// after a 150 ms debounce, so any exit within that window (New/Duplicate/
+// Recover via the shared hook, project switch, navigation/tab-close) must
+// persist immediately.
+function flushSave() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  Storage.saveCurrent(state);
+}
 function setStatus(cls, text) {
   const el = document.getElementById('save-status');
   el.className = cls;
@@ -1498,7 +1506,7 @@ function renderProjectsMenu() {
     (active && active.name) || state.name || 'untitled';
 }
 function switchProject(id) {
-  Storage.saveCurrent(state);
+  flushSave();   // BR-02
   Storage.setActiveProjectId(id);
   const loaded = Storage.loadCurrent();
   state = loaded || createDefaultState();
@@ -1772,6 +1780,9 @@ function init() {
   Storage.wireBasicProjectActions({
     makeFreshState: () => createDefaultState(),
   });
+  // BR-02: shared flush hook + pagehide flush.
+  Storage.setFlushHook(flushSave);
+  window.addEventListener('pagehide', flushSave);
   // Wire the shared Recover-from-snapshot + Migration-backup buttons.
   // ProjectMenu.wire is a no-op for any button that's missing or
   // already has a handler attached — Backgrounds + Sprites keep

@@ -509,6 +509,145 @@
         jumpTo: 'sprites.html',
       };
     },
+
+    // V11 (BR-03): the players alone must not exceed the NES's 64 hardware
+    // sprites.  Each 8x8-tile cell of a Player sprite is one hardware sprite
+    // (4 OAM bytes); Player 1 renders first, then Player 2.  An 8x8 P1 fills
+    // the whole 256-byte OAM shadow buffer by itself, so any P2 on top would
+    // overrun it.  Blocking — this is the unsafe-memory case.
+    function playerOamOverflow(state) {
+      const players = sprites(state).filter(function (s) {
+        return s && s.role === 'player';
+      });
+      if (!players.length) return null;
+      const cells = function (s) {
+        return Math.max(1, (s.width | 0)) * Math.max(1, (s.height | 0));
+      };
+      let total = cells(players[0]);
+      const p2On = moduleEnabled(state, 'players.player2') && players.length >= 2;
+      if (p2On) total += cells(players[1]);
+      if (total <= 64) return null;
+      return {
+        id: 'player-oam-overflow',
+        severity: 'error',
+        message: 'Player 1' + (p2On ? ' + Player 2' : '') + ' need ' + total +
+          ' hardware sprites, but the NES only has 64.',
+        fix: p2On
+          ? 'Make the two Player sprites smaller on the Sprites page so ' +
+            'their tile cells add up to 64 or fewer (for example two 5x6 ' +
+            'players, or one 8x8 and one tiny P2).'
+          : 'Make the Player sprite smaller on the Sprites page — at most ' +
+            '64 tile cells (e.g. 8x8).',
+        jumpTo: 'sprites.html',
+      };
+    },
+
+    // V12 (BR-03): everything drawn each frame — players, placed Scene
+    // instances and HUD hearts — shares the same 64 hardware sprites.  When
+    // the total clearly exceeds 64 the engine safely drops the overflow
+    // (scene/HUD/spawn writes are bounds-guarded), so this is a warning, not
+    // an error: some sprites simply won't appear.
+    function frameOamBudgetTight(state) {
+      const all = sprites(state);
+      const players = all.filter(function (s) { return s && s.role === 'player'; });
+      if (!players.length) return null;
+      const cells = function (s) {
+        return s ? Math.max(1, (s.width | 0)) * Math.max(1, (s.height | 0)) : 0;
+      };
+      let total = cells(players[0]);
+      if (moduleEnabled(state, 'players.player2') && players.length >= 2) {
+        total += cells(players[1]);
+      }
+      // Placed scene instances each cost their sprite's cell count.
+      if (moduleEnabled(state, 'scene')) {
+        const node = moduleNode(state, 'scene');
+        const instances = (node && node.config && node.config.instances) || [];
+        for (const inst of instances) total += cells(all[inst.spriteIdx]);
+      }
+      // HUD draws one heart sprite per point of Player 1 max HP.
+      if (moduleEnabled(state, 'hud')) {
+        const p1 = moduleNode(state, 'players.player1');
+        const maxHp = (p1 && p1.config && (p1.config.maxHp | 0)) || 0;
+        const hudSprite = all.find(function (s) { return s && s.role === 'hud'; });
+        total += maxHp * (hudSprite ? cells(hudSprite) : 1);
+      }
+      if (total <= 64) return null;
+      return {
+        id: 'frame-oam-budget-tight',
+        severity: 'warn',
+        message: 'Your players, scene sprites and HUD hearts add up to about ' +
+          total + ' hardware sprites, over the NES limit of 64.',
+        fix: 'The game will still run, but some sprites won\'t be drawn each ' +
+          'frame.  Reduce sprite sizes, place fewer Scene instances, or lower ' +
+          'Player 1\'s max HP to stay within 64.',
+        jumpTo: null,
+      };
+    },
+
+    // V13 (BR-04): the trigger-tile Spawn effect must point at a real sprite.
+    // The picker is now a dropdown, but imported / hand-edited / deleted-sprite
+    // projects can still hold an out-of-range index, which used to surface as a
+    // late cc65 error (missing SPAWN_* tables).  Blocking — catch it in Builder.
+    function spawnTriggerInvalidSprite(state) {
+      if (!moduleEnabled(state, 'spawn')) return null;
+      const cfg = (moduleNode(state, 'spawn') || {}).config || {};
+      const idx = cfg.spriteIdx;
+      if (Number.isInteger(idx) && idx >= 0 && idx < sprites(state).length) return null;
+      return {
+        id: 'spawn-trigger-invalid-sprite',
+        severity: 'error',
+        message: 'The Spawn effect points at sprite #' + idx +
+          ', which does not exist.',
+        fix: 'Choose an existing sprite in the Spawn effect\'s dropdown, or ' +
+          'draw the sprite on the Sprites page first.',
+        jumpTo: null,
+      };
+    },
+
+    // V14 (BR-04): same check for the Damage module's "show an effect sprite
+    // when hit".  Only when that option is ticked.
+    function damageEffectInvalidSprite(state) {
+      if (!moduleEnabled(state, 'damage')) return null;
+      const cfg = (moduleNode(state, 'damage') || {}).config || {};
+      if (!cfg.spawnOnHit) return null;
+      const idx = cfg.spawnSpriteIdx;
+      if (Number.isInteger(idx) && idx >= 0 && idx < sprites(state).length) return null;
+      return {
+        id: 'damage-effect-invalid-sprite',
+        severity: 'error',
+        message: 'The "show an effect sprite when hit" option points at sprite #' +
+          idx + ', which does not exist.',
+        fix: 'Choose an existing sprite in the Damage module\'s effect dropdown, ' +
+          'or draw the sprite on the Sprites page first.',
+        jumpTo: null,
+      };
+    },
+
+    // (BR-05 model B: the trigger and hit effects are now genuinely independent
+    // — each has its own art + lifetime in the engine — so the old
+    // "shared-effect conflict" warning was removed.  Nothing to validate here.)
+
+    // V16 (BR-08): checkpoint respawn HP must not exceed Player 1's max HP.
+    // The generated code now clamps it, so this is a warning that the value
+    // will be capped (and catches imported / stale states).
+    function respawnHpOverMax(state) {
+      if (!moduleEnabled(state, 'damage')) return null;
+      const dm = (moduleNode(state, 'damage') || {}).config || {};
+      if (!dm.checkpoints) return null;
+      const respawn = dm.respawnHp | 0;
+      const p1 = (moduleNode(state, 'players.player1') || {}).config || {};
+      const maxHp = p1.maxHp | 0;
+      if (maxHp <= 0 || respawn <= maxHp) return null;
+      return {
+        id: 'respawn-hp-over-max',
+        severity: 'warn',
+        message: 'Respawn HP (' + respawn + ') is higher than Player 1\'s max ' +
+          'HP (' + maxHp + '), so it will be capped at ' + maxHp + ' on respawn.',
+        fix: 'Lower "HP restored on respawn" to ' + maxHp + ' or less, or raise ' +
+          'Player 1\'s max HP.',
+        jumpTo: null,
+      };
+    },
   ];
 
   function validate(state) {

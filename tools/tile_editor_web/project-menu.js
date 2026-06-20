@@ -136,6 +136,9 @@
         btn.addEventListener('click', () => {
           // Best-effort: save the current state as a "before_recovery"
           // snapshot.  Falls back gracefully if no current state exists.
+          // BR-02: flush in-flight editor edits first so the recovery
+          // snapshot captures the latest work, not a stale debounced slot.
+          try { Storage.flushPending(); } catch (_) {}
           try {
             const cur = Storage.loadCurrent();
             if (cur) Storage.saveSnapshot(cur, 'before_recovery');

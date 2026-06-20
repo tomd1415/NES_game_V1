@@ -20,6 +20,14 @@ Builds on the earlier codegen rework
 Sprints 1–3 done) and the web-feedback fixes
 ([`2026-06-17-web-feedback-fixes.md`](2026-06-17-web-feedback-fixes.md)).
 
+**Interrupt — bug-fix sweep (Wave 0.5):** the 2026-06-20 bug report found eight
+confirmed defects on current `main` (data loss, wrong game from the Top-down
+workflow, out-of-bounds OAM writes, …). These take priority over the feature
+arcs and run as a new wave; see the
+[bug-report fix plan](2026-06-20-bug-report-fix-plan.md). A few cross-link into
+the arcs (BR-03 ↔ Arc D OAM budget, BR-04/05 ↔ Arc C spawn pool, BR-01 ↔ Arc E
+game styles, BR-06 ↔ shared emulator), noted in that plan.
+
 ## Guiding rules (apply to every arc)
 1. **The byte-identical-ROM invariant is sacred.** Every engine change is
    `#if`-gated so a no-modules ROM equals the `Step_Playground` baseline; macros
@@ -76,6 +84,18 @@ A large, valuable batch is **uncommitted** (the web-feedback fixes, the dialogue
 scroll + per-NPC fixes, the editor letter-tile UI, codegen Sprints 1–3, all the
 plan docs). Branch off `main`, group into a few logical commits, land it. See
 **Cross-cutting** below.
+
+### Wave 0.5 — Bug-fix sweep ✅ DONE (2026-06-20)
+The eight confirmed defects in the 2026-06-20 bug report are fixed, each with a
+regression test in `tools/builder-tests/`; full `run-all.mjs` (incl. the
+byte-identical invariant + all ROM builds) is green. Detail and per-bug
+solutions: [bug-report fix plan](2026-06-20-bug-report-fix-plan.md).
+**All eight are complete.** **BR-05 shipped as model B** (independent effects,
+per the user's call): the trigger and damage effects now each own their art +
+lifetime in the engine (per-slot `spawn_kind`, `SPAWN0_*`/`SPAWN1_*`,
+`SPAWN_TTL_0`/`SPAWN_TTL_1`), byte-identical baseline preserved. The OAM-budget
+validator (BR-03) ships now; an in-emulator render test of the overflow can be
+backfilled once Arc A's harness lands.
 
 ### Wave 1 — Foundation: Arc A (~4–4.5 days)
 The render-test harness + the deterministic-spawn helper + backfill render

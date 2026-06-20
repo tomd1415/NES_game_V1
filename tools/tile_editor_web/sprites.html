@@ -2257,6 +2257,7 @@ details.collapsible > summary .sub-count {
       <span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> D-pad</span>
       <span><kbd>Z</kbd> B · <kbd>X</kbd> A</span>
       <span><kbd>Enter</kbd> Start · <kbd>Shift</kbd> Select</span>
+      <span id="emu-p2-hint" hidden><kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd> P2 · <kbd>O</kbd> A · <kbd>U</kbd> B · <kbd>1</kbd> Start · <kbd>2</kbd> Select</span>
       <span><kbd>F</kbd> fullscreen · <kbd>P</kbd> pause · <kbd>R</kbd> reset</span>
     </div>
     <div class="emu-actions">
@@ -2966,7 +2967,10 @@ function migrateBuilderFields(s) {
     s.builder = {
       version: 1,
       modules: {
-        game: { enabled: true, config: { type: 'platformer' } },
+        // BR-01: Builder game type is canonical (assembler reads only this);
+        // seed it from the legacy `template` so Top-down projects generate a
+        // top-down game instead of defaulting to platformer.
+        game: { enabled: true, config: { type: s.template === 'topdown' ? 'topdown' : 'platformer' } },
         players: {
           enabled: true,
           config: { count: 1 },
@@ -7327,28 +7331,42 @@ function emuStopAudio() {
   if (emu.audioCtx && emu.audioCtx.state === 'running') { try { emu.audioCtx.suspend(); } catch (_) {} }
 }
 
+// BR-06: every entry is { pad, button } so Player 2 keys reach controller 2,
+// mirroring the shared emulator.js + the Code page.  Player 1 keeps the
+// arrows/WASD/ZX bindings this page already shipped; Player 2 uses IJKL move,
+// O=A, U=B, 1=Start, 2=Select.
 const EMU_KEY_MAP = {
-  'ArrowUp':    jsnes.Controller.BUTTON_UP,
-  'ArrowDown':  jsnes.Controller.BUTTON_DOWN,
-  'ArrowLeft':  jsnes.Controller.BUTTON_LEFT,
-  'ArrowRight': jsnes.Controller.BUTTON_RIGHT,
-  'KeyW':       jsnes.Controller.BUTTON_UP,
-  'KeyS':       jsnes.Controller.BUTTON_DOWN,
-  'KeyA':       jsnes.Controller.BUTTON_LEFT,
-  'KeyD':       jsnes.Controller.BUTTON_RIGHT,
-  'KeyZ':       jsnes.Controller.BUTTON_B,
-  'KeyX':       jsnes.Controller.BUTTON_A,
-  'Enter':      jsnes.Controller.BUTTON_START,
-  'ShiftLeft':  jsnes.Controller.BUTTON_SELECT,
-  'ShiftRight': jsnes.Controller.BUTTON_SELECT,
+  // Player 1
+  'ArrowUp':    { pad: 1, button: jsnes.Controller.BUTTON_UP },
+  'ArrowDown':  { pad: 1, button: jsnes.Controller.BUTTON_DOWN },
+  'ArrowLeft':  { pad: 1, button: jsnes.Controller.BUTTON_LEFT },
+  'ArrowRight': { pad: 1, button: jsnes.Controller.BUTTON_RIGHT },
+  'KeyW':       { pad: 1, button: jsnes.Controller.BUTTON_UP },
+  'KeyS':       { pad: 1, button: jsnes.Controller.BUTTON_DOWN },
+  'KeyA':       { pad: 1, button: jsnes.Controller.BUTTON_LEFT },
+  'KeyD':       { pad: 1, button: jsnes.Controller.BUTTON_RIGHT },
+  'KeyZ':       { pad: 1, button: jsnes.Controller.BUTTON_B },
+  'KeyX':       { pad: 1, button: jsnes.Controller.BUTTON_A },
+  'Enter':      { pad: 1, button: jsnes.Controller.BUTTON_START },
+  'ShiftLeft':  { pad: 1, button: jsnes.Controller.BUTTON_SELECT },
+  'ShiftRight': { pad: 1, button: jsnes.Controller.BUTTON_SELECT },
+  // Player 2
+  'KeyI':       { pad: 2, button: jsnes.Controller.BUTTON_UP },
+  'KeyK':       { pad: 2, button: jsnes.Controller.BUTTON_DOWN },
+  'KeyJ':       { pad: 2, button: jsnes.Controller.BUTTON_LEFT },
+  'KeyL':       { pad: 2, button: jsnes.Controller.BUTTON_RIGHT },
+  'KeyO':       { pad: 2, button: jsnes.Controller.BUTTON_A },
+  'KeyU':       { pad: 2, button: jsnes.Controller.BUTTON_B },
+  'Digit1':     { pad: 2, button: jsnes.Controller.BUTTON_START },
+  'Digit2':     { pad: 2, button: jsnes.Controller.BUTTON_SELECT },
 };
 
 function onEmuKey(e, down) {
-  const btn = EMU_KEY_MAP[e.code];
-  if (btn !== undefined) {
+  const m = EMU_KEY_MAP[e.code];
+  if (m !== undefined) {
     e.preventDefault();
-    if (down) emu.nes.buttonDown(1, btn);
-    else emu.nes.buttonUp(1, btn);
+    if (down) emu.nes.buttonDown(m.pad, m.button);
+    else emu.nes.buttonUp(m.pad, m.button);
     return;
   }
   if (down && (e.code === 'KeyP')) { e.preventDefault(); toggleEmuPause(); }
@@ -7396,6 +7414,15 @@ function openEmulator(rom) {
   emu.nes.loadROM(romStr);
   emu.paused = false;
   document.getElementById('btn-emu-pause').textContent = '⏸ Pause';
+
+  // BR-06: surface the Player 2 key hint only when this project has P2 on.
+  const p2hint = document.getElementById('emu-p2-hint');
+  if (p2hint) {
+    const p2 = state && state.builder && state.builder.modules &&
+      state.builder.modules.players && state.builder.modules.players.submodules &&
+      state.builder.modules.players.submodules.player2;
+    p2hint.hidden = !(p2 && p2.enabled);
+  }
 
   const dlg = document.getElementById('emu-dialog');
   if (!dlg.open) dlg.showModal();
@@ -8002,6 +8029,10 @@ function init() {
     } else {
       fresh.movement = 'platformer';
     }
+    // BR-01: seed the Builder tree now (from fresh.template) so the canonical
+    // game.config.type is set correctly at creation instead of being defaulted
+    // to platformer by a later migration.
+    migrateBuilderFields(fresh);
     Storage.createProject(name, fresh);
     state = fresh;
     undoStack = []; redoStack = []; updateUndoButtons();

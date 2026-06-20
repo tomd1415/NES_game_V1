@@ -82,6 +82,14 @@
     // download *before* it's wiped. It's only valid for the current session.
     let preMigrationBackup = null;
 
+    // BR-02: pages register a synchronous flush that copies any in-flight
+    // editor state (CodeMirror contents, debounced Builder/Behaviour edits)
+    // into the active-project slot.  Storage calls it before any action that
+    // reloads or switches the active project, so a debounced edit made just
+    // before the action is never lost.  Centralised here so every page is
+    // covered and no individual call site can forget it.
+    let flushHook = null;
+
     function collectLegacyKeys() {
       const dump = {};
       for (let i = 0; i < localStorage.length; i++) {
@@ -248,6 +256,16 @@
         return parseSlot(localStorage.getItem(projectCurrentKey(activeId())));
       },
 
+      // BR-02: flush-hook registration + invocation.  A page registers its
+      // synchronous flushSave() once; flushPending() runs it (guarded) and is
+      // called before every reload/switch path so debounced edits persist.
+      setFlushHook(fn) { flushHook = (typeof fn === 'function') ? fn : null; },
+      flushPending() {
+        if (!flushHook) return;
+        try { flushHook(); }
+        catch (e) { try { console.error('[storage] flush hook failed', e); } catch (_) {} }
+      },
+
       // Snapshots & backups — per active project.
       saveSnapshot(state, reason) {
         try {
@@ -339,6 +357,16 @@
         saveCatalog(c);
         return true;
       },
+      // BR-07: rename the *active* project atomically — update both the
+      // in-memory state and the v2 catalog so a page can't update only one
+      // half (which left the catalog list / duplicate / delete showing the
+      // old name).  Returns the normalised name.
+      renameCurrent(state, name) {
+        const n = (name && String(name)) || 'untitled';
+        if (state) state.name = n;
+        this.renameProject(activeId(), n);
+        return n;
+      },
       duplicateProject(id) {
         const c = catalog();
         const p = c.projects.find(p => p.id === id);
@@ -407,6 +435,7 @@
             if (raw == null) return;
             const name = (raw || '').trim() || 'untitled';
             try {
+              this.flushPending();   // BR-02: persist the current project's edits first
               this.createProject(name, factory());
               window.location.reload();
             } catch (e) {
@@ -416,6 +445,8 @@
         }
         if (btnDup) {
           btnDup.addEventListener('click', () => {
+            // BR-02: flush so unsaved edits are in the slot duplicateProject copies.
+            this.flushPending();
             const id = this.duplicateProject(this.getActiveProjectId());
             if (id) window.location.reload();
           });

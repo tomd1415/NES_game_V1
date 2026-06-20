@@ -1800,7 +1800,11 @@ function migrateBuilderFields(s) {
     s.builder = {
       version: 1,
       modules: {
-        game: { enabled: true, config: { type: 'platformer' } },
+        // BR-01: the Builder game type is the single source of truth the
+        // assembler reads.  Seed it from the legacy `template` field so a
+        // Top-down project (new or legacy-without-a-builder-tree) generates
+        // a top-down game instead of silently defaulting to platformer.
+        game: { enabled: true, config: { type: s.template === 'topdown' ? 'topdown' : 'platformer' } },
         players: {
           enabled: true,
           config: { count: 1 },
@@ -3944,6 +3948,10 @@ function init() {
     fresh.name = name;
     fresh.template = template;
     fresh.movement = template === 'topdown' ? 'fourway' : 'platformer';
+    // BR-01: seed the Builder tree now (from fresh.template) so the canonical
+    // game.config.type is correct at creation, not left to a later migration
+    // that would default it to platformer.
+    migrateBuilderFields(fresh);
     Storage.createProject(name, fresh);
     state = fresh;
     undoStack = []; redoStack = []; updateUndoButtons();

@@ -82,19 +82,20 @@ const tpl = H.readTemplate();
 {
   const on = win.BuilderAssembler.assemble(makeState(win, true), tpl);
   const off = win.BuilderAssembler.assemble(makeState(win, false), tpl);
-  // Match the emitted define at line start (the template mentions the macro in
-  // a comment, which must not count).
-  if (/^#define BW_SPAWN_ENABLED 1/m.test(on) && /bw_spawn\(px, py\)/.test(on)) ok('spawn-on-hit emits BW_SPAWN_ENABLED + the bw_spawn call');
-  else bad('spawn-on-hit did not emit the spawn wiring');
-  if (!/^#define BW_SPAWN_ENABLED 1/m.test(off)) ok('spawn-on-hit off omits BW_SPAWN_ENABLED (byte-identical gate)');
-  else bad('spawn off unexpectedly emitted BW_SPAWN_ENABLED');
+  // BR-05 model B: the Damage hit effect is kind 1 (BW_SPAWN1_ENABLED +
+  // bw_spawn(..., 1)).  Match the emitted define at line start (the template
+  // mentions the macro in a comment, which must not count).
+  if (/^#define BW_SPAWN1_ENABLED 1/m.test(on) && /bw_spawn\(px, py, 1\)/.test(on)) ok('spawn-on-hit emits BW_SPAWN1_ENABLED + the kind-1 bw_spawn call');
+  else bad('spawn-on-hit did not emit the hit-effect wiring');
+  if (!/^#define BW_SPAWN1_ENABLED 1/m.test(off)) ok('spawn-on-hit off omits BW_SPAWN1_ENABLED (byte-identical gate)');
+  else bad('spawn off unexpectedly emitted BW_SPAWN1_ENABLED');
 }
 
-// --- R-3 emit guard: the spawn module emits the TRIGGER edge check ---
+// --- R-3 emit guard: the spawn module emits the TRIGGER edge check (kind 0) ---
 {
   const on = win.BuilderAssembler.assemble(makeR3State(win), tpl);
-  if (/^#define BW_SPAWN_ENABLED 1/m.test(on) && /== BEHAVIOUR_TRIGGER/.test(on) && /bw_spawn\(px, py\)/.test(on))
-    ok('spawn module emits BW_SPAWN_ENABLED + the BEHAVIOUR_TRIGGER edge check');
+  if (/^#define BW_SPAWN0_ENABLED 1/m.test(on) && /== BEHAVIOUR_TRIGGER/.test(on) && /bw_spawn\(px, py, 0\)/.test(on))
+    ok('spawn module emits BW_SPAWN0_ENABLED + the BEHAVIOUR_TRIGGER edge check');
   else bad('spawn module did not emit the trigger wiring');
 }
 
@@ -105,8 +106,8 @@ try {
   // Mirror the live count of active spawn slots into RAM so we can assert on the
   // pool directly (OAM tile-matching is brittle when sprites overlap).
   let c = win.BuilderAssembler.assemble(s, tpl);
-  c = c.replace('unsigned char spk, spr, spc;',
-    'unsigned char spk, spr, spc; (*(unsigned char*)0x0704) = spawn_active[0] + spawn_active[1] + spawn_active[2] + spawn_active[3];');
+  c = c.replace('unsigned char spk, spr, spc, sp_w, sp_h;',
+    'unsigned char spk, spr, spc, sp_w, sp_h; (*(unsigned char*)0x0704) = spawn_active[0] + spawn_active[1] + spawn_active[2] + spawn_active[3];');
   const r = await H.buildRom(PORT, {
     state: s, playerSpriteIdx: 0, playerStart: { x: 60, y: 120 },
     sceneSprites: [{ spriteIdx: 1, x: 60, y: 208 }],   // enemy overlaps the player → hits
@@ -139,8 +140,8 @@ try {
   // --- R-3: stepping onto a TRIGGER tile pops an effect ---
   const s3 = makeR3State(win);
   let c3 = win.BuilderAssembler.assemble(s3, tpl);
-  c3 = c3.replace('unsigned char spk, spr, spc;',
-    'unsigned char spk, spr, spc; (*(unsigned char*)0x0705) = spawn_active[0] + spawn_active[1] + spawn_active[2] + spawn_active[3];');
+  c3 = c3.replace('unsigned char spk, spr, spc, sp_w, sp_h;',
+    'unsigned char spk, spr, spc, sp_w, sp_h; (*(unsigned char*)0x0705) = spawn_active[0] + spawn_active[1] + spawn_active[2] + spawn_active[3];');
   const r3 = await H.buildRom(PORT, {
     state: s3, playerSpriteIdx: 0, playerStart: { x: 16, y: 120 },
     mode: 'browser', customMainC: c3,

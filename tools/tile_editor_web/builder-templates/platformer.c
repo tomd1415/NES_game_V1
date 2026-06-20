@@ -212,32 +212,50 @@ unsigned char attack_prev;      // last frame's pad, for the attack-button edge
 
 /* R-3 / R-6 — runtime spawn pool.  A small fixed pool of effect sprites the
  * engine turns on in response to a collision (R-3: player touches a spawner
- * tile; R-6: the player is hurt).  The `spawn` / `damage` modules write
- * `#define BW_SPAWN_ENABLED 1` + `#define SPAWN_TTL <n>`; the server emits
- * SPAWN_TILES/SPAWN_ATTRS/SPAWN_W/SPAWN_H from a chosen sprite.  Off → fully
- * compiled out → the no-module ROM is byte-identical.  spawn_active/_ttl are
- * zero-initialised (BSS) = all slots free at boot. */
-#ifndef BW_SPAWN_ENABLED
-#define BW_SPAWN_ENABLED 0
+ * tile; R-6: the player is hurt).
+ *
+ * BR-05 (model B — independent effects): the two event sources own DISTINCT
+ * effects.  Kind 0 is the trigger-tile effect (the `spawn` module); kind 1 is
+ * the hit effect (the `damage` module's spawn-on-hit).  Each kind has its own
+ * art (SPAWN0_* / SPAWN1_*, emitted by the server) and its own lifetime
+ * (SPAWN_TTL_0 / SPAWN_TTL_1).  A per-slot `spawn_kind` records which to draw.
+ *
+ * The `spawn` module writes `#define BW_SPAWN0_ENABLED 1` + `SPAWN_TTL_0`; the
+ * `damage` module writes `#define BW_SPAWN1_ENABLED 1` + `SPAWN_TTL_1`.  Either
+ * one turns the shared pool on.  Off → fully compiled out → the no-module ROM
+ * is byte-identical.  The pool arrays are zero-initialised (BSS) = all slots
+ * free at boot. */
+#ifndef BW_SPAWN0_ENABLED
+#define BW_SPAWN0_ENABLED 0
 #endif
+#ifndef BW_SPAWN1_ENABLED
+#define BW_SPAWN1_ENABLED 0
+#endif
+#define BW_SPAWN_ENABLED (BW_SPAWN0_ENABLED || BW_SPAWN1_ENABLED)
 #if BW_SPAWN_ENABLED
-#ifndef SPAWN_TTL
-#define SPAWN_TTL 24
+#ifndef SPAWN_TTL_0
+#define SPAWN_TTL_0 24
+#endif
+#ifndef SPAWN_TTL_1
+#define SPAWN_TTL_1 24
 #endif
 #define SPAWN_MAX 4
 unsigned char spawn_active[SPAWN_MAX];
 pxcoord_t     spawn_x[SPAWN_MAX];
 pxcoord_t     spawn_y[SPAWN_MAX];
 unsigned char spawn_ttl[SPAWN_MAX];
-/* Activate the first free pool slot at world (bx,by).  No-op if the pool is
- * full (overflow just drops the effect — NES has only 64 OAM sprites). */
-void bw_spawn(pxcoord_t bx, pxcoord_t by) {
+unsigned char spawn_kind[SPAWN_MAX];   /* 0 = trigger effect, 1 = hit effect */
+/* Activate the first free pool slot at world (bx,by) with the given effect
+ * kind.  No-op if the pool is full (overflow just drops the effect — NES has
+ * only 64 OAM sprites). */
+void bw_spawn(pxcoord_t bx, pxcoord_t by, unsigned char kind) {
     unsigned char k;
     for (k = 0; k < SPAWN_MAX; k++) {
         if (!spawn_active[k]) {
             spawn_active[k] = 1;
             spawn_x[k] = bx; spawn_y[k] = by;
-            spawn_ttl[k] = SPAWN_TTL;
+            spawn_kind[k] = kind;
+            spawn_ttl[k] = (kind == 0) ? SPAWN_TTL_0 : SPAWN_TTL_1;
             return;
         }
     }
@@ -1232,7 +1250,13 @@ void main(void) {
 #endif
             }
             for (r = 0; r < PLAYER2_H; r++) {
+                /* BR-03 — Player 1 can fill OAM (an 8x8 P1 is 64 hw sprites =
+                 * the whole 256-byte buffer), so a large P1 + P2 would write
+                 * past oam_buf[255].  Guard every four-byte write and stop the
+                 * outer loop once full, exactly like the spawn/HUD writers. */
+                if (oam_idx > 252) break;
                 for (c = 0; c < PLAYER2_W; c++) {
+                    if (oam_idx > 252) break;
 #ifdef SCROLL_BUILD
                     sy = world_to_screen_y((unsigned int)py2 + (r << 3));
                     if (plrdir2 == 0x40) {
@@ -1260,7 +1284,11 @@ void main(void) {
         }
 #else
         for (r = 0; r < PLAYER2_H; r++) {
+            /* BR-03 — see the animated branch above: guard every P2 write so a
+             * large Player 1 + Player 2 cannot overrun the OAM shadow buffer. */
+            if (oam_idx > 252) break;
             for (c = 0; c < PLAYER2_W; c++) {
+                if (oam_idx > 252) break;
 #ifdef SCROLL_BUILD
                 sy = world_to_screen_y((unsigned int)py2 + (r << 3));
                 if (plrdir2 == 0x40) {
@@ -1290,24 +1318,43 @@ void main(void) {
 
 #if BW_SPAWN_ENABLED
         /* R-3/R-6 — draw the active spawn-pool effects, tick their TTL, and
-         * free a slot when it expires.  Same oam_idx<=252 overflow guard as the
-         * scene sprites; off-pool slots are skipped. */
+         * free a slot when it expires.  BR-05 (model B): each slot's spawn_kind
+         * selects that effect's own art (SPAWN0_* trigger / SPAWN1_* hit) and
+         * dimensions, so the two effects are genuinely independent.  Same
+         * oam_idx<=252 overflow guard as the scene sprites. */
         {
-            unsigned char spk, spr, spc;
+            const unsigned char *sp_tiles;
+            const unsigned char *sp_attrs;
+            unsigned char spk, spr, spc, sp_w, sp_h;
             for (spk = 0; spk < SPAWN_MAX; spk++) {
                 if (!spawn_active[spk]) continue;
                 if (spawn_ttl[spk] == 0) { spawn_active[spk] = 0; continue; }
                 spawn_ttl[spk]--;
-                for (spr = 0; spr < SPAWN_H; spr++) {
-                    for (spc = 0; spc < SPAWN_W; spc++) {
+                /* Pick this slot's art by kind.  Each branch only compiles when
+                 * its source is enabled, so a single-effect ROM keeps just one. */
+                sp_tiles = 0; sp_attrs = 0; sp_w = 0; sp_h = 0;
+#if BW_SPAWN0_ENABLED
+                if (spawn_kind[spk] == 0) {
+                    sp_tiles = SPAWN0_TILES; sp_attrs = SPAWN0_ATTRS;
+                    sp_w = SPAWN0_W; sp_h = SPAWN0_H;
+                }
+#endif
+#if BW_SPAWN1_ENABLED
+                if (spawn_kind[spk] == 1) {
+                    sp_tiles = SPAWN1_TILES; sp_attrs = SPAWN1_ATTRS;
+                    sp_w = SPAWN1_W; sp_h = SPAWN1_H;
+                }
+#endif
+                for (spr = 0; spr < sp_h; spr++) {
+                    for (spc = 0; spc < sp_w; spc++) {
                         if (oam_idx > 252) break;
 #ifdef SCROLL_BUILD
                         oam_buf[oam_idx++] = world_to_screen_y(spawn_y[spk] + (spr << 3));
 #else
                         oam_buf[oam_idx++] = spawn_y[spk] + (spr << 3);
 #endif
-                        oam_buf[oam_idx++] = SPAWN_TILES[spr * SPAWN_W + spc];
-                        oam_buf[oam_idx++] = SPAWN_ATTRS[spr * SPAWN_W + spc];
+                        oam_buf[oam_idx++] = sp_tiles[spr * sp_w + spc];
+                        oam_buf[oam_idx++] = sp_attrs[spr * sp_w + spc];
 #ifdef SCROLL_BUILD
                         oam_buf[oam_idx++] = world_to_screen_x(spawn_x[spk] + (spc << 3));
 #else
