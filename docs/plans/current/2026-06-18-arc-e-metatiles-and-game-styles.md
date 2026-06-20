@@ -333,6 +333,12 @@ Arc A spawn helper; nicer after §1; independent of the racer.
 > physics the engine has never had (angle-based velocity). **Design-note-first
 > with its own future design doc**; below is a high-level phase plan + key
 > unknowns, deliberately not full detail.
+>
+> **Status (2026-06-21): STARTED.** The dedicated design doc is written
+> ([`2026-06-21-topdown-racer.md`](2026-06-21-topdown-racer.md)) and the **E3-1
+> movement spike is done** — `BW_GAME_STYLE == 3` drivable car, headless-green,
+> golden ROM unchanged. Awaiting the user's visual/feel pass before E3-2. See
+> §3.4 for per-phase status.
 
 ## 3.1 Goal & ask
 Top-down racing: a car with **angle-based velocity** (steer rotates heading,
@@ -350,23 +356,39 @@ accel/friction, a sin/cos table); **rotated sprite rendering** (per-angle CHR);
 reusable with tuning).
 
 ## 3.3 Decisions for the dedicated design doc
-Heading resolution (8/16/32 dirs — lean 16); fixed-point format + friction model;
-sin/cos table size + CHR cost; track authoring vocabulary (metatiles strongly
-recommended); lap model (N ordered checkpoints + finish line + editor affordance
-to order them); multiplayer (P2 already exists → split/shared-screen is natural
-extra scope).
+**Settled in [`2026-06-21-topdown-racer.md`](2026-06-21-topdown-racer.md) §3:**
+heading resolution = **16 dirs** (D1); fixed-point = **signed 8.8** with sub-pixel
+accumulators (D2); **16-entry Q7 cosine table** `COS16`, `sin(h)=COS16[(h+12)&15]`
+(D3); accel/friction tunables with `#ifndef` defaults (D4); steering = ±1 heading
+(D5); track authoring = metatiles, track vs edge via `behaviour_at` (D6); collision
+= hard slow + push-back (D7); camera = reuse `scroll_follow` (D8); rotated art =
+per-heading CHR, **deferred to E3-3** (D9); laps = N ordered checkpoints + finish
+(D10); 2-player deferred (D11).
 
 ## 3.4 High-level phases
-E3-0 design doc (settle §3.3, prototype the math off-target) → E3-1 movement spike
-(`BW_GAME_STYLE == 3`, drivable car, no collision/laps) → E3-2 track-edge
-collision → E3-3 rotated car art + Builder option → E3-4 laps & checkpoints →
-E3-5 polish & 2-player.
+- **E3-0 design doc** — ✅ done ([`2026-06-21-topdown-racer.md`](2026-06-21-topdown-racer.md)).
+- **E3-1 movement spike** (`BW_GAME_STYLE == 3`, drivable car, no collision/laps)
+  — ✅ **done**: engine block in [`platformer.c`](../../../tools/tile_editor_web/builder-templates/platformer.c)
+  (heading/speed/COS16/sub-pixel, all `== 3`-gated), Builder `🏎 Racer` option +
+  `racerTopSpeed` tunable, `racer-needs-scrolling-world` validator, tests
+  `racer.mjs` + `racer-validators.mjs` (green), golden ROM unchanged. **Awaiting
+  the user's visual/feel pass.**
+- **E3-2 track-edge collision** → **E3-3 rotated car art + Builder art hookup** →
+  **E3-4 laps & checkpoints** → **E3-5 polish & 2-player** — pending.
 
 ## 3.5 Open questions (flagged)
 CHR budget for rotated frames (may force ≤16 dirs); fixed-point trig perf under
 cc65 (the one place `-Os` genuinely matters — measure); checkpoint-ordering UX on
 a stateless grid; whether `scroll_follow` suffices for a fast car; 8×8 collision
 granularity for racing.
+
+**Perf update (E3-1):** the spike's per-frame math is **2 long multiplies +
+2 long position updates** (heading→vx/vy via `COS16`, sub-pixel accumulate) —
+estimated ~1–1.5k cycles/frame (~5% of the ~29.8k NTSC budget), and it *replaces*
+the platformer's horizontal-walk probing. Comfortably affordable on paper; the
+**visual/feel pass confirms no real-hardware slowdown** (watch for laggy/sluggish
+movement). `scroll_follow` reuse and CHR budget are deferred to E3-2/E3-3 as
+planned.
 
 ## 3.6 Dependencies
 The heaviest stack: Arc A + **`-Os`** + **metatiles** + benefits from T3.1/T3.2.
@@ -380,7 +402,7 @@ Correctly sequenced **last**.
 |---|---|---|---|---|
 | **§1 Metatiles** | Arc A (E1-1+) | migration; T3.1/T3.2 (E1-4) | **Low** — server expansion, no baseline change | bigger worlds, F4 (reframed), kills desync (N4) |
 | **§2 Runner** | Arc A spawn helper | §1 metatiles; migration | **Low** — reuses jump/scroll/respawn | F24 / T3.4 / R-11 |
-| **§3 Racer** | Arc A, `-Os`, §1 | T3.1/T3.2 | **High** — new physics, art, laps | T3.5 |
+| **§3 Racer** | Arc A, `-Os`, §1 | T3.1/T3.2 | **High** — new physics, art, laps | T3.5 — **E3-0/E3-1 done** |
 
 **Recommendation:** §1 metatiles first (structural, low first-slice risk, unblocks
 "bigger worlds", removes a bug class), §2 runner next (highest demand, cheapest

@@ -50,7 +50,7 @@
       'four-way movement, no gravity, no jumping.  All other modules ' +
       '(damage, dialogue, doors, pickups, …) work the same in either ' +
       'mode — only the player physics changes.',
-    defaultConfig: { type: 'platformer', autoscrollSpeed: 2 },
+    defaultConfig: { type: 'platformer', autoscrollSpeed: 2, racerTopSpeed: 3 },
     schema: [
       {
         key: 'type',
@@ -60,6 +60,7 @@
           { value: 'platformer', label: '🏃 Platformer (side-on, gravity + jump)' },
           { value: 'topdown',    label: '🧭 Top-down (four-way, no gravity)' },
           { value: 'runner',     label: '🏃‍➡️ Auto-runner (auto-scroll, tap to jump)' },
+          { value: 'racer',      label: '🏎 Racer (steer + accelerate, top-down)' },
         ],
       },
       {
@@ -69,6 +70,15 @@
         min: 1, max: 4,
         help: 'Auto-runner only: how fast the world scrolls past, in pixels per ' +
           'frame.  1 = gentle, 4 = frantic.  Ignored for platformer / top-down.',
+      },
+      {
+        key: 'racerTopSpeed',
+        label: 'Racer top speed (1–4)',
+        type: 'int',
+        min: 1, max: 4,
+        help: 'Racer only: how fast the car can go.  1 = gentle, 4 = fast.  ' +
+          'Steer with Left/Right, hold A (or Up) to accelerate; the car coasts ' +
+          'to a stop.  Ignored for the other game types.',
       },
     ],
     // Phase 3.1 / Arc E §2: both styles share one template (`platformer.c`).
@@ -91,6 +101,17 @@
           '/* Builder game module — auto-runner style. */',
           '#define BW_GAME_STYLE 2',
           '#define AUTOSCROLL_SPEED ' + spd,
+        ].join('\n'));
+      }
+      if (c.type === 'racer') {
+        // Map the 1–4 feel knob to an 8.8 max-speed (1.5–3.0 px/frame).
+        // Accel/friction keep the engine #ifndef defaults for now.
+        const tier = A.clampInt(c.racerTopSpeed, 1, 4, 3);
+        const maxSpeed = 256 + tier * 128;   // 1:384  2:512  3:640  4:768
+        return A.appendToSlot(template, 'declarations', [
+          '/* Builder game module — top-down racer style (Arc E §3). */',
+          '#define BW_GAME_STYLE 3',
+          '#define RACER_MAX_SPEED ' + maxSpeed,
         ].join('\n'));
       }
       // Platformer: emit nothing (BW_GAME_STYLE defaults to 0 in the

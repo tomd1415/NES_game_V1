@@ -21,6 +21,37 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — design doc + E3-1 movement spike — 2026-06-21
+
+The third game style is under way. Wrote the dedicated design doc
+([`docs/plans/current/2026-06-21-topdown-racer.md`](../plans/current/2026-06-21-topdown-racer.md))
+settling the open decisions (16-direction heading, signed 8.8 fixed-point, the
+16-entry Q7 `COS16` table with `sin(h)=COS16[(h+12)&15]`, accel/friction tunables,
+metatile track authoring, push-back collision, deferred rotated art + laps), then
+built the **E3-1 movement spike**:
+
+- **Engine** (`builder-templates/platformer.c`, all `#if BW_GAME_STYLE == 3`-gated
+  so the default ROM stays byte-identical): a `racer_heading` (0–15), 8.8
+  `racer_speed`, and `px_sub`/`py_sub` sub-pixel accumulators; a per-frame block
+  that steers (Left/Right = ∓1 heading), accelerates (A/Up, capped at
+  `RACER_MAX_SPEED`) with friction when coasting, derives `vx/vy` from `COS16`,
+  and advances `px`/`py` through the accumulators. The horizontal-walk block is
+  now gated `!= 2 && != 3`; the racer reuses `scroll_follow` for the camera.
+  Heading 0 = right, 4 = down, 8 = left, 12 = up (screen Y down).
+- **Builder**: a `🏎 Racer` game-type option emitting `#define BW_GAME_STYLE 3`
+  plus a `racerTopSpeed` (1–4) tunable → `RACER_MAX_SPEED`; a
+  `racer-needs-scrolling-world` validator (blocking — a racer wants ≥2 screens in
+  either axis so the camera can follow the car).
+- **Tests**: `tools/builder-tests/racer.mjs` drives a real ROM in jsnes and
+  asserts the physics (accelerate at heading 0 → +x only; coast → friction stops
+  the car; steer → heading changes; velocity then follows the new heading via the
+  cos table), and `racer-validators.mjs` covers the new validator. Both green; the
+  full suite + golden-hash invariant still pass (the racer is fully gated).
+
+No collision, laps, or rotated car art yet (E3-2…E3-4). **Pending the user's
+in-person visual/feel pass** (does it drive like a car? any real-hardware
+slowdown from the fixed-point math?) before E3-2.
+
 ## Arc E §2 infinite-runner — runner+modules compatibility test — 2026-06-20
 
 Hardening after the dialogue finding: verified (and codified) that the

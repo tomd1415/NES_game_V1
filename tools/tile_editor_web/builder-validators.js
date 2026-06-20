@@ -713,6 +713,33 @@
         jumpTo: null,
       };
     },
+
+    // V20 (Arc E §3 / E3-1): the racer follows the car with the scrolling
+    // camera, which only moves when the world is bigger than one screen
+    // (SCROLL_BUILD).  On a single-screen world the car has almost nowhere to
+    // drive — a racer wants a track at least 2 screens across or down.  Because
+    // the racer is top-down, either axis being ≥2 screens satisfies it.
+    // Blocking.
+    function racerNeedsScrollingWorld(state) {
+      const g = (moduleNode(state, 'game') || {}).config || {};
+      if (g.type !== 'racer') return null;
+      const bgs = (state && state.backgrounds) || [];
+      const idx = (state && state.selectedBgIdx) | 0;
+      const bg = bgs[idx] || bgs[0] || {};
+      const sx = (((bg.dimensions || {}).screens_x) | 0) || 1;
+      const sy = (((bg.dimensions || {}).screens_y) | 0) || 1;
+      if (sx >= 2 || sy >= 2) return null;
+      return {
+        id: 'racer-needs-scrolling-world',
+        severity: 'error',
+        message: 'A racer needs a track bigger than one screen so the car has ' +
+          'room to drive, but this background is only ' + sx + '×' + sy +
+          ' screen.',
+        fix: 'On the Backgrounds page, make the background larger — set it to 2 ' +
+          'or more screens across or down.',
+        jumpTo: 'index.html',
+      };
+    },
   ];
 
   function validate(state) {

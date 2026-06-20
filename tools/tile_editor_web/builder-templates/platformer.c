@@ -582,6 +582,29 @@ void runner_respawn(void) {
 }
 #endif
 
+/* Arc E §3 — top-down racer (BW_GAME_STYLE == 3).  Angle-based velocity: steer
+ * rotates a 16-direction heading, accelerate adds 8.8 fixed-point speed along
+ * it, friction bleeds it off.  Heading 0 = right, 4 = down, 8 = left, 12 = up
+ * (screen Y is down).  All gated so the default ROMs stay byte-identical.
+ * See docs/plans/current/2026-06-21-topdown-racer.md (E3-1 movement spike). */
+#if BW_GAME_STYLE == 3
+#ifndef RACER_ACCEL
+#define RACER_ACCEL 13            /* 8.8 px/frame added while accelerating (~0.05) */
+#endif
+#ifndef RACER_FRICTION
+#define RACER_FRICTION 8          /* 8.8 px/frame bled off when coasting (~0.03) */
+#endif
+#ifndef RACER_MAX_SPEED
+#define RACER_MAX_SPEED 640       /* 8.8 cap (~2.5 px/frame) */
+#endif
+unsigned char racer_heading;      /* 0..15 (16 directions, 22.5deg steps) */
+unsigned int  racer_speed;        /* 8.8 fixed-point, 0..RACER_MAX_SPEED */
+unsigned char px_sub, py_sub;     /* sub-pixel position accumulators */
+/* cos(angle) in Q7 (+-127 ~ +-1.0); sin(h) = COS16[(h + 12) & 15]. */
+const signed char COS16[16] = { 127, 117, 90, 49, 0, -49, -90, -117,
+                                -127, -117, -90, -49, 0, 49, 90, 117 };
+#endif
+
 void main(void) {
     waitvsync();
     PPU_MASK = 0;
@@ -694,13 +717,47 @@ void main(void) {
         if (py >= (WORLD_H_PX - 8)) runner_respawn();
 #endif
 
-#if BW_GAME_STYLE != 2
+#if BW_GAME_STYLE == 3
+        // Top-down racer (E3-1 movement spike): steer rotates the 16-direction
+        // heading, A/UP accelerates along it (8.8 fixed-point), friction bleeds
+        // speed off, and vx/vy come from COS16.  Position advances through the
+        // sub-pixel accumulators so fractional velocity isn't lost.  No
+        // collision, laps, or rotated art yet (E3-2..E3-4).  The replaced
+        // horizontal/vertical walk below is skipped for this style.
+        {
+            signed long pfx;       // 24.8 fixed-point work value for one axis
+            signed int  vx, vy;    // 8.8 velocity components
+            if (pad & 0x02) racer_heading = (racer_heading + 15) & 15;  // LEFT  = turn CCW
+            if (pad & 0x01) racer_heading = (racer_heading + 1) & 15;   // RIGHT = turn CW
+            if (pad & 0x88) {                                           // A or UP = accelerate
+                racer_speed += RACER_ACCEL;
+                if (racer_speed > RACER_MAX_SPEED) racer_speed = RACER_MAX_SPEED;
+            } else {
+                racer_speed = (racer_speed > RACER_FRICTION) ? (racer_speed - RACER_FRICTION) : 0;
+            }
+            vx = (signed int)(((signed long)racer_speed * COS16[racer_heading]) >> 7);
+            vy = (signed int)(((signed long)racer_speed * COS16[(racer_heading + 12) & 15]) >> 7);
+            pfx = (((signed long)px) << 8) + px_sub + vx;
+            if (pfx < 0) pfx = 0;
+            if (pfx > (((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8))
+                pfx = ((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8;
+            px = (pxcoord_t)(pfx >> 8);  px_sub = (unsigned char)(pfx & 0xFF);
+            pfx = (((signed long)py) << 8) + py_sub + vy;
+            if (pfx < 0) pfx = 0;
+            if (pfx > (((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8))
+                pfx = ((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8;
+            py = (pxcoord_t)(pfx >> 8);  py_sub = (unsigned char)(pfx & 0xFF);
+        }
+#endif
+
+#if BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
         // tiles painted on the Behaviour page block the player from walking
         // through them — the column just ahead of the player's leading edge
         // is probed at every body row, and the step is cancelled if any row
         // meets a solid tile.  PLATFORM stays one-way (floor only).
-        // (The auto-runner, == 2, locks px to the camera, so it skips this.)
+        // (The auto-runner, == 2, locks px to the camera, so it skips this.
+        //  The racer, == 3, has its own angle-based movement above.)
         if (pad & 0x01) {                     // RIGHT
             if (px < (WORLD_W_PX - PLAYER_W * 8)) {
                 unsigned char ahead_col = (px + (PLAYER_W << 3) + walk_speed - 1) >> 3;
@@ -739,7 +796,7 @@ void main(void) {
             }
             plrdir = 0x40;
         }
-#endif  /* BW_GAME_STYLE != 2 */
+#endif  /* BW_GAME_STYLE != 2 && != 3 */
 
 #if BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2
         // ----- Platformer vertical movement: ladders + jump + gravity -----
