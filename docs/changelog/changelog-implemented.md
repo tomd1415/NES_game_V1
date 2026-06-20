@@ -21,6 +21,35 @@ deferred.
 
 ---
 
+## Arc E §2 infinite-runner — E2-0 spike (BW_GAME_STYLE == 2) — 2026-06-20
+
+First slice of the auto-runner / Geometry-Dash game style from
+[`docs/plans/current/2026-06-18-arc-e-metatiles-and-game-styles.md`](../plans/current/2026-06-18-arc-e-metatiles-and-game-styles.md)
+§2 (most-requested new style, F24).
+
+- **Engine** (`builder-templates/platformer.c`), all gated `#if BW_GAME_STYLE
+  == 2`: the camera auto-advances (`cam_x += AUTOSCROLL_SPEED`), the player rides
+  it at a fixed screen X (`px = cam_x + RUNNER_SCREEN_X`; manual left/right is
+  skipped via `#if BW_GAME_STYLE != 2`), it reuses the shared platformer
+  jump/gravity (the vertical block's guard widened to `== 0 || == 2`), and
+  `runner_respawn()` snaps back to the start on touching a spike tile
+  (behaviour slot 7, `BW_RUNNER_SPIKE_ID`), falling below the world, or reaching
+  the end. The camera follow is `#if BW_GAME_STYLE != 2`-gated.
+- **Builder** (`builder-modules.js`): the `game` module gained a
+  **🏃‍➡️ Auto-runner** type emitting `#define BW_GAME_STYLE 2` plus a 1–4
+  `AUTOSCROLL_SPEED` tunable.
+- **Byte-identical golden UNCHANGED** — every runner block is `==2`/`!=2`-gated,
+  so the no-modules (`==0`) ROM compiles to the same bytes; the platformer +
+  top-down suites stay green.
+- **Test** `tools/builder-tests/runner.mjs`: a 4×1 auto-scroll world — asserts
+  the camera advances, the player is camera-locked, tap-UP jumps, and touching a
+  spike resets the run.
+
+Deferred to later phases: validators (require screens_x ≥ 2; warn if no spike
+painted) + a Behaviour-page "Spike tile" affordance (E2-1); the A-to-jump remap
+(jump is currently the shared UP, E2-3); nicer spike-ribbon authoring once §1
+metatiles land (E2-4).
+
 ## Arc E §1 metatiles — E1-1 headless half (shared MetatileLib) — 2026-06-20
 
 The UI-agnostic logic for metatile authoring, ahead of the canvas UI.

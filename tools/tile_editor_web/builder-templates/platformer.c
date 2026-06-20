@@ -556,6 +556,32 @@ static void load_background_n(unsigned char n) {
 }
 #endif
 
+/* R-11 / Arc E §2 — auto-runner (BW_GAME_STYLE == 2).  Forced horizontal
+ * autoscroll, tap-to-jump (reuses the shared platformer gravity/jump block),
+ * and an instant restart when the player touches a spike tile, falls off the
+ * bottom, or reaches the end of the track.  Everything is gated so the default
+ * platformer (== 0) and top-down (== 1) ROMs are byte-identical. */
+#if BW_GAME_STYLE == 2
+#ifndef AUTOSCROLL_SPEED
+#define AUTOSCROLL_SPEED 2        /* world pixels the camera advances per frame */
+#endif
+#ifndef RUNNER_SCREEN_X
+#define RUNNER_SCREEN_X 64        /* the player's fixed on-screen X (rides the camera) */
+#endif
+#ifndef BW_RUNNER_SPIKE_ID
+#define BW_RUNNER_SPIKE_ID 7      /* behaviour slot painted as the deadly spike */
+#endif
+#define RUNNER_CAM_MAX (WORLD_W_PX - SCREEN_W_PX)
+/* Snap back to the start of the track. */
+void runner_respawn(void) {
+    cam_x = 0;
+    px = RUNNER_SCREEN_X;
+    py = PLAYER_Y;
+    jumping = 0;
+    jmp_up = 0;
+}
+#endif
+
 void main(void) {
     waitvsync();
     PPU_MASK = 0;
@@ -651,11 +677,30 @@ void main(void) {
         pad = read_controller();
 #endif
 
+#if BW_GAME_STYLE == 2
+        // Auto-runner: advance the camera every frame, lock the player to a
+        // fixed screen X (so the world scrolls past), and restart on reaching
+        // the end, touching a spike tile, or falling off the bottom.  The
+        // vertical jump/gravity below is the shared platformer block.
+        cam_x += AUTOSCROLL_SPEED;
+        if (cam_x >= RUNNER_CAM_MAX) runner_respawn();
+        px = cam_x + RUNNER_SCREEN_X;
+        {
+            unsigned char run_c = (unsigned char)((px + (PLAYER_W << 2)) >> 3);
+            unsigned char run_r = (unsigned char)((py + (PLAYER_H << 2)) >> 3);
+            if (behaviour_at((unsigned int)run_c, (unsigned int)run_r) == BW_RUNNER_SPIKE_ID)
+                runner_respawn();
+        }
+        if (py >= (WORLD_H_PX - 8)) runner_respawn();
+#endif
+
+#if BW_GAME_STYLE != 2
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
         // tiles painted on the Behaviour page block the player from walking
         // through them — the column just ahead of the player's leading edge
         // is probed at every body row, and the step is cancelled if any row
         // meets a solid tile.  PLATFORM stays one-way (floor only).
+        // (The auto-runner, == 2, locks px to the camera, so it skips this.)
         if (pad & 0x01) {                     // RIGHT
             if (px < (WORLD_W_PX - PLAYER_W * 8)) {
                 unsigned char ahead_col = (px + (PLAYER_W << 3) + walk_speed - 1) >> 3;
@@ -694,9 +739,11 @@ void main(void) {
             }
             plrdir = 0x40;
         }
+#endif  /* BW_GAME_STYLE != 2 */
 
-#if BW_GAME_STYLE == 0
+#if BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2
         // ----- Platformer vertical movement: ladders + jump + gravity -----
+        // (Shared by the platformer (== 0) and the auto-runner (== 2).)
         // Ladder probe.  If any tile the player overlaps is a LADDER the
         // player can move up/down with the D-pad and gravity is suspended.
         // Stepping sideways off the ladder resumes normal falling.
@@ -818,7 +865,7 @@ void main(void) {
                 jumping = 1;   // airborne (jump descent or walked off a ledge)
             }
         }
-#endif  /* BW_GAME_STYLE == 0 (platformer vertical) */
+#endif  /* BW_GAME_STYLE == 0 || == 2 (platformer + runner vertical) */
 
 #if BW_GAME_STYLE == 1
         // ----- Top-down vertical movement: 4-way step with collision -----
@@ -1106,11 +1153,14 @@ void main(void) {
 #endif
 
 #ifdef SCROLL_BUILD
+#if BW_GAME_STYLE != 2
         // Pull the camera toward the player's centre.  Clamped at world
         // edges and held steady inside the deadzone by scroll_follow()
         // itself, so the camera eases rather than teleports.
+        // (The auto-runner, == 2, advances cam_x itself at the top of the loop.)
         scroll_follow((unsigned int)px + ((PLAYER_W << 3) >> 1),
                       (unsigned int)py + ((PLAYER_H << 3) >> 1));
+#endif
 #endif
 
         // --- Build OAM shadow buffer (PRE-VBLANK) -----------------------

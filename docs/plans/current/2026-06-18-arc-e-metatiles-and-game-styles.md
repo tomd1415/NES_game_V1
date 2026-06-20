@@ -204,10 +204,29 @@ code `== 0 || == 2` rather than copy-paste); lock `px = cam_x + RUNNER_SCREEN_X`
 spike/pit probe → respawn; replace the follow call with `cam_x += AUTOSCROLL_SPEED`.
 
 ## 2.7 Phases
-E2-0 spike → E2-1 Builder option + validators (require a horizontally-scrolling
-world; warn if no spike painted) → E2-2 spike behaviour + respawn (render-tested)
-→ E2-3 polish (death flash/sound, distance counter, A-to-jump remap) → E2-4
-authoring ergonomics (metatiles; optional level-loop).
+E2-0 spike ✅ **DONE (2026-06-20)** → E2-1 Builder option + validators (require a
+horizontally-scrolling world; warn if no spike painted) → E2-2 spike behaviour +
+respawn (render-tested) → E2-3 polish (death flash/sound, distance counter,
+A-to-jump remap) → E2-4 authoring ergonomics (metatiles; optional level-loop).
+
+> **E2-0 spike (done).** Engine: `#if BW_GAME_STYLE == 2` in `platformer.c` —
+> `cam_x += AUTOSCROLL_SPEED` each frame, `px = cam_x + RUNNER_SCREEN_X` (rides
+> the camera, manual L/R skipped), shared platformer jump/gravity via the
+> extended `#if BW_GAME_STYLE == 0 || == 2` guard, `runner_respawn()` on touching
+> a spike (behaviour slot 7, `BW_RUNNER_SPIKE_ID`), falling below `WORLD_H_PX`, or
+> reaching the end. The camera `scroll_follow` is `#if BW_GAME_STYLE != 2`-gated.
+> Builder: the `game` module gained a **🏃‍➡️ Auto-runner** type emitting
+> `#define BW_GAME_STYLE 2` + `AUTOSCROLL_SPEED` (1–4 tunable). Test
+> `tools/builder-tests/runner.mjs` drives a 4×1 world and asserts autoscroll,
+> camera-lock, tap-UP jump, and spike→reset. **Byte-identical golden unchanged**
+> (all `==2`/`!=2`-gated; the `==0` no-modules path compiles identically) and
+> topdown/platformer suites still green.
+>
+> *Carried to later phases:* E2-1 needs the validators (screens_x ≥ 2; warn if no
+> spike painted) + a "Spike tile" affordance on the Behaviour page (slot 7); the
+> jump is currently **UP** (shared block) — the **A-to-jump remap** is the E2-3
+> polish item; authoring long spike ribbons is much nicer once §1 metatiles land
+> (E2-4).
 
 ## 2.8 Scoped first build
 "A 2×4 horizontal world auto-scrolls, player tap-jumps, touching slot-7 tiles

@@ -50,7 +50,7 @@
       'four-way movement, no gravity, no jumping.  All other modules ' +
       '(damage, dialogue, doors, pickups, …) work the same in either ' +
       'mode — only the player physics changes.',
-    defaultConfig: { type: 'platformer' },
+    defaultConfig: { type: 'platformer', autoscrollSpeed: 2 },
     schema: [
       {
         key: 'type',
@@ -59,27 +59,44 @@
         options: [
           { value: 'platformer', label: '🏃 Platformer (side-on, gravity + jump)' },
           { value: 'topdown',    label: '🧭 Top-down (four-way, no gravity)' },
+          { value: 'runner',     label: '🏃‍➡️ Auto-runner (auto-scroll, tap to jump)' },
         ],
       },
+      {
+        key: 'autoscrollSpeed',
+        label: 'Auto-runner scroll speed (1–4)',
+        type: 'int',
+        min: 1, max: 4,
+        help: 'Auto-runner only: how fast the world scrolls past, in pixels per ' +
+          'frame.  1 = gentle, 4 = frantic.  Ignored for platformer / top-down.',
+      },
     ],
-    // Phase 3.1: top-down support.  Both styles share one template
-    // (`platformer.c`).  We just emit a `BW_GAME_STYLE` macro that the
-    // template's preprocessor uses to pick which player-vertical block
-    // to compile — gravity + jump + ladder for platformer (default),
-    // 4-way movement with collision for top-down.  Default value of 0
-    // matches Step_Playground's stock main.c so the byte-identical-
-    // baseline test still holds when no Builder modules are ticked.
+    // Phase 3.1 / Arc E §2: both styles share one template (`platformer.c`).
+    // We emit a `BW_GAME_STYLE` macro the template's preprocessor uses to pick
+    // the player physics — gravity+jump+ladder (0, platformer, default), 4-way
+    // no-gravity (1, top-down), or auto-runner (2: forced scroll + shared jump).
+    // Default value of 0 matches Step_Playground's stock main.c so the
+    // byte-identical-baseline test holds when no Builder modules are ticked.
     applyToTemplate(template, node /*, state */) {
       const c = (node && node.config) || {};
-      const isTopdown = c.type === 'topdown';
+      if (c.type === 'topdown') {
+        return A.appendToSlot(template, 'declarations', [
+          '/* Builder game module — top-down style. */',
+          '#define BW_GAME_STYLE 1',
+        ].join('\n'));
+      }
+      if (c.type === 'runner') {
+        const spd = A.clampInt(c.autoscrollSpeed, 1, 4, 2);
+        return A.appendToSlot(template, 'declarations', [
+          '/* Builder game module — auto-runner style. */',
+          '#define BW_GAME_STYLE 2',
+          '#define AUTOSCROLL_SPEED ' + spd,
+        ].join('\n'));
+      }
       // Platformer: emit nothing (BW_GAME_STYLE defaults to 0 in the
       // template's `#ifndef`).  Keeps the no-modules-ticked path
       // byte-for-byte identical to today.
-      if (!isTopdown) return template;
-      return A.appendToSlot(template, 'declarations', [
-        '/* Builder game module — top-down style. */',
-        '#define BW_GAME_STYLE 1',
-      ].join('\n'));
+      return template;
     },
   };
 
