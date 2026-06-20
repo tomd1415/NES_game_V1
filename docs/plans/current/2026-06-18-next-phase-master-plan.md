@@ -185,8 +185,15 @@ record verbatim into `docs/feedback/` (per the
 ### Parked (Tier 4 — own design conversation, not in this plan)
 - **Tablet/mobile UX** (T4.1) — the editor assumes pointer + keyboard; in-browser
   play assumes a keyboard.
-- **Optional accounts + cloud-saved projects** (T4.2) — biggest item; start with
-  the anonymous per-browser gallery-deletion nonce.
+- **Pupil accounts + cross-device project save** (T4.2) — biggest item.
+  **Design doc now written:** [`2026-06-21-pupil-accounts.md`](2026-06-21-pupil-accounts.md)
+  — per the user's spec, an account stores **only a username (never a real name)
+  + a password (hashed)**, purely so pupils can save and resume work from home.
+  Settles backend (SQLite), hashing (`hashlib.scrypt`), sessions, sync model, and
+  gallery ownership (answers feedback item 24); flags 5 open decisions (signup
+  gate, recovery, sync, projects-per-account, HTTPS). Still parked until those are
+  picked, but no longer needs the up-front design conversation. (Anonymous
+  per-browser gallery-deletion nonce remains a promotable Tier-2-sized first step.)
 Listed so they're not forgotten; each needs its own doc before code.
 
 ## Status snapshot (2026-06-21)

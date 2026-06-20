@@ -136,8 +136,10 @@ From the architecture review / codegen rework (deferred sprints):
   ~2 months.  A light routine (e.g. a periodic pass over `/feedback`, or a
   scheduled reminder) keeps pupil reports from piling up — see
   [`project_web_feedback_stream`] notes.
-- **Mobile/tablet + accounts (Tier 4)** remain parked pending a design
-  conversation (plan T4.1 / T4.2) — list them so they're not forgotten.
+- **Mobile/tablet + accounts (Tier 4)** remain parked (plan T4.1 / T4.2) — but
+  **T4.2 accounts now has its design doc**:
+  [`2026-06-21-pupil-accounts.md`](2026-06-21-pupil-accounts.md) (username +
+  password only, for cross-device save). T4.1 still needs its spike.
 
 ---
 

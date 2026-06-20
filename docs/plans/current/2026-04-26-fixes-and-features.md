@@ -532,6 +532,14 @@ ROM" → "polished".  Don't start code until the spike has run.
 
 ### T4.2 Optional user accounts + cloud-saved projects *(item 24)*
 
+> **Design doc written (2026-06-21):**
+> [`2026-06-21-pupil-accounts.md`](2026-06-21-pupil-accounts.md). The user has
+> set the core constraint — an account stores **only a non-real-name username +
+> a hashed password**, so pupils can save and resume work from home. That doc is
+> now the source of truth for T4.2 (backend, hashing, sessions, sync, gallery
+> ownership, phased build, open decisions); the notes below are the original
+> framing it builds on.
+
 Biggest item on the list.  Touches the playground server,
 gallery, every editor page that currently uses
 `localStorage`, and any session-state code.  Compounds with
