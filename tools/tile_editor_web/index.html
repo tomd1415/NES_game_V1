@@ -3570,7 +3570,11 @@ function syncMetatileControls() {
   // While in metatile mode the per-8×8 paint tools + size selector don't apply.
   const sizeSel = document.getElementById('nt-size');
   if (sizeSel) sizeSel.disabled = !!isMeta;
-  document.querySelectorAll('.nt-mode').forEach(b => { b.disabled = !!isMeta; });
+  // Lock the per-8×8 paint tools in metatile mode, but KEEP "select" usable so
+  // blocks can be marquee-selected for copy/paste (Slice 5).
+  document.querySelectorAll('.nt-mode').forEach(b => {
+    b.disabled = isMeta && b.dataset.mode !== 'select';
+  });
   // Show the block library (Slice 2) for click-to-stamp painting + the
   // mini-editor (Slice 3) for the selected block.
   const lib = document.getElementById('mt-library');
@@ -3734,6 +3738,7 @@ let ntHoverBlockKey = null;
 // R-9 background region copy/paste (tile-accurate, editor-only).
 let ntSelection = null;        // frozen marquee rect {x0,y0,x1,y1} (tile cells)
 let ntRegionClipboard = null;  // { w, h, cells: [[{tile, palette}, …]] }
+let mtRegionClipboard = null;  // Arc E §1 — metatile-id region { w, h, cells: [[id,…]] }
 let ntHoverCell = null;        // last hovered {x, y} — the paste anchor
 
 function normalisedBlockRect(a, b) {
@@ -3833,6 +3838,23 @@ function copyNtRegion() {
     setRegionInfo('Select a region first (drag with “Select region”).');
     return;
   }
+  // Arc E §1 — in metatile mode, copy whole 16×16 blocks (mtmap ids) that the
+  // selection covers (tile coords → metatile coords by >>1).
+  if (activeBg().tileMode === '16x16') {
+    const { x0, y0, x1, y1 } = ntSelection;
+    const mx0 = x0 >> 1, my0 = y0 >> 1, mx1 = x1 >> 1, my1 = y1 >> 1;
+    const cells = [];
+    for (let my = my0; my <= my1; my++) {
+      const srow = (activeBg().mtmap || [])[my] || [];
+      const row = [];
+      for (let mx = mx0; mx <= mx1; mx++) row.push(srow[mx] | 0);
+      cells.push(row);
+    }
+    mtRegionClipboard = { w: mx1 - mx0 + 1, h: my1 - my0 + 1, cells };
+    setRegionInfo(mtRegionClipboard.w + '×' + mtRegionClipboard.h +
+      ' blocks copied — hover the grid and “Paste here”.');
+    return;
+  }
   const { x0, y0, x1, y1 } = ntSelection;
   const cells = [];
   for (let y = y0; y <= y1; y++) {
@@ -3850,6 +3872,28 @@ function copyNtRegion() {
 }
 
 function pasteNtRegion(anchorX, anchorY) {
+  // Arc E §1 — metatile mode pastes blocks into mtmap at the hovered block.
+  if (activeBg().tileMode === '16x16') {
+    if (!mtRegionClipboard) { setRegionInfo('No blocks copied yet.'); return; }
+    const amx = anchorX >> 1, amy = anchorY >> 1;
+    const map = activeBg().mtmap || [];
+    const nMt = ((activeBg().metatiles && activeBg().metatiles.length) | 0);
+    pushUndo();
+    const { w, h, cells } = mtRegionClipboard;
+    for (let dy = 0; dy < h; dy++) {
+      const drow = map[amy + dy];
+      if (!drow) continue;
+      for (let dx = 0; dx < w; dx++) {
+        if (amx + dx >= drow.length) continue;
+        const id = cells[dy][dx] | 0;
+        drow[amx + dx] = (id >= 0 && id < nMt) ? id : 0;   // drop stale ids
+      }
+    }
+    markDirty();
+    renderNametable();
+    setRegionInfo('Pasted ' + w + '×' + h + ' blocks at ' + amx + ',' + amy + ' (Ctrl+Z to undo).');
+    return;
+  }
   if (!ntRegionClipboard) { setRegionInfo('Nothing copied yet.'); return; }
   // Snap the paste origin to the 2×2 attribute-block grid (palette is a block
   // property on NES — keeps pasted colours landing where the pupil expects).
@@ -3872,7 +3916,8 @@ function pasteNtRegion(anchorX, anchorY) {
 }
 
 function pasteNtRegionAtHover() {
-  if (!ntRegionClipboard) { setRegionInfo('Nothing copied yet.'); return; }
+  const haveClip = (activeBg().tileMode === '16x16') ? !!mtRegionClipboard : !!ntRegionClipboard;
+  if (!haveClip) { setRegionInfo('Nothing copied yet.'); return; }
   if (!ntHoverCell) { setRegionInfo('Hover over the canvas where you want it, then Paste.'); return; }
   pasteNtRegion(ntHoverCell.x, ntHoverCell.y);
 }
@@ -4775,14 +4820,15 @@ function init() {
   ntc.addEventListener('contextmenu', e => e.preventDefault());
   ntc.addEventListener('mousedown', e => {
     const { x, y } = ntPointToCell(e);
-    // Arc E §1 (Slice 2) — metatile mode stamps the selected block.
-    if (activeBg().tileMode === '16x16') {
+    const tool = document.getElementById('nt-tool').value;
+    // Arc E §1 — metatile mode stamps a block (Slice 2), except the select tool
+    // which drags a marquee for block copy/paste (Slice 5; falls through).
+    if (activeBg().tileMode === '16x16' && tool !== 'select') {
       ntPainting = true;
       pushUndo();
       stampMetatileAt(x, y);
       return;
     }
-    const tool = document.getElementById('nt-tool').value;
     ntPainting = true;
     if (tool === 'palette-rect') {
       ntRectStart = { x, y };
@@ -4810,8 +4856,9 @@ function init() {
       'Cell (' + x + ', ' + y + ') — screen '
       + Math.floor(x / SCREEN_W) + ',' + Math.floor(y / SCREEN_H)
       + ' · local ' + (x % SCREEN_W) + ',' + (y % SCREEN_H);
-    // Arc E §1 (Slice 2) — drag to stamp blocks in metatile mode.
-    if (activeBg().tileMode === '16x16') {
+    // Arc E §1 — drag to stamp blocks (Slice 2), unless the select tool is
+    // active (block marquee for copy/paste, Slice 5 — falls through to it).
+    if (activeBg().tileMode === '16x16' && document.getElementById('nt-tool').value !== 'select') {
       if (ntPainting) stampMetatileAt(x, y);
       return;
     }

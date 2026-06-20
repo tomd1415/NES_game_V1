@@ -112,6 +112,21 @@ painted) + a Behaviour-page "Spike tile" affordance (E2-1); the A-to-jump remap
 (jump is currently the shared UP, E2-3); nicer spike-ribbon authoring once §1
 metatiles land (E2-4).
 
+## Arc E §1 metatiles — E1-1 UI Slice 5 (block copy/paste) — 2026-06-20
+
+R-9 region copy/paste, on the metatile grid — completes the metatile authoring
+feature (promote · stamp · edit · +new · delete · copy/paste):
+
+- The **Select** tool is re-enabled in metatile mode (paint tools stay locked).
+- `copyNtRegion` / `pasteNtRegion` gained 16×16 branches: marquee a region,
+  **Copy region**, hover, **Paste here** → whole **blocks** (mtmap ids) are
+  copied/pasted via a separate `mtRegionClipboard` (tile coords → metatile by
+  `>>1`; pasted ids out of range fall back to block 0). Builds big block-levels
+  fast.
+
+The marquee overlay is tile-granular while copy/paste snap to whole blocks (a
+minor visual nicety to refine later). Suite green; needs a visual pass.
+
 ## Arc E §1 metatiles — E1-1 UI Slice 4 (block delete) — 2026-06-20
 
 Completes metatile block CRUD (promote → stamp → edit → +new → delete):

@@ -151,12 +151,15 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
     `metatile-lib.mjs`. The palette select carries a tooltip stating the
     one-palette-per-block rule (the "read-only-palette" cue). **Metatile block
     CRUD is now complete** (promote → stamp → edit → +new → delete).
-  - ⏳ **Deferred (own follow-up):** **R-9 region copy/paste on the metatile
-    grid.** The existing select/copy/paste machinery operates on the 8×8
-    nametable and is disabled in metatile mode; adapting it to `mtmap` regions is
-    a self-contained but non-trivial piece — left for a dedicated change rather
-    than rushed into this slice. The per-block editor already covers the common
-    "make a block once, stamp it everywhere" need.
+  - **UI Slice 5 DONE (2026-06-20): R-9 region copy/paste on the metatile grid.**
+    The **Select** tool is re-enabled in metatile mode; `copyNtRegion` /
+    `pasteNtRegion` gained 16×16 branches that copy/paste **whole blocks**
+    (mtmap ids, tile coords → metatile by `>>1`) via a separate
+    `mtRegionClipboard`; pasted ids out of range fall back to block 0. Marquee +
+    "Copy region" + "Paste here" now build big block-levels fast. (The marquee
+    overlay is tile-granular; copy/paste snap to whole blocks.) **The metatile
+    authoring feature is now complete** (promote · stamp · edit · +new · delete ·
+    copy/paste). Built + suite-green; **awaiting the user's visual test.**
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).
