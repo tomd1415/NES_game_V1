@@ -137,9 +137,16 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
     mode; click a swatch to select it, then **click/drag the grid to stamp** it
     (`stampMetatileAt` writes `mtmap[y>>1][x>>1]`, one undo per stroke). Built +
     suite-green; **awaiting the user's visual test.**
-  - ⏳ **Remaining UI slices:** Slice 3 — **mini-editor** (pick 4 tiles + palette
-    + behaviour, create/edit blocks rather than only the auto-built set); Slice 4
-    — read-only-palette cue + R-9 copy/paste on the metatile grid.
+  - **UI Slice 3 DONE (2026-06-20):** an inline **mini-editor** for the selected
+    block — a 4× preview (`drawMetatileSwatch` now takes a zoom), a palette
+    select, a behaviour select, and **+ New block** (copies the selected block;
+    edit its tiles after). Pick a tileset tile then click a corner of the
+    preview to set it; palette/behaviour apply to the whole block. Edits apply
+    immediately and re-render library + canvas. Built + suite-green; **awaiting
+    the user's visual test.**
+  - ⏳ **Remaining UI slice:** Slice 4 — read-only-palette cue (it's already
+    one-per-block) + R-9 region copy/paste on the metatile grid + block delete
+    (with mtmap remap).
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).

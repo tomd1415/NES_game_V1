@@ -1340,6 +1340,18 @@ kbd {
   <div class="mt-library" id="mt-library" style="display:none; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; padding:6px; border:1px solid var(--border,#3a3352); border-radius:6px;">
     <span class="muted" style="font-size:0.9em;">🧱 Blocks — click one, then click the grid to stamp it:</span>
     <div id="mt-library-swatches" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+    <button type="button" id="btn-mt-new" title="Add a new block to the library (a copy of the selected block — then edit its tiles below).">+ New block</button>
+  </div>
+  <!-- Arc E §1 (Slice 3) — mini-editor for the selected block. -->
+  <div class="mt-editor" id="mt-editor" style="display:none; gap:12px; align-items:center; flex-wrap:wrap; margin:6px 0; padding:6px; border:1px dashed var(--border,#3a3352); border-radius:6px;">
+    <span class="muted" style="font-size:0.9em;">✎ Edit block <b id="mt-editor-id">#0</b> — pick a tile in the tileset, then click a square to set that corner. Palette/behaviour apply to the whole block:</span>
+    <canvas id="mt-editor-canvas" width="64" height="64" style="image-rendering:pixelated; cursor:pointer; border:1px solid var(--border,#3a3352); border-radius:3px;"></canvas>
+    <label style="font-size:0.9em;">Palette
+      <select id="mt-editor-palette"><option>0</option><option>1</option><option>2</option><option>3</option></select>
+    </label>
+    <label style="font-size:0.9em;">Behaviour
+      <select id="mt-editor-behaviour"></select>
+    </label>
   </div>
   <div class="nt-canvas-wrap" data-mode="paint">
     <canvas id="nt-canvas"></canvas>
@@ -3445,12 +3457,12 @@ function ntZoom() {
 // Arc E §1 (Slice 2) — the currently-selected metatile block to stamp.
 let selectedMetatileId = 0;
 
-// Draw one metatile (its 4 tiles + palette) into a 32×32 (16×16 @2×) swatch.
-function drawMetatileSwatch(cv, mt) {
+// Draw one metatile (its 4 tiles + palette) into a 16×16-at-z× swatch.
+function drawMetatileSwatch(cv, mt, z) {
+  z = z || 2;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = nesRgb(state.universal_bg);
   ctx.fillRect(0, 0, cv.width, cv.height);
-  const z = 2;
   const pal = state.bg_palettes[(mt.palette | 0) & 3];
   const over = { slot0: state.universal_bg, slot1: pal.slots[0], slot2: pal.slots[1], slot3: pal.slots[2] };
   const tiles = mt.tiles || [];
@@ -3485,9 +3497,38 @@ function renderMetatileLibrary() {
       (i === selectedMetatileId ? 'var(--accent,#ffd866)' : 'rgba(255,255,255,0.15)') +
       ';border-radius:3px;';
     drawMetatileSwatch(cv, mt);
-    cv.addEventListener('click', () => { selectedMetatileId = i; renderMetatileLibrary(); });
+    cv.addEventListener('click', () => { selectedMetatileId = i; renderMetatileLibrary(); renderMetatileEditor(); });
     host.appendChild(cv);
   });
+}
+
+// Slice 3 — the mini-editor for the currently-selected block: a 4× preview, a
+// palette select, and a behaviour select.  Edits apply immediately (like the
+// rest of the editor) and re-render the library + canvas.
+function renderMetatileEditor() {
+  const panel = document.getElementById('mt-editor');
+  if (!panel) return;
+  const mts = (activeBg() && activeBg().metatiles) || [];
+  const mt = mts[selectedMetatileId];
+  if (!mt) { panel.style.display = 'none'; return; }
+  const idEl = document.getElementById('mt-editor-id');
+  if (idEl) idEl.textContent = '#' + selectedMetatileId;
+  drawMetatileSwatch(document.getElementById('mt-editor-canvas'), mt, 4);
+  const palSel = document.getElementById('mt-editor-palette');
+  if (palSel) palSel.value = String((mt.palette | 0) & 3);
+  const behSel = document.getElementById('mt-editor-behaviour');
+  if (behSel) {
+    const types = (state.behaviour_types && state.behaviour_types.length)
+      ? state.behaviour_types : defaultBehaviourTypes();
+    behSel.replaceChildren();
+    types.forEach(t => {
+      const o = document.createElement('option');
+      o.value = String(t.id);
+      o.textContent = t.id + ' · ' + t.name;
+      behSel.appendChild(o);
+    });
+    behSel.value = String((mt.behaviour | 0) & 0xFF);
+  }
 }
 
 // Stamp the selected block at the metatile cell under tile coords (x, y).
@@ -3529,10 +3570,13 @@ function syncMetatileControls() {
   const sizeSel = document.getElementById('nt-size');
   if (sizeSel) sizeSel.disabled = !!isMeta;
   document.querySelectorAll('.nt-mode').forEach(b => { b.disabled = !!isMeta; });
-  // Show the block library (Slice 2) for click-to-stamp painting.
+  // Show the block library (Slice 2) for click-to-stamp painting + the
+  // mini-editor (Slice 3) for the selected block.
   const lib = document.getElementById('mt-library');
   if (lib) lib.style.display = isMeta ? 'flex' : 'none';
-  if (isMeta) renderMetatileLibrary();
+  const editor = document.getElementById('mt-editor');
+  if (editor) editor.style.display = isMeta ? 'flex' : 'none';
+  if (isMeta) { renderMetatileLibrary(); renderMetatileEditor(); }
 }
 
 function renderNametable() {
@@ -4578,6 +4622,51 @@ function init() {
     markDirty();
     renderNametable();
     setStatus('saved', '● Back to 8×8 tiles');
+  });
+  // Slice 3 — mini-editor: edit the selected block's tiles / palette / behaviour.
+  document.getElementById('btn-mt-new').addEventListener('click', () => {
+    const bg = activeBg();
+    if (bg.tileMode !== '16x16' || !Array.isArray(bg.metatiles)) return;
+    pushUndo();
+    const src = bg.metatiles[selectedMetatileId] || { tiles: [0, 0, 0, 0], palette: 0, behaviour: 0 };
+    bg.metatiles.push({
+      tiles: (src.tiles || [0, 0, 0, 0]).slice(0, 4),
+      palette: src.palette | 0, behaviour: src.behaviour | 0,
+    });
+    selectedMetatileId = bg.metatiles.length - 1;
+    markDirty();
+    renderNametable();
+    setStatus('saved', '● Added block #' + selectedMetatileId);
+  });
+  document.getElementById('mt-editor-canvas').addEventListener('click', e => {
+    const bg = activeBg();
+    const mt = (bg.metatiles || [])[selectedMetatileId];
+    if (!mt) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const col = ((e.clientX - rect.left) / rect.width) < 0.5 ? 0 : 1;
+    const row = ((e.clientY - rect.top) / rect.height) < 0.5 ? 0 : 1;
+    const k = row * 2 + col;   // TL=0,TR=1,BL=2,BR=3
+    pushUndo();
+    if (!Array.isArray(mt.tiles)) mt.tiles = [0, 0, 0, 0];
+    mt.tiles[k] = selectedTileIdx | 0;
+    markDirty();
+    renderNametable();
+  });
+  document.getElementById('mt-editor-palette').addEventListener('change', e => {
+    const mt = (activeBg().metatiles || [])[selectedMetatileId];
+    if (!mt) return;
+    pushUndo();
+    mt.palette = parseInt(e.target.value, 10) & 3;
+    markDirty();
+    renderNametable();
+  });
+  document.getElementById('mt-editor-behaviour').addEventListener('change', e => {
+    const mt = (activeBg().metatiles || [])[selectedMetatileId];
+    if (!mt) return;
+    pushUndo();
+    mt.behaviour = parseInt(e.target.value, 10) & 0xFF;
+    markDirty();
+    renderNametable();
   });
   document.getElementById('btn-bg-rename').addEventListener('click', () => {
     const cur = activeBg();

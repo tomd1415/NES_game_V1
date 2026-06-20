@@ -112,6 +112,23 @@ painted) + a Behaviour-page "Spike tile" affordance (E2-1); the A-to-jump remap
 (jump is currently the shared UP, E2-3); nicer spike-ribbon authoring once §1
 metatiles land (E2-4).
 
+## Arc E §1 metatiles — E1-1 UI Slice 3 (block mini-editor) — 2026-06-20
+
+You can now create + edit blocks, not just stamp the auto-built set:
+
+- An inline **mini-editor** for the selected block: a 4× preview
+  (`drawMetatileSwatch` gained a zoom arg), a **palette** select, a
+  **behaviour** select (from the project's behaviour types), and **+ New block**
+  (copies the selected block to start from).
+- Set a corner's tile by picking a tile in the tileset, then clicking that
+  quadrant of the preview. Palette/behaviour apply to the whole 16×16 block.
+- Edits apply immediately (one undo each) and re-render the library swatches +
+  the canvas (every placed copy of that block updates).
+
+Suite green (index.html syntax + promote-roundtrip). Needs a visual pass. Last
+slice (4): read-only-palette cue + R-9 copy/paste on the metatile grid + block
+delete.
+
 ## Arc E §1 metatiles — E1-1 UI Slice 2 (block library + stamping) — 2026-06-20
 
 Makes metatile mode actually paintable (on top of Slice 1's promote/render):
