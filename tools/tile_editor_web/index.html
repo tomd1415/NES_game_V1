@@ -1249,6 +1249,13 @@ kbd {
       <input type="range" id="nt-zoom" min="1" max="4" step="1" value="2">
       <span id="nt-zoom-label">2×</span>
     </label>
+    <span class="mt-controls" style="display:inline-flex;gap:6px;align-items:center;">
+      <button type="button" id="btn-mt-promote"
+              title="Turn this background into 16×16 metatile blocks — paint whole blocks in one click and build much bigger levels. Your current art becomes the starter block library; you can edit blocks next.">🧱 Promote to metatiles</button>
+      <button type="button" id="btn-mt-revert" style="display:none;"
+              title="Turn this background back into individual 8×8 tiles.">↩ Back to 8×8 tiles</button>
+      <span id="mt-status" class="muted" style="display:none;"></span>
+    </span>
     <div class="nt-mode-toggle" role="radiogroup" aria-label="Background painting mode">
       <button type="button" class="nt-mode" data-mode="paint" aria-pressed="true"
               title="Paint tile: click to stamp the selected tile. The 2×2 block also takes the selected palette.">
@@ -2804,9 +2811,14 @@ function renderFullPreview() {
   ctx.fillStyle = nesRgb(state.universal_bg);
   ctx.fillRect(0, 0, srcW, srcH);
 
+  // Arc E §1 — expand a 16×16 metatile bg so the preview matches the ROM.
+  const pvGrid = (activeBg().tileMode === '16x16' && window.MetatileLib)
+    ? window.MetatileLib.expand(activeBg()).nametable
+    : activeBg().nametable;
+
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const cell = activeBg().nametable[y][x];
+      const cell = (pvGrid[y] && pvGrid[y][x]) || { tile: 0, palette: 0 };
       const tile = state.bg_tiles[cell.tile];
       const pal = state.bg_palettes[cell.palette & 3];
       const over = {
@@ -3425,6 +3437,32 @@ function renderNtPalettePicker() {
 function ntZoom() {
   return parseInt(document.getElementById('nt-zoom').value, 10) || 2;
 }
+// Arc E §1 — show Promote (8×8) or Revert+status (16×16), and lock the 8×8
+// paint tools / size selector while a background is in metatile mode (Slice 1:
+// metatile painting/editing arrives in the next slice).
+function syncMetatileControls() {
+  const bg = activeBg();
+  const isMeta = bg && bg.tileMode === '16x16';
+  const promote = document.getElementById('btn-mt-promote');
+  const revert  = document.getElementById('btn-mt-revert');
+  const status  = document.getElementById('mt-status');
+  if (!promote || !revert || !status) return;
+  promote.style.display = isMeta ? 'none' : '';
+  revert.style.display  = isMeta ? '' : 'none';
+  if (isMeta) {
+    const n = ((bg.metatiles && bg.metatiles.length) | 0);
+    status.style.display = '';
+    status.textContent = '🧱 metatile mode · ' + n + ' block' + (n === 1 ? '' : 's') +
+      ' (painting tools coming next)';
+  } else {
+    status.style.display = 'none';
+  }
+  // While in metatile mode the per-8×8 paint tools + size selector don't apply.
+  const sizeSel = document.getElementById('nt-size');
+  if (sizeSel) sizeSel.disabled = !!isMeta;
+  document.querySelectorAll('.nt-mode').forEach(b => { b.disabled = !!isMeta; });
+}
+
 function renderNametable() {
   const canvas = document.getElementById('nt-canvas');
   const ctx = canvas.getContext('2d');
@@ -3439,8 +3477,15 @@ function renderNametable() {
   ctx.fillStyle = nesRgb(state.universal_bg);
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // Arc E §1 — a 16×16 metatile background is rendered by expanding its
+  // metatile map back to the ordinary 8×8 grid (the same expansion the server
+  // does at build time), so the canvas shows exactly what the ROM will.
+  const isMeta = activeBg().tileMode === '16x16' && window.MetatileLib;
+  const grid = isMeta ? window.MetatileLib.expand(activeBg()).nametable
+                      : activeBg().nametable;
+
   for (let y = 0; y < rows; y++) {
-    const ntRow = activeBg().nametable[y];
+    const ntRow = grid[y];
     if (!ntRow) continue;
     for (let x = 0; x < cols; x++) {
       const cell = ntRow[x];
@@ -3524,6 +3569,27 @@ function renderNametable() {
     ctx.lineTo(canvas.width, sy*SCREEN_H*cellPx);
     ctx.stroke();
   }
+
+  // Arc E §1 — bold 16×16 metatile grid so the block boundaries are obvious.
+  if (isMeta) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,216,102,0.7)';   // accent
+    ctx.lineWidth = 1;
+    for (let ax = 0; ax <= cols; ax += 2) {
+      ctx.beginPath();
+      ctx.moveTo(ax * cellPx + 0.5, 0);
+      ctx.lineTo(ax * cellPx + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let ay = 0; ay <= rows; ay += 2) {
+      ctx.beginPath();
+      ctx.moveTo(0, ay * cellPx + 0.5);
+      ctx.lineTo(canvas.width, ay * cellPx + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  syncMetatileControls();
 
   // R-9: keep the frozen region marquee visible across redraws.
   if (ntSelection) drawNtSelectionOverlay(ntSelection);
@@ -3696,6 +3762,13 @@ function pasteNtRegionAtHover() {
 
 function applyNtTool(cx, cy) {
   if (cy < 0 || cx < 0) return;
+  // Arc E §1 — a metatile background isn't painted cell-by-cell (Slice 1:
+  // editing comes next).  Ignore the 8×8 tools so they can't corrupt mtmap.
+  if (activeBg().tileMode === '16x16') {
+    const info = document.getElementById('nt-info');
+    if (info) info.textContent = 'Metatile mode — block painting is coming in the next update.';
+    return;
+  }
   if (!activeBg().nametable[cy] || !activeBg().nametable[cy][cx]) return;
   const tool = document.getElementById('nt-tool').value;
   const pal = parseInt(document.getElementById('nt-palette').value, 10);
@@ -4401,6 +4474,38 @@ function init() {
     markDirty();
     refreshBgUi();
     renderNametable();
+  });
+  // Arc E §1 — Promote this background to 16×16 metatiles (auto-builds a starter
+  // block library from the current art via MetatileLib.promote).
+  document.getElementById('btn-mt-promote').addEventListener('click', () => {
+    const bg = activeBg();
+    if (bg.tileMode === '16x16') return;
+    if (!window.MetatileLib) { alert('Metatile support failed to load — reload the page.'); return; }
+    pushUndo();
+    window.MetatileLib.promote(bg);
+    markDirty();
+    renderNametable();
+    setStatus('saved', '● Promoted to 16×16 metatiles — ' + bg.metatiles.length + ' starter blocks');
+  });
+  // Revert to 8×8: flatten the current metatile layout back to ordinary tiles.
+  document.getElementById('btn-mt-revert').addEventListener('click', () => {
+    const bg = activeBg();
+    if (bg.tileMode !== '16x16') return;
+    if (!confirm('Turn this background back into 8×8 tiles?\n\n' +
+                 'The current block layout is flattened to tiles; you can ' +
+                 'promote again later.')) return;
+    pushUndo();
+    if (window.MetatileLib) {
+      const ex = window.MetatileLib.expand(bg);
+      bg.nametable = ex.nametable;
+      bg.behaviour = ex.behaviour;
+    }
+    bg.tileMode = '8x8';
+    delete bg.metatiles;
+    delete bg.mtmap;
+    markDirty();
+    renderNametable();
+    setStatus('saved', '● Back to 8×8 tiles');
   });
   document.getElementById('btn-bg-rename').addEventListener('click', () => {
     const cur = activeBg();

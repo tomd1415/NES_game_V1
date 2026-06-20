@@ -100,8 +100,11 @@ try {
     playerSpriteIdx: 0,
     playerStart: { x: 60, y: 120 },
     mode: 'browser',
-    // No customMainC — the server assembles scene.inc/nam from the (expanded)
-    // background, which is the whole point of the spike.
+    // Pass the engine template as customMainC so /play uses the TEMPDIR build
+    // path (not the in-place STEP_DIR path) — keeps the shared Step_Playground
+    // tree + the golden test pristine.  scene.inc/level.nam are still generated
+    // from the (expanded) metatile background, which is the point of the spike.
+    customMainC: H.readTemplate(),
   });
   if (!r.ok) {
     bad('metatile /play build rejected at stage ' + r.stage + ':\n' + String(r.log || '').slice(-1800));

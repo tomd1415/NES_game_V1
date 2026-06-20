@@ -112,6 +112,30 @@ painted) + a Behaviour-page "Spike tile" affordance (E2-1); the A-to-jump remap
 (jump is currently the shared UP, E2-3); nicer spike-ribbon authoring once §1
 metatiles land (E2-4).
 
+## Arc E §1 metatiles — E1-1 UI Slice 1 (Promote / render / revert) — 2026-06-20
+
+First slice of the metatile authoring UI on the Backgrounds page (`index.html`),
+built on the tested `MetatileLib`:
+
+- **🧱 Promote to metatiles** button — turns the current 8×8 background into
+  16×16 metatile blocks (auto-builds the starter block library from the current
+  art via `MetatileLib.promote`). **↩ Back to 8×8 tiles** flattens it again
+  (`MetatileLib.expand`).
+- `renderNametable` + `renderFullPreview` render a 16×16 background by expanding
+  its metatile map (so the canvas matches the built ROM exactly), with a bold
+  16×16 grid overlay. The 8×8 paint tools + size selector are locked in metatile
+  mode (`syncMetatileControls`) — block painting/editing is the next slice.
+- **Headless guard `promote-roundtrip.mjs`:** a palette+behaviour block-uniform
+  8×8 background builds to the **byte-identical ROM** after promote, proving the
+  editor→server metatile path is non-destructive. (Also fixed both metatile tests
+  to build via the tempdir `/play` path so they don't pollute the shared
+  Step_Playground tree / the byte-identical golden.)
+
+Pupil-facing caveat: promote coarsens per-8×8-cell palette **and** behaviour to
+one-per-16×16-block (the block's top-left) — by design for metatiles. Remaining
+slices: library panel + click-to-stamp, mini-editor, copy/paste. **Needs a
+visual pass** (canvas rendering isn't headlessly verifiable).
+
 ## Arc E §1 metatiles — E1-1 headless half (shared MetatileLib) — 2026-06-20
 
 The UI-agnostic logic for metatile authoring, ahead of the canvas UI.

@@ -122,12 +122,20 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
   - ✅ Test `tools/builder-tests/metatile-lib.mjs`: migrate additivity,
     promote dedup/map, promote→expand round-trip, JS↔server `expand` parity,
     non-uniform-block→TL-palette.
-  - ⏳ **Left for the UI half (your call/build):** the metatile **library panel
-    + mini-editor + stamping** on the canvas in `index.html`, a per-bg
-    `8x8 | 16x16` toggle wired to a **Promote** button calling
-    `MetatileLib.promote`, read-only-palette swatches (the "correct by
-    construction" UI cue), and region copy/paste (R-9) on the metatile grid.
-    Use `MetatileLib.expand` for live swatch/preview rendering.
+  - **UI Slice 1 DONE (2026-06-20):** `index.html` gained a **🧱 Promote to
+    metatiles** button (calls `MetatileLib.promote`) + **↩ Back to 8×8** (flattens
+    via `MetatileLib.expand`). `renderNametable` + `renderFullPreview` render a
+    16×16 bg by expanding its mtmap (so the canvas matches the ROM), with a bold
+    16×16 grid overlay; the 8×8 paint tools + size selector are locked in metatile
+    mode (`syncMetatileControls`). Headless guard `promote-roundtrip.mjs`: a
+    palette+behaviour-block-uniform 8×8 bg builds to the **same ROM** after
+    promote (editor→server path non-destructive). *Pupil-facing caveat surfaced:
+    promote coarsens per-8×8-cell palette **and** behaviour to one-per-16×16-block
+    (takes the block's top-left) — by design for metatiles.*
+  - ⏳ **Remaining UI slices:** Slice 2 — metatile **library panel** (16×16
+    swatches via `MetatileLib.expand`) + **click-to-stamp** on the grid; Slice 3
+    — **mini-editor** (pick 4 tiles + palette + behaviour, create new blocks);
+    Slice 4 — read-only-palette cue + R-9 copy/paste on the metatile grid.
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).
