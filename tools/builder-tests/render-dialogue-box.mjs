@@ -139,22 +139,26 @@ try {
   // ---- Case 2: scroll build (2x1) — exercises the SCROLL_BUILD banner/attr
   //      code path (camera at 0,0 here; the scrolled-camera maths mirrors the
   //      proven tile loop and is covered by dialogue-scroll.mjs's compile).
-  //      NB: on a scroll build the player settles ~32px higher than on a
-  //      non-scroll build (a scroll-collision quirk, separate from dialogue),
-  //      so the NPC is parked at y=176 to sit adjacent. If the engine's rest
-  //      height changes, this box won't open and the test fails loudly. ----
+  //      The player and NPC are both on the floor (y=208 — the player's rest
+  //      height once it has fallen) so they're adjacent and the box opens.
+  //      NB: a scroll build streams its whole 2-screen world into VRAM over
+  //      many vblanks BEFORE the main loop runs, and how many frames that takes
+  //      is cc65 -O-level-sensitive (an -Os build finishes the load — and so the
+  //      player's fall — sooner).  So settle until the player is genuinely at
+  //      REST (≥200 frames covers the slowest, no-opt, load+fall) rather than a
+  //      fixed count that could catch the player mid-fall. ----
   {
     const s = makeState(win, 2);
     const r = await H.buildRom(PORT, {
       state: s, playerSpriteIdx: 0, playerStart: { x: 60, y: 120 },
-      sceneSprites: [{ spriteIdx: 1, x: 60, y: 176 }],
+      sceneSprites: [{ spriteIdx: 1, x: 60, y: 208 }],
       mode: 'browser', customMainC: win.BuilderAssembler.assemble(s, tpl),
     });
     if (!r.ok) {
       bad('2x1 scroll-build dialogue did not compile at stage ' + r.stage + ':\n' + String(r.log || '').slice(-1200));
     } else {
       const h = H.openRom(r.romBytes);
-      h.frames(120);
+      h.frames(200);
       h.tap(H.BTN.B); h.frames(10);
       // Camera is at 0 (player at the left edge), so the box lands in NT0.
       const row = [2, 3, 4, 5, 6].map((c) => H.ntTile(h.nes, 0, 25, c));

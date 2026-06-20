@@ -45,37 +45,42 @@
 
 ---
 
-# Sprint 4 — `-Os` optimisation unblock  ⚠ test-net DONE; flip TRIED + REVERTED (regressed)
+# Sprint 4 — `-Os` optimisation unblock  ✅ DONE (headless); FCEUX pass pending
 
-> **Status (2026-06-20).**
+> **Status (2026-06-20).** **`-Os` is enabled** (`Makefile` `CFLAGS = -Os`) and
+> the full `run-all.mjs` is green under it. **T4.1/T4.2** (golden-hash test net)
+> + **T4.3/T4.4** (flip + re-pinned `-Os` goldens `1730448e…`, `_rom-equiv`
+> `42a45ca8…`) all done.
 >
-> **T4.1 + T4.2 DONE and kept** (the valuable, safe part): the byte-identical
-> invariant in `run-all.mjs` is re-founded on **two frozen golden hashes**
-> (`GOLDEN_STOCK` / `GOLDEN_TEMPLATE`) instead of a cross-file comparison, plus
-> an advisory `GOLDEN_STOCK === GOLDEN_TEMPLATE`. Clean improvement regardless of
-> `-Os`.
+> **The first flip looked like it regressed two render tests — but the
+> diagnosis was wrong, and chasing it is instructive:**
+> 1. Under `-Os`, `render-dialogue-box` (scroll case) and `render-walker-wall-stop`
+>    failed. Initial read: a timing-sensitive scroll/vblank miscompilation.
+> 2. **Tracing the player's `py` over time disproved that.** `behaviour_at`
+>    returns identical, correct values under both `-O` levels. A scroll build
+>    streams its **whole 2-screen world into VRAM over many vblanks before the
+>    main loop runs**, and that load is `-O`-sensitive: `-Os` reaches the main
+>    loop ~45 frames sooner (f≈45 vs f≈90). So at the tests' fixed 120-frame
+>    settle, no-opt was still **mid-fall** (py 178) while `-Os` had already
+>    **landed on the floor** (py 208). Run no-opt longer and it lands at 208 too
+>    (f≈180). **Both builds are correct; neither strands the player.**
+> 3. So there is **no collision bug and no miscompilation** — the two tests were
+>    sampling at a fixed frame count and catching the player mid-fall. Fixed by
+>    making them **settle-to-rest** (≥200 frames) + parking the dialogue NPC at
+>    the floor-rest height. `-Os` then passes everything.
 >
-> **T4.3/T4.4 flip ATTEMPTED then REVERTED.** Flipping `CFLAGS = -Os` built
-> cleanly and even kept the no-modules ROM cross-file-identical (stock == template
-> == `1730448e…` under `-Os` — better than the plan predicted), BUT the **Arc A
-> render harness caught two real regressions under jsnes**:
-> - `render-dialogue-box.mjs` — in the **SCROLL_BUILD** path the dialogue banner
->   **stopped drawing** (tiles read as scenery, not letters). This is exactly the
->   timing-sensitive scroll/vblank-burst hazard the verification gate warned
->   about — a genuine visual bug that would have shipped to pupils.
-> - `render-walker-wall-stop.mjs` — walker spawn timing shifted (x 80 → 87).
+> **Left to a human:** the **FCEUX/Mesen A/B timing pass** is still recommended —
+> jsnes is not cycle-accurate, so it can't see whether `-Os`'s instruction
+> selection in the scroll bursts fits the ~2273-cycle NTSC vblank budget on real
+> hardware. Build a scrolling 2×1 + a dialogue-while-scrolling + an audio project
+> and A/B against a no-opt build. **Revert is one line** (`CFLAGS =` + restore the
+> `00e156fb…` goldens, kept in comments).
 >
-> Reverting `CFLAGS` to empty makes both green again, confirming `-Os` is the
-> cause. So **`-Os` is not safe as-is.** Re-enabling it is no longer a "flip +
-> FCEUX" task — it needs a **cc65 codegen investigation of the scroll burst**
-> first (candidates: `volatile`/compiler barriers on the unrolled `$2007` writes
-> in `scroll.c`, a per-file optimisation pragma, or `-O` without the `i`/`r`
-> bundle). The golden-hash net + the captured `-Os` hashes (in `run-all.mjs` and
-> the Makefile comments) make the next attempt cheap to retry once the codegen
-> issue is fixed.
->
-> **Lesson:** the render harness paid for itself here — it caught a real `-Os`
-> timing regression headlessly, before FCEUX or a pupil ever saw it.
+> **Lessons:** (a) the render harness earned its keep — it forced the
+> investigation that a fixed-frame test would otherwise hide; (b) "looks like an
+> `-Os` miscompile" was actually fragile-test + load-timing — always trace before
+> concluding. (c) The scroll-build initial-load duration being this long is worth
+> a look someday (own item), but it's not a correctness bug.
 
 ## Goal
 

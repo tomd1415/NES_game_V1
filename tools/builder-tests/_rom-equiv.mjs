@@ -20,10 +20,9 @@ import * as H from './lib/render-harness.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
-//   ce62ec47… is the no-opt value (current).  Under -Os it was
-//   42a45ca8349bd04480a03110271748fc0251391b — but -Os was reverted (it
-//   regressed render tests), so the no-opt hash stands.
-const EXPECT = 'ce62ec47b35cf7111e2ae5ea9c8a64f5cd43c316';
+//   42a45ca8… is the -Os value (current; Makefile CFLAGS = -Os).
+//   ce62ec47b35cf7111e2ae5ea9c8a64f5cd43c316 was the no-opt value.
+const EXPECT = '42a45ca8349bd04480a03110271748fc0251391b';
 
 const PORT = 18834;
 

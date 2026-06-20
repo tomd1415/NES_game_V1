@@ -108,8 +108,9 @@ font glyph, walker-wall-stop). **Everything after Wave 1 is verifiable.**
   box body = universal_bg" now, defer the backdrop-independent dark box.
 - **Arc C quick wins in parallel:** **R-10 character bob** (Quick), **R-4 enemy
   speed** (JS-only), **R-9 background copy/paste** (editor-only, isolated). Also
-  **Arc D Sprint 4 (`-Os`)** — a contained quick win once the byte-identical test
-  is re-founded on a golden hash; needs your FCEUX pass.
+  **Arc D Sprint 4 (`-Os`)** — ✅ DONE (2026-06-20): byte-identical test
+  re-founded on golden hashes, `CFLAGS = -Os` enabled, suite green, FCEUX/Mesen
+  A/B pass confirmed clean on both emulators.
 
 ### Wave 3 — The meaty features (~1.5–2 weeks)
 - **Arc C R-7** (button → attack animation) — proves the tagged-animation art

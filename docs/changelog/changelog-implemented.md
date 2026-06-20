@@ -49,6 +49,35 @@ Left for the UI half (E1-1 proper): the library panel + mini-editor + canvas
 stamping, the per-bg `8x8|16x16` toggle + Promote button, read-only palette
 swatches, and R-9 region copy/paste on the metatile grid.
 
+## Arc D Sprint 4 — `-Os` ENABLED (corrected diagnosis) — 2026-06-20
+
+Supersedes the "reverted" entry below. `-Os` is **on** (`CFLAGS = -Os`) and the
+full `run-all.mjs` is green under it (golden-hash invariant re-pinned to the
+`-Os` hashes `1730448e…` / `_rom-equiv` `42a45ca8…`).
+
+The first flip *looked* like it regressed two render tests, but tracing the
+player's `py` over time disproved a miscompilation:
+
+- `behaviour_at` returns identical, correct values under both `-O` levels.
+- A scroll build streams its whole 2-screen world into VRAM over many vblanks
+  **before the main loop runs**, and that load is `-O`-sensitive — `-Os` reaches
+  the main loop ~45 frames sooner. So at the tests' fixed 120-frame settle,
+  no-opt was still mid-fall (py 178) while `-Os` had already landed on the floor
+  (py 208). Run no-opt longer and it lands at 208 too. **Both builds are
+  correct; neither strands the player — there is no collision bug.**
+- The two tests were sampling at a fixed frame count and catching the player
+  mid-fall. Fixed by making them **settle-to-rest** (`render-dialogue-box`
+  Case 2 now settles ≥200f with the NPC at the floor-rest height;
+  `render-walker-wall-stop` tolerates a couple of tiles of early-load drift).
+
+**Still recommended:** an FCEUX/Mesen A/B timing pass — jsnes isn't cycle-
+accurate, so it can't confirm `-Os`'s scroll bursts fit the NTSC vblank budget
+on real hardware. Revert is one line (`CFLAGS =` + the `00e156fb…` goldens).
+
+**Lesson:** "looks like an `-Os` miscompile" was fragile-test + load-timing —
+the render harness forced the trace that revealed the truth; always trace before
+concluding.
+
 ## Arc D Sprint 4 — `-Os` trial flipped + REVERTED (render regression) — 2026-06-20
 
 Attempted the cc65 `-Os` flip now that the golden-hash test net was ready. It

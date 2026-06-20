@@ -13,16 +13,21 @@ TARGET  = nes
 CONFIG  = cfg/nes.cfg
 NESLIB  = /usr/share/cc65/lib/nes.lib
 
-# No `-O` (kept empty).  Arc D Sprint 4 prepared a golden-hash test net so -Os
-# *could* be enabled, and a trial flip to `-Os` was attempted (2026-06-20) — but
-# it regressed two render tests under jsnes: the SCROLL_BUILD dialogue banner
-# stopped drawing (the timing-sensitive vblank/scroll burst the plan warned
-# about) and the walker spawn timing shifted.  So -Os is NOT safe as-is and the
-# flip was reverted.  Re-enabling it needs a cc65 codegen investigation of the
-# scroll burst (e.g. `volatile`/barrier on the unrolled writes, or per-file
-# `#pragma`), not just the test reframing.  See the changelog.
-# (The test net stays golden-hash-based, which is a clean improvement on its own.)
-CFLAGS  =
+# Optimised build (`-Os`).  Arc D Sprint 4 (2026-06-20): the byte-identical
+# invariant is golden-hash-based (tools/builder-tests/run-all.mjs), so -Os no
+# longer trips a cross-file comparison — the goldens are pinned under -Os.
+#
+# A first -Os trial *looked* like it regressed two render tests, but tracing
+# showed there is NO miscompilation: a scroll build streams its whole 2-screen
+# world into VRAM over many vblanks before the main loop runs, and -Os finishes
+# that load (and so the player's fall) ~45 frames sooner.  Both -O levels land
+# the player correctly on the floor; the two tests were just sampling at a fixed
+# frame count and catching the player mid-fall.  Those tests were made
+# settle-to-rest, and -Os was enabled.  (FCEUX/Mesen A/B pass still recommended
+# when changing this — the scroll bursts live on the NTSC vblank budget.)
+# Revert: set `CFLAGS =` (empty) and restore the no-opt goldens
+# (00e156fb… — kept in run-all.mjs's comment).
+CFLAGS  = -Os
 
 EMULATOR = fceux
 
