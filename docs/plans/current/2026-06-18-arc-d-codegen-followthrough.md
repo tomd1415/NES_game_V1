@@ -45,22 +45,37 @@
 
 ---
 
-# Sprint 4 — `-Os` optimisation unblock  ⏳ headless prep DONE; flip + FCEUX left to human
+# Sprint 4 — `-Os` optimisation unblock  ⚠ test-net DONE; flip TRIED + REVERTED (regressed)
 
-> **Status (2026-06-20).** **T4.1 + T4.2 are DONE** (headless, suite-green): the
-> byte-identical invariant in `run-all.mjs` is re-founded on **two frozen golden
-> hashes** — `GOLDEN_STOCK` and `GOLDEN_TEMPLATE` (both
-> `00e156fb…` while `CFLAGS` is empty) — replacing the old cross-file
-> equality, plus an **advisory** `GOLDEN_STOCK === GOLDEN_TEMPLATE` check that
-> still enforces "template adds nothing at no-modules" until `-Os` flips. A loud
-> regeneration procedure is documented inline.
+> **Status (2026-06-20).**
 >
-> **Left to a human (cannot be done headlessly):** **T4.3** flip
-> `steps/Step_Playground/Makefile:26` `CFLAGS = -Os`, **T4.4** re-capture both
-> goldens under `-Os` + drop the advisory equality line, and the **mandatory
-> FCEUX/Mesen timing A/B pass** (scroll-burst tearing, dialogue-while-scrolling,
-> audio tempo) — the verification gate below. The test net is now ready so the
-> flip is a ~3-line change + the manual gate; revert is one line.
+> **T4.1 + T4.2 DONE and kept** (the valuable, safe part): the byte-identical
+> invariant in `run-all.mjs` is re-founded on **two frozen golden hashes**
+> (`GOLDEN_STOCK` / `GOLDEN_TEMPLATE`) instead of a cross-file comparison, plus
+> an advisory `GOLDEN_STOCK === GOLDEN_TEMPLATE`. Clean improvement regardless of
+> `-Os`.
+>
+> **T4.3/T4.4 flip ATTEMPTED then REVERTED.** Flipping `CFLAGS = -Os` built
+> cleanly and even kept the no-modules ROM cross-file-identical (stock == template
+> == `1730448e…` under `-Os` — better than the plan predicted), BUT the **Arc A
+> render harness caught two real regressions under jsnes**:
+> - `render-dialogue-box.mjs` — in the **SCROLL_BUILD** path the dialogue banner
+>   **stopped drawing** (tiles read as scenery, not letters). This is exactly the
+>   timing-sensitive scroll/vblank-burst hazard the verification gate warned
+>   about — a genuine visual bug that would have shipped to pupils.
+> - `render-walker-wall-stop.mjs` — walker spawn timing shifted (x 80 → 87).
+>
+> Reverting `CFLAGS` to empty makes both green again, confirming `-Os` is the
+> cause. So **`-Os` is not safe as-is.** Re-enabling it is no longer a "flip +
+> FCEUX" task — it needs a **cc65 codegen investigation of the scroll burst**
+> first (candidates: `volatile`/compiler barriers on the unrolled `$2007` writes
+> in `scroll.c`, a per-file optimisation pragma, or `-O` without the `i`/`r`
+> bundle). The golden-hash net + the captured `-Os` hashes (in `run-all.mjs` and
+> the Makefile comments) make the next attempt cheap to retry once the codegen
+> issue is fixed.
+>
+> **Lesson:** the render harness paid for itself here — it caught a real `-Os`
+> timing regression headlessly, before FCEUX or a pupil ever saw it.
 
 ## Goal
 

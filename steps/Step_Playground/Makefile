@@ -13,16 +13,15 @@ TARGET  = nes
 CONFIG  = cfg/nes.cfg
 NESLIB  = /usr/share/cc65/lib/nes.lib
 
-# Why no `-O`: cc65 with optimisation enabled makes different
-# inline / register decisions for the stock main.c vs the Builder's
-# platformer.c template — the two files are semantically equivalent
-# on the no-modules path but differ structurally (extra macros,
-# `//@ insert:` slots, conditionally-gated globals).  Without -O
-# both compile to literally identical bytes; with -O they diverge
-# and the byte-identical-ROM invariant fires.  Targeted hotspots
-# (the scroll column / row bursts) are unrolled manually in
-# scroll.c so they get the cycle budget they need without giving
-# up the invariant.
+# No `-O` (kept empty).  Arc D Sprint 4 prepared a golden-hash test net so -Os
+# *could* be enabled, and a trial flip to `-Os` was attempted (2026-06-20) — but
+# it regressed two render tests under jsnes: the SCROLL_BUILD dialogue banner
+# stopped drawing (the timing-sensitive vblank/scroll burst the plan warned
+# about) and the walker spawn timing shifted.  So -Os is NOT safe as-is and the
+# flip was reverted.  Re-enabling it needs a cc65 codegen investigation of the
+# scroll burst (e.g. `volatile`/barrier on the unrolled writes, or per-file
+# `#pragma`), not just the test reframing.  See the changelog.
+# (The test net stays golden-hash-based, which is a clean improvement on its own.)
 CFLAGS  =
 
 EMULATOR = fceux

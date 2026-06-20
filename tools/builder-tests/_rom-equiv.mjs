@@ -16,11 +16,13 @@
 import { createHash } from 'node:crypto';
 import * as H from './lib/render-harness.mjs';
 
-// The everything-on ROM hash, captured 2026-06-20 before the Sprint-7 module
-// migrations.  Each verbatim loop move (T7.1–T7.5) must keep this UNCHANGED —
-// that is the "ROM-equality diff" the Arc D plan calls the strongest proof a
-// migration is behaviour-preserving.  If a migration legitimately changes
-// codegen, re-capture deliberately and note why.
+// The everything-on ROM hash.  Each verbatim per-frame loop move (Sprint 7
+// T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
+// calls the strongest proof a migration is behaviour-preserving.  Re-pin
+// deliberately when codegen legitimately changes; note why.
+//   ce62ec47… is the no-opt value (current).  Under -Os it was
+//   42a45ca8349bd04480a03110271748fc0251391b — but -Os was reverted (it
+//   regressed render tests), so the no-opt hash stands.
 const EXPECT = 'ce62ec47b35cf7111e2ae5ea9c8a64f5cd43c316';
 
 const PORT = 18834;

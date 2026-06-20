@@ -524,19 +524,23 @@ console.log('');
 // the cross-file equality firing.  THE FLIP ITSELF IS LEFT TO A HUMAN — it needs
 // an FCEUX/Mesen timing A/B pass (scroll bursts live on the vblank budget).
 //
-// Regeneration procedure (when the engine legitimately changes, or after the
-// -Os flip): `make -s` each config, read `sha1sum game.nes`, paste below, and
-// note WHY in the commit.  No-opt values captured 2026-06-20.
+// Regeneration procedure (when the engine legitimately changes, or when the
+// CFLAGS optimisation level changes): `make -s` each config, read
+// `sha1sum game.nes`, paste below, and note WHY in the commit.
+//   No-opt values (current; CFLAGS empty).
+//   Under -Os both files were 1730448eca6d4857d3468407b33e41de7806bf99 — kept
+//   here so a future -Os attempt has the reference, but -Os is reverted (it
+//   regressed render tests; see the Makefile + changelog).
 const GOLDEN_STOCK    = '00e156fb69cc390fb2e6669379dad335fae8992c';
 const GOLDEN_TEMPLATE = '00e156fb69cc390fb2e6669379dad335fae8992c';
 
-// Advisory (only meaningful while CFLAGS is empty): the template with no modules
-// must add NOTHING over the stock engine.  After the -Os flip the two goldens
-// will legitimately differ — drop this line then.
-check('invariant: no-opt goldens equal (template adds nothing at no-modules)', () => {
+// Advisory: the template with no modules must add NOTHING over the stock
+// engine.  (Held under both no-opt and -Os — the template's extra blocks are
+// #if-gated out at no-modules — so it's a cross-file guarantee worth keeping.)
+check('invariant: goldens equal (template adds nothing at no-modules)', () => {
   if (GOLDEN_STOCK !== GOLDEN_TEMPLATE) {
-    throw new Error('GOLDEN_STOCK !== GOLDEN_TEMPLATE — expected while CFLAGS is ' +
-      'empty.  If you have flipped -Os, delete this advisory check.');
+    throw new Error('GOLDEN_STOCK !== GOLDEN_TEMPLATE — the template no longer ' +
+      'compiles to the same bytes as stock at no-modules; confirm intended.');
   }
 }) || (anyFail = true);
 

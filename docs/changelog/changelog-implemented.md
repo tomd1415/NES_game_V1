@@ -49,6 +49,28 @@ Left for the UI half (E1-1 proper): the library panel + mini-editor + canvas
 stamping, the per-bg `8x8|16x16` toggle + Promote button, read-only palette
 swatches, and R-9 region copy/paste on the metatile grid.
 
+## Arc D Sprint 4 — `-Os` trial flipped + REVERTED (render regression) — 2026-06-20
+
+Attempted the cc65 `-Os` flip now that the golden-hash test net was ready. It
+built cleanly and even kept the no-modules ROM cross-file-identical (stock ==
+template == `1730448e…` under `-Os`), but the **Arc A render harness caught two
+real regressions under jsnes**:
+
+- `render-dialogue-box.mjs` — in the **SCROLL_BUILD** path the dialogue banner
+  stopped drawing (tiles read as scenery, not letters) — the timing-sensitive
+  scroll/vblank-burst hazard, a visual bug that would have shipped to pupils.
+- `render-walker-wall-stop.mjs` — walker spawn timing shifted (x 80 → 87).
+
+Reverting `CFLAGS` to empty makes both green again, so `-Os` is the cause and is
+**not safe as-is**. Reverted the flip; **kept** the golden-hash test reframing
+(a clean improvement on its own). Re-enabling `-Os` now needs a cc65 codegen
+investigation of the scroll burst (volatile/barriers on the unrolled `$2007`
+writes, a per-file pragma, or a narrower `-O`) — not just the test reframing +
+an FCEUX pass. The captured `-Os` hashes are kept in comments for the next try.
+
+**The render harness paid for itself:** it caught a real `-Os` timing regression
+headlessly, before FCEUX or a pupil saw it.
+
 ## Arc D Sprint 4 — `-Os` headless prep (golden-hash test reframing) — 2026-06-20
 
 Prepared the test net for the cc65 `-Os` optimisation flip without making the
