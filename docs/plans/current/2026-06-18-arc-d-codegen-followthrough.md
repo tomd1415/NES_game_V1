@@ -45,7 +45,22 @@
 
 ---
 
-# Sprint 4 — `-Os` optimisation unblock  ⏸ → ready (the contained quick win)
+# Sprint 4 — `-Os` optimisation unblock  ⏳ headless prep DONE; flip + FCEUX left to human
+
+> **Status (2026-06-20).** **T4.1 + T4.2 are DONE** (headless, suite-green): the
+> byte-identical invariant in `run-all.mjs` is re-founded on **two frozen golden
+> hashes** — `GOLDEN_STOCK` and `GOLDEN_TEMPLATE` (both
+> `00e156fb…` while `CFLAGS` is empty) — replacing the old cross-file
+> equality, plus an **advisory** `GOLDEN_STOCK === GOLDEN_TEMPLATE` check that
+> still enforces "template adds nothing at no-modules" until `-Os` flips. A loud
+> regeneration procedure is documented inline.
+>
+> **Left to a human (cannot be done headlessly):** **T4.3** flip
+> `steps/Step_Playground/Makefile:26` `CFLAGS = -Os`, **T4.4** re-capture both
+> goldens under `-Os` + drop the advisory equality line, and the **mandatory
+> FCEUX/Mesen timing A/B pass** (scroll-burst tearing, dialogue-while-scrolling,
+> audio tempo) — the verification gate below. The test net is now ready so the
+> flip is a ~3-line change + the manual gate; revert is one line.
 
 ## Goal
 

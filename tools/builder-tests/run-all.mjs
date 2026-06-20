@@ -508,26 +508,61 @@ check('invariant: dialogue font char set agrees across server, editor + validato
 
 console.log('');
 
-// --- Step 3: byte-identical ROM invariant ------------------------------
+// --- Step 3: byte-identical ROM invariant (golden-hash form) -----------
 //
-// Step_Playground's stock main.c compiles to a baseline ROM.  Swapping
-// in the Builder's platformer.c (with no modules ticked because no
-// scene.inc is re-emitted by this test) should produce a ROM with the
-// same sha1sum.  Guards the "Builder additions are strictly gated" rule.
-check('invariant: Step_Playground ROM byte-identical after template swap', () => {
+// FROZEN GOLDEN HASHES — regenerate DELIBERATELY (procedure below) only when
+// the engine source legitimately changes.  A surprise mismatch here means a
+// code change altered the no-modules ROM — confirm that was intended before
+// re-pinning.
+//
+// Arc D Sprint 4 prep (T4.1/T4.2): the old check compiled TWO different files
+// (stock 779-line main.c vs the 1473-line platformer.c template) and asserted
+// equal bytes.  That only works while CFLAGS is empty — `-Os` makes cc65 pick
+// different inline/register choices per file, so the two diverge even though
+// they're semantically equal on the no-modules path.  Re-founding each file on
+// its OWN golden hash lets `-Os` be flipped (CFLAGS=-Os in the Makefile) without
+// the cross-file equality firing.  THE FLIP ITSELF IS LEFT TO A HUMAN — it needs
+// an FCEUX/Mesen timing A/B pass (scroll bursts live on the vblank budget).
+//
+// Regeneration procedure (when the engine legitimately changes, or after the
+// -Os flip): `make -s` each config, read `sha1sum game.nes`, paste below, and
+// note WHY in the commit.  No-opt values captured 2026-06-20.
+const GOLDEN_STOCK    = '00e156fb69cc390fb2e6669379dad335fae8992c';
+const GOLDEN_TEMPLATE = '00e156fb69cc390fb2e6669379dad335fae8992c';
+
+// Advisory (only meaningful while CFLAGS is empty): the template with no modules
+// must add NOTHING over the stock engine.  After the -Os flip the two goldens
+// will legitimately differ — drop this line then.
+check('invariant: no-opt goldens equal (template adds nothing at no-modules)', () => {
+  if (GOLDEN_STOCK !== GOLDEN_TEMPLATE) {
+    throw new Error('GOLDEN_STOCK !== GOLDEN_TEMPLATE — expected while CFLAGS is ' +
+      'empty.  If you have flipped -Os, delete this advisory check.');
+  }
+}) || (anyFail = true);
+
+check('invariant: Step_Playground stock ROM matches golden hash', () => {
+  execSync('make -s clean', { cwd: STEP, stdio: ['ignore', 'ignore', 'ignore'] });
+  execSync('make -s', { cwd: STEP, stdio: ['ignore', 'ignore', 'pipe'] });
+  const got = execSync('sha1sum game.nes', { cwd: STEP }).toString().trim().split(/\s+/)[0];
+  if (got !== GOLDEN_STOCK) {
+    throw new Error('stock ROM hash drifted: got=' + got.slice(0, 12) +
+      ' golden=' + GOLDEN_STOCK.slice(0, 12) + ' — a change altered the stock ' +
+      'engine ROM; confirm it was intended, then re-pin GOLDEN_STOCK.');
+  }
+}) || (anyFail = true);
+
+check('invariant: template (no modules) ROM matches golden hash', () => {
   const stockPath = path.join(STEP, 'src', 'main.c');
   const backup = fs.readFileSync(stockPath);
-  // Build baseline first (ensure game.nes is up to date).
-  execSync('make -s', { cwd: STEP, stdio: ['ignore', 'ignore', 'pipe'] });
-  const baseline = execSync('sha1sum game.nes', { cwd: STEP }).toString().trim().split(/\s+/)[0];
   try {
     fs.writeFileSync(stockPath, fs.readFileSync(TEMPLATE));
     execSync('make -s clean', { cwd: STEP, stdio: ['ignore', 'ignore', 'ignore'] });
     execSync('make -s', { cwd: STEP, stdio: ['ignore', 'ignore', 'pipe'] });
-    const swapped = execSync('sha1sum game.nes', { cwd: STEP }).toString().trim().split(/\s+/)[0];
-    if (swapped !== baseline) {
-      throw new Error('ROM hash drifted: baseline=' + baseline.slice(0, 12) +
-        ' swapped=' + swapped.slice(0, 12));
+    const got = execSync('sha1sum game.nes', { cwd: STEP }).toString().trim().split(/\s+/)[0];
+    if (got !== GOLDEN_TEMPLATE) {
+      throw new Error('template (no-modules) ROM hash drifted: got=' + got.slice(0, 12) +
+        ' golden=' + GOLDEN_TEMPLATE.slice(0, 12) + ' — a template change altered ' +
+        'the no-modules ROM; confirm it was intended, then re-pin GOLDEN_TEMPLATE.');
     }
   } finally {
     fs.writeFileSync(stockPath, backup);

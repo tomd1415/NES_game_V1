@@ -21,6 +21,28 @@ deferred.
 
 ---
 
+## Arc D Sprint 4 — `-Os` headless prep (golden-hash test reframing) — 2026-06-20
+
+Prepared the test net for the cc65 `-Os` optimisation flip without making the
+flip itself (which needs a human FCEUX/Mesen timing pass). From
+[`docs/plans/current/2026-06-18-arc-d-codegen-followthrough.md`](../plans/current/2026-06-18-arc-d-codegen-followthrough.md)
+Sprint 4 (T4.1/T4.2).
+
+- **`run-all.mjs` byte-identical invariant re-founded on frozen golden hashes.**
+  The old check compiled two different files (stock 779-line `main.c` vs the
+  1473-line `platformer.c` template) and asserted equal bytes — which only holds
+  while `CFLAGS` is empty (`-Os` makes cc65 choose differently per file). It is
+  now two independent checks: `GOLDEN_STOCK` and `GOLDEN_TEMPLATE` (both
+  `00e156fb…` captured no-opt), each file vs its own pinned hash, with a loud
+  regeneration procedure documented inline.
+- **Advisory equality kept** (`GOLDEN_STOCK === GOLDEN_TEMPLATE`) so the
+  "template adds nothing at no-modules" guarantee is still enforced until `-Os`
+  flips; it is dropped at the flip (when the two legitimately diverge).
+- **Left to a human:** flip `Makefile` `CFLAGS = -Os`, re-capture both goldens,
+  drop the advisory, and run the mandatory FCEUX/Mesen A/B pass (scroll-burst
+  tearing, dialogue-while-scrolling, audio tempo). The flip is now a ~3-line
+  change behind a ready test net; revert is one line.
+
 ## Arc E §1 metatiles — server-side-expansion spike (E1-0) — 2026-06-20
 
 First slice of 16×16 metatiles from
