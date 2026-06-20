@@ -127,19 +127,27 @@ font glyph, walker-wall-stop). **Everything after Wave 1 is verifiable.**
   [`2026-06-18-arc-d-codegen-followthrough.md`](2026-06-18-arc-d-codegen-followthrough.md).
 
 ### Wave 4 — Bigger reach (multi-week)
-- **Arc E §1 Metatiles** — server-side expansion first (E1-0 spike → E1-3), the
-  NES-side compact storage (E1-4) later/with T3.1–2. *E1-0 spike DONE
-  (2026-06-20): `_expand_metatiles` + `metatiles.mjs`; palette-correct by
-  construction, no baseline change. Next: E1-1 authoring UI + migration.*
-- **Arc E §1 Metatiles** — *E1-1 headless half DONE (2026-06-20): shared
-  `MetatileLib` (migrate/promote/expand) + tests; canvas authoring UI remains.*
-- **Arc E §2 Infinite-runner** — *E2-0 spike + E2-1 validators + E2-3 A-to-jump
-  DONE (2026-06-20); auto-runner is playable and pupil-tested. Remaining: spike
-  palette affordance + death/distance polish (visual).*
+- **Arc E §1 Metatiles — ✅ DONE through E1-1 (2026-06-20/21).** Server-side
+  expansion (E1-0: `_expand_metatiles` + `metatiles.mjs`, palette-correct by
+  construction, no baseline change); the shared `MetatileLib`
+  (migrate/promote/expand/deleteBlock, headless-tested); and the **full
+  Backgrounds-page authoring UI** (Slices 1–5: promote/revert · 16×16 render ·
+  block library + click/drag stamp · mini-editor · delete · region copy/paste).
+  Builds non-destructively (`promote-roundtrip.mjs`). *Remaining: **E1-4** —
+  NES-side compact storage (`mt_map[]`+`mt_defs[]`) for genuinely huge worlds /
+  longer runner tracks; multi-day, vblank-sensitive, do with/after T3.1–2.*
+- **Arc E §2 Infinite-runner — ✅ DONE through E2-1/E2-3 (2026-06-20); pupil-
+  tested.** Auto-runner game style (`BW_GAME_STYLE == 2`: autoscroll + shared
+  jump + A-to-jump + spike/pit/end respawn), Builder option + `AUTOSCROLL_SPEED`,
+  validators, dialogue auto-disabled in runner (pupil-reported), runner+modules
+  compatibility. *Remaining: death flash / distance counter (visual), the
+  Behaviour-page "spike" palette label, and longer tracks (needs E1-4/T3.2 — the
+  editor caps worlds at 2×2 today).*
 - **Arc D Sprint 5 (NMI frame model)** — the deeper rework; a VRAM ring buffer is
   *already linked* via nes.lib (`ppubuf_flush`), just bypassed — decompose into
   (1) per-frame byte budget on the in-window Builder dialogue, (2) safe snippet
-  primitives, (3) the architecture change. Design-first.
+  primitives, (3) the architecture change. Design-first. *(Also the prerequisite
+  for in-runner dialogue, which is currently disabled.)*
 
 ### Wave 5 — Largest initiative (own design doc)
 - **Arc E §3 Top-down racer** — angle-based velocity, rotated art, laps. Write
@@ -154,9 +162,9 @@ font glyph, walker-wall-stop). **Everything after Wave 1 is verifiable.**
 
 ## Cross-cutting work
 
-### Commit cadence (Wave 0 — urgent)
-Everything from the recent sessions is in the working tree, uncommitted. Suggested
-grouping into commits on a branch off `main`:
+### Commit cadence (Wave 0 — ✅ historical, completed)
+That batch is long since committed on `main`. The grouping below is kept as a
+record of what landed:
 1. Web-feedback triage + bug fixes (B-1 enemy collision, B-4 tint, B-8 animation
    warning, B-2 dialogue font) + the docs.
 2. Dialogue: per-NPC build fix + camera-relative scroll fix + the font-set sync
@@ -181,22 +189,30 @@ record verbatim into `docs/feedback/` (per the
   the anonymous per-browser gallery-deletion nonce.
 Listed so they're not forgotten; each needs its own doc before code.
 
-## Open decisions flagged by the arc plans (worth settling early)
-- **Arc B:** adopt the full-width attribute-aligned banner (Option A)? Ship white
-  text now, defer the dark box?
-- **Arc C:** R-3 spawn — first trigger as damage-driven (avoids the 3-bit
-  behaviour-id-space question) before a tile/block trigger? Build R-7 before R-3
-  to prove the art path?
-- **Arc D:** Sprint 4 — re-found the byte-identical test on a frozen golden hash
-  (recommended) vs unify `main.c` with the template? Sprint 7 — generate both
-  scene includes from one source vs scope the asm path to an honest "no modules"
-  mode?
-- **Arc E:** metatiles server-side-expansion-first (recommended) before the
-  NES-side compact storage?
+## Status snapshot (2026-06-21)
+Waves 0–3 and the Wave-4 features (metatiles E1-0/E1-1, runner E2) are **done**;
+the 2026-06-20 bug sweep (BR-01…08) is done. Earlier "open decisions" are all
+**resolved**: Arc B shipped the full-width banner; Arc C R-3/R-6/R-7 shipped;
+Arc D Sprint 4 enabled `-Os` (golden-hash test, FCEUX-verified); Sprint 7 did the
+safe slices and **deferred** the per-frame migration (pickups→win ordering
+coupling — see the Arc D plan); Arc E did metatiles server-side-expansion-first.
 
-## Suggested first three steps
-1. **Wave 0** — commit the working tree (branch off `main`).
-2. **Arc A tasks T1–T4** — the harness library + the deterministic-spawn spike
-   (the single highest-leverage thing; unblocks verifiable everything).
-3. **Arc B** + **Arc C R-10/R-4** in parallel — finish dialogue and ship two
-   visible pupil wins, all now render-tested.
+## Open decisions / next big initiative (pick one)
+The remaining work is large and design-first — these are the genuine forks:
+- **Arc E §3 Top-down racer** — the last/most novel game style (angle-based
+  velocity, fixed-point, sin/cos, laps). Prereqs (`-Os`, metatiles) are now **in**.
+  Design-doc-first.
+- **Arc D Sprint 5 (NMI frame model)** — architectural; also unblocks in-runner
+  dialogue. Highest risk; design-first; ship the dialogue-budget slice first.
+- **Arc E §1 E1-4 (NES-side compact metatile storage)** — genuinely huge worlds /
+  longer runner tracks; multi-day, vblank-sensitive; pairs with T3.1–2.
+- **Smaller polish** (not design-first): runner death-flash / distance counter,
+  the Behaviour-page "spike" palette label, metatile marquee block-snap.
+
+## Suggested next steps
+1. Land the metatile UI + runner work (already committed on `main`).
+2. **Racer**: write `docs/plans/current/2026-06-21-topdown-racer.md` (settle
+   heading resolution, fixed-point format, sin/cos table, lap model), then an
+   E3-1 movement spike (`BW_GAME_STYLE == 3`, drivable car) — render-tested like
+   the runner, then a visual pass.
+3. Or pick Sprint 5 / E1-4 above if those matter more to you.

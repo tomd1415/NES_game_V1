@@ -1,5 +1,12 @@
 # Next-phase suggestions — 2026-06-18
 
+> **Status (2026-06-21): largely implemented — kept as the original brainstorm.**
+> Wave 0 is long committed; Arcs A–E and the bug sweep are done through the
+> Wave-4 features (metatiles, runner). For the *current* state and the remaining
+> initiatives (racer · Sprint 5 · E1-4), see the master plan's "Status snapshot"
+> + "Open decisions" sections. The "commit the working tree" / "uncommitted"
+> notes below are historical.
+
 > **Detailed plan.** This is the high-level set of suggestions.  The full,
 > code-grounded implementation plan to complete all of them lives in
 > [`2026-06-18-next-phase-master-plan.md`](2026-06-18-next-phase-master-plan.md)

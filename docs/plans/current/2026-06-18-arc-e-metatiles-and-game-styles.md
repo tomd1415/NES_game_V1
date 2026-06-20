@@ -135,22 +135,23 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
   - **UI Slice 2 DONE (2026-06-20):** a **block library** strip (one 16×16
     swatch per metatile, drawn from its 4 tiles + palette) appears in metatile
     mode; click a swatch to select it, then **click/drag the grid to stamp** it
-    (`stampMetatileAt` writes `mtmap[y>>1][x>>1]`, one undo per stroke). Built +
-    suite-green; **awaiting the user's visual test.**
+    (`stampMetatileAt` writes `mtmap[y>>1][x>>1]`, one undo per stroke).
+    **User-confirmed working (2026-06-20).**
   - **UI Slice 3 DONE (2026-06-20):** an inline **mini-editor** for the selected
     block — a 4× preview (`drawMetatileSwatch` now takes a zoom), a palette
     select, a behaviour select, and **+ New block** (copies the selected block;
     edit its tiles after). Pick a tileset tile then click a corner of the
     preview to set it; palette/behaviour apply to the whole block. Edits apply
-    immediately and re-render library + canvas. Built + suite-green; **awaiting
-    the user's visual test.**
+    immediately and re-render library + canvas. **User-confirmed working
+    (2026-06-20).**
   - **UI Slice 4 (partial) DONE (2026-06-20):** **block delete** —
     `MetatileLib.deleteBlock(bg, id)` removes a block, falls its usages back to
     block 0, and shifts higher ids down to stay valid (refuses to delete the
     last block); wired to a **🗑 Delete block** button. Unit-tested in
     `metatile-lib.mjs`. The palette select carries a tooltip stating the
     one-palette-per-block rule (the "read-only-palette" cue). **Metatile block
-    CRUD is now complete** (promote → stamp → edit → +new → delete).
+    CRUD is now complete** (promote → stamp → edit → +new → delete). *Built +
+    suite-green; visual test outstanding (non-blocking — user moved on).*
   - **UI Slice 5 DONE (2026-06-20): R-9 region copy/paste on the metatile grid.**
     The **Select** tool is re-enabled in metatile mode; `copyNtRegion` /
     `pasteNtRegion` gained 16×16 branches that copy/paste **whole blocks**
@@ -159,7 +160,8 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
     "Copy region" + "Paste here" now build big block-levels fast. (The marquee
     overlay is tile-granular; copy/paste snap to whole blocks.) **The metatile
     authoring feature is now complete** (promote · stamp · edit · +new · delete ·
-    copy/paste). Built + suite-green; **awaiting the user's visual test.**
+    copy/paste). *Built + suite-green; visual test of delete + copy/paste
+    outstanding (non-blocking — user moved on to the next initiative).*
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).
