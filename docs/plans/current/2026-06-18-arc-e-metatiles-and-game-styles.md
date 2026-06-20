@@ -106,11 +106,28 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
   against the real expansion, and (B) a hand-authored checkerboard metatile
   project builds a real iNES ROM through `/play`. This banks the §1.2 desync kill
   (palette correct by construction) at the data layer.
-- **E1-1** — Authoring UI + state + migration + promote helper. *(next)* The
-  state shape the spike consumes is settled: per-bg `tileMode`, `metatiles[]`
-  (`{tiles:[TL,TR,BL,BR], palette, behaviour}`), `mtmap[][]`. Still to build:
-  `migrateMetatileFields` (additive, no STATE_VERSION bump), the library +
-  mini-editor + stamping UI in `index.html`, and the one-way promote helper.
+- **E1-1** — Authoring UI + state + migration + promote helper. *Headless half
+  DONE (2026-06-20); UI half is what's left.*
+  - ✅ **`tools/tile_editor_web/metatiles.js`** — a shared, UI-agnostic
+    `MetatileLib` with `migrate` (additive; 8×8 bgs untouched so saves stay
+    stable, 16×16 bgs get their arrays, unknown→8×8), `promote(bg)` (8×8→16×16:
+    scans 2×2 blocks, dedups into a library, builds the id map; palette+behaviour
+    from each block's TOP-LEFT cell = render-equivalent to the old emit), and
+    `expand(bg)` (16×16→8×8 for live preview). `expand` mirrors the server
+    `_expand_metatile_bg` **byte-for-byte** (cross-checked in tests).
+  - ✅ Wired into `index.html` (script tag + `MetatileLib.migrate(s)` in
+    `migrateState`). No UI yet — additive, no behaviour change for 8×8.
+  - ✅ Centralised in ONE module (not duplicated per page) — deliberately
+    avoiding the per-page migration drift that caused BR-01.
+  - ✅ Test `tools/builder-tests/metatile-lib.mjs`: migrate additivity,
+    promote dedup/map, promote→expand round-trip, JS↔server `expand` parity,
+    non-uniform-block→TL-palette.
+  - ⏳ **Left for the UI half (your call/build):** the metatile **library panel
+    + mini-editor + stamping** on the canvas in `index.html`, a per-bg
+    `8x8 | 16x16` toggle wired to a **Promote** button calling
+    `MetatileLib.promote`, read-only-palette swatches (the "correct by
+    construction" UI cue), and region copy/paste (R-9) on the metatile grid.
+    Use `MetatileLib.expand` for live swatch/preview rendering.
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).

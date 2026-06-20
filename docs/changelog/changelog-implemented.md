@@ -21,6 +21,34 @@ deferred.
 
 ---
 
+## Arc E §1 metatiles — E1-1 headless half (shared MetatileLib) — 2026-06-20
+
+The UI-agnostic logic for metatile authoring, ahead of the canvas UI.
+
+- **New `tools/tile_editor_web/metatiles.js`** exposing `MetatileLib`:
+  - `migrate(state)` — additive: 8×8 backgrounds are left untouched (saves stay
+    stable; the server defaults a missing `tileMode` to `8x8`), 16×16 bgs get
+    their `metatiles`/`mtmap` arrays ensured, an unknown `tileMode` normalises to
+    `8x8`.
+  - `promote(bg)` — one-way 8×8→16×16: scans the nametable in 2×2 blocks, dedups
+    them into a library, and builds the metatile-id map. Palette + behaviour come
+    from each block's TOP-LEFT cell — matching the NES 16×16 attribute
+    granularity the server already downsamples to, so a promoted background
+    renders identically to the original (the §1.2 "correct by construction").
+  - `expand(bg)` — 16×16→8×8 nametable+behaviour for live preview; mirrors the
+    server `_expand_metatile_bg` **byte-for-byte**.
+- **Centralised in one module** (not duplicated per page) — deliberately
+  avoiding the per-page migration drift that caused BR-01.
+- **Wired into `index.html`** (script tag + `MetatileLib.migrate` in
+  `migrateState`); no UI yet, additive, no behaviour change for 8×8 projects.
+- **Test `tools/builder-tests/metatile-lib.mjs`:** migrate additivity, promote
+  dedup/map, promote→expand round-trip, JS↔server `expand` parity, and the
+  non-uniform-block→TL-palette case.
+
+Left for the UI half (E1-1 proper): the library panel + mini-editor + canvas
+stamping, the per-bg `8x8|16x16` toggle + Promote button, read-only palette
+swatches, and R-9 region copy/paste on the metatile grid.
+
 ## Arc D Sprint 4 — `-Os` headless prep (golden-hash test reframing) — 2026-06-20
 
 Prepared the test net for the cc65 `-Os` optimisation flip without making the

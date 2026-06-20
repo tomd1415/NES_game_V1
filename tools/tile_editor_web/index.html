@@ -1558,6 +1558,7 @@ kbd {
 </div>
 
 <script src="storage.js"></script>
+<script src="metatiles.js"></script>
 <script src="a11y.js"></script>
 <script src="tour.js"></script>
 <script src="feedback.js"></script>
@@ -1792,6 +1793,8 @@ function migrateState(s) {
   // preserves it through save/load.  Seed a default tree here so older
   // projects open cleanly when a pupil first clicks 🧱 Builder.
   migrateBuilderFields(s);
+  // Arc E §1 — metatile fields (additive; no-op for 8x8 backgrounds).
+  if (window.MetatileLib) window.MetatileLib.migrate(s);
   return s;
 }
 
