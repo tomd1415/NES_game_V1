@@ -21,6 +21,26 @@ deferred.
 
 ---
 
+## Arc E §2 infinite-runner — E2-1 Builder validators — 2026-06-20
+
+Two auto-runner validators in `builder-validators.js` (the Builder runner option
++ `AUTOSCROLL_SPEED` tunable already shipped in E2-0):
+
+- **`runner-needs-scrolling-world`** (error) — an auto-runner on a background
+  narrower than 2 screens can't scroll (the camera advances every frame but the
+  world is one screen wide), so Play is blocked with a fix pointing at the
+  Backgrounds page.
+- **`runner-no-spike`** (warn) — an auto-runner with no spike tile painted
+  (behaviour slot 7) has no hazards; the player can never lose.
+
+Test: `tools/builder-tests/runner-validators.mjs` (1-screen→error, ≥2→ok,
+no-spike→warn, spike→ok, platformer→neither). Full suite green.
+
+Deferred (UI, needs a visual pass): a **"Spike" palette affordance** on the
+Behaviour page — labelling/seeding the custom slot (id 7) as "spike" when the
+game type is runner, so pupils don't need to know "slot 7 = spike". The
+validators' fix-text names slot 7 in the meantime.
+
 ## Arc E §2 infinite-runner — E2-0 spike (BW_GAME_STYLE == 2) — 2026-06-20
 
 First slice of the auto-runner / Geometry-Dash game style from

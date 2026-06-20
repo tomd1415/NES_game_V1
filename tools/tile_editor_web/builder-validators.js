@@ -648,6 +648,51 @@
         jumpTo: null,
       };
     },
+
+    // V17 (Arc E §2 / E2-1): the auto-runner advances the camera every frame,
+    // which only scrolls when the world is wider than one screen (SCROLL_BUILD).
+    // On a 1-screen-wide world the camera can't move — the run is broken.
+    // Blocking.
+    function runnerNeedsScrollingWorld(state) {
+      const g = (moduleNode(state, 'game') || {}).config || {};
+      if (g.type !== 'runner') return null;
+      const bgs = (state && state.backgrounds) || [];
+      const idx = (state && state.selectedBgIdx) | 0;
+      const bg = bgs[idx] || bgs[0] || {};
+      const sx = (((bg.dimensions || {}).screens_x) | 0) || 1;
+      if (sx >= 2) return null;
+      return {
+        id: 'runner-needs-scrolling-world',
+        severity: 'error',
+        message: 'Auto-runner needs a world at least 2 screens wide so it can ' +
+          'scroll, but this background is only ' + sx + ' screen wide.',
+        fix: 'On the Backgrounds page, make the background wider — set it to 2 ' +
+          'or more screens across.',
+        jumpTo: 'index.html',
+      };
+    },
+
+    // V18 (E2-1): the auto-runner restarts when the player touches a spike
+    // (behaviour slot 7 — BW_RUNNER_SPIKE_ID in the engine).  With no spike
+    // painted the run has no hazards: playable, but the player can never lose.
+    // Warn.
+    function runnerNoSpike(state) {
+      const g = (moduleNode(state, 'game') || {}).config || {};
+      if (g.type !== 'runner') return null;
+      const map = activeBehaviourMap(state);
+      for (const row of map) {
+        for (const v of row) if ((v | 0) === 7) return null;   // a spike tile exists
+      }
+      return {
+        id: 'runner-no-spike',
+        severity: 'warn',
+        message: 'Auto-runner has no spike tiles painted, so the player has ' +
+          'nothing to dodge and can never lose.',
+        fix: 'On the Behaviour page, paint some tiles as the spike (the custom ' +
+          'slot, id 7) for the player to jump over.',
+        jumpTo: 'behaviour.html',
+      };
+    },
   ];
 
   function validate(state) {

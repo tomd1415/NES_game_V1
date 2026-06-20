@@ -204,10 +204,26 @@ code `== 0 || == 2` rather than copy-paste); lock `px = cam_x + RUNNER_SCREEN_X`
 spike/pit probe → respawn; replace the follow call with `cam_x += AUTOSCROLL_SPEED`.
 
 ## 2.7 Phases
-E2-0 spike ✅ **DONE (2026-06-20)** → E2-1 Builder option + validators (require a
-horizontally-scrolling world; warn if no spike painted) → E2-2 spike behaviour +
-respawn (render-tested) → E2-3 polish (death flash/sound, distance counter,
-A-to-jump remap) → E2-4 authoring ergonomics (metatiles; optional level-loop).
+E2-0 spike ✅ **DONE (2026-06-20)** → E2-1 Builder option ✅ + validators ✅
+**(DONE 2026-06-20)**; spike palette affordance ⏳ (UI) → E2-2 spike behaviour +
+respawn ✅ (already in E2-0; render-tested by `runner.mjs`) → E2-3 polish (death
+flash/sound, distance counter, A-to-jump remap) → E2-4 authoring ergonomics
+(metatiles; optional level-loop).
+
+> **E2-1 (validators done).** `builder-validators.js` gained two runner
+> validators (tested by `tools/builder-tests/runner-validators.mjs`):
+> - `runner-needs-scrolling-world` (**error**) — a runner on a <2-screen-wide
+>   background can't scroll; blocks Play.
+> - `runner-no-spike` (**warn**) — a runner with no spike tile (behaviour slot 7)
+>   painted has no hazards; the player can never lose.
+>
+> The Builder runner option + `AUTOSCROLL_SPEED` tunable already shipped in E2-0.
+>
+> *Remaining (UI, needs a visual pass — deferred):* a **"Spike" palette
+> affordance on the Behaviour page** — label/seed the custom slot (id 7) as
+> "spike" when the game type is runner, so pupils don't have to know "slot 7 =
+> spike". The validators' fix-text points at slot 7 in the meantime. Spike
+> *render/respawn behaviour* is already engine-side + covered by `runner.mjs`.
 
 > **E2-0 spike (done).** Engine: `#if BW_GAME_STYLE == 2` in `platformer.c` —
 > `cam_x += AUTOSCROLL_SPEED` each frame, `px = cam_x + RUNNER_SCREEN_X` (rides
