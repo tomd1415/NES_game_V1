@@ -57,6 +57,19 @@ try {
   if (!/^#define AUTOSCROLL_SPEED 2$/m.test(asm)) bad('runner did not emit AUTOSCROLL_SPEED');
   else ok('runner emits AUTOSCROLL_SPEED tunable');
 
+  // Dialogue is disabled in runner builds (its in-vblank writes fight the
+  // auto-scroll — pupil-reported).  Even with the dialogue module ON, a runner
+  // build must emit NO dialogue.
+  {
+    const sd = makeState();
+    sd.builder.modules.dialogue = { enabled: true, config: { text: 'HELLO', proximity: 2 } };
+    const dasm = win.BuilderAssembler.assemble(sd, tpl);
+    // The template carries `#if BW_DIALOGUE_ENABLED` guards always; what the
+    // dialogue MODULE emits (and the runner must skip) is the `#define`.
+    if (/^#define BW_DIALOGUE_ENABLED 1$/m.test(dasm)) bad('runner build still enabled dialogue (#define emitted)');
+    else ok('dialogue is disabled in runner builds (no #define BW_DIALOGUE_ENABLED)');
+  }
+
   // Mirror cam_x (u16), px (u16), py (u8) into scratch RAM each frame.
   let c = asm.replace('while (oam_idx < 256) {',
     '(*(unsigned char*)0x0700)=(unsigned char)(cam_x&0xFF);(*(unsigned char*)0x0701)=(unsigned char)(cam_x>>8);' +

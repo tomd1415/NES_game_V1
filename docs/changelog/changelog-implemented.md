@@ -21,6 +21,24 @@ deferred.
 
 ---
 
+## Arc E §2 infinite-runner — dialogue disabled in auto-runner (pupil-reported) — 2026-06-20
+
+In-person testing of the auto-runner found the dialogue box glitches the screen —
+its in-vblank PPU writes fight the constant auto-scroll. Per the report, dialogue
+is now disabled in auto-runner builds:
+
+- `builder-modules.js`: the dialogue module's `applyToTemplate` emits **nothing**
+  when the game type is `runner` (no `BW_DIALOGUE_ENABLED`, no per-frame trigger,
+  no vblank writes) — disabled at the source, robust against any path.
+- `builder-validators.js`: a `runner-dialogue-unsupported` **warning** tells the
+  pupil dialogue is off in auto-runner games (so a ticked Dialogue module that
+  doesn't appear isn't a mystery).
+
+Non-runner dialogue is untouched (all dialogue suites green). Tests:
+`runner.mjs` (asserts no `#define BW_DIALOGUE_ENABLED` in a runner+dialogue
+build) + `runner-validators.mjs` (the warn). A proper in-runner dialogue would
+need the Sprint-5 NMI/queue frame model — out of scope for §2.
+
 ## Arc E §2 infinite-runner — E2-3 A-to-jump remap — 2026-06-20
 
 The auto-runner now also jumps on **A** (Geometry-Dash "tap to jump"), not just

@@ -693,6 +693,26 @@
         jumpTo: 'behaviour.html',
       };
     },
+
+    // V19 (Arc E §2): dialogue boxes don't work in an auto-runner — the constant
+    // auto-scroll fights the dialogue box's in-vblank PPU writes and glitches
+    // the screen — so dialogue is skipped in runner builds.  Warn (not block) so
+    // the pupil isn't surprised their dialogue never shows.
+    function runnerDialogueUnsupported(state) {
+      const g = (moduleNode(state, 'game') || {}).config || {};
+      if (g.type !== 'runner') return null;
+      if (!moduleEnabled(state, 'dialogue')) return null;
+      return {
+        id: 'runner-dialogue-unsupported',
+        severity: 'warn',
+        message: 'Dialogue boxes don\'t work in an auto-runner game (the ' +
+          'auto-scroll glitches the box), so dialogue is turned off in the ' +
+          'built game.',
+        fix: 'Untick the Dialogue module for this game, or switch the Game type ' +
+          'away from Auto-runner if you need dialogue.',
+        jumpTo: null,
+      };
+    },
   ];
 
   function validate(state) {

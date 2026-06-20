@@ -79,11 +79,10 @@ game styles, BR-06 ↔ shared emulator), noted in that plan.
 
 ## Milestones (waves)
 
-### Wave 0 — Land the current work (do first, ~0.5 day)
-A large, valuable batch is **uncommitted** (the web-feedback fixes, the dialogue
-scroll + per-NPC fixes, the editor letter-tile UI, codegen Sprints 1–3, all the
-plan docs). Branch off `main`, group into a few logical commits, land it. See
-**Cross-cutting** below.
+### Wave 0 — Land the current work ✅ DONE
+That batch (web-feedback fixes, dialogue scroll + per-NPC fixes, editor
+letter-tile UI, codegen Sprints 1–3, plan docs) is long since committed on
+`main`. The **Cross-cutting → Commit cadence** section below is historical.
 
 ### Wave 0.5 — Bug-fix sweep ✅ DONE (2026-06-20)
 The eight confirmed defects in the 2026-06-20 bug report are fixed, each with a
@@ -132,7 +131,11 @@ font glyph, walker-wall-stop). **Everything after Wave 1 is verifiable.**
   NES-side compact storage (E1-4) later/with T3.1–2. *E1-0 spike DONE
   (2026-06-20): `_expand_metatiles` + `metatiles.mjs`; palette-correct by
   construction, no baseline change. Next: E1-1 authoring UI + migration.*
-- **Arc E §2 Infinite-runner** — cheap once Arc A + (ideally) metatiles are in.
+- **Arc E §1 Metatiles** — *E1-1 headless half DONE (2026-06-20): shared
+  `MetatileLib` (migrate/promote/expand) + tests; canvas authoring UI remains.*
+- **Arc E §2 Infinite-runner** — *E2-0 spike + E2-1 validators + E2-3 A-to-jump
+  DONE (2026-06-20); auto-runner is playable and pupil-tested. Remaining: spike
+  palette affordance + death/distance polish (visual).*
 - **Arc D Sprint 5 (NMI frame model)** — the deeper rework; a VRAM ring buffer is
   *already linked* via nes.lib (`ppubuf_flush`), just bypassed — decompose into
   (1) per-frame byte budget on the in-window Builder dialogue, (2) safe snippet

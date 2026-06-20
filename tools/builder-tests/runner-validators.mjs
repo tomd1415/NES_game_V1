@@ -15,7 +15,7 @@ new Function(fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8'))()
 const V = window.BuilderValidators;
 
 // A background `screensX` wide; `spike` paints one slot-7 cell when true.
-function mkState({ type = 'runner', screensX = 4, spike = false } = {}) {
+function mkState({ type = 'runner', screensX = 4, spike = false, dialogue = false } = {}) {
   const cols = 32 * screensX, rows = 30;
   const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
   for (let c = 0; c < cols; c++) beh[28][c] = 1;   // floor
@@ -25,7 +25,10 @@ function mkState({ type = 'runner', screensX = 4, spike = false } = {}) {
     selectedBgIdx: 0,
     backgrounds: [{ name: 'bg', dimensions: { screens_x: screensX, screens_y: 1 }, behaviour: beh }],
     behaviour_types: [{ id: 7, name: 'spike' }],
-    builder: { version: 1, modules: { game: { enabled: true, config: { type, autoscrollSpeed: 2 } } } },
+    builder: { version: 1, modules: {
+      game: { enabled: true, config: { type, autoscrollSpeed: 2 } },
+      dialogue: { enabled: dialogue, config: { text: 'HELLO', proximity: 2 } },
+    } },
   };
 }
 const has = (ps, id) => ps.some(p => p.id === id);
@@ -58,5 +61,16 @@ p = V.validate(mkState({ type: 'platformer', screensX: 1, spike: false }));
 assert(!has(p, 'runner-needs-scrolling-world') && !has(p, 'runner-no-spike'),
   'runner validators wrongly fired for a platformer');
 console.log('✓ platformer (not runner) → neither runner validator fires');
+
+// 6. runner + dialogue enabled → warn it's unsupported (dialogue is auto-off).
+p = V.validate(mkState({ screensX: 4, spike: true, dialogue: true }));
+assert(has(p, 'runner-dialogue-unsupported') && sev(p, 'runner-dialogue-unsupported') === 'warn',
+  'runner + dialogue did not warn');
+console.log('✓ runner + dialogue enabled → warning (dialogue off in auto-runner)');
+
+// 7. platformer + dialogue → no runner-dialogue warning.
+p = V.validate(mkState({ type: 'platformer', screensX: 2, dialogue: true }));
+assert(!has(p, 'runner-dialogue-unsupported'), 'platformer + dialogue wrongly warned');
+console.log('✓ platformer + dialogue → no runner-dialogue warning');
 
 console.log('\nE2-1 runner-validators: all checks passed');

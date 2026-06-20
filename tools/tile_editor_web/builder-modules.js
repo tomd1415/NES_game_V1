@@ -1145,6 +1145,14 @@
       'MVP; per-NPC text is a future upgrade.',
     ],
     applyToTemplate(template, node, state) {
+      // The auto-runner (BW_GAME_STYLE == 2) advances the camera every frame;
+      // the dialogue box's in-vblank PPU writes fight that constant scroll and
+      // glitch the screen (pupil-reported).  Disable dialogue entirely in runner
+      // builds — emit nothing, so there's no BW_DIALOGUE_ENABLED, no per-frame
+      // trigger, and no vblank writes.  A validator warns so the pupil knows.
+      const gameType = (((state && state.builder && state.builder.modules &&
+        state.builder.modules.game) || {}).config || {}).type;
+      if (gameType === 'runner') return template;
       const c = (node && node.config) || {};
       // Phase 3.2: 1-3 lines of dialogue.  Pupils fill text/text2/text3;
       // empty lines drop out so a "HELLO" + "" + "" project emits a

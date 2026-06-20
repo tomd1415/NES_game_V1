@@ -216,12 +216,23 @@ remain) → E2-4 authoring ergonomics (metatiles; optional level-loop).
 > `runner.mjs` taps A for its jump check. Remaining E2-3 polish: a death
 > flash/sound and an on-screen distance counter (both want a visual pass).
 
-> **E2-1 (validators done).** `builder-validators.js` gained two runner
+> **Pupil-reported finding (2026-06-20): dialogue is disabled in auto-runner
+> builds.** In-person testing showed the dialogue box glitches the screen in a
+> runner — its in-vblank PPU writes fight the constant auto-scroll. Fix: the
+> dialogue module's `applyToTemplate` now **emits nothing when the game type is
+> runner** (no `BW_DIALOGUE_ENABLED`, no per-frame trigger, no vblank writes), and
+> a `runner-dialogue-unsupported` **warn** validator tells the pupil. (A proper
+> in-runner dialogue would need the Sprint-5 NMI/queue frame model; out of scope
+> for §2.) Covered by `runner.mjs` (no `#define` emitted) + `runner-validators.mjs`.
+>
+> **E2-1 (validators done).** `builder-validators.js` gained three runner
 > validators (tested by `tools/builder-tests/runner-validators.mjs`):
 > - `runner-needs-scrolling-world` (**error**) — a runner on a <2-screen-wide
 >   background can't scroll; blocks Play.
 > - `runner-no-spike` (**warn**) — a runner with no spike tile (behaviour slot 7)
 >   painted has no hazards; the player can never lose.
+> - `runner-dialogue-unsupported` (**warn**) — dialogue is auto-disabled in
+>   runner builds (see the finding above).
 >
 > The Builder runner option + `AUTOSCROLL_SPEED` tunable already shipped in E2-0.
 >
