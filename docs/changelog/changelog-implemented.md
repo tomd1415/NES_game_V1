@@ -47,8 +47,11 @@ invariant, all ROM builds, all suites) is green.
   Guarded every Player 2 four-byte write (`oam_idx > 252`, outer + inner) in
   `platformer.c` — inside `#if PLAYER2_ENABLED`, so the byte-identical baseline
   is untouched.  Added a **blocking** validator when P1+P2 cells exceed 64 and a
-  **warning** for the full player/scene/HUD frame budget.  Test:
-  `player-oam-budget.mjs`.
+  **warning** for the full player/scene/HUD frame budget.  Tests:
+  `player-oam-budget.mjs` (validator) + `render-player-oam-overflow.mjs` (Arc A
+  in-emulator: builds the over-budget two-8x8-player ROM through `/play` and
+  probes `oam_idx` to prove no write past `oam_buf[255]`; negative-control
+  verified).
 - **BR-04 (Med) — invalid spawn-effect index failed late in cc65.** Both effect
   fields are now sprite **dropdowns** (new `spriteRef` field type bound to the
   live sprite list); added **blocking** validators for the trigger and damage

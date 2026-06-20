@@ -93,9 +93,9 @@ solutions: [bug-report fix plan](2026-06-20-bug-report-fix-plan.md).
 **All eight are complete.** **BR-05 shipped as model B** (independent effects,
 per the user's call): the trigger and damage effects now each own their art +
 lifetime in the engine (per-slot `spawn_kind`, `SPAWN0_*`/`SPAWN1_*`,
-`SPAWN_TTL_0`/`SPAWN_TTL_1`), byte-identical baseline preserved. The OAM-budget
-validator (BR-03) ships now; an in-emulator render test of the overflow can be
-backfilled once Arc A's harness lands.
+`SPAWN_TTL_0`/`SPAWN_TTL_1`), byte-identical baseline preserved. The BR-03
+in-emulator overflow render test (`render-player-oam-overflow.mjs`) has now been
+backfilled on Arc A's harness, so the sweep has no deferred items.
 
 ### Wave 1 — Foundation: Arc A (~4–4.5 days)
 The render-test harness + the deterministic-spawn helper + backfill render

@@ -26,7 +26,7 @@ before / overlapping Arc A.
 | -- | --- | ---- | ------ | --------------- |
 | BR-02 | High | Persistence — debounced saves lose edits | ✅ fixed | `flush-save.mjs` |
 | BR-01 | High | New Top-down project assembled as Platformer | ✅ fixed | `topdown-new-project.mjs` |
-| BR-03 | High | Large 2-player sprites overflow OAM shadow | ✅ fixed | `player-oam-budget.mjs` |
+| BR-03 | High | Large 2-player sprites overflow OAM shadow | ✅ fixed | `player-oam-budget.mjs`, `render-player-oam-overflow.mjs` |
 | BR-04 | Med | Invalid spawn-effect index → late cc65 failure | ✅ fixed | `spawn-effect-refs.mjs` |
 | BR-05 | Med | Trigger & damage effects silently share one pool | ✅ fixed (model B) | `spawn-effect-refs.mjs`, `spawn.mjs` |
 | BR-06 | Med | Player 2 uncontrollable in Sprites preview | ✅ fixed | `emulator-p2-keys.mjs` |
@@ -120,9 +120,13 @@ pupil-authored content.
    - **Warning** based on the full player + HUD + scene + effect OAM budget.
 4. (Optional, confirm) cap player dimensions below the 8x8 general-art maximum.
 
-**Test:** render test (Arc A harness) — two players that fit render both;
-an over-budget config is blocked by the validator before generation. Confirms
-no write past `oam_buf[255]`.
+**Tests:** `player-oam-budget.mjs` (validator: blocks P1+P2>64, warns on the
+full frame budget) and `render-player-oam-overflow.mjs` (Arc A harness: builds
+the over-budget two-8x8-player ROM directly through `/play` — bypassing the
+validator, as an imported state would — and probes the engine's `oam_idx` to
+prove Player 1 fills OAM to exactly 256 and the Player 2 guard skips the rest,
+so nothing is written past `oam_buf[255]`). Negative-control verified: with the
+guard removed the probe sees `oam_idx == 512`.
 
 **Cross-link:** this is the OAM-budget concern that Arc D's codegen migration
 (Sprint 7) should preserve when player rendering moves into the engine.
