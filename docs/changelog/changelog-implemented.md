@@ -21,6 +21,22 @@ deferred.
 
 ---
 
+## Arc E §2 infinite-runner — runner+modules compatibility test — 2026-06-20
+
+Hardening after the dialogue finding: verified (and codified) that the
+auto-runner coexists with the other Builder modules. `tools/builder-tests/
+runner-modules.mjs` builds a runner game with HP + damage + HUD + pickups + win
+all enabled and asserts no validator errors, a clean compile to a real ROM, and
+that it still auto-scrolls — catching any future module change that conflicts
+with the `BW_GAME_STYLE == 2` branch. All green (no conflicts today).
+
+Also recorded a Sprint-7 finding (in the Arc D plan): the per-frame codegen
+migration can't be done one-module-at-a-time — `pickups` must run before
+`win_condition` (reads its counters), so migrating it alone would delay the
+"collect them all" win by a frame. The migration needs an all-at-once,
+order-preserving pass (incl. the scene-AI data-table redesign) — deferred as
+zero-pupil-value-for-real-risk until something concrete needs it.
+
 ## Arc E §2 infinite-runner — dialogue disabled in auto-runner (pupil-reported) — 2026-06-20
 
 In-person testing of the auto-runner found the dialogue box glitches the screen —

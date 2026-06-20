@@ -271,6 +271,19 @@ order T7.0 → T7.1 → … (cheapest/safest first). **One module per change**, 
 **re-run `all-modules.mjs` after each** (`tools/builder-tests/all-modules.mjs`,
 which ticks every module at once — see `all-modules.mjs:1–11`).
 
+> **Update (2026-06-20): "one module per change" is NOT safe for the per-frame
+> migrations — confirmed empirically.** Beyond the byte-ordering point already
+> noted below, there is a real **behavioural** coupling: `pickups` must run
+> *before* `win_condition` (which reads `bw_pickup_count`/`_total` for the
+> "collect them all" win). Migrating `pickups` alone moves it relative to the
+> still-string-appended `win_condition`, delaying the win check by one frame.
+> So the per-frame migrations (T7.1–T7.5) must be done **all-at-once,
+> order-preserving** (and T7.5 scene-AI needs its server-side `ss_ai[]`
+> data-table redesign as part of it) — a large change for **zero pupil-facing
+> value**, so it stays **deferred** until there's a concrete reason (e.g. an
+> engine feature that the string-emitted loops genuinely block). The SAFE
+> slices (T7.6 asm path, T7.7 events, T7.6a role dedup) already shipped.
+
 ## 7.0 Goal & shared mechanism
 
 Push the remaining **string-emitted per-frame C loops** out of
