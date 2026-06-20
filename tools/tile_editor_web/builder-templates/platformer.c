@@ -810,8 +810,15 @@ void main(void) {
             jmp_up = 0;
         } else {
             // UP = jump.  Edge-triggered: must release and re-press to
-            // bounce again, and only takes off from the ground.
-            if ((pad & 0x08) && !(prev_pad & 0x08) && !jumping) {
+            // bounce again, and only takes off from the ground.  The
+            // auto-runner (== 2) also accepts A — a Geometry-Dash "tap to
+            // jump" — kept #if-gated so the platformer's controls (and its
+            // byte-identical baseline) are unchanged.
+            if ((((pad & 0x08) && !(prev_pad & 0x08))
+#if BW_GAME_STYLE == 2
+                 || ((pad & 0x80) && !(prev_pad & 0x80))
+#endif
+                ) && !jumping) {
                 jumping = 1;
 //>> jump_height: How high the player jumps. Bigger number = higher jump (try 10 to 40).
                 jmp_up = 20;

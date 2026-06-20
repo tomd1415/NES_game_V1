@@ -21,6 +21,14 @@ deferred.
 
 ---
 
+## Arc E §2 infinite-runner — E2-3 A-to-jump remap — 2026-06-20
+
+The auto-runner now also jumps on **A** (Geometry-Dash "tap to jump"), not just
+the shared **UP**. The extra `(pad & 0x80)` edge in the jump trigger is
+`#if BW_GAME_STYLE == 2`-gated, so the platformer/top-down controls and the
+byte-identical golden are unchanged. `runner.mjs` taps A for its jump assertion.
+Remaining E2-3 polish (death flash/sound, distance counter) wants a visual pass.
+
 ## Arc E §2 infinite-runner — E2-1 Builder validators — 2026-06-20
 
 Two auto-runner validators in `builder-validators.js` (the Builder runner option

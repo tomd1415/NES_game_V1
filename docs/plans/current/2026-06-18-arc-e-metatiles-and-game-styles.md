@@ -206,9 +206,15 @@ spike/pit probe → respawn; replace the follow call with `cam_x += AUTOSCROLL_S
 ## 2.7 Phases
 E2-0 spike ✅ **DONE (2026-06-20)** → E2-1 Builder option ✅ + validators ✅
 **(DONE 2026-06-20)**; spike palette affordance ⏳ (UI) → E2-2 spike behaviour +
-respawn ✅ (already in E2-0; render-tested by `runner.mjs`) → E2-3 polish (death
-flash/sound, distance counter, A-to-jump remap) → E2-4 authoring ergonomics
-(metatiles; optional level-loop).
+respawn ✅ (already in E2-0; render-tested by `runner.mjs`) → E2-3 polish
+(A-to-jump remap ✅ **DONE 2026-06-20**; death flash/sound + distance counter
+remain) → E2-4 authoring ergonomics (metatiles; optional level-loop).
+
+> **E2-3 (partial — A-to-jump done).** The runner now also jumps on **A**
+> (Geometry-Dash "tap to jump"), `#if BW_GAME_STYLE == 2`-gated alongside the
+> shared UP control so the platformer is unchanged (byte-identical golden holds).
+> `runner.mjs` taps A for its jump check. Remaining E2-3 polish: a death
+> flash/sound and an on-screen distance counter (both want a visual pass).
 
 > **E2-1 (validators done).** `builder-validators.js` gained two runner
 > validators (tested by `tools/builder-tests/runner-validators.mjs`):

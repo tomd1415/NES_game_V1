@@ -86,16 +86,16 @@ try {
       ok('player locked to cam_x + ' + RUNNER_SCREEN_X + ' (px=' + pxv() + ', cam_x=' + camX() + ')');
     else bad('player not camera-locked: px=' + pxv() + ', cam_x=' + camX());
 
-    // 3. Jump: settle on the floor, then tap UP — py must rise then come back.
-    //    (The runner reuses the shared platformer jump = UP; an A-to-jump remap
-    //    is a deferred E2-3 polish item.)
+    // 3. Jump: settle on the floor, then tap A — py must rise then come back.
+    //    The runner accepts A (Geometry-Dash "tap to jump") as well as the
+    //    shared UP; we test A here since it's the runner's intuitive control.
     let py0 = pyv(); guard = 0;
     while (guard < 80) { h.frames(1); if (pyv() === py0) break; py0 = pyv(); guard++; }
     const rest = pyv();
-    h.tap(H.BTN.UP);
+    h.tap(H.BTN.A);
     let minPy = rest; for (let i = 0; i < 12; i++) { h.frames(1); if (pyv() < minPy) minPy = pyv(); }
-    if (minPy < rest - 4) ok('tap UP jumps (py rose ' + rest + ' → ' + minPy + ')');
-    else bad('tap UP did not jump (rest ' + rest + ', min ' + minPy + ')');
+    if (minPy < rest - 4) ok('tap A jumps (py rose ' + rest + ' → ' + minPy + ')');
+    else bad('tap A did not jump (rest ' + rest + ', min ' + minPy + ')');
 
     // 4. Spike → respawn: run on until the player reaches the spike column; the
     //    run must snap back (cam_x drops sharply toward 0).
