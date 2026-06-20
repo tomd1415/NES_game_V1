@@ -112,6 +112,20 @@ painted) + a Behaviour-page "Spike tile" affordance (E2-1); the A-to-jump remap
 (jump is currently the shared UP, E2-3); nicer spike-ribbon authoring once §1
 metatiles land (E2-4).
 
+## Arc E §1 metatiles — E1-1 UI Slice 2 (block library + stamping) — 2026-06-20
+
+Makes metatile mode actually paintable (on top of Slice 1's promote/render):
+
+- A **block library** strip appears in metatile mode — one 16×16 swatch per
+  metatile, drawn from its 4 tiles + palette (`drawMetatileSwatch` /
+  `renderMetatileLibrary`). Click a swatch to select it (highlighted).
+- **Click or drag the grid to stamp** the selected block —
+  `stampMetatileAt(x,y)` writes `mtmap[y>>1][x>>1]` and re-renders; one undo per
+  stroke, no-ops on unchanged cells.
+
+Suite green (index.html syntax + promote-roundtrip). Canvas behaviour needs a
+visual pass. Next: Slice 3 mini-editor (create/edit blocks), Slice 4 polish.
+
 ## Arc E §1 metatiles — E1-1 UI Slice 1 (Promote / render / revert) — 2026-06-20
 
 First slice of the metatile authoring UI on the Backgrounds page (`index.html`),

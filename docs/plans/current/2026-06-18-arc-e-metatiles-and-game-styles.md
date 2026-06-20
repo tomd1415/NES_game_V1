@@ -132,10 +132,14 @@ copy/paste (R-9) is trivial on the metatile grid and should be built here.
     promote (editor→server path non-destructive). *Pupil-facing caveat surfaced:
     promote coarsens per-8×8-cell palette **and** behaviour to one-per-16×16-block
     (takes the block's top-left) — by design for metatiles.*
-  - ⏳ **Remaining UI slices:** Slice 2 — metatile **library panel** (16×16
-    swatches via `MetatileLib.expand`) + **click-to-stamp** on the grid; Slice 3
-    — **mini-editor** (pick 4 tiles + palette + behaviour, create new blocks);
-    Slice 4 — read-only-palette cue + R-9 copy/paste on the metatile grid.
+  - **UI Slice 2 DONE (2026-06-20):** a **block library** strip (one 16×16
+    swatch per metatile, drawn from its 4 tiles + palette) appears in metatile
+    mode; click a swatch to select it, then **click/drag the grid to stamp** it
+    (`stampMetatileAt` writes `mtmap[y>>1][x>>1]`, one undo per stroke). Built +
+    suite-green; **awaiting the user's visual test.**
+  - ⏳ **Remaining UI slices:** Slice 3 — **mini-editor** (pick 4 tiles + palette
+    + behaviour, create/edit blocks rather than only the auto-built set); Slice 4
+    — read-only-palette cue + R-9 copy/paste on the metatile grid.
 - **E1-2** — Behaviour bundling (metatile behaviour → 8×8 `behaviour_map`).
 - **E1-3** — Bigger-world authoring cap (surface honestly that >2×2 scrolling
   needs T3.1/T3.2).

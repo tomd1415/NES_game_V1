@@ -1336,6 +1336,11 @@ kbd {
          existing paint-tile / paint-palette logic continues to read
          it unchanged. -->
   </div>
+  <!-- Arc E §1 — metatile block library (shown only in 16×16 mode). -->
+  <div class="mt-library" id="mt-library" style="display:none; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; padding:6px; border:1px solid var(--border,#3a3352); border-radius:6px;">
+    <span class="muted" style="font-size:0.9em;">🧱 Blocks — click one, then click the grid to stamp it:</span>
+    <div id="mt-library-swatches" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+  </div>
   <div class="nt-canvas-wrap" data-mode="paint">
     <canvas id="nt-canvas"></canvas>
   </div>
@@ -3437,9 +3442,73 @@ function renderNtPalettePicker() {
 function ntZoom() {
   return parseInt(document.getElementById('nt-zoom').value, 10) || 2;
 }
+// Arc E §1 (Slice 2) — the currently-selected metatile block to stamp.
+let selectedMetatileId = 0;
+
+// Draw one metatile (its 4 tiles + palette) into a 32×32 (16×16 @2×) swatch.
+function drawMetatileSwatch(cv, mt) {
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = nesRgb(state.universal_bg);
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  const z = 2;
+  const pal = state.bg_palettes[(mt.palette | 0) & 3];
+  const over = { slot0: state.universal_bg, slot1: pal.slots[0], slot2: pal.slots[1], slot3: pal.slots[2] };
+  const tiles = mt.tiles || [];
+  const quads = [[0, 0], [1, 0], [0, 1], [1, 1]];   // TL,TR,BL,BR → (col,row)
+  for (let k = 0; k < 4; k++) {
+    const t = state.bg_tiles[(tiles[k] | 0) & 0xFF];
+    if (!t) continue;
+    const ox = quads[k][0] * 8 * z, oy = quads[k][1] * 8 * z;
+    for (let py = 0; py < 8; py++) {
+      for (let px = 0; px < 8; px++) {
+        const rgb = pixelRgb(t.pixels[py][px], over);
+        if (!rgb) continue;
+        ctx.fillStyle = rgb;
+        ctx.fillRect(ox + px * z, oy + py * z, z, z);
+      }
+    }
+  }
+}
+
+// Build the metatile library strip: one clickable swatch per block.
+function renderMetatileLibrary() {
+  const host = document.getElementById('mt-library-swatches');
+  if (!host) return;
+  const mts = (activeBg() && activeBg().metatiles) || [];
+  if (selectedMetatileId >= mts.length) selectedMetatileId = 0;
+  host.replaceChildren();
+  mts.forEach((mt, i) => {
+    const cv = document.createElement('canvas');
+    cv.width = 32; cv.height = 32;
+    cv.title = 'Block #' + i + (i === selectedMetatileId ? ' (selected)' : '');
+    cv.style.cssText = 'image-rendering:pixelated;cursor:pointer;border:2px solid ' +
+      (i === selectedMetatileId ? 'var(--accent,#ffd866)' : 'rgba(255,255,255,0.15)') +
+      ';border-radius:3px;';
+    drawMetatileSwatch(cv, mt);
+    cv.addEventListener('click', () => { selectedMetatileId = i; renderMetatileLibrary(); });
+    host.appendChild(cv);
+  });
+}
+
+// Stamp the selected block at the metatile cell under tile coords (x, y).
+// (x>>1, y>>1) is the metatile cell.  No-ops if unchanged so dragging across a
+// block doesn't spam re-renders.  Caller pushes one undo per stroke.
+function stampMetatileAt(x, y) {
+  const bg = activeBg();
+  if (!bg || bg.tileMode !== '16x16' || !Array.isArray(bg.mtmap)) return;
+  if (x < 0 || y < 0) return;
+  const mx = x >> 1, my = y >> 1;
+  const row = bg.mtmap[my];
+  if (!row || mx >= row.length) return;
+  if (row[mx] === selectedMetatileId) return;
+  row[mx] = selectedMetatileId;
+  markDirty();
+  renderNametable();
+}
+
 // Arc E §1 — show Promote (8×8) or Revert+status (16×16), and lock the 8×8
-// paint tools / size selector while a background is in metatile mode (Slice 1:
-// metatile painting/editing arrives in the next slice).
+// paint tools / size selector while a background is in metatile mode.  In
+// metatile mode the block library is shown for click-to-stamp painting.
 function syncMetatileControls() {
   const bg = activeBg();
   const isMeta = bg && bg.tileMode === '16x16';
@@ -3452,8 +3521,7 @@ function syncMetatileControls() {
   if (isMeta) {
     const n = ((bg.metatiles && bg.metatiles.length) | 0);
     status.style.display = '';
-    status.textContent = '🧱 metatile mode · ' + n + ' block' + (n === 1 ? '' : 's') +
-      ' (painting tools coming next)';
+    status.textContent = '🧱 metatile mode · ' + n + ' block' + (n === 1 ? '' : 's');
   } else {
     status.style.display = 'none';
   }
@@ -3461,6 +3529,10 @@ function syncMetatileControls() {
   const sizeSel = document.getElementById('nt-size');
   if (sizeSel) sizeSel.disabled = !!isMeta;
   document.querySelectorAll('.nt-mode').forEach(b => { b.disabled = !!isMeta; });
+  // Show the block library (Slice 2) for click-to-stamp painting.
+  const lib = document.getElementById('mt-library');
+  if (lib) lib.style.display = isMeta ? 'flex' : 'none';
+  if (isMeta) renderMetatileLibrary();
 }
 
 function renderNametable() {
@@ -4598,8 +4670,15 @@ function init() {
   const ntc = document.getElementById('nt-canvas');
   ntc.addEventListener('contextmenu', e => e.preventDefault());
   ntc.addEventListener('mousedown', e => {
-    const tool = document.getElementById('nt-tool').value;
     const { x, y } = ntPointToCell(e);
+    // Arc E §1 (Slice 2) — metatile mode stamps the selected block.
+    if (activeBg().tileMode === '16x16') {
+      ntPainting = true;
+      pushUndo();
+      stampMetatileAt(x, y);
+      return;
+    }
+    const tool = document.getElementById('nt-tool').value;
     ntPainting = true;
     if (tool === 'palette-rect') {
       ntRectStart = { x, y };
@@ -4627,6 +4706,11 @@ function init() {
       'Cell (' + x + ', ' + y + ') — screen '
       + Math.floor(x / SCREEN_W) + ',' + Math.floor(y / SCREEN_H)
       + ' · local ' + (x % SCREEN_W) + ',' + (y % SCREEN_H);
+    // Arc E §1 (Slice 2) — drag to stamp blocks in metatile mode.
+    if (activeBg().tileMode === '16x16') {
+      if (ntPainting) stampMetatileAt(x, y);
+      return;
+    }
     if (!ntPainting) {
       const tool = ntToolSel.value;
       if (tool === 'palette' || tool === 'palette-rect') {
