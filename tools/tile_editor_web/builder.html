@@ -722,6 +722,7 @@ body.emu-single-player #emu-p2-controls { display: none; }
 </dialog>
 
 <script src="storage.js"></script>
+<script src="metatiles.js"></script>
 <script src="a11y.js"></script>
 <script src="project-menu.js"></script>
 <script src="feedback.js"></script>
@@ -1484,14 +1485,24 @@ body.emu-single-player #emu-p2-controls { display: none; }
   // 8×8 block.
   function drawBackgroundBehind(ctx, canvas) {
     const bgs = (state && state.backgrounds) || [];
-    const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0];
-    if (!bg || !Array.isArray(bg.nametable)) return;
+    // Prefer the selected background; fall back to a legacy top-level nametable
+    // (older single-screen saves) so those still render here.
+    let bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0];
+    if (!bg && state && Array.isArray(state.nametable)) bg = { nametable: state.nametable };
+    if (!bg) return;
+    // 16×16 metatile backgrounds keep their content in mtmap + metatiles, not a
+    // plain nametable — expand it the same way the Backgrounds page does, or the
+    // placement area would show blank for those levels.
+    const nt = (bg.tileMode === '16x16' && window.MetatileLib)
+      ? ((window.MetatileLib.expand(bg) || {}).nametable)
+      : bg.nametable;
+    if (!Array.isArray(nt)) return;
     const W = sceneWorld();
     const tiles = (state && state.bg_tiles) || [];
-    const rows = Math.min(W.rows, bg.nametable.length);
+    const rows = Math.min(W.rows, nt.length);
     const s = W.scale;
     for (let y = 0; y < rows; y++) {
-      const row = bg.nametable[y];
+      const row = nt[y];
       if (!Array.isArray(row)) continue;
       const cols = Math.min(W.cols, row.length);
       for (let x = 0; x < cols; x++) {
