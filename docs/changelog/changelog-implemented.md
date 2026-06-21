@@ -21,6 +21,25 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — E3-5 16-bit velocity math (perf) — 2026-06-21
+
+Followed the 2-player perf flag with the specified fix: the racer's per-frame
+velocity + position math is now **16-bit, no `long`**. `(speed >> 2) * cos >> 5`
+gives the same 8.8 velocity as the old `speed * cos >> 7` within ~0.003 px but
+fits a 16-bit multiply, and the position now accumulates the sub-pixel in 16-bit
+(`acc = px_sub + vx; np = px + (acc >> 8); px_sub = acc & 0xFF`) instead of
+`((long)px << 8)`. Applied to both cars. All 8 racer tests pass **unchanged**
+(velocity numerically ~identical) and the golden ROM is intact (racer-gated).
+
+**Measured:** single-player now runs **1:1** with the frame — the headless
+coast-to-stop dropped 144 → 96 frames (= exactly `MAX_SPEED/FRICTION`, one logic
+step per frame), so the single-car overrun is gone. **Two-player is still ~2×**
+(its per-frame movement was identical before/after), which pins the remaining cost
+on the four full-box `racer_box_on_edge` collision scans — not the arithmetic.
+The next perf lever (deferred, only if 2-player needs it) is a corner-probe
+collision (≈half the `behaviour_at` calls), which trades a little accuracy. See
+design doc §7.
+
 ## Arc E §3 top-down racer — E3-5 2-player (shared screen, follow P1) — 2026-06-21
 
 Two cars race on one screen (the user chose the follow-P1 camera; the NES has no

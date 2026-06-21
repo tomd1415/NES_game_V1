@@ -788,9 +788,13 @@ void main(void) {
         // otherwise, after moving, driving over a checkpoint arms a lap and
         // crossing the finish line while armed counts one.
         if (!RACER_RACE_OVER) {
-            signed long pfx;       // 24.8 fixed-point work value for one axis
+            // E3-5 perf: all 16-bit math (no `long`) so the per-frame cost stays
+            // within the NTSC budget even with two cars.  (speed>>2)*cos>>5 equals
+            // the old speed*cos>>7 within ~0.003 px but fits a 16-bit multiply;
+            // the position accumulates the sub-pixel in 16-bit too.
             signed int  vx, vy;    // 8.8 velocity components
             signed int  avx, avy;  // |vx|, |vy| for the dominant-axis test
+            signed int  acc, np;   // 16-bit sub-pixel accumulate + new coord
             pxcoord_t   keep;      // pre-move coord for push-back
             unsigned char keep_sub, hit_x = 0, hit_y = 0;
             if (pad & 0x02) racer_heading = (racer_heading + 15) & 15;  // LEFT  = turn CCW
@@ -803,24 +807,30 @@ void main(void) {
             } else {                                                    // coast = friction
                 racer_speed = (racer_speed > RACER_FRICTION) ? (racer_speed - RACER_FRICTION) : 0;
             }
-            vx = (signed int)(((signed long)racer_speed * COS16[racer_heading]) >> 7);
-            vy = (signed int)(((signed long)racer_speed * COS16[(racer_heading + 12) & 15]) >> 7);
+            vx = ((signed int)(racer_speed >> 2) * COS16[racer_heading]) >> 5;
+            vy = ((signed int)(racer_speed >> 2) * COS16[(racer_heading + 12) & 15]) >> 5;
             avx = vx < 0 ? -vx : vx;  avy = vy < 0 ? -vy : vy;
-            // Advance X (clamped to the world), then push back out of any edge.
+            // Advance X (16-bit sub-pixel), clamp to world, push back out of edges.
             keep = px;  keep_sub = px_sub;
-            pfx = (((signed long)px) << 8) + px_sub + vx;
-            if (pfx < 0) pfx = 0;
-            if (pfx > (((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8))
-                pfx = ((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8;
-            px = (pxcoord_t)(pfx >> 8);  px_sub = (unsigned char)(pfx & 0xFF);
+            acc = (signed int)px_sub + vx;
+            np  = (signed int)px + (acc >> 8);
+            px_sub = (unsigned char)(acc & 0xFF);
+            if (np < 0) { np = 0; px_sub = 0; }
+            else if (np > (signed int)(WORLD_W_PX - PLAYER_W * 8)) {
+                np = (signed int)(WORLD_W_PX - PLAYER_W * 8); px_sub = 0;
+            }
+            px = (pxcoord_t)np;
             if (racer_box_on_edge(px, py, PLAYER_W, PLAYER_H)) { px = keep;  px_sub = keep_sub;  hit_x = 1; }
             // Advance Y likewise (independent axis → the car slides along walls).
             keep = py;  keep_sub = py_sub;
-            pfx = (((signed long)py) << 8) + py_sub + vy;
-            if (pfx < 0) pfx = 0;
-            if (pfx > (((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8))
-                pfx = ((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8;
-            py = (pxcoord_t)(pfx >> 8);  py_sub = (unsigned char)(pfx & 0xFF);
+            acc = (signed int)py_sub + vy;
+            np  = (signed int)py + (acc >> 8);
+            py_sub = (unsigned char)(acc & 0xFF);
+            if (np < 0) { np = 0; py_sub = 0; }
+            else if (np > (signed int)(WORLD_H_PX - PLAYER_H * 8)) {
+                np = (signed int)(WORLD_H_PX - PLAYER_H * 8); py_sub = 0;
+            }
+            py = (pxcoord_t)np;
             if (racer_box_on_edge(px, py, PLAYER_W, PLAYER_H)) { py = keep;  py_sub = keep_sub;  hit_y = 1; }
             // Bleed speed only on a head-on / steep hit (the blocked axis carried
             // the bulk of the velocity); a shallow graze keeps its speed.
@@ -848,8 +858,8 @@ void main(void) {
         // E3-5 2-player: the second car, identical physics driven by pad2.  The
         // camera follows P1, so P2 may scroll off-screen until it catches up.
         if (!RACER_RACE_OVER) {
-            signed long pfx;
             signed int  vx, vy, avx, avy;
+            signed int  acc, np;   // 16-bit math (no `long`) — see P1 block
             pxcoord_t   keep;
             unsigned char keep_sub, hit_x = 0, hit_y = 0;
             if (pad2 & 0x02) racer_heading2 = (racer_heading2 + 15) & 15;
@@ -862,22 +872,28 @@ void main(void) {
             } else {
                 racer_speed2 = (racer_speed2 > RACER_FRICTION) ? (racer_speed2 - RACER_FRICTION) : 0;
             }
-            vx = (signed int)(((signed long)racer_speed2 * COS16[racer_heading2]) >> 7);
-            vy = (signed int)(((signed long)racer_speed2 * COS16[(racer_heading2 + 12) & 15]) >> 7);
+            vx = ((signed int)(racer_speed2 >> 2) * COS16[racer_heading2]) >> 5;
+            vy = ((signed int)(racer_speed2 >> 2) * COS16[(racer_heading2 + 12) & 15]) >> 5;
             avx = vx < 0 ? -vx : vx;  avy = vy < 0 ? -vy : vy;
             keep = px2;  keep_sub = px2_sub;
-            pfx = (((signed long)px2) << 8) + px2_sub + vx;
-            if (pfx < 0) pfx = 0;
-            if (pfx > (((signed long)(WORLD_W_PX - PLAYER2_W * 8)) << 8))
-                pfx = ((signed long)(WORLD_W_PX - PLAYER2_W * 8)) << 8;
-            px2 = (pxcoord_t)(pfx >> 8);  px2_sub = (unsigned char)(pfx & 0xFF);
+            acc = (signed int)px2_sub + vx;
+            np  = (signed int)px2 + (acc >> 8);
+            px2_sub = (unsigned char)(acc & 0xFF);
+            if (np < 0) { np = 0; px2_sub = 0; }
+            else if (np > (signed int)(WORLD_W_PX - PLAYER2_W * 8)) {
+                np = (signed int)(WORLD_W_PX - PLAYER2_W * 8); px2_sub = 0;
+            }
+            px2 = (pxcoord_t)np;
             if (racer_box_on_edge(px2, py2, PLAYER2_W, PLAYER2_H)) { px2 = keep;  px2_sub = keep_sub;  hit_x = 1; }
             keep = py2;  keep_sub = py2_sub;
-            pfx = (((signed long)py2) << 8) + py2_sub + vy;
-            if (pfx < 0) pfx = 0;
-            if (pfx > (((signed long)(WORLD_H_PX - PLAYER2_H * 8)) << 8))
-                pfx = ((signed long)(WORLD_H_PX - PLAYER2_H * 8)) << 8;
-            py2 = (pxcoord_t)(pfx >> 8);  py2_sub = (unsigned char)(pfx & 0xFF);
+            acc = (signed int)py2_sub + vy;
+            np  = (signed int)py2 + (acc >> 8);
+            py2_sub = (unsigned char)(acc & 0xFF);
+            if (np < 0) { np = 0; py2_sub = 0; }
+            else if (np > (signed int)(WORLD_H_PX - PLAYER2_H * 8)) {
+                np = (signed int)(WORLD_H_PX - PLAYER2_H * 8); py2_sub = 0;
+            }
+            py2 = (pxcoord_t)np;
             if (racer_box_on_edge(px2, py2, PLAYER2_W, PLAYER2_H)) { py2 = keep;  py2_sub = keep_sub;  hit_y = 1; }
             if ((hit_x && avx >= avy) || (hit_y && avy >= avx))
                 racer_speed2 >>= 1;

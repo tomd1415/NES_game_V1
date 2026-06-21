@@ -224,11 +224,11 @@ The remaining work is large and design-first — these are the genuine forks:
 - **Arc E §3 Top-down racer — IN PROGRESS.** E3-0…E3-4 done + **E3-5 mostly done**
   (see above + the [racer design doc](2026-06-21-topdown-racer.md)): movement,
   collision, laps/race goal, rotated art, **brake**, **lap HUD**, and **2-player**
-  (shared screen, follow P1; `racer-2p.mjs` green). **Perf: two cars run ~2× over
-  the NTSC budget** (`long` velocity math) — the **16-bit velocity-math
-  optimisation is now the priority** (design doc §7; numerically ~unchanged).
-  Remaining after that: full reverse (signed-speed), ordered checkpoints,
-  flip-shared rotation CHR.
+  (shared screen, follow P1; `racer-2p.mjs` green), and the **16-bit velocity/
+  position math** (no `long`). **Perf now: single-player runs 1:1** (overrun
+  gone); **2-player still ~2×**, now bound by the collision scans, not the math
+  (design doc §7). Remaining: collision-scan trim (corner-probe, only if 2-player
+  needs it), full reverse (signed-speed), ordered checkpoints, flip-shared CHR.
 - **Arc D Sprint 5 (NMI frame model)** — architectural; also unblocks in-runner
   dialogue. Highest risk; design-first; ship the dialogue-budget slice first.
 - **Arc E §1 E1-4 (NES-side compact metatile storage)** — genuinely huge worlds /

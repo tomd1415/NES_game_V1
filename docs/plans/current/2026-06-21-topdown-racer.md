@@ -124,10 +124,10 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   pass** (draw a car facing right → does it look right rotating, esp. diagonals?).
 - **E3-5 — polish + 2-player** (D11). **Mostly done:** ✅ **brake** (DOWN,
   `racer-brake.mjs`), ✅ **numeric lap HUD** (`racer-hud.mjs`), ✅ **2-player**
-  (shared screen, follow P1; `racer-2p.mjs`). Lap detection trimmed to a
-  centre-cell lookup. **Remaining:** the **16-bit velocity-math optimisation**
-  (now the priority — see §7, two cars run ~2× over budget), full **reverse**
-  (signed-speed), multiple ordered checkpoints, flip-shared rotation CHR.
+  (shared screen, follow P1; `racer-2p.mjs`), ✅ **16-bit velocity/position math**
+  (single-player now runs 1:1 — see §7). **Remaining:** collision-scan trim (only
+  if 2-player's residual ~2× slowdown matters), full **reverse** (signed-speed),
+  multiple ordered checkpoints, flip-shared rotation CHR.
 
 ## 6. Verification & invariants
 Same rules as the runner: every block `#if BW_GAME_STYLE == 3`-gated so the
@@ -137,20 +137,22 @@ runner suites stay green; the movement spike gets a headless render test
 part jsnes can't judge). Builder validators where sensible (e.g. racer wants a
 ≥2-screen track; later, ≥1 checkpoint + a finish line).
 
-## 7. Perf finding (measured at E3-5) — optimisation now the priority
-Frame-counting in the headless tests shows the racer's main loop runs over the
-NTSC frame budget: **single car ~1.3–1.5×**, **two cars ~2×** (jsnes models a
-missed `waitvsync` as a 2-frame iteration, so logic advances ~1 step per ~2
-emulated frames with 2 cars). The dominant cost is the **32-bit `long` multiplies**
-`vx/vy = speed × COS16` (two per car) plus the 24.8 `long` position math. Single
-car has been feel-tested as good; **two cars are noticeably slow**.
+## 7. Perf — 16-bit math done; single-player now 1:1, 2-player scan-bound
+**Done:** the per-frame velocity + position math is now 16-bit (no `long`):
+`(speed >> 2) × cos >> 5` (same 8.8 result within ~0.003 px, fits a 16-bit
+multiply) and a 16-bit sub-pixel accumulate (`acc = px_sub + vx; np = px +
+(acc >> 8); px_sub = acc & 0xFF`) instead of `((long)px << 8)`. All 8 racer tests
+passed unchanged (velocity numerically ~identical), golden intact.
 
-**The fix (well-specified, do next):** make the per-frame math 16-bit. `speed`
-(≤768) × `cos` (±127) overflows 16-bit, but `(speed >> 2) × cos >> 5` is the same
-8.8 result within ~0.003 px and fits a 16-bit multiply; the position update can
-accumulate the sub-pixel in 16-bit (`acc = px_sub + vx; step = acc >> 8;
-px += step; px_sub = acc & 0xFF`) instead of `((long)px << 8)`. That removes all
-`long` arithmetic from the racer hot path (4 muls + 4 position updates with two
-cars) — the velocity is numerically ~unchanged, so the existing tests should pass
-as-is. Deferred from this commit only to keep the 2-player change reviewable +
-re-feel-tested on its own.
+**Measured result:** **single-player now runs 1:1** with the frame (headless
+coast-to-stop dropped 144 → 96 frames = exactly `MAX_SPEED/FRICTION`, i.e. one
+logic step per frame — the overrun is gone). **Two-player is still ~2×** (its
+per-frame movement was identical before and after the math change), which pins the
+remaining cost on the **four full-box `racer_box_on_edge` collision scans** (two
+axes × two cars, ~9 `behaviour_at` each), *not* the arithmetic.
+
+**Next perf lever (only if 2-player needs it):** cut the collision scan — probe
+the car's 4 corners (+ centre) instead of the full 3×3 box (≈half the
+`behaviour_at` calls). Trade-off: a one-cell-thick wall in the car's middle span
+could be missed on a 3-column straddle, so it slightly weakens collision accuracy
+— hence deferred until a 2-player feel pass says the slowdown matters.
