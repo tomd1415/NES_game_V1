@@ -612,7 +612,16 @@ void runner_respawn(void) {
 #define BW_RACER_FINISH_ID 7      /* behaviour slot painted as the finish line */
 #endif
 #ifndef BW_RACER_CHECKPOINT_ID
-#define BW_RACER_CHECKPOINT_ID 5  /* behaviour slot painted as a checkpoint */
+#define BW_RACER_CHECKPOINT_ID 5  /* checkpoint 1 (the 'trigger' slot) */
+#endif
+#ifndef BW_RACER_CHECKPOINT2_ID
+#define BW_RACER_CHECKPOINT2_ID 6 /* checkpoint 2 (the 'ladder' slot) — ordered after CP1 */
+#endif
+/* E3-5 ordered checkpoints: a lap needs the car to pass RACER_CP_COUNT (1 or 2)
+ * checkpoints IN ORDER (CP1 then CP2) before re-crossing the finish.  Default 1
+ * keeps single-checkpoint tracks working unchanged. */
+#ifndef RACER_CP_COUNT
+#define RACER_CP_COUNT 1
 #endif
 /* E3-5 reverse: DOWN brakes, then backs up below 0 (signed speed) capped at
  * RACER_REV_MAX (default: half top speed — reverse is slower than forward). */
@@ -623,7 +632,7 @@ unsigned char racer_heading;      /* 0..15 (16 directions, 22.5deg steps) */
 signed int    racer_speed;        /* 8.8 fixed-point, -RACER_REV_MAX..+RACER_MAX_SPEED */
 unsigned char px_sub, py_sub;     /* sub-pixel position accumulators */
 unsigned char racer_laps;         /* completed laps */
-unsigned char racer_armed;        /* passed a checkpoint since the last finish? */
+unsigned char racer_cp_stage;     /* ordered checkpoints passed since last finish (0..RACER_CP_COUNT) */
 unsigned char racer_finished;     /* reached RACER_LAPS_TO_WIN -> race won */
 #if PLAYER2_ENABLED
 /* E3-5 2-player: a second car with its own heading/speed/laps, driven by pad2.
@@ -632,7 +641,7 @@ unsigned char racer_finished;     /* reached RACER_LAPS_TO_WIN -> race won */
 unsigned char racer_heading2;
 signed int    racer_speed2;
 unsigned char px2_sub, py2_sub;
-unsigned char racer_laps2, racer_armed2, racer_finished2;
+unsigned char racer_laps2, racer_cp_stage2, racer_finished2;
 #define RACER_RACE_OVER (racer_finished || racer_finished2)
 #else
 #define RACER_RACE_OVER (racer_finished)
@@ -858,9 +867,10 @@ void main(void) {
                 unsigned char mid = behaviour_at(
                     (unsigned int)((px + (PLAYER_W << 2)) >> 3),
                     (unsigned int)((py + (PLAYER_H << 2)) >> 3));
-                if (mid == BW_RACER_CHECKPOINT_ID) racer_armed = 1;
-                else if (racer_armed && mid == BW_RACER_FINISH_ID) {
-                    racer_armed = 0;
+                if (mid == BW_RACER_CHECKPOINT_ID && racer_cp_stage == 0) racer_cp_stage = 1;
+                else if (mid == BW_RACER_CHECKPOINT2_ID && racer_cp_stage == 1) racer_cp_stage = 2;
+                else if (mid == BW_RACER_FINISH_ID && racer_cp_stage >= RACER_CP_COUNT) {
+                    racer_cp_stage = 0;
                     if (++racer_laps >= RACER_LAPS_TO_WIN) racer_finished = 1;
                 }
             }
@@ -917,9 +927,10 @@ void main(void) {
                 unsigned char mid = behaviour_at(
                     (unsigned int)((px2 + (PLAYER2_W << 2)) >> 3),
                     (unsigned int)((py2 + (PLAYER2_H << 2)) >> 3));
-                if (mid == BW_RACER_CHECKPOINT_ID) racer_armed2 = 1;
-                else if (racer_armed2 && mid == BW_RACER_FINISH_ID) {
-                    racer_armed2 = 0;
+                if (mid == BW_RACER_CHECKPOINT_ID && racer_cp_stage2 == 0) racer_cp_stage2 = 1;
+                else if (mid == BW_RACER_CHECKPOINT2_ID && racer_cp_stage2 == 1) racer_cp_stage2 = 2;
+                else if (mid == BW_RACER_FINISH_ID && racer_cp_stage2 >= RACER_CP_COUNT) {
+                    racer_cp_stage2 = 0;
                     if (++racer_laps2 >= RACER_LAPS_TO_WIN) racer_finished2 = 1;
                 }
             }

@@ -57,7 +57,7 @@ try {
     '(*(unsigned char*)0x0700)=(unsigned char)(px&0xFF);(*(unsigned char*)0x0701)=(unsigned char)(px>>8);' +
     '(*(unsigned char*)0x0702)=(unsigned char)(py&0xFF);(*(unsigned char*)0x0703)=(unsigned char)(py>>8);' +
     '(*(unsigned char*)0x0704)=racer_heading;' +
-    '(*(unsigned char*)0x0705)=racer_laps;(*(unsigned char*)0x0706)=racer_armed;(*(unsigned char*)0x0707)=racer_finished;' +
+    '(*(unsigned char*)0x0705)=racer_laps;(*(unsigned char*)0x0706)=racer_cp_stage;(*(unsigned char*)0x0707)=racer_finished;' +
     'while (oam_idx < 256) {');
   const r = await H.buildRom(PORT, {
     state: s, playerSpriteIdx: 0, playerStart: { x: 144, y: 200 }, mode: 'browser', customMainC: c });

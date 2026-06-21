@@ -749,26 +749,32 @@
     function racerLapsNeedMarkers(state) {
       const g = (moduleNode(state, 'game') || {}).config || {};
       if (g.type !== 'racer') return null;
+      const cpCount = Math.max(1, Math.min(2, (g.racerCheckpoints | 0) || 1));
       const map = activeBehaviourMap(state);
-      let hasFinish = false, hasCheckpoint = false;
+      let hasFinish = false, hasCp1 = false, hasCp2 = false;
       for (const row of map) {
         for (const v of row) {
           if ((v | 0) === 7) hasFinish = true;
-          else if ((v | 0) === 5) hasCheckpoint = true;
+          else if ((v | 0) === 5) hasCp1 = true;
+          else if ((v | 0) === 6) hasCp2 = true;
         }
       }
-      if (hasFinish && hasCheckpoint) return null;
-      const missing = !hasFinish && !hasCheckpoint
-        ? 'a finish line and a checkpoint'
-        : (!hasFinish ? 'a finish line' : 'a checkpoint');
+      const needCp2 = cpCount >= 2;
+      if (hasFinish && hasCp1 && (!needCp2 || hasCp2)) return null;
+      const miss = [];
+      if (!hasFinish) miss.push('a finish line');
+      if (!hasCp1) miss.push('checkpoint 1 (the trigger tile)');
+      if (needCp2 && !hasCp2) miss.push('checkpoint 2 (the ladder tile)');
       return {
         id: 'racer-laps-need-markers',
         severity: 'warn',
-        message: 'This racer has no ' + missing + ' painted, so laps can never be ' +
-          'completed and the race can\'t be won — it will just be free-drive.',
+        message: 'This racer is missing ' + miss.join(' and ') + ', so laps can ' +
+          'never be completed and the race can\'t be won — it will just be free-drive.',
         fix: 'On the Behaviour page, paint a finish line (the custom slot, id 7) ' +
-          'across the track and at least one checkpoint (the trigger slot) on the ' +
-          'far side, so a lap = finish → checkpoint → finish.',
+          'across the track and ' + (needCp2 ? 'two checkpoints — the trigger tile ' +
+          '(passed first) then the ladder tile (passed second)' : 'a checkpoint ' +
+          '(the trigger tile)') + ' on the far side, so a lap = finish → ' +
+          (needCp2 ? 'checkpoint 1 → checkpoint 2' : 'checkpoint') + ' → finish.',
         jumpTo: 'behaviour.html',
       };
     },

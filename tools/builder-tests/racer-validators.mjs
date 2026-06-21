@@ -15,18 +15,20 @@ globalThis.window = globalThis;
 new Function(fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8'))();
 const V = window.BuilderValidators;
 
-function mkState({ type = 'racer', screensX = 2, screensY = 2, finish = false, checkpoint = false } = {}) {
+function mkState({ type = 'racer', screensX = 2, screensY = 2, finish = false,
+                  checkpoint = false, checkpoint2 = false, racerCheckpoints = 1 } = {}) {
   const cols = 32 * screensX, rows = 30 * screensY;
   const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
   if (finish) beh[2][2] = 7;        // a finish-line tile (slot 7)
-  if (checkpoint) beh[2][5] = 5;    // a checkpoint tile (trigger slot, id 5)
+  if (checkpoint) beh[2][5] = 5;    // checkpoint 1 (trigger slot, id 5)
+  if (checkpoint2) beh[2][8] = 6;   // checkpoint 2 (ladder slot, id 6)
   return {
     sprites: [{ role: 'player' }],
     selectedBgIdx: 0,
     backgrounds: [{ name: 'bg', dimensions: { screens_x: screensX, screens_y: screensY }, behaviour: beh }],
     behaviour_types: [],
     builder: { version: 1, modules: {
-      game: { enabled: true, config: { type, racerTopSpeed: 3 } },
+      game: { enabled: true, config: { type, racerTopSpeed: 3, racerCheckpoints } },
     } },
   };
 }
@@ -79,5 +81,15 @@ console.log('✓ racer with finish + checkpoint → no markers warning');
 p = V.validate(mkState({ type: 'platformer', finish: false, checkpoint: false }));
 assert(!has(p, 'racer-laps-need-markers'), 'racer-laps validator wrongly fired for a platformer');
 console.log('✓ platformer (not racer) → racer-laps validator does not fire');
+
+// 10. (E3-5) 2-checkpoint racer with finish + CP1 but no CP2 → warns.
+p = V.validate(mkState({ finish: true, checkpoint: true, checkpoint2: false, racerCheckpoints: 2 }));
+assert(has(p, 'racer-laps-need-markers'), '2-checkpoint racer without CP2 did not warn');
+console.log('✓ 2-checkpoint racer missing checkpoint 2 → warning');
+
+// 11. 2-checkpoint racer with finish + CP1 + CP2 → no warning.
+p = V.validate(mkState({ finish: true, checkpoint: true, checkpoint2: true, racerCheckpoints: 2 }));
+assert(!has(p, 'racer-laps-need-markers'), '2-checkpoint racer with both CPs wrongly warned');
+console.log('✓ 2-checkpoint racer with both checkpoints → no warning');
 
 console.log('\nE3-1/E3-4 racer-validators: all checks passed');
