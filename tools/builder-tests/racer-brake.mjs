@@ -41,6 +41,7 @@ try {
   const s = makeState();
   const asm = win.BuilderAssembler.assemble(s, tpl);
   let c = asm.replace('while (oam_idx < 256) {',
+    '(*(unsigned char*)0x0700)=(unsigned char)(px&0xFF);(*(unsigned char*)0x0701)=(unsigned char)(px>>8);' +
     '(*(unsigned char*)0x0705)=(unsigned char)(racer_speed&0xFF);(*(unsigned char*)0x0706)=(unsigned char)(racer_speed>>8);' +
     'while (oam_idx < 256) {');
   const r = await H.buildRom(PORT, {
@@ -48,16 +49,21 @@ try {
   if (!r.ok) { bad('racer-brake ROM did not compile at stage ' + r.stage + ':\n' + String(r.log || '').slice(-1800)); }
   else {
     const h = H.openRom(r.romBytes);
-    const spd = () => h.nes.cpu.mem[0x705] + 256 * h.nes.cpu.mem[0x706];
+    const pxv = () => h.nes.cpu.mem[0x700] + 256 * h.nes.cpu.mem[0x701];
+    // racer_speed is signed 8.8 now (DOWN can drive it negative = reverse).
+    const spd = () => { const s = h.nes.cpu.mem[0x705] + 256 * h.nes.cpu.mem[0x706]; return s >= 32768 ? s - 65536 : s; };
 
     const toMax = () => { h.hold(H.BTN.A); for (let i = 0; i < 80; i++) h.frames(1); h.release(H.BTN.A); };
-    const framesToStop = (brake) => {
+    // Frames until speed drops to 0 or below (coast = friction; brake = hold DOWN,
+    // which crosses 0 into reverse).  Latency-robust: both pay the same cost.
+    const framesToZero = (brake) => {
       let g = 0;
       if (brake) h.hold(H.BTN.DOWN);
       while (spd() > 0 && g < 300) { h.frames(1); g++; }
       if (brake) h.release(H.BTN.DOWN);
       return g;
     };
+    const restFully = () => { for (let i = 0; i < 200 && spd() !== 0; i++) h.frames(1); };
 
     h.frames(200);
     toMax();
@@ -65,15 +71,23 @@ try {
     if (s0 > 400) ok('accelerate builds real speed (speed=' + s0 + ' 8.8)');
     else bad('did not build enough speed to test braking (speed=' + s0 + ')');
 
-    // Coast to a stop (friction only), then re-accelerate and brake to a stop.
-    // Comparing stop-times is robust to input latency (both pay the same cost).
-    const gCoast = framesToStop(false);
+    // Brake stops far faster than coasting (compare frames to reach 0).
+    const gCoast = framesToZero(false);
     toMax();
-    const gBrake = framesToStop(true);
-    if (gBrake > 0 && spd() === 0) ok('braking brings the car to a full stop (' + gBrake + ' frames)');
-    else bad('braking did not stop the car (speed=' + spd() + ', frames=' + gBrake + ')');
-    if (gBrake * 2 < gCoast) ok('braking stops far faster than coasting (' + gBrake + ' vs ' + gCoast + ' frames)');
+    const gBrake = framesToZero(true);
+    if (gBrake > 0 && gBrake * 2 < gCoast)
+      ok('braking stops far faster than coasting (' + gBrake + ' vs ' + gCoast + ' frames)');
     else bad('braking not clearly faster than friction (brake ' + gBrake + ', coast ' + gCoast + ')');
+
+    // Reverse: from rest, hold DOWN → speed goes negative and the car backs up
+    // (heading 0 = +x, so reverse decreases px).
+    restFully();
+    const rx = pxv();
+    h.hold(H.BTN.DOWN); for (let i = 0; i < 60; i++) h.frames(1); h.release(H.BTN.DOWN);
+    const dRev = pxv() - rx;
+    if (spd() < 0 && dRev < -4)
+      ok('holding DOWN from rest reverses the car (speed=' + spd() + ', Δpx=' + dRev + ')');
+    else bad('reverse did not work (speed=' + spd() + ', Δpx=' + dRev + ')');
   }
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));

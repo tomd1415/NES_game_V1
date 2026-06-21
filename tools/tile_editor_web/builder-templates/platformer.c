@@ -614,8 +614,13 @@ void runner_respawn(void) {
 #ifndef BW_RACER_CHECKPOINT_ID
 #define BW_RACER_CHECKPOINT_ID 5  /* behaviour slot painted as a checkpoint */
 #endif
+/* E3-5 reverse: DOWN brakes, then backs up below 0 (signed speed) capped at
+ * RACER_REV_MAX (default: half top speed — reverse is slower than forward). */
+#ifndef RACER_REV_MAX
+#define RACER_REV_MAX (RACER_MAX_SPEED / 2)
+#endif
 unsigned char racer_heading;      /* 0..15 (16 directions, 22.5deg steps) */
-unsigned int  racer_speed;        /* 8.8 fixed-point, 0..RACER_MAX_SPEED */
+signed int    racer_speed;        /* 8.8 fixed-point, -RACER_REV_MAX..+RACER_MAX_SPEED */
 unsigned char px_sub, py_sub;     /* sub-pixel position accumulators */
 unsigned char racer_laps;         /* completed laps */
 unsigned char racer_armed;        /* passed a checkpoint since the last finish? */
@@ -625,7 +630,7 @@ unsigned char racer_finished;     /* reached RACER_LAPS_TO_WIN -> race won */
  * The camera follows P1 (chosen model), so P2 can scroll off-screen.  The race
  * ends as soon as EITHER car finishes. */
 unsigned char racer_heading2;
-unsigned int  racer_speed2;
+signed int    racer_speed2;
 unsigned char px2_sub, py2_sub;
 unsigned char racer_laps2, racer_armed2, racer_finished2;
 #define RACER_RACE_OVER (racer_finished || racer_finished2)
@@ -807,10 +812,13 @@ void main(void) {
             if (pad & 0x88) {                                           // A or UP = accelerate
                 racer_speed += RACER_ACCEL;
                 if (racer_speed > RACER_MAX_SPEED) racer_speed = RACER_MAX_SPEED;
-            } else if (pad & 0x04) {                                    // DOWN = brake
-                racer_speed = (racer_speed > RACER_BRAKE) ? (racer_speed - RACER_BRAKE) : 0;
-            } else {                                                    // coast = friction
-                racer_speed = (racer_speed > RACER_FRICTION) ? (racer_speed - RACER_FRICTION) : 0;
+            } else if (pad & 0x04) {                                    // DOWN = brake, then reverse
+                racer_speed -= RACER_BRAKE;
+                if (racer_speed < -(RACER_REV_MAX)) racer_speed = -(RACER_REV_MAX);
+            } else {                                                    // coast = friction toward 0
+                if (racer_speed > RACER_FRICTION) racer_speed -= RACER_FRICTION;
+                else if (racer_speed < -(RACER_FRICTION)) racer_speed += RACER_FRICTION;
+                else racer_speed = 0;
             }
             vx = ((signed int)(racer_speed >> 2) * COS16[racer_heading]) >> 5;
             vy = ((signed int)(racer_speed >> 2) * COS16[(racer_heading + 12) & 15]) >> 5;
@@ -872,10 +880,13 @@ void main(void) {
             if (pad2 & 0x88) {
                 racer_speed2 += RACER_ACCEL;
                 if (racer_speed2 > RACER_MAX_SPEED) racer_speed2 = RACER_MAX_SPEED;
-            } else if (pad2 & 0x04) {
-                racer_speed2 = (racer_speed2 > RACER_BRAKE) ? (racer_speed2 - RACER_BRAKE) : 0;
-            } else {
-                racer_speed2 = (racer_speed2 > RACER_FRICTION) ? (racer_speed2 - RACER_FRICTION) : 0;
+            } else if (pad2 & 0x04) {                                    // brake, then reverse
+                racer_speed2 -= RACER_BRAKE;
+                if (racer_speed2 < -(RACER_REV_MAX)) racer_speed2 = -(RACER_REV_MAX);
+            } else {                                                     // friction toward 0
+                if (racer_speed2 > RACER_FRICTION) racer_speed2 -= RACER_FRICTION;
+                else if (racer_speed2 < -(RACER_FRICTION)) racer_speed2 += RACER_FRICTION;
+                else racer_speed2 = 0;
             }
             vx = ((signed int)(racer_speed2 >> 2) * COS16[racer_heading2]) >> 5;
             vy = ((signed int)(racer_speed2 >> 2) * COS16[(racer_heading2 + 12) & 15]) >> 5;

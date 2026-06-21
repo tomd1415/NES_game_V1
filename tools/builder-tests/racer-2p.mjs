@@ -75,8 +75,9 @@ try {
       ok('controller 2 drives P2, not P1 (Δpx2=' + dP2 + ', Δpx1=' + dP1 + ')');
     else bad('P2 control wrong (Δpx2=' + dP2 + ', Δpx1=' + dP1 + ')');
 
-    // Brake P2 to a stop, then drive P1 — P1 moves, the stopped P2 stays put.
-    h.nes.buttonDown(2, H.BTN.DOWN); coast(140); h.nes.buttonUp(2, H.BTN.DOWN); coast(20);
+    // Let P2 coast to a stop (friction; holding DOWN would reverse it now), then
+    // drive P1 — P1 moves, the stopped P2 stays put.
+    coast(260);
     p1 = pxv(); p2 = px2v();
     driveP1(100);
     const eP1 = pxv() - p1, eP2 = px2v() - p2;
