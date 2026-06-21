@@ -21,6 +21,34 @@ deferred.
 
 ---
 
+## Multi-screen scene-sprite placement — 2026-06-21
+
+Pupil-reported: the Builder only let you put sprites (enemies, NPCs, pickups) on
+the **first screen** of a multi-screen level. Fixed in two halves:
+
+- **Data layer** (`build_scene_inc`, commit e2fd2f5): scene-sprite `ss_x`/`ss_y`
+  were 8-bit (`& 0xFF`), so any position past 255 wrapped back onto screen 1. They
+  now clamp to the world bounds and emit as 16-bit (`unsigned int`) whenever a
+  sprite sits past the first screen; single-screen levels keep the 8-bit layout
+  (so the asm/C `_rom-equiv` parity holds) and the no-modules stub stays 8-bit (so
+  the byte-identical golden is untouched). The engine already drew scene sprites
+  camera-aware (`world_to_screen_x/y` handle any 16-bit position), so no engine
+  logic changed. Test `scene-multiscreen.mjs`: a sprite at world x=400 sits off
+  the right edge on screen 1 (an 8-bit wrap would put it mid-screen at 144) and
+  scrolls to its true position as the camera reaches it.
+- **Editor** (`builder.html`, commit dd82cc3): the scene-sprite preview was a
+  single 256×240 screen. It now spans the **whole world** — a `sceneWorld()`
+  helper sizes the canvas to all screens at an adaptive zoom, the background +
+  grid render across every screen with yellow screen-boundary lines, and
+  click/drag/number-inputs map to and clamp against the full world. The player
+  *start* stays on screen 1 (PLAYER_X/Y are 8-bit in the engine).
+
+Known minor limitation (documented in the template): a scene sprite off the
+screen's RIGHT clamps to x=255 — a 1px sliver at the edge — rather than fully
+hiding; a proper fix needs an engine-wide off-screen-sentinel change + a golden
+re-pin, deferred. Player-start-on-any-screen would need 16-bit PLAYER_X — also
+deferred. Pending the user's visual pass. Full suite + golden green.
+
 ## Arc E §3 top-down racer — E3-5 polish complete (4 parts) — 2026-06-21
 
 Finished the optional E3-5 polish; the racer is now feature-complete. Each part
