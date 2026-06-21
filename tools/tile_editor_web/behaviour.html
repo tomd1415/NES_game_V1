@@ -545,6 +545,8 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 
 <script src="storage.js"></script>
 <script src="a11y.js"></script>
+<script src="account-menu.js"></script>
+<script src="cookie-notice.js"></script>
 <script src="project-menu.js"></script>
 <script src="feedback.js"></script>
 <script src="help.js"></script>
@@ -841,6 +843,7 @@ function validateState(s) {
 // Storage / undo / autosave  (same shape as the other pages)
 // ================================================================
 const Storage = createTileEditorStorage({ migrateState, validateState });
+window.Storage = Storage;   // expose for the shared account-menu.js
 
 const UNDO_LIMIT = 50;
 let state = createDefaultState();
@@ -1534,13 +1537,7 @@ function afterStateReplaced() {
 // Init
 // ================================================================
 function init() {
-  const loaded = Storage.loadCurrent();
-  if (loaded) {
-    state = loaded;
-  } else {
-    state = createDefaultState();
-    Storage.saveCurrent(state);
-  }
+  state = Storage.bootstrapCurrent(createDefaultState);
 
   // Header wiring ------------------------------------------------
   document.getElementById('project-name').value = state.name || 'untitled';
@@ -1777,17 +1774,22 @@ function init() {
   // Wire the shared New / Duplicate / Delete buttons (Phase 1.3).
   // Reloads on success; in-place replacement isn't worth the extra
   // plumbing on pages where pupils swap projects rarely.
-  Storage.wireBasicProjectActions({
-    makeFreshState: () => createDefaultState(),
-  });
+  Storage.wireBasicProjectActions({});
   // BR-02: shared flush hook + pagehide flush.
   Storage.setFlushHook(flushSave);
   window.addEventListener('pagehide', flushSave);
-  // Wire the shared Recover-from-snapshot + Migration-backup buttons.
+  // Wire the shared New (name+template dialog) + Recover + Migration buttons.
   // ProjectMenu.wire is a no-op for any button that's missing or
   // already has a handler attached — Backgrounds + Sprites keep
   // their inline wiring untouched.
-  if (window.ProjectMenu) window.ProjectMenu.wire();
+  if (window.ProjectMenu) window.ProjectMenu.wire({
+    makeFreshState: (template) => {
+      const s = createDefaultState();
+      s.template = template;
+      s.movement = template === 'topdown' ? 'fourway' : 'platformer';
+      return s;
+    },
+  });
 
   // First render -----------------------------------------------
   renderProjectsMenu();

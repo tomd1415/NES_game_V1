@@ -55,6 +55,20 @@
       'dialog#recovery-dialog .dialog-actions {',
       '  display: flex; justify-content: flex-end; gap: 8px;',
       '}',
+      'dialog#new-project-dialog {',
+      '  background: var(--bg, #14121f); color: var(--fg, #f4f4f4);',
+      '  border: 1px solid var(--border, #3a3352); border-radius: 6px;',
+      '  padding: 18px 20px; width: min(460px, 94vw);',
+      '}',
+      'dialog#new-project-dialog::backdrop { background: rgba(0,0,0,0.7); }',
+      'dialog#new-project-dialog h2 { margin: 0 0 8px; color: var(--accent, #ffd866); }',
+      'dialog#new-project-dialog label { display: block; margin-bottom: 10px; }',
+      'dialog#new-project-dialog input, dialog#new-project-dialog select {',
+      '  width: 100%; padding: 6px 8px; margin-top: 4px;',
+      '}',
+      'dialog#new-project-dialog .dialog-actions {',
+      '  display: flex; justify-content: flex-end; gap: 8px;',
+      '}',
     ].join('\n');
     const style = document.createElement('style');
     style.id = 'project-menu-injected-css';
@@ -166,6 +180,105 @@
     dlg.showModal();
   }
 
+  // --- New project (rich dialog: name + template) -----------------------
+  // Replaces the old window.prompt() New on Behaviour/Builder/Code so every
+  // page offers the same dialog the Backgrounds page does.  Injected lazily so
+  // the markup lives in one place.
+  function ensureNewProjectDialog() {
+    let dlg = document.getElementById('new-project-dialog');
+    if (dlg) return dlg;
+    dlg = document.createElement('dialog');
+    dlg.id = 'new-project-dialog';
+
+    const h = document.createElement('h2');
+    h.textContent = 'New project';
+    dlg.appendChild(h);
+
+    const p = document.createElement('p');
+    p.style.color = 'var(--muted)';
+    p.style.lineHeight = '1.5';
+    p.textContent = 'Creates a fresh project alongside your existing ones. The ' +
+      'current project is left untouched and you can switch back any time.';
+    dlg.appendChild(p);
+
+    const nameLabel = document.createElement('label');
+    nameLabel.textContent = 'Name';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.id = 'new-project-name';
+    nameInput.value = 'untitled';
+    nameLabel.appendChild(nameInput);
+    dlg.appendChild(nameLabel);
+
+    const tplLabel = document.createElement('label');
+    tplLabel.textContent = 'Template';
+    const tplSelect = document.createElement('select');
+    tplSelect.id = 'new-project-template';
+    [['platformer', 'Platformer — side-view, gravity + jump'],
+     ['topdown', 'Top-down — 4-way movement, no gravity']].forEach(([val, text]) => {
+      const opt = document.createElement('option');
+      opt.value = val; opt.textContent = text;
+      tplSelect.appendChild(opt);
+    });
+    tplSelect.value = 'platformer';
+    tplLabel.appendChild(tplSelect);
+    dlg.appendChild(tplLabel);
+
+    const actions = document.createElement('div');
+    actions.className = 'dialog-actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.id = 'btn-new-project-cancel';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', () => dlg.close());
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.id = 'btn-new-project-yes';
+    yes.className = 'primary';
+    yes.textContent = 'Create project';
+    actions.appendChild(cancel);
+    actions.appendChild(yes);
+    dlg.appendChild(actions);
+
+    document.body.appendChild(dlg);
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+    return dlg;
+  }
+
+  function wireNewButton(opts) {
+    opts = opts || {};
+    const btn = document.getElementById('btn-project-new');
+    if (!btn) return;                                   // page omits New
+    if (typeof opts.makeFreshState !== 'function') return; // no starter factory
+    if (btn.dataset.projectMenuWired === '1') return;   // already wired
+    btn.dataset.projectMenuWired = '1';
+    btn.addEventListener('click', () => {
+      const dlg = ensureNewProjectDialog();
+      const nameEl = dlg.querySelector('#new-project-name');
+      const tplEl  = dlg.querySelector('#new-project-template');
+      if (nameEl) nameEl.value = 'untitled';
+      // Close any open <details> menu the button lives in.
+      const det = btn.closest && btn.closest('details');
+      if (det) det.open = false;
+      const yes = dlg.querySelector('#btn-new-project-yes');
+      // Re-bind confirm each open so it captures the current opts.
+      yes.onclick = () => {
+        const name = ((nameEl && nameEl.value) || '').trim() || 'untitled';
+        const template = (tplEl && tplEl.value) || 'platformer';
+        try {
+          Storage.flushPending();   // BR-02: persist the current project first
+          Storage.createProject(name, opts.makeFreshState(template));
+          dlg.close();
+          if (typeof opts.onAfterNew === 'function') { opts.onAfterNew(); return; }
+          window.location.reload();
+        } catch (e) {
+          alert('Could not create project: ' + (e && e.message || e));
+        }
+      };
+      dlg.showModal();
+    });
+  }
+
   function wireRecoverButton(opts) {
     const btn = document.getElementById('btn-recover');
     if (!btn) return;
@@ -204,9 +317,10 @@
 
   function wire(opts) {
     injectStyles();
+    wireNewButton(opts || {});
     wireRecoverButton(opts || {});
     wireMigrationButton();
   }
 
-  global.ProjectMenu = { wire, openRecoveryDialog };
+  global.ProjectMenu = { wire, openRecoveryDialog, wireNewButton };
 })(typeof window !== 'undefined' ? window : globalThis);

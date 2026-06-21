@@ -69,6 +69,39 @@ a { color: var(--info); }
   background: #3a2f50; border-color: var(--accent); color: var(--accent);
 }
 
+/* --- Project menu (matches the other editor pages) ---------- */
+.projects-menu { position: relative; margin-left: auto; }
+.projects-menu > summary {
+  list-style: none; cursor: pointer;
+  padding: 5px 10px; background: var(--panel2);
+  border: 1px solid var(--border); border-radius: 4px;
+  max-width: 220px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.projects-menu[open] > summary { background: #3a3560; }
+.projects-menu > .menu-body {
+  position: absolute; right: 0; top: calc(100% + 4px);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 4px; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+  min-width: 260px; box-shadow: 0 6px 18px rgba(0,0,0,0.5); z-index: 25;
+}
+.projects-menu .projects-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 180px; overflow-y: auto;
+}
+.projects-menu .projects-list button { text-align: left; padding: 5px 8px; }
+.projects-menu .projects-list button.active { background: var(--accent); color: #000; font-weight: 600; }
+.projects-menu .menu-body button { text-align: left; }
+.projects-menu .menu-body button.warn { border-color: var(--warn); color: var(--warn); }
+.tb-inline-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; width: 100%; }
+.tb-section-label { font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-top: 2px; }
+.tb-rename-row { display: flex; }
+.tb-rename-row input {
+  flex: 1; padding: 5px 8px; background: var(--panel2); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+
 main { padding: 16px; max-width: 1100px; margin: 0 auto; }
 
 #status-bar {
@@ -180,6 +213,26 @@ input[type=file] { display: none; }
     <a class="page-link active" href="audio.html" title="You are here — manage music + sound effects">🎵 Audio</a>
     <a class="page-link" href="gallery.html" title="Browse projects published from across the class">🖼 Gallery</a>
   </nav>
+  <details class="projects-menu" id="projects-menu">
+    <summary title="Project + Save / Open / Recover"><span aria-hidden="true">📁 </span><span id="active-project-label">untitled</span> <span aria-hidden="true">▾</span></summary>
+    <div class="menu-body">
+      <div class="tb-section-label">Projects</div>
+      <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
+      <div class="tb-rename-row">
+        <input id="project-name" type="text" value="untitled" title="Rename this project (shared with other pages)" aria-label="Project name" placeholder="untitled">
+      </div>
+      <button type="button" id="btn-project-new">+ New project…</button>
+      <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
+      <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
+      <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
+      <hr class="tb-inline-divider">
+      <div class="tb-section-label">Save &amp; restore</div>
+      <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing your whole project — tiles, palettes, backgrounds, sprites, behaviour map, custom code and audio. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
+      <button type="button" id="btn-load-all" title="Load a .json file saved with ‘Save all my work’. This replaces the current project.">📂 Open saved work</button>
+      <button type="button" id="btn-recover" title="Recover from a snapshot or backup">♻ Recover from snapshot…</button>
+    </div>
+  </details>
+  <input id="file-input-all" type="file" accept=".json" style="display:none">
 </header>
 
 <div id="status-bar">Loading audio…</div>
@@ -260,7 +313,11 @@ input[type=file] { display: none; }
 </main>
 
 <script src="storage.js"></script>
+<script src="default-state.js"></script>
+<script src="project-menu.js"></script>
 <script src="a11y.js"></script>
+<script src="account-menu.js"></script>
+<script src="cookie-notice.js"></script>
 <script src="sprite-render.js"></script>
 <script src="builder-assembler.js"></script>
 <script src="builder-modules.js"></script>
@@ -683,8 +740,94 @@ input[type=file] { display: none; }
     }
   });
 
+  // --- Project menu (shared with the other editor pages) --------
+  function flushSave() { if (state) Storage.saveCurrent(state); }
+  function updateProjectLabel() {
+    const ap = Storage.getActiveProject();
+    const name = (ap && ap.name) || (state && state.name) || 'untitled';
+    const label = document.getElementById('active-project-label');
+    if (label) label.textContent = name;
+    const nameEl = document.getElementById('project-name');
+    if (nameEl && document.activeElement !== nameEl) nameEl.value = name;
+  }
+  function renderProjectsList() {
+    const activeIdNow = Storage.getActiveProjectId();
+    const list = document.getElementById('projects-list');
+    if (!list) return;
+    list.replaceChildren();
+    for (const p of Storage.listProjects()) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = p.name + (p.id === activeIdNow ? '  ● current' : '');
+      btn.classList.toggle('active', p.id === activeIdNow);
+      btn.addEventListener('click', () => {
+        if (p.id === activeIdNow) return;
+        flushSave();
+        Storage.setActiveProjectId(p.id);
+        window.location.reload();
+      });
+      list.appendChild(btn);
+    }
+    const delBtn = document.getElementById('btn-project-delete');
+    if (delBtn) delBtn.disabled = Storage.listProjects().length <= 1;
+  }
+  function wireProjectMenu() {
+    updateProjectLabel();
+    renderProjectsList();
+    const menu = document.getElementById('projects-menu');
+    if (menu) menu.addEventListener('toggle', e => { if (e.target.open) renderProjectsList(); });
+    const nameEl = document.getElementById('project-name');
+    if (nameEl) nameEl.addEventListener('input', (e) => {
+      Storage.renameCurrent(state, e.target.value);   // BR-07: state + catalog
+      updateProjectLabel();
+      if (state) saveState();
+    });
+    Storage.wireBasicProjectActions({});               // Duplicate + Delete
+    Storage.setFlushHook(flushSave);
+    window.addEventListener('pagehide', flushSave);
+    // Shared New (name+template dialog) + Recover + Migration buttons.
+    if (window.ProjectMenu) window.ProjectMenu.wire({
+      makeFreshState: (template) => {
+        const s = window.DefaultState.create({ template });
+        s.audio = { songs: [], sfx: null, defaultSongIdx: 0 };
+        return s;
+      },
+    });
+    // Save all / Open saved work — whole-project JSON bundle.
+    const btnSaveAll = document.getElementById('btn-save-all');
+    if (btnSaveAll) btnSaveAll.addEventListener('click', () => {
+      if (!state) { setStatus('No project to save yet — make one with “+ New project…”.', 'warn'); return; }
+      flushSave();
+      const safe = (state.name || 'untitled').replace(/[^a-z0-9_\-]+/gi, '_') || 'untitled';
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = safe + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    });
+    const btnLoadAll = document.getElementById('btn-load-all');
+    const fileAll = document.getElementById('file-input-all');
+    if (btnLoadAll && fileAll) {
+      btnLoadAll.addEventListener('click', () => fileAll.click());
+      fileAll.addEventListener('change', async (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        try {
+          const loaded = JSON.parse(await f.text());
+          if (!loaded || typeof loaded !== 'object') throw new Error('not a project file');
+          Storage.saveCurrent(loaded);
+          window.location.reload();
+        } catch (err) {
+          alert('Could not read that file: ' + (err.message || err));
+        }
+      });
+    }
+  }
+
   // --- Init -------------------------------------------------------
   loadState();
+  wireProjectMenu();
   // Fetch the platformer template once so PlayPipeline can build a
   // default ROM with the pupil's audio without going through the
   // Builder page.  Cached for subsequent previews.
@@ -705,13 +848,14 @@ input[type=file] { display: none; }
     banner.style.padding = '32px 24px';
     banner.innerHTML =
       '<h3 style="color:var(--accent);margin:0 0 8px">No project yet</h3>' +
-      '<p style="margin:0 0 12px">Audio belongs to a project — start one on the ' +
+      '<p style="margin:0 0 12px">Audio belongs to a project. Make one right here with ' +
+      '<b>📁 → + New project…</b> (top right), or start on the ' +
       '<a href="sprites.html">Sprites page</a> first (it\'ll seed a starter hero ' +
-      'sprite for you), then come back here to add music + sound effects.</p>' +
+      'sprite for you), then come back to add music + sound effects.</p>' +
       '<a class="page-link" href="sprites.html">🦸 Open the Sprites page</a>';
     grid.replaceChildren(banner);
     sfxHost.replaceChildren();
-    setStatus('No project yet — open the Sprites page first.', 'warn');
+    setStatus('No project yet — use “+ New project…” above, or open the Sprites page.', 'warn');
   } else if (state.audio.songs.length === 0) {
     setStatus('No songs yet.  Click "Load starter pack" or upload your own FamiStudio export.', '');
   } else {

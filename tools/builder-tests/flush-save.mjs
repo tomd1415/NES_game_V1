@@ -101,15 +101,18 @@ assert(/cm\.getValue\(\)/.test(flushBody.slice(0, 600)),
   'code.html flushSave does not copy CodeMirror value into state');
 console.log('✓ code.html flushSave copies CodeMirror → state');
 
-// storage.js flushes before the reload-causing New / Duplicate actions.
-assert(/flushPending\(\)[\s\S]{0,120}createProject/.test(src),
-  'storage.js New handler does not flushPending() before createProject');
+// storage.js flushes before the reload-causing Duplicate action.  (New moved
+// to project-menu.js's shared name+template dialog — asserted below.)
 assert(/flushPending\(\)[\s\S]{0,120}duplicateProject/.test(src),
   'storage.js Duplicate handler does not flushPending() before duplicateProject');
-console.log('✓ storage.js flushes before New + Duplicate');
+console.log('✓ storage.js flushes before Duplicate');
 
-// project-menu.js flushes before snapshotting on recovery.
+// project-menu.js flushes before New (createProject) and before the recovery
+// snapshot.
 const pm = fs.readFileSync(path.join(WEB, 'project-menu.js'), 'utf8');
+assert(/flushPending\(\)[\s\S]{0,160}createProject/.test(pm),
+  'project-menu.js New handler does not flushPending() before createProject');
+console.log('✓ project-menu.js flushes before New');
 assert(/Storage\.flushPending\(\)/.test(pm),
   'project-menu.js does not flush before the recovery snapshot');
 console.log('✓ project-menu.js flushes before recovery snapshot');

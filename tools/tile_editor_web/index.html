@@ -1585,6 +1585,8 @@ kbd {
 <script src="storage.js"></script>
 <script src="metatiles.js"></script>
 <script src="a11y.js"></script>
+<script src="account-menu.js"></script>
+<script src="cookie-notice.js"></script>
 <script src="tour.js"></script>
 <script src="feedback.js"></script>
 <script src="help.js"></script>
@@ -2062,6 +2064,7 @@ const SNAPSHOT_INTERVAL_MS  = 30 * 1000;
 
 // Shared layer — see tools/tile_editor_web/storage.js.
 const Storage = createTileEditorStorage({ migrateState, validateState });
+window.Storage = Storage;   // expose for the shared account-menu.js
 
 // ================================================================
 // Undo / redo
@@ -4093,13 +4096,7 @@ function refreshColourButtons() {
 // ================================================================
 function init() {
   // --- Load state + prefs ---
-  const loaded = Storage.loadCurrent();
-  if (loaded) {
-    state = loaded;
-  } else {
-    state = createDefaultState();
-    Storage.saveCurrent(state);
-  }
+  state = Storage.bootstrapCurrent(createDefaultState);
   resizeNametable(state);
   restoreSelectedTile();
   prefs = Object.assign({ autoDownloadBackups: false }, Storage.readPrefs());

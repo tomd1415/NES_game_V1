@@ -541,20 +541,18 @@ body.emu-single-player #emu-p2-controls { display: none; }
   <div class="toolbar">
     <span id="save-status" class="saved" title="Loading…">●</span>
     <div class="tb-group" role="group" aria-label="File">
-      <details class="projects-menu" id="file-menu">
-        <summary title="Project + Save / Open"><span aria-hidden="true">📁 </span><span id="active-project-label">untitled</span> <span aria-hidden="true">▾</span></summary>
+      <details class="projects-menu" id="projects-menu">
+        <summary title="Project + Save / Open / Recover"><span aria-hidden="true">📁 </span><span id="active-project-label">untitled</span> <span aria-hidden="true">▾</span></summary>
         <div class="menu-body">
           <div class="tb-section-label">Projects</div>
           <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>
           <div class="tb-rename-row">
             <input id="project-name" type="text" value="untitled" title="Rename this project (shared with other pages)" aria-label="Project name" placeholder="untitled">
           </div>
+          <button type="button" id="btn-project-new">+ New project…</button>
           <button type="button" id="btn-project-duplicate">⎘ Duplicate this project</button>
           <button type="button" id="btn-project-delete" class="warn">🗑 Delete this project</button>
           <button type="button" id="btn-migration-download" hidden>💾 Download pre-upgrade backup</button>
-          <p class="menu-hint">
-            New projects start on the <a href="sprites.html">Sprites page</a> so a starter hero gets seeded for you.
-          </p>
           <hr class="tb-inline-divider">
           <div class="tb-section-label">Save &amp; restore</div>
           <button type="button" id="btn-save-all" class="primary" title="Download a single .json file containing everything — tiles, palettes, backgrounds, sprites, behaviour map, custom code, builder selections. Keep it on a USB stick or email it to yourself.">💾 Save all my work</button>
@@ -722,8 +720,11 @@ body.emu-single-player #emu-p2-controls { display: none; }
 </dialog>
 
 <script src="storage.js"></script>
+<script src="default-state.js"></script>
 <script src="metatiles.js"></script>
 <script src="a11y.js"></script>
+<script src="account-menu.js"></script>
+<script src="cookie-notice.js"></script>
 <script src="project-menu.js"></script>
 <script src="feedback.js"></script>
 <script src="sprite-render.js"></script>
@@ -2125,12 +2126,11 @@ body.emu-single-player #emu-p2-controls { display: none; }
     });
     document.getElementById('project-name').value = state.name || 'untitled';
 
-    // Projects list (Phase 1.3 parity).  Builder has no
-    // createDefaultState — a brand-new project needs the rich sprite
-    // starter that only Sprites/Backgrounds know how to seed — so we
-    // offer Duplicate + Delete only here and route "New" pupils back
-    // to Sprites via the menu-hint above.  Switching projects uses
-    // reload (simpler than retrofitting an afterStateReplaced path).
+    // Projects list (Phase 1.3 parity).  New / Duplicate / Delete all
+    // work here now: New uses the shared default-state.js starter (and
+    // seeds the Builder module tree), so the menu matches Backgrounds.
+    // Switching projects uses reload (simpler than retrofitting an
+    // afterStateReplaced path).
     function renderProjectsList() {
       const activeIdNow = Storage.getActiveProjectId();
       const list = document.getElementById('projects-list');
@@ -2153,21 +2153,26 @@ body.emu-single-player #emu-p2-controls { display: none; }
       if (delBtn) delBtn.disabled = Storage.listProjects().length <= 1;
     }
     renderProjectsList();
-    const fileMenu = document.getElementById('file-menu');
-    if (fileMenu) {
-      fileMenu.addEventListener('toggle', e => {
+    const projectsMenu = document.getElementById('projects-menu');
+    if (projectsMenu) {
+      projectsMenu.addEventListener('toggle', e => {
         if (e.target.open) renderProjectsList();
       });
     }
-    Storage.wireBasicProjectActions({
-      makeFreshState: () => null,   // no fresh-state path here (see hint)
-    });
+    Storage.wireBasicProjectActions({});
     // BR-02: shared flush hook + pagehide flush.
     Storage.setFlushHook(flushSave);
     window.addEventListener('pagehide', flushSave);
-    // Shared Recover-from-snapshot + Migration-backup buttons.
-    // No-op on any button missing or already wired.
-    if (window.ProjectMenu) window.ProjectMenu.wire();
+    // Shared New (name+template dialog) + Recover + Migration buttons.
+    // No-op on any button missing or already wired.  New seeds a complete
+    // blank project AND its Builder module tree so it works straight away.
+    if (window.ProjectMenu) window.ProjectMenu.wire({
+      makeFreshState: (template) => {
+        const s = window.DefaultState.create({ template });
+        if (typeof migrateBuilderState === 'function') migrateBuilderState(s);
+        return s;
+      },
+    });
 
     document.getElementById('btn-save-all').addEventListener('click', () => {
       Storage.saveCurrent(state);

@@ -2556,6 +2556,8 @@ details.collapsible > summary .sub-count {
 
 <script src="storage.js"></script>
 <script src="a11y.js"></script>
+<script src="account-menu.js"></script>
+<script src="cookie-notice.js"></script>
 <script src="tour.js"></script>
 <script src="feedback.js"></script>
 <script src="help.js"></script>
@@ -3141,6 +3143,7 @@ const SNAPSHOT_INTERVAL_MS = 30 * 1000;
 
 // Shared layer — see tools/tile_editor_web/storage.js.
 const Storage = createTileEditorStorage({ migrateState, validateState });
+window.Storage = Storage;   // expose for the shared account-menu.js
 
 // ================================================================
 // Undo / redo
@@ -7927,6 +7930,12 @@ function init() {
   initCollapsiblePersistence();
   const loaded = Storage.loadCurrent();
   state = loaded || createDefaultState();
+  if (!loaded) {
+    // Inherit the catalog name ("My First Project") so the rename field and the
+    // project list agree on the starter project's name.
+    const ap = Storage.getActiveProject();
+    if (ap && ap.name) state.name = ap.name;
+  }
   migrateState(state);
   if (!loaded) Storage.saveCurrent(state);
   prefs = Storage.readPrefs();

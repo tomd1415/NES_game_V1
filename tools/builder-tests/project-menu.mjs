@@ -13,12 +13,13 @@ function fail(msg) { console.error('FAIL:', msg); process.exit(1); }
 
 // -- 1) Every page declares the universal lifecycle buttons -----
 //
-// Builder + Code intentionally omit `btn-project-new` because they
-// hint pupils to create projects on the Sprites page (see the
-// `<p class="menu-hint">` in those files).  Every other button is
-// expected on every page now.
-const PAGES = ['index.html', 'sprites.html', 'behaviour.html', 'builder.html', 'code.html'];
+// Every editor page now carries the full menu, including "+ New
+// project…" (wired to the shared name+template dialog in
+// project-menu.js).  Audio used to have no menu at all; Builder + Code
+// used to omit New.  They all match the Backgrounds page now.
+const PAGES = ['index.html', 'sprites.html', 'behaviour.html', 'builder.html', 'code.html', 'audio.html'];
 const UNIVERSAL = [
+  'btn-project-new',
   'btn-project-duplicate',
   'btn-project-delete',
   'btn-migration-download',
@@ -26,7 +27,7 @@ const UNIVERSAL = [
   'btn-load-all',
   'btn-recover',
 ];
-const NEW_PROJECT_PAGES = new Set(['index.html', 'sprites.html', 'behaviour.html']);
+const NEW_PROJECT_PAGES = new Set(PAGES);
 
 for (const page of PAGES) {
   const html = fs.readFileSync(path.join(WEB, page), 'utf8');
@@ -43,11 +44,17 @@ for (const page of PAGES) {
 //
 // Backgrounds + Sprites stay on their inline handlers.  The rest
 // rely on the shared module to wire btn-recover / btn-migration.
-for (const page of ['behaviour.html', 'builder.html', 'code.html']) {
+// behaviour.html reuses its own createDefaultState(); builder/code/audio rely
+// on the shared default-state.js factory.
+const SHARED_FACTORY_PAGES = new Set(['builder.html', 'code.html', 'audio.html']);
+for (const page of ['behaviour.html', 'builder.html', 'code.html', 'audio.html']) {
   const html = fs.readFileSync(path.join(WEB, page), 'utf8');
   if (!html.includes('src="project-menu.js"')) fail(`${page} does not include project-menu.js`);
-  if (!/ProjectMenu\.wire\s*\(/.test(html))    fail(`${page} does not call ProjectMenu.wire()`);
-  console.log(`✓ ${page} loads + invokes project-menu.js`);
+  if (SHARED_FACTORY_PAGES.has(page) && !html.includes('src="default-state.js"'))
+    fail(`${page} does not include default-state.js (needed for New)`);
+  if (!/ProjectMenu\.wire\s*\(\s*\{/.test(html)) fail(`${page} does not call ProjectMenu.wire({makeFreshState})`);
+  if (!/makeFreshState/.test(html))             fail(`${page} does not pass a makeFreshState factory to New`);
+  console.log(`✓ ${page} loads project-menu.js + wires New (shared dialog)`);
 }
 
 // -- 3) project-menu.js loads in headless mode + wires correctly --
@@ -182,5 +189,41 @@ win.ProjectMenu.wire();
 const afterListeners = btnRecover.listeners.click ? btnRecover.listeners.click.length : 0;
 if (afterListeners !== beforeListeners) fail('second wire() attached an extra listener');
 console.log('✓ ProjectMenu.wire is idempotent');
+
+// -- 4) New-project dialog wiring --------------------------------
+//
+// Add a New button, wire it with a makeFreshState factory, click it,
+// fill the name and confirm — assert the shared dialog drives
+// Storage.flushPending + createProject(name, freshState) and reloads.
+const btnNew = makeElement('button'); btnNew.attrs.id = 'btn-project-new'; btnNew.id = 'btn-project-new';
+body.appendChild(btnNew);
+let created = null, flushedBeforeCreate = false, flushed = false;
+Storage.flushPending = () => { flushed = true; };
+Storage.createProject = (name, fresh) => { flushedBeforeCreate = flushed; created = { name, fresh }; return { id: 'new1' }; };
+win._reloaded = false;
+
+win.ProjectMenu.wire({ makeFreshState: (template) => ({ blank: true, template }) });
+btnNew.dispatchEvent('click', {});
+
+const newDlg = document_.getElementById('new-project-dialog');
+if (!newDlg) fail('new-project-dialog not injected after clicking New');
+if (!newDlg._open) fail('new-project-dialog not opened');
+const nameInput = newDlg.querySelector('#new-project-name');
+const tpl = newDlg.querySelector('#new-project-template');
+if (!nameInput || !tpl) fail('new-project dialog missing name/template fields');
+console.log('✓ New opens the injected name+template dialog');
+
+nameInput.value = 'My New Game';
+tpl.value = 'topdown';
+const yes = newDlg.querySelector('#btn-new-project-yes');
+if (!yes) fail('Create-project button missing');
+yes.onclick();   // shim binds via .onclick, not addEventListener
+
+if (!created) fail('confirming New did not call Storage.createProject');
+if (created.name !== 'My New Game') fail('createProject got the wrong name: ' + created.name);
+if (!created.fresh || created.fresh.template !== 'topdown') fail('createProject did not get the templated fresh state');
+if (!flushedBeforeCreate) fail('New did not flushPending() before createProject (BR-02)');
+if (!win._reloaded) fail('New did not reload after creating the project');
+console.log('✓ Confirming New flushes, creates the templated project, and reloads');
 
 console.log('\nProject-menu parity smoke-test complete.');

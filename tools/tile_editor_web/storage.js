@@ -196,6 +196,47 @@
       writeCatalog(c);
     }
 
+    // Cross-tab-safe catalog mutation.  Two editor tabs share one
+    // localStorage; a tab's in-memory `cached` catalog goes stale the moment
+    // another tab adds/removes a project.  Writing that stale copy back (as
+    // every autosave did via touchProject -> saveCatalog) silently erased the
+    // other tab's project — the pupil-reported "saving a new project sometimes
+    // loses one".  So always re-read the on-disk catalog as the base and apply
+    // only the targeted change; an unrelated project can never be dropped.
+    // This tab's own activeId is preserved across the reconcile unless `mutate`
+    // changes it explicitly (New / switch / delete-active).
+    function commitCatalog(mutate) {
+      const disk = readCatalog();
+      const myActive = cached ? cached.activeId : (disk ? disk.activeId : null);
+      const base = disk || cached || ensureCatalog();
+      const c = {
+        version: 2,
+        migratedAt: base.migratedAt != null ? base.migratedAt
+                  : (cached ? cached.migratedAt : null),
+        activeId: myActive != null ? myActive : base.activeId,
+        projects: base.projects.slice(),
+      };
+      mutate(c);
+      cached = c;
+      writeCatalog(c);
+      return c;
+    }
+
+    // Pull in any projects other tabs added/renamed since our last write, so
+    // the project list a page renders is current.  Keeps THIS tab's activeId.
+    function syncList() {
+      const disk = readCatalog();
+      if (disk) {
+        cached = cached
+          ? { ...cached, projects: disk.projects.slice(),
+              migratedAt: disk.migratedAt != null ? disk.migratedAt : cached.migratedAt }
+          : disk;
+      } else if (!cached) {
+        cached = ensureCatalog();
+      }
+      return cached;
+    }
+
     // --- Per-project meta -------------------------------------------------
     function readProjectMeta(id) {
       try {
@@ -223,9 +264,10 @@
     }
 
     function touchProject(id) {
-      const c = catalog();
-      const p = c.projects.find(p => p.id === id);
-      if (p) { p.modified = Date.now(); saveCatalog(c); }
+      commitCatalog(c => {
+        const p = c.projects.find(p => p.id === id);
+        if (p) p.modified = Date.now();
+      });
     }
 
     function activeId() { return catalog().activeId; }
@@ -254,6 +296,20 @@
       },
       loadCurrent() {
         return parseSlot(localStorage.getItem(projectCurrentKey(activeId())));
+      },
+      // Load the active project, or seed a fresh one on first visit.  Crucially
+      // the seeded state inherits the active catalog project's name (e.g. "My
+      // First Project") instead of the factory default ("untitled"), so the
+      // rename field, the project list and the dropdown label all agree — the
+      // mismatch that made the starter project look un-renameable.
+      bootstrapCurrent(makeDefault) {
+        let s = this.loadCurrent();
+        if (s) return s;
+        s = (typeof makeDefault === 'function') ? makeDefault() : {};
+        const ap = this.getActiveProject();
+        if (ap && ap.name) s.name = ap.name;
+        this.saveCurrent(s);
+        return s;
       },
 
       // BR-02: flush-hook registration + invocation.  A page registers its
@@ -322,40 +378,45 @@
 
       // Projects API --------------------------------------------------------
       listProjects() {
-        return catalog().projects.slice();
+        return syncList().projects.slice();
       },
       getActiveProjectId() { return activeId(); },
       getActiveProject() {
-        return catalog().projects.find(p => p.id === activeId()) || null;
+        return syncList().projects.find(p => p.id === activeId()) || null;
       },
       setActiveProjectId(id) {
-        const c = catalog();
-        if (!c.projects.some(p => p.id === id)) return false;
-        c.activeId = id;
-        saveCatalog(c);
-        return true;
+        let okSwitch = false;
+        commitCatalog(c => {
+          if (c.projects.some(p => p.id === id)) { c.activeId = id; okSwitch = true; }
+        });
+        return okSwitch;
       },
       createProject(name, initialState) {
-        const c = catalog();
         const id = uid();
         const now = Date.now();
-        c.projects.push({ id, name: name || 'untitled', created: now, modified: now });
-        c.activeId = id;
+        // Atomicity: write the project's own slot + meta BEFORE registering it
+        // in the catalog.  If the slot write fails (e.g. localStorage full) we
+        // throw here, having registered nothing — no phantom catalog entry, and
+        // the previously-active project is untouched.
         if (initialState) {
           localStorage.setItem(projectCurrentKey(id), JSON.stringify(initialState));
         }
         writeProjectMeta(id, { snapshots: [], backups: [] });
-        saveCatalog(c);
+        // Commit against the on-disk catalog so a concurrent tab's projects
+        // survive (we only ever add our new entry).
+        commitCatalog(c => {
+          c.projects.push({ id, name: name || 'untitled', created: now, modified: now });
+          c.activeId = id;
+        });
         return { id };
       },
       renameProject(id, name) {
-        const c = catalog();
-        const p = c.projects.find(p => p.id === id);
-        if (!p) return false;
-        p.name = name || p.name;
-        p.modified = Date.now();
-        saveCatalog(c);
-        return true;
+        let okRename = false;
+        commitCatalog(c => {
+          const p = c.projects.find(p => p.id === id);
+          if (p) { p.name = name || p.name; p.modified = Date.now(); okRename = true; }
+        });
+        return okRename;
       },
       // BR-07: rename the *active* project atomically — update both the
       // in-memory state and the v2 catalog so a page can't update only one
@@ -368,26 +429,27 @@
         return n;
       },
       duplicateProject(id) {
-        const c = catalog();
-        const p = c.projects.find(p => p.id === id);
-        if (!p) return null;
+        const src = (readCatalog() || catalog()).projects.find(p => p.id === id);
+        if (!src) return null;
         const newId = uid();
         const now = Date.now();
-        c.projects.push({ id: newId, name: p.name + ' (copy)', created: now, modified: now });
+        // Copy the slot + meta first (atomic, same reasoning as createProject).
         const curRaw = localStorage.getItem(projectCurrentKey(id));
         if (curRaw != null) {
           localStorage.setItem(projectCurrentKey(newId), curRaw);
         }
         writeProjectMeta(newId, { snapshots: [], backups: [] });
-        c.activeId = newId;
-        saveCatalog(c);
+        commitCatalog(c => {
+          c.projects.push({ id: newId, name: src.name + ' (copy)', created: now, modified: now });
+          c.activeId = newId;
+        });
         return newId;
       },
       deleteProject(id) {
-        const c = catalog();
-        if (c.projects.length <= 1) return false;  // never delete the last one
-        const idx = c.projects.findIndex(p => p.id === id);
-        if (idx < 0) return false;
+        // Decide against the on-disk list so a concurrent tab's projects count.
+        const live = (readCatalog() || catalog());
+        if (live.projects.length <= 1) return false;  // never delete the last one
+        if (!live.projects.some(p => p.id === id)) return false;
         // Remove storage keys for this project.
         const prefix = PROJECT_PREFIX + id + '.';
         const keys = [];
@@ -398,9 +460,11 @@
         for (const k of keys) {
           try { localStorage.removeItem(k); } catch {}
         }
-        c.projects.splice(idx, 1);
-        if (c.activeId === id) c.activeId = c.projects[0].id;
-        saveCatalog(c);
+        commitCatalog(c => {
+          const idx = c.projects.findIndex(p => p.id === id);
+          if (idx >= 0) c.projects.splice(idx, 1);
+          if (c.activeId === id) c.activeId = (c.projects[0] && c.projects[0].id) || c.activeId;
+        });
         return true;
       },
 
@@ -410,39 +474,21 @@
       clearPreMigrationBackup() { preMigrationBackup = null; },
 
       // Project-menu shared action wiring --------------------------------
-      // Phase 1.3: wire the New / Duplicate / Delete buttons on pages
-      // that don't have bespoke handlers (behaviour / builder / code).
-      // The index.html + sprites.html handlers do in-place state
-      // replacement for a smoother UX; this reload-based fallback is
-      // simpler and good enough for pages where project-level actions
-      // are rare.  Caller passes a factory that makes a fresh blank
-      // state when the pupil clicks New.  Silently no-ops if a button
-      // is missing — pages stay free to ship a subset.
+      // Phase 1.3: wire the Duplicate / Delete buttons on pages that don't
+      // have bespoke handlers (behaviour / builder / code / audio).  The
+      // index.html + sprites.html handlers do in-place state replacement for a
+      // smoother UX; this reload-based fallback is simpler and good enough for
+      // pages where project-level actions are rare.  "New project" is wired
+      // separately by ProjectMenu.wire (a rich name+template dialog shared with
+      // every page).  Silently no-ops if a button is missing — pages stay free
+      // to ship a subset.
       wireBasicProjectActions(opts) {
         opts = opts || {};
-        const factory = typeof opts.makeFreshState === 'function'
-          ? opts.makeFreshState : () => null;
 
         const byId = (id) => document.getElementById(id);
-        const btnNew = byId('btn-project-new');
         const btnDup = byId('btn-project-duplicate');
         const btnDel = byId('btn-project-delete');
 
-        if (btnNew) {
-          btnNew.addEventListener('click', () => {
-            const raw = window.prompt('Name for the new project:',
-                                      'untitled');
-            if (raw == null) return;
-            const name = (raw || '').trim() || 'untitled';
-            try {
-              this.flushPending();   // BR-02: persist the current project's edits first
-              this.createProject(name, factory());
-              window.location.reload();
-            } catch (e) {
-              alert('Could not create project: ' + e.message);
-            }
-          });
-        }
         if (btnDup) {
           btnDup.addEventListener('click', () => {
             // BR-02: flush so unsaved edits are in the slot duplicateProject copies.

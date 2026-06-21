@@ -21,6 +21,109 @@ deferred.
 
 ---
 
+## Project-menu unification, save-reliability, optional accounts UI + cookie notice — 2026-06-21
+
+A batch of pupil/teacher-reported project-management fixes. **All headless
+tests pass, including the byte-identical golden ROM invariant** (this batch is
+editor JS/HTML only — no ROM/template code changed). Items needing an
+in-browser pass are flagged at the end.
+
+### 1. Data-loss: "saving a new project sometimes loses the old one" (fixed)
+
+Root cause was a **cross-tab catalog clobber**. Two editor tabs share one
+`localStorage`; each held an in-memory copy of the projects catalog. Every
+autosave called `touchProject → saveCatalog`, which wrote that whole in-memory
+catalog back — so a tab that had gone stale (because another tab created a
+project) silently erased the new project on its next save. Reproduced in a
+headless test (`project-save-safety.mjs`): the catalog collapsed to
+`["default"]`.
+
+Fix (`storage.js`): a new `commitCatalog(mutate)` re-reads the on-disk catalog
+as the base for **every** mutation (`touchProject`, `createProject`,
+`renameProject`, `duplicateProject`, `deleteProject`, `setActiveProjectId`), so
+a mutation can only ever touch its own target and can never drop an unrelated
+project. This tab's `activeId` is preserved across the reconcile. `createProject`
+/ `duplicateProject` now also write the project's slot + meta **before**
+registering it in the catalog (atomic: a failed/quota write leaves no phantom
+entry and the old project intact — also covered by the test). Known minor
+limitation documented in code: a project deleted in one tab can momentarily
+reappear in another stale tab until reload (no data loss).
+
+### 2. Renaming the starter project (fixed)
+
+The catalog seeded the first project as **"My First Project"** but
+`createDefaultState()` named the slot **"untitled"**, and on first visit there
+was no slot — so the dropdown *label* said "My First Project" while the rename
+*input* said "untitled", making the starter look un-renameable. New
+`Storage.bootstrapCurrent(makeDefault)` seeds a first-visit project's
+`state.name` from the active catalog entry so the label, list and rename field
+agree. Adopted in every seeding page's init (Backgrounds/Sprites/Behaviour, and
+Code's minimal seed). The rename field already worked on the active project; it
+now also reads correctly for the starter.
+
+### 3. One consistent project menu on every page (was "a little different")
+
+Every editor page now carries the **same** Backgrounds-style menu:
+
+- **Audio** had *no* project menu at all — it now has the full menu (project
+  list, rename, New, Duplicate, Delete, Save-all/Open-saved, Recover).
+- **Builder + Code** gained the **"+ New project…"** button (they used to omit
+  it and point pupils to Sprites); their `id="file-menu"` is renamed to
+  `id="projects-menu"` and the summary tooltip aligned.
+- **Behaviour** New was a `window.prompt`; it now uses the shared rich dialog.
+- New shared `default-state.js` (`window.DefaultState.create({name,template})`)
+  gives Builder/Code/Audio a complete, valid blank starter so New works there
+  (mirrors the Sprites page's `createDefaultState`).
+- The rich **New dialog** (name + template) moved into `project-menu.js`
+  (`ProjectMenu.wireNewButton`), replacing the old prompt path that lived in
+  `storage.js`'s `wireBasicProjectActions` (now Duplicate/Delete only).
+
+Tests: `project-menu.mjs` extended (audio added; New asserted on every page; a
+new behavioural test drives the dialog → flush → `createProject` → reload).
+
+### 4. Optional pupil accounts — editor UI (T4.2 P3)
+
+New standalone `account-menu.js` adds an **"Account (optional)"** section to the
+shared menu on every editor page (auto-mounts; talks to the existing P1/P2
+`/auth/*` + `/me/projects` endpoints, same-origin session cookie):
+
+- Signed-out: "Sign in / Create account…" dialog (username + password, optional
+  class code; shows the one-time recovery code after sign-up — no email stored,
+  username only, per the privacy constraint).
+- Signed-in: "Save to my account" (PUTs the same-named cloud project else POSTs)
+  and "Open from my account…" (copies a cloud project into a **new local
+  project** so it never clobbers current work), plus Sign out.
+- **Accounts stay optional**: if `/auth/me` is unreachable (static-only host,
+  server down, or nginx not proxying `/auth`), the whole section silently hides
+  — it never blocks the editor. Covered by `account-ui.mjs` (graceful-hide,
+  signed-out/in render, save PUT-vs-POST, load→createProject→reload). Backend
+  already covered by `accounts.mjs` + `account-projects.mjs`.
+
+### 5. EU cookie / storage notice
+
+New `cookie-notice.js`: a small, dismissible banner on every page (incl.
+Gallery) explaining the only client storage used is functional —
+`localStorage` for projects and, if you sign in, one login cookie; no tracking,
+ads, or third parties. Dismissal remembered in `localStorage`.
+
+### Deploy + verify
+
+- **New files to deploy as a unit** (nginx serves the static dir directly):
+  `default-state.js`, `project-menu.js` (changed), `account-menu.js`,
+  `cookie-notice.js`, `storage.js` (changed), and all page HTML. The dev
+  playground server serves the whole `tile_editor_web/` dir, so they work there
+  with no config.
+- **Production nginx must proxy `/auth/*` and `/me/projects*` to the playground
+  server** for the account UI to function. If it doesn't, the account section
+  just stays hidden (editor unaffected).
+- **In-browser pass still needed** (can't be checked headless): open two tabs
+  and confirm creating a project in one no longer drops projects in the other;
+  rename the starter project; New/Duplicate/Delete on Audio + Builder + Code;
+  sign up / sign in / Save to / Open from account end-to-end; cookie banner
+  shows once and stays dismissed.
+
+---
+
 ## Multi-screen scene-sprite placement — 2026-06-21
 
 Pupil-reported: the Builder only let you put sprites (enemies, NPCs, pickups) on
