@@ -21,6 +21,32 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — E3-5 brake + lap HUD (+ perf trim) — 2026-06-21
+
+First polish slice of E3-5.
+
+- **Brake (DOWN)** (`platformer.c`): a `RACER_BRAKE` deceleration (~5× friction)
+  so the pupil can slow for a corner; floors at 0. Full *reverse* is deferred (it
+  needs a signed-speed refactor). Test `racer-brake.mjs` compares brake-stop vs
+  coast-stop time (brake far faster) — measured robustly to dodge input latency.
+- **Numeric lap HUD** (server + engine): for a racer the server seeds 0–9 digit
+  glyphs (from the dialogue font, mapped to a transparent background) into spare
+  sprite-CHR slots and emits `racer_digit_tiles[]` + `BW_RACER_HUD`; the engine
+  draws the **current lap as one digit sprite top-left** (sprites don't scroll, so
+  it stays put). Test `racer-hud.mjs`: the HUD digit's tile changes when the lap
+  advances. All racer-gated → other ROMs byte-identical.
+- **Perf trim**: frame-counting showed the racer loop runs a touch over the NTSC
+  budget (the `long` velocity multiplies dominate — present since E3-1, which
+  feel-tested fine). Lap detection was changed from two full-box behaviour scans
+  to a single **centre-cell** lookup (markers are track-spanning lines), keeping
+  the per-frame cost near the E3-2 level the user liked. Noted the bigger win
+  (16-bit velocity math) in the design doc if a feel pass shows real lag.
+
+Full suite + the byte-identical ROM golden invariant green. Remaining E3-5:
+2-player (needs a shared-screen camera decision), full reverse, ordered
+checkpoints, flip-shared rotation CHR. Pending the user's feel pass (brake + the
+on-screen lap number).
+
 ## Arc E §3 top-down racer — E3-3 auto-rotated car art — 2026-06-21
 
 The racer car now faces its heading. The pupil draws the car **once (facing

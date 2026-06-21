@@ -1392,6 +1392,25 @@ def _inject_racer_rotation(state, player_idx):
     state["_racer_rot"] = {"tiles": tiles, "attrs": attrs,
                            "frames": RACER_ROT_FRAMES, "w": pw, "h": ph}
 
+    # E3-5 lap HUD: seed 0-9 digit glyphs into 10 more spare slots so the engine
+    # can draw the current lap number.  The font glyph uses colour 2 for its
+    # background (the dialogue box body); a HUD sprite wants it transparent, so we
+    # keep the stroke (colour 1) and map everything else to 0.  Skipped (HUD off)
+    # if there isn't room — rotation has first claim on the free slots.
+    digits = "0123456789"
+    if len(free) - k >= len(digits):
+        dig_idx = []
+        for ch in digits:
+            g = _DIALOGUE_FONT.get(ch) or _glyph()
+            sub = [[1 if g[y][x] == 1 else 0 for x in range(8)] for y in range(8)]
+            idx = free[k]; k += 1
+            if isinstance(pool[idx], dict):
+                pool[idx]["pixels"] = sub
+            else:
+                pool[idx] = {"pixels": sub}
+            dig_idx.append(idx)
+        state["_racer_digits"] = dig_idx
+
 
 # T7.6a: single source of truth for sprite role codes.  Both scene emitters
 # render this — the C path as `#define ROLE_<NAME> <code>` and the asm path as
@@ -1489,6 +1508,15 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             "};",
             f"static const unsigned char car_rot_attrs[{len(ra)}] = {{",
             "    " + ", ".join(f"0x{a:02X}" for a in ra),
+            "};",
+            "",
+        ]
+    digs = state.get("_racer_digits")
+    if digs and len(digs) == 10:
+        lines += [
+            "#define BW_RACER_HUD 1",
+            f"static const unsigned char racer_digit_tiles[10] = {{",
+            "    " + ", ".join(f"0x{t:02X}" for t in digs),
             "};",
             "",
         ]

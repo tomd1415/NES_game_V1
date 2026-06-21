@@ -221,11 +221,13 @@ All headless-green; golden unchanged. **E3-4 + E3-3 await the user's feel/visual
 
 ## Open decisions / next big initiative (pick one)
 The remaining work is large and design-first — these are the genuine forks:
-- **Arc E §3 Top-down racer — IN PROGRESS.** E3-0…E3-4 all done (see above + the
-  [racer design doc](2026-06-21-topdown-racer.md)): movement, collision, laps/race
-  goal, and **E3-3 auto-rotated car art** (server bakes 8 rotated frames; engine
-  draws by heading; `racer-rotation.mjs` green). Remaining: **E3-5 polish/2P**
-  (+ numeric lap HUD, ordered checkpoints, reverse/brake, flip-shared rotation CHR).
+- **Arc E §3 Top-down racer — IN PROGRESS.** E3-0…E3-4 done + **E3-5 started**
+  (see above + the [racer design doc](2026-06-21-topdown-racer.md)): movement,
+  collision, laps/race goal, rotated art, plus **brake (DOWN)** and a **numeric
+  lap HUD** (`racer-brake.mjs`, `racer-hud.mjs` green). Remaining E3-5: 2-player
+  (shared-screen camera decision), full reverse (signed-speed), ordered
+  checkpoints, flip-shared rotation CHR. (Perf: loop runs slightly over the NTSC
+  budget — `long` velocity math; 16-bit math is the win if a feel pass shows lag.)
 - **Arc D Sprint 5 (NMI frame model)** — architectural; also unblocks in-runner
   dialogue. Highest risk; design-first; ship the dialogue-budget slice first.
 - **Arc E §1 E1-4 (NES-side compact metatile storage)** — genuinely huge worlds /

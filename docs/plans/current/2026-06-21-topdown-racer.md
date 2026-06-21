@@ -117,8 +117,13 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   `racer-rotation.mjs` (drawn tile changes with heading; adjacent headings reuse
   a frame). Golden unchanged (no-op for non-racers). **Pending the user's visual
   pass** (draw a car facing right → does it look right rotating, esp. diagonals?).
-- **E3-5 — polish + 2-player** (D11). Also: numeric lap HUD, multiple ordered
-  checkpoints, reverse/brake (D4), flip-sharing to cut rotation CHR.
+- **E3-5 — polish + 2-player** (D11). **Started:** ✅ **brake** (DOWN sheds speed
+  ~5× friction; `racer-brake.mjs`) and ✅ **numeric lap HUD** (current lap as a
+  digit sprite top-left, from server-seeded glyphs; `racer-hud.mjs`). Lap
+  detection trimmed to a single **centre-cell** lookup to keep the per-frame
+  budget down. **Remaining:** 2-player (needs a camera decision — shared-screen
+  on NES, no true split), full **reverse** (needs signed-speed), multiple ordered
+  checkpoints, flip-shared rotation CHR.
 
 ## 6. Verification & invariants
 Same rules as the runner: every block `#if BW_GAME_STYLE == 3`-gated so the
@@ -127,3 +132,17 @@ runner suites stay green; the movement spike gets a headless render test
 (`racer.mjs`) asserting the physics, then a mandatory **visual/feel pass** (the
 part jsnes can't judge). Builder validators where sensible (e.g. racer wants a
 ≥2-screen track; later, ≥1 checkpoint + a finish line).
+
+## 7. Perf finding (measured at E3-5)
+Frame-counting in the headless tests shows the racer's main loop runs a bit over
+the NTSC frame budget — game logic advances ~1 step per ~1.3–1.5 emulated frames
+(jsnes models a missed `waitvsync` as a 2-frame iteration). The dominant cost is
+the two **32-bit `long` multiplies** (`vx/vy = speed × COS16`) plus the per-axis
+24.8 position math and the two full-box `racer_on_edge` collision scans — all
+present since E3-1/E3-2, which the user feel-tested as good. E3-4/E3-5 additions
+are cheap (centre-cell lap check, a frame-index for rotation, one HUD sprite), and
+the lap check was trimmed from two full-box scans to one centre lookup to hold the
+line. **If a visual pass shows real sluggishness, the big win is replacing the
+`long` velocity multiply with a 16-bit-safe scheme** (smaller fixed-point so
+`speed × cos` fits 16 bits, or a precomputed per-heading unit-velocity table
+scaled by speed) — deferred until the feel pass says it's needed.

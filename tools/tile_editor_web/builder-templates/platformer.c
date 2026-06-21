@@ -594,6 +594,9 @@ void runner_respawn(void) {
 #ifndef RACER_FRICTION
 #define RACER_FRICTION 8          /* 8.8 px/frame bled off when coasting (~0.03) */
 #endif
+#ifndef RACER_BRAKE
+#define RACER_BRAKE 40            /* 8.8 px/frame shed while braking (DOWN) — ~5x friction */
+#endif
 #ifndef RACER_MAX_SPEED
 #define RACER_MAX_SPEED 640       /* 8.8 cap (~2.5 px/frame) */
 #endif
@@ -638,20 +641,6 @@ unsigned char racer_on_edge(void) {
             if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;
         }
     }
-    return 0;
-}
-
-/* E3-4: true if the car's box overlaps any cell of the given behaviour id —
- * used to detect driving over the finish line / a checkpoint. */
-unsigned char racer_touching(unsigned char id) {
-    unsigned char c0 = (unsigned char)(px >> 3);
-    unsigned char c1 = (unsigned char)((px + PLAYER_W * 8 - 1) >> 3);
-    unsigned char r0 = (unsigned char)(py >> 3);
-    unsigned char r1 = (unsigned char)((py + PLAYER_H * 8 - 1) >> 3);
-    unsigned char cc, rr;
-    for (rr = r0; rr <= r1; rr++)
-        for (cc = c0; cc <= c1; cc++)
-            if (behaviour_at((unsigned int)cc, (unsigned int)rr) == id) return 1;
     return 0;
 }
 #endif
@@ -797,7 +786,9 @@ void main(void) {
             if (pad & 0x88) {                                           // A or UP = accelerate
                 racer_speed += RACER_ACCEL;
                 if (racer_speed > RACER_MAX_SPEED) racer_speed = RACER_MAX_SPEED;
-            } else {
+            } else if (pad & 0x04) {                                    // DOWN = brake
+                racer_speed = (racer_speed > RACER_BRAKE) ? (racer_speed - RACER_BRAKE) : 0;
+            } else {                                                    // coast = friction
                 racer_speed = (racer_speed > RACER_FRICTION) ? (racer_speed - RACER_FRICTION) : 0;
             }
             vx = (signed int)(((signed long)racer_speed * COS16[racer_heading]) >> 7);
@@ -823,12 +814,20 @@ void main(void) {
             // the bulk of the velocity); a shallow graze keeps its speed.
             if ((hit_x && avx >= avy) || (hit_y && avy >= avx))
                 racer_speed >>= 1;
-            // Lap counting: arm on a checkpoint, count on the finish while armed
-            // (finish→checkpoint→finish = one lap; can't farm the line).
-            if (racer_touching(BW_RACER_CHECKPOINT_ID)) racer_armed = 1;
-            if (racer_armed && racer_touching(BW_RACER_FINISH_ID)) {
-                racer_armed = 0;
-                if (++racer_laps >= RACER_LAPS_TO_WIN) racer_finished = 1;
+            // Lap counting via the car's CENTRE cell (one lookup, cheap — keeps
+            // the per-frame budget down): a checkpoint arms a lap, the finish
+            // counts it while armed (finish→checkpoint→finish = one lap, can't
+            // farm the line).  Markers are track-spanning lines, so the centre
+            // always crosses them.
+            {
+                unsigned char mid = behaviour_at(
+                    (unsigned int)((px + (PLAYER_W << 2)) >> 3),
+                    (unsigned int)((py + (PLAYER_H << 2)) >> 3));
+                if (mid == BW_RACER_CHECKPOINT_ID) racer_armed = 1;
+                else if (racer_armed && mid == BW_RACER_FINISH_ID) {
+                    racer_armed = 0;
+                    if (++racer_laps >= RACER_LAPS_TO_WIN) racer_finished = 1;
+                }
             }
         }
 #endif
@@ -1625,6 +1624,20 @@ void main(void) {
                 }
                 if (hud_x >= step) hud_x -= step; else hud_x = 0;
             }
+        }
+#endif
+
+#if BW_GAME_STYLE == 3 && BW_RACER_HUD
+        // E3-5 lap HUD: the current lap (1-based, clamped to the target) as one
+        // digit sprite at the top-left.  Sprites don't scroll, so it stays put as
+        // the track scrolls past.
+        {
+            unsigned char lap = (unsigned char)(racer_laps + 1);
+            if (lap > RACER_LAPS_TO_WIN) lap = RACER_LAPS_TO_WIN;
+            oam_buf[oam_idx++] = 8;                        // y
+            oam_buf[oam_idx++] = racer_digit_tiles[lap];   // digit glyph tile
+            oam_buf[oam_idx++] = 0;                        // attr: sprite palette 0
+            oam_buf[oam_idx++] = 8;                        // x
         }
 #endif
 
