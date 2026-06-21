@@ -212,5 +212,46 @@ const control = (env) => env.document_.getElementById('account-control');
   }
 }
 
+// ---- 7) Create-account hidden when signups are closed ------------------
+{
+  const env = makeEnv();
+  const fetchImpl = (p) => p === '/auth/me' ? jsonResp(true, { ok: true, username: null, signupsOpen: false }) : jsonResp(false, {});
+  load(env, fetchImpl, { loadCurrent: () => ({ name: 'x' }), flushPending() {} });
+  await tick(); await tick();
+  env.document_.getElementById('account-signin').click();
+  await tick();
+  const dlg = env.body.querySelector('.acct-dialog');
+  if (!dlg) bad('auth dialog did not open');
+  else {
+    const hasCreate = dlg.querySelectorAll('button').some(b => /Create account/.test(b.textContent));
+    if (!hasCreate && /closed/.test(allText(dlg)))
+      ok('signups closed: dialog hides "Create account" and explains why');
+    else bad('signups-closed dialog still offered Create account: ' + JSON.stringify(allText(dlg)));
+  }
+}
+
+// ---- 8) Enter submits the auth form ------------------------------------
+{
+  const env = makeEnv();
+  const calls = [];
+  const fetchImpl = (p) => {
+    calls.push(p);
+    if (p === '/auth/me') return jsonResp(true, { ok: true, username: null, signupsOpen: true });
+    if (p === '/auth/login') return jsonResp(true, { ok: true, username: 'kid' });
+    return jsonResp(false, {});
+  };
+  load(env, fetchImpl, { loadCurrent: () => ({ name: 'x' }), flushPending() {} });
+  await tick(); await tick();
+  env.document_.getElementById('account-signin').click();
+  await tick();
+  const dlg = env.body.querySelector('.acct-dialog');
+  const inputs = dlg.querySelectorAll('input');
+  inputs[0].value = 'kid'; inputs[1].value = 'secretpw';
+  inputs[1].dispatchEvent('keydown', { key: 'Enter', preventDefault() {} });
+  await tick(); await tick();
+  if (calls.includes('/auth/login')) ok('pressing Enter in the auth form submits (calls /auth/login)');
+  else bad('Enter did not submit the auth form: ' + JSON.stringify(calls));
+}
+
 if (failed) { console.error('\naccount-ui: FAILURES above'); process.exit(1); }
 console.log('\naccount-ui: all checks passed');

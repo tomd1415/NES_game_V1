@@ -53,6 +53,7 @@
       '  min-width: 220px; box-shadow: 0 6px 18px rgba(0,0,0,0.5); z-index: 30;',
       '}',
       '.account-menu > .menu-body button { text-align: left; }',
+      '.acct-line { font-size: 0.9em; color: var(--muted, #9a97ad); margin: 2px 0; }',
       'dialog.acct-dialog {',
       '  background: var(--bg, #14121f); color: var(--fg, #f4f4f4);',
       '  border: 1px solid var(--border, #3a3352); border-radius: 6px;',
@@ -172,15 +173,20 @@
 
     var dlg = el('dialog', { class: 'acct-dialog' });
     var title = el('h2', { text: 'Sign in' });
+    // Self-signup is gated on a class join code; when the server has none
+    // configured (signupsOpen=false) there's no point offering "Create account".
+    var canSignup = !(me && me.signupsOpen === false);
     var tabLogin = el('button', { type: 'button', class: 'active', text: 'Sign in' });
     var tabSignup = el('button', { type: 'button', text: 'Create account' });
-    var tabs = el('div', { class: 'acct-tabs' }, [tabLogin, tabSignup]);
+    var tabs = el('div', { class: 'acct-tabs' }, canSignup ? [tabLogin, tabSignup] : [tabLogin]);
+    var closedNote = canSignup ? null : el('div', { class: 'acct-line',
+      text: 'New accounts are closed right now — ask your teacher for the class join code.' });
 
     var userIn = el('input', { type: 'text', autocomplete: 'username', placeholder: '3–20 letters/numbers' });
     var passIn = el('input', { type: 'password', autocomplete: 'current-password', placeholder: 'at least 6 characters' });
     var userLab = el('label', { text: 'Username' }, [userIn]);
     var passLab = el('label', { text: 'Password' }, [passIn]);
-    var codeIn = el('input', { type: 'text', placeholder: 'only if your teacher gave you one' });
+    var codeIn = el('input', { type: 'text', placeholder: 'ask your teacher for the class code' });
     var codeLab = el('label', { text: 'Class code', style: 'display:none' }, [codeIn]);
     var msg = el('div', { class: 'acct-msg' });
     var recovery = el('div', { class: 'acct-recovery', style: 'display:none' });
@@ -201,7 +207,14 @@
       recovery.style.display = 'none';
     }
     tabLogin.addEventListener('click', function () { mode = 'login'; applyMode(); });
-    tabSignup.addEventListener('click', function () { mode = 'signup'; applyMode(); });
+    if (canSignup) tabSignup.addEventListener('click', function () { mode = 'signup'; applyMode(); });
+
+    // Enter in any field submits — pupils expect it and there's no <form>.
+    [userIn, passIn, codeIn].forEach(function (inp) {
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); submit.click(); }
+      });
+    });
 
     submit.addEventListener('click', function () {
       var username = (userIn.value || '').trim();
@@ -240,6 +253,7 @@
 
     dlg.appendChild(title);
     dlg.appendChild(tabs);
+    if (closedNote) dlg.appendChild(closedNote);
     dlg.appendChild(userLab);
     dlg.appendChild(passLab);
     dlg.appendChild(codeLab);
