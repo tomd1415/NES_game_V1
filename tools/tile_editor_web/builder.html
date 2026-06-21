@@ -1113,23 +1113,26 @@ body.emu-single-player #emu-p2-controls { display: none; }
     }
     host.appendChild(summary);
 
-    // Preview canvas — shows every instance drawn at its (x, y) on a
-    // scaled-up 256×240 screen.  Click to add; drag to move.  The
-    // number-input rows below still work for precise placement.
+    // Preview canvas — shows every instance drawn at its (x, y) over the WHOLE
+    // world (all screens of a scrolling level; yellow lines mark screen edges).
+    // Click to add; drag to move.  The number-input rows below still work for
+    // precise placement.  (drawPreview resizes the canvas to fit the world.)
     let preview = null;
     if (placeable.length > 0) {
       preview = document.createElement('div');
       preview.className = 'scene-preview-wrap';
       const canvas = document.createElement('canvas');
-      canvas.width = 512;       // 256 * 2 — the on-screen pixel size
-      canvas.height = 480;      // 240 * 2
+      const _w0 = sceneWorld();
+      canvas.width = _w0.wpx * _w0.scale;
+      canvas.height = _w0.hpx * _w0.scale;
       canvas.className = 'scene-preview-canvas';
       canvas.title = 'Click to add a sprite here.  Drag an existing sprite to move it.';
       preview.appendChild(canvas);
       const hint = document.createElement('div');
       hint.className = 'scene-preview-hint';
       hint.textContent =
-        'Click an empty spot to drop a new sprite. Drag a sprite to move it.';
+        'Click an empty spot to drop a new sprite. Drag to move it. The whole ' +
+        'level is shown — yellow lines mark where each screen begins.';
       preview.appendChild(hint);
       host.appendChild(preview);
       wireScenePreview(canvas, node, placeable, () => { drawPreview(canvas, node); rerender(); });
@@ -1227,18 +1230,19 @@ body.emu-single-player #emu-p2-controls { display: none; }
     const sprite = (state.sprites || [])[inst.spriteIdx];
     roleBadge.textContent = (sprite && sprite.role) || 'other';
 
+    const _w = sceneWorld();
     const xIn = document.createElement('input');
-    xIn.type = 'number'; xIn.min = 0; xIn.max = 240; xIn.step = 4;
+    xIn.type = 'number'; xIn.min = 0; xIn.max = _w.wpx - 8; xIn.step = 4;
     xIn.value = inst.x;
-    xIn.title = 'Pixel x position on screen (0 = left, 240 = right)';
+    xIn.title = 'Pixel x position in the world (0 = far left; spans every screen)';
     xIn.addEventListener('input', () => {
       const v = parseInt(xIn.value, 10);
       if (!Number.isNaN(v)) { inst.x = v; scheduleSave(); }
     });
     const yIn = document.createElement('input');
-    yIn.type = 'number'; yIn.min = 16; yIn.max = 216; yIn.step = 4;
+    yIn.type = 'number'; yIn.min = 0; yIn.max = _w.hpx - 8; yIn.step = 4;
     yIn.value = inst.y;
-    yIn.title = 'Pixel y position on screen (16 = top, 216 = bottom)';
+    yIn.title = 'Pixel y position in the world (0 = top; spans every screen)';
     yIn.addEventListener('input', () => {
       const v = parseInt(yIn.value, 10);
       if (!Number.isNaN(v)) { inst.y = v; scheduleSave(); }
@@ -1355,12 +1359,29 @@ body.emu-single-player #emu-p2-controls { display: none; }
   // --- Scene preview canvas ---------------------------------------
   //
   // Coordinate system: the NES screen is 256×240 logical pixels; we
-  // draw at 2× so each logical pixel is a 2×2 block.  Everything in
-  // state uses logical pixels, so the UI converts on mouse events.
-  const SCENE_SCALE = 2;
+  // draw scaled up so each logical pixel is a SCENE_SCALE block.  Everything in
+  // state uses logical pixels, so the UI converts on mouse events.  The preview
+  // now covers the WHOLE world (every screen of a scrolling level), so scene
+  // sprites can be placed anywhere — not just the first screen.  The zoom adapts
+  // to keep the preview a sensible on-screen size.
+  function sceneWorld() {
+    const bgs = (state && state.backgrounds) || [];
+    const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0] || {};
+    const dim = (bg && bg.dimensions) || {};
+    const cols = (((dim.screens_x | 0) || 1)) * 32;
+    const rows = (((dim.screens_y | 0) || 1)) * 30;
+    const wpx = cols * 8, hpx = rows * 8;
+    const scale = Math.max(1, Math.min(Math.floor(512 / wpx), Math.floor(480 / hpx))) || 1;
+    return { cols, rows, wpx, hpx, scale };
+  }
 
   function drawPreview(canvas, node) {
     if (!canvas) return;
+    const W = sceneWorld();
+    const SCENE_SCALE = W.scale;
+    const cw = W.wpx * SCENE_SCALE, ch = W.hpx * SCENE_SCALE;
+    if (canvas.width !== cw) canvas.width = cw;
+    if (canvas.height !== ch) canvas.height = ch;
     const ctx = canvas.getContext('2d');
     // Universal BG colour first, so any transparent pixels in the
     // nametable read as the real NES backdrop.
@@ -1377,13 +1398,29 @@ body.emu-single-player #emu-p2-controls { display: none; }
     // eyeball tile coordinates when dragging.
     ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.lineWidth = 1;
-    for (let x = 0; x <= 256; x += 16) {
+    for (let x = 0; x <= W.wpx; x += 16) {
       ctx.beginPath();
       ctx.moveTo(x * SCENE_SCALE + 0.5, 0);
       ctx.lineTo(x * SCENE_SCALE + 0.5, canvas.height);
       ctx.stroke();
     }
-    for (let y = 0; y <= 240; y += 16) {
+    for (let y = 0; y <= W.hpx; y += 16) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * SCENE_SCALE + 0.5);
+      ctx.lineTo(canvas.width, y * SCENE_SCALE + 0.5);
+      ctx.stroke();
+    }
+    // Brighter lines on the screen boundaries (every 256×240) so pupils can see
+    // where each screen of a multi-screen level begins.
+    ctx.strokeStyle = 'rgba(255,216,102,0.35)';
+    ctx.lineWidth = 1;
+    for (let x = 256; x < W.wpx; x += 256) {
+      ctx.beginPath();
+      ctx.moveTo(x * SCENE_SCALE + 0.5, 0);
+      ctx.lineTo(x * SCENE_SCALE + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 240; y < W.hpx; y += 240) {
       ctx.beginPath();
       ctx.moveTo(0, y * SCENE_SCALE + 0.5);
       ctx.lineTo(canvas.width, y * SCENE_SCALE + 0.5);
@@ -1427,24 +1464,24 @@ body.emu-single-player #emu-p2-controls { display: none; }
     }
   }
 
-  // Paint the active background's nametable onto the preview.  Only
-  // draws the first screen (32×30 tiles) — multi-screen worlds show
-  // just their first screen in the placement view, which is where
-  // the scene sprites live anyway.  Each nametable cell carries
-  // `{tile, palette}` on the editor's data model (the attribute-table
-  // quantisation happens at /play time), so we look up the bg tile
-  // and its palette per cell and fill the 8×8 block.
+  // Paint the active background's nametable onto the preview — the WHOLE world
+  // (every screen of a scrolling level), so the placement view matches where
+  // scene sprites can actually go.  Each nametable cell carries `{tile, palette}`
+  // on the editor's data model (the attribute-table quantisation happens at
+  // /play time), so we look up the bg tile and its palette per cell and fill the
+  // 8×8 block.
   function drawBackgroundBehind(ctx, canvas) {
     const bgs = (state && state.backgrounds) || [];
     const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0];
     if (!bg || !Array.isArray(bg.nametable)) return;
+    const W = sceneWorld();
     const tiles = (state && state.bg_tiles) || [];
-    const rows = Math.min(30, bg.nametable.length);
-    const s = SCENE_SCALE;
+    const rows = Math.min(W.rows, bg.nametable.length);
+    const s = W.scale;
     for (let y = 0; y < rows; y++) {
       const row = bg.nametable[y];
       if (!Array.isArray(row)) continue;
-      const cols = Math.min(32, row.length);
+      const cols = Math.min(W.cols, row.length);
       for (let x = 0; x < cols; x++) {
         const cell = row[x];
         if (!cell) continue;
@@ -1554,12 +1591,18 @@ body.emu-single-player #emu-p2-controls { display: none; }
     return null;
   }
 
-  // Clamp a position so the sprite's bounding box stays on screen.
-  function clampSpritePos(sp, x, y) {
+  // Clamp a position so the sprite's bounding box stays in bounds.  Scene sprites
+  // may go anywhere in the world; the player START stays on the first screen
+  // (PLAYER_X/Y are 8-bit in the engine), keeping the original screen-1 margins.
+  function clampSpritePos(sp, x, y, isPlayer) {
     const w = sp.width * 8;
     const h = sp.height * 8;
-    const cx = Math.max(0, Math.min(255 - w, x | 0));
-    const cy = Math.max(16, Math.min(232 - h, y | 0));
+    const W = sceneWorld();
+    const maxX = isPlayer ? (255 - w) : (W.wpx - w);
+    const maxY = isPlayer ? (232 - h) : (W.hpx - h);
+    const minY = isPlayer ? 16 : 0;
+    const cx = Math.max(0, Math.min(maxX, x | 0));
+    const cy = Math.max(minY, Math.min(maxY, y | 0));
     return { x: cx, y: cy };
   }
 
@@ -1584,11 +1627,12 @@ body.emu-single-player #emu-p2-controls { display: none; }
 
     function toLogical(e) {
       const rect = canvas.getBoundingClientRect();
+      const scale = sceneWorld().scale;
       const sx = canvas.width / rect.width;
       const sy = canvas.height / rect.height;
       return {
-        x: ((e.clientX - rect.left) * sx) / SCENE_SCALE,
-        y: ((e.clientY - rect.top)  * sy) / SCENE_SCALE,
+        x: ((e.clientX - rect.left) * sx) / scale,
+        y: ((e.clientY - rect.top)  * sy) / scale,
       };
     }
 
@@ -1629,7 +1673,8 @@ body.emu-single-player #emu-p2-controls { display: none; }
       const p = toLogical(e);
       const sp = draggableSprite(dragging);
       if (!sp) return;
-      const next = clampSpritePos(sp, p.x - dragOff.x, p.y - dragOff.y);
+      const isPlayer = dragging.kind === 'player1' || dragging.kind === 'player2';
+      const next = clampSpritePos(sp, p.x - dragOff.x, p.y - dragOff.y, isPlayer);
       if (next.x !== dragging.x || next.y !== dragging.y) {
         dragging.x = next.x;
         dragging.y = next.y;
