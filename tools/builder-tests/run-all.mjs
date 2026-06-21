@@ -464,6 +464,35 @@ check('invariant: sprites.html warns on player-size animation frame mismatch', (
   }
 }) || (anyFail = true);
 
+// 2026-06-21 production-only report: projects with only a Player sprite used
+// to skip creation of the entire Scene preview because it was wrapped in
+// `if (placeable.length > 0)`.  That hid the background as well as the Player
+// start marker, even though dragging Player 1/2 is useful before any NPC or
+// Enemy exists.  Keep the canvas unconditional; only empty-area placement is
+// meant to be disabled when there is no non-player sprite to add.
+check('invariant: Builder scene preview renders with only a Player sprite', () => {
+  const html = fs.readFileSync(path.join(WEB, 'builder.html'), 'utf8');
+  const start = html.indexOf('function renderSceneInstances(');
+  const end = html.indexOf('function renderSceneInstanceRow(', start);
+  if (start < 0 || end < 0) {
+    throw new Error('could not locate renderSceneInstances() in builder.html');
+  }
+  const scene = html.slice(start, end);
+  const createAt = scene.indexOf("preview = document.createElement('div')");
+  if (createAt < 0) {
+    throw new Error('Builder Scene no longer creates its preview canvas');
+  }
+  const oldGate = scene.lastIndexOf('if (placeable.length > 0)', createAt);
+  if (oldGate >= 0) {
+    throw new Error('Builder Scene preview is gated on a non-player sprite — ' +
+      'Player-only projects will hide the background and Player start again');
+  }
+  if (!/if \(placeable\.length === 0\) return;/.test(html)) {
+    throw new Error('empty-area Scene clicks must remain guarded when no ' +
+      'non-player sprite exists');
+  }
+}) || (anyFail = true);
+
 // B-2 (feedback F1b + F23, bug 31): dialogue must render real letters, not
 // garbage, on any project.  As of 2026-06-18 the server seeds a built-in font
 // into blank bg tiles when dialogue is on (Sprint 3), the assembler uppercases

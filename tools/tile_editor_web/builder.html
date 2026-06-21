@@ -1100,9 +1100,10 @@ body.emu-single-player #emu-p2-controls { display: none; }
     const summary = document.createElement('div');
     summary.className = 'scene-summary';
     if (placeable.length === 0) {
-      summary.textContent = 'No non-player sprites to place. Add some ' +
-        'on the Sprites page (tag them Enemy, Pickup, NPC, …) and ' +
-        'come back.';
+      summary.textContent = 'The level and Player start are shown below, but ' +
+        'there are no NPC, Enemy, Pickup, or other non-player sprites to place. ' +
+        'You can drag the Player to choose its starting position, or add another ' +
+        'sprite on the Sprites page to place more characters here.';
     } else if (instances.length === 0) {
       summary.textContent = 'Empty list → the Builder will auto-place ' +
         'one of each non-player sprite at default positions. Click ' +
@@ -1119,32 +1120,36 @@ body.emu-single-player #emu-p2-controls { display: none; }
     // Click to add; drag to move.  The number-input rows below still work for
     // precise placement.  (drawPreview resizes the canvas to fit the world.)
     let preview = null;
-    // The preview is a nicety; if anything in it throws (e.g. an unexpected
-    // background shape or a canvas the browser can't size), log it and carry on
-    // so the instance list below still renders — never blank the whole panel.
-    if (placeable.length > 0) {
-      try {
-        preview = document.createElement('div');
-        preview.className = 'scene-preview-wrap';
-        const canvas = document.createElement('canvas');
-        const _w0 = sceneWorld();
-        canvas.width = _w0.wpx * _w0.scale;
-        canvas.height = _w0.hpx * _w0.scale;
-        canvas.className = 'scene-preview-canvas';
-        canvas.title = 'Click to add a sprite here.  Drag an existing sprite to move it.';
-        preview.appendChild(canvas);
-        const hint = document.createElement('div');
-        hint.className = 'scene-preview-hint';
-        hint.textContent =
-          'Click an empty spot to drop a new sprite. Drag to move it. The whole ' +
-          'level is shown — yellow lines mark where each screen begins.';
-        preview.appendChild(hint);
-        host.appendChild(preview);
-        wireScenePreview(canvas, node, placeable, () => { drawPreview(canvas, node); rerender(); });
-        drawPreview(canvas, node);
-      } catch (err) {
-        console.error('[builder] scene preview failed to render:', err);
-      }
+    // Always show the level, even before the pupil creates a non-player sprite:
+    // the preview is also how they see and position Player 1/2.  Empty-area
+    // clicks remain harmless while `placeable` is empty (wireScenePreview
+    // already guards that path).
+    try {
+      preview = document.createElement('div');
+      preview.className = 'scene-preview-wrap';
+      const canvas = document.createElement('canvas');
+      const _w0 = sceneWorld();
+      canvas.width = _w0.wpx * _w0.scale;
+      canvas.height = _w0.hpx * _w0.scale;
+      canvas.className = 'scene-preview-canvas';
+      canvas.title = placeable.length > 0
+        ? 'Click to add a sprite here. Drag an existing sprite to move it.'
+        : 'Drag the Player to choose its starting position.';
+      preview.appendChild(canvas);
+      const hint = document.createElement('div');
+      hint.className = 'scene-preview-hint';
+      hint.textContent = placeable.length > 0
+        ? 'Click an empty spot to drop a new sprite. Drag to move it. The whole ' +
+          'level is shown — yellow lines mark where each screen begins.'
+        : 'Drag the Player to choose its starting position. Add an NPC, Enemy, ' +
+          'Pickup, or other sprite on the Sprites page to place more characters. ' +
+          'Yellow lines mark where each screen begins.';
+      preview.appendChild(hint);
+      host.appendChild(preview);
+      wireScenePreview(canvas, node, placeable, () => { drawPreview(canvas, node); rerender(); });
+      drawPreview(canvas, node);
+    } catch (err) {
+      console.error('[builder] scene preview failed to render:', err);
     }
 
     const list = document.createElement('div');
@@ -1156,9 +1161,11 @@ body.emu-single-player #emu-p2-controls { display: none; }
       if (instances.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'scene-instances-empty';
-        empty.textContent =
-          'No sprites placed yet.  Click an empty spot on the preview ' +
-          'above to drop one, or use + Add instance below.';
+        empty.textContent = placeable.length > 0
+          ? 'No non-player sprites placed yet. Click an empty spot on the ' +
+            'preview above to drop one, or use + Add instance below.'
+          : 'No non-player sprites are available yet. The Player start can ' +
+            'still be moved in the preview above.';
         list.appendChild(empty);
         return;
       }
