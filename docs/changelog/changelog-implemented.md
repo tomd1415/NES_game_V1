@@ -21,6 +21,38 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — E3-5 polish complete (4 parts) — 2026-06-21
+
+Finished the optional E3-5 polish; the racer is now feature-complete. Each part
+is its own commit, all racer-gated (golden ROM intact), full suite green.
+
+1. **Corner-probe collision** — `racer_box_on_edge` probes 4 corners + centre
+   (5 lookups) instead of the full 3×3 span (~9), freeing per-frame headroom.
+   *Finding:* this + the 16-bit math made **single-player run 1:1**, but
+   **2-player stays ~2×** — `waitvsync` is quantised (1 frame if the loop fits,
+   else 2), and two cars sit just over the line regardless of these per-car
+   savings (design doc §7).
+2. **Full reverse** — `racer_speed` is now signed; DOWN brakes then backs the car
+   up (capped at `RACER_REV_MAX`, default half top speed), friction pulls toward 0
+   from both sides. `racer-brake.mjs` gains a reverse check.
+3. **Ordered checkpoints** — a lap can require 1 or 2 checkpoints passed *in
+   order* (CP1 = trigger id 5 → CP2 = ladder id 6) before the finish counts; a
+   Builder "checkpoints per lap (1–2)" knob → `RACER_CP_COUNT` (default 1 keeps
+   single-checkpoint tracks unchanged). `racer_armed`→`racer_cp_stage`; validator
+   + `racer-checkpoints.mjs` cover order enforcement.
+4. **Flip-shared rotation CHR** — the 8 headings now use only **3 unique drawn
+   frames** (E/SE/S) mirrored via OAM H/V-flip bits, cutting the car's rotation
+   CHR from 32 tiles to 12 (the "no CHR room" fallback is now rare). P2's draw ORs
+   the per-frame flip bits into its palette.
+
+New tests: `racer-checkpoints.mjs`. Updated: `racer-brake.mjs` (signed speed +
+reverse), `racer-2p.mjs` (coast P2 to stop, since DOWN reverses now),
+`racer-laps.mjs`/`racer-validators.mjs` (cp_stage + 2-checkpoint cases).
+
+Pending the user's feel pass (reverse, 2 checkpoints, rotation art, 2-player).
+Open: 2-player's residual ~2× (needs a deeper loop cut to cross the 1-frame
+budget) and 3+ ordered checkpoints (behaviour-id limited).
+
 ## Arc E §3 top-down racer — E3-5 16-bit velocity math (perf) — 2026-06-21
 
 Followed the 2-player perf flag with the specified fix: the racer's per-frame

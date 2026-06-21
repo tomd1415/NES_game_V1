@@ -125,9 +125,11 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
 - **E3-5 — polish + 2-player** (D11). **Mostly done:** ✅ **brake** (DOWN,
   `racer-brake.mjs`), ✅ **numeric lap HUD** (`racer-hud.mjs`), ✅ **2-player**
   (shared screen, follow P1; `racer-2p.mjs`), ✅ **16-bit velocity/position math**
-  (single-player now runs 1:1 — see §7). **Remaining:** collision-scan trim (only
-  if 2-player's residual ~2× slowdown matters), full **reverse** (signed-speed),
-  multiple ordered checkpoints, flip-shared rotation CHR.
+  (single-player runs 1:1 — §7), ✅ **corner-probe collision**, ✅ **full reverse**
+  (DOWN backs up; signed speed), ✅ **ordered checkpoints** (1–2 per lap, in order;
+  `racer-checkpoints.mjs`), ✅ **flip-shared rotation CHR** (3 drawn frames → 8 via
+  flips, 32→12 tiles). **E3-5 complete.** Open only: 2-player still ~2× (a
+  quantised-frame issue, not the per-car cost — §7) and 3+ checkpoints.
 
 ## 6. Verification & invariants
 Same rules as the runner: every block `#if BW_GAME_STYLE == 3`-gated so the
