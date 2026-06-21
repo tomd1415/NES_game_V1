@@ -86,8 +86,11 @@ try {
     else bad('car did not start at heading 0 (got ' + baseHead + ')');
 
     // 1. Accelerate straight: hold A at heading 0 → px climbs, py barely moves.
+    //    Measured over a generous window so it's robust to startup/streaming
+    //    timing (jsnes is deterministic, but the exact frame the main loop takes
+    //    over shifts as the ROM changes).
     const ax = pxv(), ay = pyv();
-    h.hold(H.BTN.A); h.frames(24); h.release(H.BTN.A);
+    h.hold(H.BTN.A); h.frames(45); h.release(H.BTN.A);
     const dx1 = pxv() - ax, dy1 = pyv() - ay;
     if (dx1 > 8 && Math.abs(dy1) <= 3)
       ok('accelerate at heading 0 drives +x (Δpx=' + dx1 + ', Δpy=' + dy1 + ')');

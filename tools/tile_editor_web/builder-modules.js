@@ -50,7 +50,7 @@
       'four-way movement, no gravity, no jumping.  All other modules ' +
       '(damage, dialogue, doors, pickups, …) work the same in either ' +
       'mode — only the player physics changes.',
-    defaultConfig: { type: 'platformer', autoscrollSpeed: 2, racerTopSpeed: 3 },
+    defaultConfig: { type: 'platformer', autoscrollSpeed: 2, racerTopSpeed: 3, racerLaps: 3 },
     schema: [
       {
         key: 'type',
@@ -80,6 +80,16 @@
           'Steer with Left/Right, hold A (or Up) to accelerate; the car coasts ' +
           'to a stop.  Ignored for the other game types.',
       },
+      {
+        key: 'racerLaps',
+        label: 'Racer laps to win (1–9)',
+        type: 'int',
+        min: 1, max: 9,
+        help: 'Racer only: how many laps wins the race.  A lap = cross the finish ' +
+          'line, drive through a checkpoint, then cross the finish again.  Paint ' +
+          'the finish line and a checkpoint on the Behaviour page; with none ' +
+          'painted the racer is just free-drive.  Ignored for the other game types.',
+      },
     ],
     // Phase 3.1 / Arc E §2: both styles share one template (`platformer.c`).
     // We emit a `BW_GAME_STYLE` macro the template's preprocessor uses to pick
@@ -108,10 +118,12 @@
         // Accel/friction keep the engine #ifndef defaults for now.
         const tier = A.clampInt(c.racerTopSpeed, 1, 4, 3);
         const maxSpeed = 256 + tier * 128;   // 1:384  2:512  3:640  4:768
+        const laps = A.clampInt(c.racerLaps, 1, 9, 3);
         return A.appendToSlot(template, 'declarations', [
           '/* Builder game module — top-down racer style (Arc E §3). */',
           '#define BW_GAME_STYLE 3',
           '#define RACER_MAX_SPEED ' + maxSpeed,
+          '#define RACER_LAPS_TO_WIN ' + laps,
         ].join('\n'));
       }
       // Platformer: emit nothing (BW_GAME_STYLE defaults to 0 in the

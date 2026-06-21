@@ -43,7 +43,9 @@ const srv = spawn('python3', [path.join(ROOT, 'tools', 'playground_server.py')],
     PLAYGROUND_ACCOUNTS_DB: DB,
     PLAYGROUND_JOIN_CODE: JOIN,
     PLAYGROUND_ADMIN_SECRET: ADMIN,
-    PLAYGROUND_SESSION_TTL: '1',          // 1s so expiry is testable
+    PLAYGROUND_SESSION_TTL: '3',          // short, so expiry is testable; >1 to
+                                          // survive integer-second boundaries
+                                          // during the functional checks
     PLAYGROUND_AUTH_RATE_MAX: String(RATE_MAX),
     PLAYGROUND_AUTH_RATE_WINDOW: '60',
   },
@@ -143,12 +145,12 @@ try {
     if (r.json && r.json.username === null) ok('logged-out session no longer authenticates');
     else bad('post-logout me unexpected: ' + JSON.stringify(r.json));
 
-    // session expiry (TTL=1s): fresh login, wait, dead.
+    // session expiry (TTL=3s): fresh login, confirm live, wait past the TTL, dead.
     r = await req('POST', '/auth/login', { body: { username: 'speedy', password: 'red car go' } });
     const expCookie = cookieFrom(r.setCookie);
     r = await req('GET', '/auth/me', { cookie: expCookie });
     const liveBefore = r.json && r.json.username === 'speedy';
-    await sleep(1300);
+    await sleep(4000);               // > TTL (3s) + a boundary's slack
     r = await req('GET', '/auth/me', { cookie: expCookie });
     if (liveBefore && r.json && r.json.username === null) ok('sessions expire after their TTL');
     else bad('session expiry unexpected (liveBefore=' + liveBefore + ', after=' + JSON.stringify(r.json) + ')');

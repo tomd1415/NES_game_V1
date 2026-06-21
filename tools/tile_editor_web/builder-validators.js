@@ -740,6 +740,38 @@
         jumpTo: 'index.html',
       };
     },
+
+    // V21 (Arc E §3 / E3-4): lap racing counts a lap as finish → checkpoint →
+    // finish, so it needs BOTH a finish-line tile (behaviour slot 7) and at least
+    // one checkpoint (the 'trigger' slot, id 5) painted.  With either missing no
+    // lap can ever complete — the racer is just free-drive, which is valid, so
+    // this is a warning (not an error) so a pupil who wanted laps isn't puzzled.
+    function racerLapsNeedMarkers(state) {
+      const g = (moduleNode(state, 'game') || {}).config || {};
+      if (g.type !== 'racer') return null;
+      const map = activeBehaviourMap(state);
+      let hasFinish = false, hasCheckpoint = false;
+      for (const row of map) {
+        for (const v of row) {
+          if ((v | 0) === 7) hasFinish = true;
+          else if ((v | 0) === 5) hasCheckpoint = true;
+        }
+      }
+      if (hasFinish && hasCheckpoint) return null;
+      const missing = !hasFinish && !hasCheckpoint
+        ? 'a finish line and a checkpoint'
+        : (!hasFinish ? 'a finish line' : 'a checkpoint');
+      return {
+        id: 'racer-laps-need-markers',
+        severity: 'warn',
+        message: 'This racer has no ' + missing + ' painted, so laps can never be ' +
+          'completed and the race can\'t be won — it will just be free-drive.',
+        fix: 'On the Behaviour page, paint a finish line (the custom slot, id 7) ' +
+          'across the track and at least one checkpoint (the trigger slot) on the ' +
+          'far side, so a lap = finish → checkpoint → finish.',
+        jumpTo: 'behaviour.html',
+      };
+    },
   ];
 
   function validate(state) {

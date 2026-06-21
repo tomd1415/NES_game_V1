@@ -21,6 +21,38 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — E3-4 laps & race goal — 2026-06-21
+
+The racer is now an actual *game with a goal*: complete N laps to win. Built
+before E3-3 (rotated art) because it's fully headless-verifiable and needs no
+art-pipeline decision.
+
+- **Lap model (deliberately simple)**: a lap = cross the **finish line**
+  (behaviour slot 7 — the editor's renamable custom slot) → pass a **checkpoint**
+  (the `trigger` slot, id 5) → cross the finish again. The checkpoint only *arms*
+  the lap, so a pupil can't farm laps by sitting on the line, and **no checkpoint
+  ordering is needed** (sidestepping the flagged ordering-UX question). Both
+  markers are drivable (not edges). With none painted, no lap ever counts — the
+  racer is just free-drive, which is also fine.
+- **Race goal**: a Builder tunable **"laps to win" (1–9)** → `RACER_LAPS_TO_WIN`.
+  On the winning lap the screen tints (the existing "you win" cue) and the car
+  freezes. All `BW_GAME_STYLE == 3`-gated.
+- **Validator** `racer-laps-need-markers` (warn): a racer with no finish and/or
+  checkpoint can't complete a lap — tells the pupil it'll be free-drive.
+- **Test** `tools/builder-tests/racer-laps.mjs` drives a real ROM round a track
+  and asserts a full lap counts, re-crossing the finish without a fresh
+  checkpoint does NOT (anti-farm), and the final lap sets the win flag + freezes
+  the car. `racer-validators.mjs` gains the marker cases. Full suite + the
+  byte-identical ROM golden invariant green.
+
+(Also hardened `accounts.mjs`: its session-expiry check used a 1 s TTL that could
+read as expired across an integer-second boundary under load — bumped to 3 s and
+the expiry wait to 4 s. And widened `racer.mjs`'s accelerate window so it's robust
+to the small startup-timing shift from the added racer code.)
+
+Pending the user's in-person feel pass (drive a lap, win the race). Next: E3-3
+rotated car art — needs an art-pipeline decision first.
+
 ## Arc E §3 top-down racer — E3-2 track-edge collision — 2026-06-21
 
 Walls for the racer. The car can no longer drive through barriers, and it

@@ -373,12 +373,17 @@ per-heading CHR, **deferred to E3-3** (D9); laps = N ordered checkpoints + finis
   `racerTopSpeed` tunable, `racer-needs-scrolling-world` validator, tests
   `racer.mjs` + `racer-validators.mjs` (green), golden ROM unchanged. **E3-1 feel
   pass confirmed good by the user.**
-- **E3-2 track-edge collision** — ✅ **done**: `racer_on_edge()` (SOLID_GROUND/
-  WALL), per-axis push-back + dominant-axis speed bleed (head-on stops/bleeds,
-  graze slides at speed), `racer-collision.mjs` green, golden unchanged. *Pending
-  the user's feel pass.*
-- **E3-3 rotated car art + Builder art hookup** → **E3-4 laps & checkpoints** →
-  **E3-5 polish & 2-player** — pending.
+- **E3-2 track-edge collision** — ✅ **done + feel-confirmed**: `racer_on_edge()`
+  (SOLID_GROUND/WALL), per-axis push-back + dominant-axis speed bleed (head-on
+  stops/bleeds, graze slides at speed), `racer-collision.mjs` green.
+- **E3-4 laps & race goal** — ✅ **done** (before E3-3): finish + checkpoint
+  alternation (no ordering needed), `RACER_LAPS_TO_WIN` tunable, win-tint + freeze,
+  `racer-laps-need-markers` validator, `racer-laps.mjs` green (anti-farm + win).
+  *Pending the user's feel pass.*
+- **E3-3 rotated car art + Builder art hookup** — pending an **art-pipeline
+  decision** (auto-rotate vs draw-each-frame vs default car).
+- **E3-5 polish & 2-player** (+ numeric lap HUD, ordered checkpoints, reverse/brake)
+  — pending.
 
 ## 3.5 Open questions (flagged)
 CHR budget for rotated frames (may force ≤16 dirs); fixed-point trig perf under

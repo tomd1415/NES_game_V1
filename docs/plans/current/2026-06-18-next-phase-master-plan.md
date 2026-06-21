@@ -210,16 +210,19 @@ coupling — see the Arc D plan); Arc E did metatiles server-side-expansion-firs
 **Arc E §3 racer started:** E3-0 design doc + E3-1 movement spike (`BW_GAME_STYLE
 == 3`) are **done** — drivable car (16-dir heading, 8.8 fixed-point speed,
 COS16 table, accel/friction), Builder `🏎 Racer` option + `racerTopSpeed` tunable
-+ `racer-needs-scrolling-world` validator, headless-green (`racer.mjs`,
-`racer-validators.mjs`), golden ROM unchanged. **E3-1 feel pass: confirmed good
-by the user.** **E3-2 track-edge collision also done** — push-back + dominant-axis
-speed rule (head-on stops/bleeds, graze slides), `racer-collision.mjs` green.
++ `racer-needs-scrolling-world` validator, golden ROM unchanged. **E3-1 movement +
+E3-2 collision: both confirmed good by the user.** **E3-2** = push-back +
+dominant-axis speed rule (head-on stops/bleeds, graze slides), `racer-collision.mjs`.
+**E3-4 laps & race goal also done** — finish+checkpoint alternation, `RACER_LAPS_TO_WIN`
+tunable, win-tint + freeze, `racer-laps-need-markers` validator, `racer-laps.mjs`
+green (anti-farm + win covered). All headless-green; golden unchanged.
 
 ## Open decisions / next big initiative (pick one)
 The remaining work is large and design-first — these are the genuine forks:
-- **Arc E §3 Top-down racer — IN PROGRESS.** E3-0/E3-1/E3-2 done (see above + the
-  [racer design doc](2026-06-21-topdown-racer.md)). Remaining: E3-3 rotated car
-  art → E3-4 laps & checkpoints → E3-5 polish/2P.
+- **Arc E §3 Top-down racer — IN PROGRESS.** E3-0/E3-1/E3-2/E3-4 done (see above +
+  the [racer design doc](2026-06-21-topdown-racer.md)). Remaining: **E3-3 rotated
+  car art** (needs an art-pipeline decision) → E3-5 polish/2P (+ numeric lap HUD,
+  ordered checkpoints, reverse/brake).
 - **Arc D Sprint 5 (NMI frame model)** — architectural; also unblocks in-runner
   dialogue. Highest risk; design-first; ship the dialogue-budget slice first.
 - **Arc E §1 E1-4 (NES-side compact metatile storage)** — genuinely huge worlds /
@@ -228,10 +231,11 @@ The remaining work is large and design-first — these are the genuine forks:
   the Behaviour-page "spike" palette label, metatile marquee block-snap.
 
 ## Suggested next steps
-1. **Racer E3-2 feel pass** (user, in person) — drive into / along walls and
-   confirm the push-back + slide feel. (E3-1 movement was already confirmed good.)
-2. Then **E3-3 rotated car art** (CHR-budget call: 16-dir vs 8-dir-reused-for-16),
-   **E3-4 laps & ordered checkpoints**, **E3-5 polish + 2-player**.
+1. **Racer E3-4 feel pass** (user, in person) — drive a lap (finish → checkpoint →
+   finish) and win the race. (E3-1 movement + E3-2 collision already confirmed.)
+2. Then **E3-3 rotated car art** — first decide the art pipeline (CHR-budget call:
+   16-dir vs 8-dir-reused-for-16; auto-rotate one drawn car vs draw-each-frame vs
+   a default car), then **E3-5 polish + 2-player** (+ lap HUD, ordered checkpoints).
 3. In parallel, **accounts P3** (editor UI for sign-in + save/load) whenever you
    want the cross-device save wired into the editor — backend (P1/P2) is ready.
 4. Or pivot to Sprint 5 / E1-4 above if those matter more to you.

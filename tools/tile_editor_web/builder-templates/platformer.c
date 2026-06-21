@@ -597,9 +597,26 @@ void runner_respawn(void) {
 #ifndef RACER_MAX_SPEED
 #define RACER_MAX_SPEED 640       /* 8.8 cap (~2.5 px/frame) */
 #endif
+/* E3-4 laps: a lap = cross the finish line, pass a checkpoint, cross the finish
+ * again (the checkpoint stops a pupil farming laps on the line — no checkpoint
+ * ORDER is needed, just the alternation).  Reaching RACER_LAPS_TO_WIN ends the
+ * race (win tint + frozen car).  With no finish/checkpoint tiles painted no lap
+ * ever counts, so the racer is just free-drive — both are valid. */
+#ifndef RACER_LAPS_TO_WIN
+#define RACER_LAPS_TO_WIN 3
+#endif
+#ifndef BW_RACER_FINISH_ID
+#define BW_RACER_FINISH_ID 7      /* behaviour slot painted as the finish line */
+#endif
+#ifndef BW_RACER_CHECKPOINT_ID
+#define BW_RACER_CHECKPOINT_ID 5  /* behaviour slot painted as a checkpoint */
+#endif
 unsigned char racer_heading;      /* 0..15 (16 directions, 22.5deg steps) */
 unsigned int  racer_speed;        /* 8.8 fixed-point, 0..RACER_MAX_SPEED */
 unsigned char px_sub, py_sub;     /* sub-pixel position accumulators */
+unsigned char racer_laps;         /* completed laps */
+unsigned char racer_armed;        /* passed a checkpoint since the last finish? */
+unsigned char racer_finished;     /* reached RACER_LAPS_TO_WIN -> race won */
 /* cos(angle) in Q7 (+-127 ~ +-1.0); sin(h) = COS16[(h + 12) & 15]. */
 const signed char COS16[16] = { 127, 117, 90, 49, 0, -49, -90, -117,
                                 -127, -117, -90, -49, 0, 49, 90, 117 };
@@ -621,6 +638,20 @@ unsigned char racer_on_edge(void) {
             if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;
         }
     }
+    return 0;
+}
+
+/* E3-4: true if the car's box overlaps any cell of the given behaviour id —
+ * used to detect driving over the finish line / a checkpoint. */
+unsigned char racer_touching(unsigned char id) {
+    unsigned char c0 = (unsigned char)(px >> 3);
+    unsigned char c1 = (unsigned char)((px + PLAYER_W * 8 - 1) >> 3);
+    unsigned char r0 = (unsigned char)(py >> 3);
+    unsigned char r1 = (unsigned char)((py + PLAYER_H * 8 - 1) >> 3);
+    unsigned char cc, rr;
+    for (rr = r0; rr <= r1; rr++)
+        for (cc = c0; cc <= c1; cc++)
+            if (behaviour_at((unsigned int)cc, (unsigned int)rr) == id) return 1;
     return 0;
 }
 #endif
@@ -749,9 +780,13 @@ void main(void) {
         // car slides along barriers instead of sticking.  Speed is only bled when
         // the DOMINANT velocity axis is the one blocked (a head-on / steep hit);
         // a shallow graze slides along the wall keeping its speed, which feels far
-        // better than grinding to a halt against every barrier.  No laps or
-        // rotated art yet (E3-3/E3-4).
-        {
+        // better than grinding to a halt against every barrier.
+        //
+        // E3-4 laps: once the race is won the car freezes (movement guarded);
+        // otherwise, after moving, driving over a checkpoint arms a lap and
+        // crossing the finish line while armed counts one.  No rotated art yet
+        // (E3-3).
+        if (!racer_finished) {
             signed long pfx;       // 24.8 fixed-point work value for one axis
             signed int  vx, vy;    // 8.8 velocity components
             signed int  avx, avy;  // |vx|, |vy| for the dominant-axis test
@@ -788,6 +823,13 @@ void main(void) {
             // the bulk of the velocity); a shallow graze keeps its speed.
             if ((hit_x && avx >= avy) || (hit_y && avy >= avx))
                 racer_speed >>= 1;
+            // Lap counting: arm on a checkpoint, count on the finish while armed
+            // (finish→checkpoint→finish = one lap; can't farm the line).
+            if (racer_touching(BW_RACER_CHECKPOINT_ID)) racer_armed = 1;
+            if (racer_armed && racer_touching(BW_RACER_FINISH_ID)) {
+                racer_armed = 0;
+                if (++racer_laps >= RACER_LAPS_TO_WIN) racer_finished = 1;
+            }
         }
 #endif
 
@@ -1255,6 +1297,11 @@ void main(void) {
 #endif
 #if BW_WIN_ENABLED
         if (bw_won) PPU_MASK = 0x1E | 0x20;
+#endif
+#if BW_GAME_STYLE == 3
+        // E3-4: finishing the race tints the screen (same "you win" cue), and the
+        // car is already frozen by the !racer_finished movement guard above.
+        if (racer_finished) PPU_MASK = 0x1E | 0x20;
 #endif
 
 #ifdef SCROLL_BUILD

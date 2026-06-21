@@ -65,10 +65,16 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   (each art frame covers two adjacent headings) or (b) a smaller car (2×2). For
   the **E3-1 spike, skip rotation**: draw a single fixed car sprite that *moves*
   in the heading direction (proves the physics); rotation lands at E3-3.
-- **D10 — laps (E3-4): N ordered checkpoints + finish line.** A `next_cp` index
-  advances only when the car passes the expected checkpoint in order; crossing
-  the finish after the last checkpoint increments lap count. Editor affordance to
-  place + order checkpoints (a behaviour slot per checkpoint, or a numbered list).
+- **D10 — laps (E3-4): finish line + one checkpoint (alternation).** ✅ *Built —
+  simpler than the original "N ordered checkpoints" idea, which sidesteps the
+  flagged checkpoint-ordering UX (§3.5).* A lap = cross the **finish line**
+  (behaviour slot 7, the editor's renamable custom slot), pass a **checkpoint**
+  (the `trigger` slot, id 5), then cross the finish again — the checkpoint just
+  *arms* the lap so a pupil can't farm laps on the line, and no ordering is
+  needed. Reaching `RACER_LAPS_TO_WIN` (a Builder tunable, 1–9) ends the race:
+  win tint (the existing "you win" cue) + the car freezes. No finish/checkpoint
+  painted → no laps → free-drive (also valid). **Multiple ordered checkpoints +
+  a numeric lap HUD remain future polish.**
 - **D11 — multiplayer (E3-5): deferred.** P2 already exists; split/shared-screen
   is natural extra scope, last.
 
@@ -93,10 +99,18 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   scans the car's covered cells for `SOLID_GROUND`/`WALL`; per-axis push-back +
   the dominant-axis speed rule (D7). Test `racer-collision.mjs`: car pins at a
   wall (never through), head-on bleeds speed, shallow graze slides at speed.
-  Golden ROM unchanged. **Pending the user's feel pass** (driving into / along walls).
-- **E3-3 — rotated car art + Builder art hookup** (D9); FCEUX CHR check.
-- **E3-4 — laps & ordered checkpoints** (D10).
-- **E3-5 — polish + 2-player** (D11).
+  Golden ROM unchanged. **Feel pass: confirmed good by the user.**
+- **E3-4 — laps & race goal.** ✅ **Built + headless-green** *(done before E3-3:
+  fully headless-verifiable, no art-pipeline decision needed).* Finish +
+  checkpoint alternation (D10), `RACER_LAPS_TO_WIN` Builder tunable, win tint +
+  car-freeze on completion, `racer-laps-need-markers` validator. Test
+  `racer-laps.mjs`: a lap counts, anti-farm holds, the last lap wins + freezes.
+  Golden unchanged. **Pending the user's feel pass.**
+- **E3-3 — rotated car art + Builder art hookup** (D9); FCEUX CHR check. **Next —
+  but needs an art-pipeline decision** (auto-rotate one drawn car vs draw-each-
+  frame vs a default car) — tee up with the user.
+- **E3-5 — polish + 2-player** (D11). Also: numeric lap HUD, multiple ordered
+  checkpoints, reverse/brake (D4).
 
 ## 6. Verification & invariants
 Same rules as the runner: every block `#if BW_GAME_STYLE == 3`-gated so the

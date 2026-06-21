@@ -15,9 +15,11 @@ globalThis.window = globalThis;
 new Function(fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8'))();
 const V = window.BuilderValidators;
 
-function mkState({ type = 'racer', screensX = 2, screensY = 2 } = {}) {
+function mkState({ type = 'racer', screensX = 2, screensY = 2, finish = false, checkpoint = false } = {}) {
   const cols = 32 * screensX, rows = 30 * screensY;
   const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  if (finish) beh[2][2] = 7;        // a finish-line tile (slot 7)
+  if (checkpoint) beh[2][5] = 5;    // a checkpoint tile (trigger slot, id 5)
   return {
     sprites: [{ role: 'player' }],
     selectedBgIdx: 0,
@@ -57,4 +59,25 @@ p = V.validate(mkState({ type: 'platformer', screensX: 1, screensY: 1 }));
 assert(!has(p, 'racer-needs-scrolling-world'), 'racer validator wrongly fired for a platformer');
 console.log('✓ platformer (not racer) → racer validator does not fire');
 
-console.log('\nE3-1 racer-validators: all checks passed');
+// 6. (E3-4) racer with neither finish nor checkpoint → warn (laps can't work).
+p = V.validate(mkState({ finish: false, checkpoint: false }));
+assert(has(p, 'racer-laps-need-markers') && sev(p, 'racer-laps-need-markers') === 'warn',
+  'racer with no lap markers did not warn');
+console.log('✓ racer with no finish/checkpoint → warning (free-drive only)');
+
+// 7. racer with only a finish (no checkpoint) → still warns.
+p = V.validate(mkState({ finish: true, checkpoint: false }));
+assert(has(p, 'racer-laps-need-markers'), 'racer with finish but no checkpoint did not warn');
+console.log('✓ racer with a finish but no checkpoint → warning');
+
+// 8. racer with both finish + checkpoint → no markers warning.
+p = V.validate(mkState({ finish: true, checkpoint: true }));
+assert(!has(p, 'racer-laps-need-markers'), 'racer with both markers wrongly warned');
+console.log('✓ racer with finish + checkpoint → no markers warning');
+
+// 9. a platformer with no markers → no racer-laps warning.
+p = V.validate(mkState({ type: 'platformer', finish: false, checkpoint: false }));
+assert(!has(p, 'racer-laps-need-markers'), 'racer-laps validator wrongly fired for a platformer');
+console.log('✓ platformer (not racer) → racer-laps validator does not fire');
+
+console.log('\nE3-1/E3-4 racer-validators: all checks passed');
