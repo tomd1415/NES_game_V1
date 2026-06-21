@@ -21,6 +21,31 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — E3-2 track-edge collision — 2026-06-21
+
+Walls for the racer. The car can no longer drive through barriers, and it
+handles them with a feel that suits a forgiving arcade racer.
+
+- **Engine** (`platformer.c`, all `BW_GAME_STYLE == 3`-gated): `racer_on_edge()`
+  scans every 8×8 cell the car covers for a track edge — `SOLID_GROUND` or
+  `WALL` on the Behaviour page, i.e. the same "solid" vocabulary the platformer
+  and top-down already use, so pupils paint barriers exactly as they know how.
+  The per-frame movement now resolves **each axis independently**: a move that
+  would land the car on an edge is undone on *that axis only*, so the car
+  **slides along walls** instead of sticking.
+- **Speed on contact — dominant-axis rule.** Speed is halved only when the axis
+  carrying the bulk of the velocity is the one blocked (a head-on / steep hit).
+  A shallow graze keeps its speed and slides. (The first attempt halved on *any*
+  contact, which made sliding grind to a near-stop against any wall — switching
+  to the dominant-axis rule fixed the feel.)
+- **Test**: `tools/builder-tests/racer-collision.mjs` drives a real ROM into a
+  painted `WALL` column and asserts the car pins against it (never penetrates),
+  a head-on hit bleeds speed (768 → ~13), and a shallow approach slides along
+  the wall at speed. Full suite + the byte-identical ROM golden invariant green
+  (racer code is fully gated). No laps or rotated art yet (E3-3/E3-4).
+
+Pending the user's in-person feel pass (driving into and along walls) before E3-3.
+
 ## Pupil accounts (T4.2) — P1 backend foundation — 2026-06-21
 
 First slice of cross-device project save. Per the user's spec, an account stores

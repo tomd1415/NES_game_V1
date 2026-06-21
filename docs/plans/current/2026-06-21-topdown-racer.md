@@ -51,10 +51,13 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   block brushes; `behaviour_at` distinguishes **track** (drivable) from **edge**
   (slow/block). Reuse a behaviour slot for "track edge" (candidate: WALL, or a
   custom slot). Decided at E3-2.
-- **D7 — collision (E3-2): edge = hard slow + push-back**, not a bounce.
-  On entering an edge cell, zero/halve `speed` and step the car back to the last
-  on-track position. Keeps it forgiving for pupils. 8×8 granularity is fine for
-  v1 (note: chunky vs the car; revisit if it feels unfair).
+- **D7 — collision (E3-2): edge = push-back + dominant-axis slow.** ✅ *Built.*
+  Each axis is moved and resolved independently, so a blocked move is undone on
+  that axis only — the car **slides along walls** instead of sticking. Speed is
+  halved **only when the dominant velocity axis is the one blocked** (a head-on /
+  steep hit); a shallow graze keeps its speed and slides. (The first cut halved
+  on *any* contact, which made sliding grind to a crawl — the dominant-axis rule
+  fixed the feel.) Edge = `SOLID_GROUND`/`WALL` (D6). 8×8 granularity; fine for v1.
 - **D8 — camera: reuse `scroll_follow`** centred on the car (it already eases via
   the deadzone). A fast car may want a smaller deadzone; tune at E3-2/E3-3.
 - **D9 — rotated art (E3-3): per-heading CHR.** 16 headings × the car's tiles is
@@ -86,7 +89,11 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   heading; steer → heading changes; friction → coasts to stop). Builder `game`
   option `🏎 Racer` emitting `BW_GAME_STYLE 3` + tunables. **Byte-identical golden
   unchanged** (all `== 3`-gated). Then a visual pass (does it *feel* like a car?).
-- **E3-2 — track-edge collision** (D6/D7), render-tested.
+- **E3-2 — track-edge collision.** ✅ **Built + headless-green.** `racer_on_edge()`
+  scans the car's covered cells for `SOLID_GROUND`/`WALL`; per-axis push-back +
+  the dominant-axis speed rule (D7). Test `racer-collision.mjs`: car pins at a
+  wall (never through), head-on bleeds speed, shallow graze slides at speed.
+  Golden ROM unchanged. **Pending the user's feel pass** (driving into / along walls).
 - **E3-3 — rotated car art + Builder art hookup** (D9); FCEUX CHR check.
 - **E3-4 — laps & ordered checkpoints** (D10).
 - **E3-5 — polish + 2-player** (D11).

@@ -371,10 +371,14 @@ per-heading CHR, **deferred to E3-3** (D9); laps = N ordered checkpoints + finis
   — ✅ **done**: engine block in [`platformer.c`](../../../tools/tile_editor_web/builder-templates/platformer.c)
   (heading/speed/COS16/sub-pixel, all `== 3`-gated), Builder `🏎 Racer` option +
   `racerTopSpeed` tunable, `racer-needs-scrolling-world` validator, tests
-  `racer.mjs` + `racer-validators.mjs` (green), golden ROM unchanged. **Awaiting
-  the user's visual/feel pass.**
-- **E3-2 track-edge collision** → **E3-3 rotated car art + Builder art hookup** →
-  **E3-4 laps & checkpoints** → **E3-5 polish & 2-player** — pending.
+  `racer.mjs` + `racer-validators.mjs` (green), golden ROM unchanged. **E3-1 feel
+  pass confirmed good by the user.**
+- **E3-2 track-edge collision** — ✅ **done**: `racer_on_edge()` (SOLID_GROUND/
+  WALL), per-axis push-back + dominant-axis speed bleed (head-on stops/bleeds,
+  graze slides at speed), `racer-collision.mjs` green, golden unchanged. *Pending
+  the user's feel pass.*
+- **E3-3 rotated car art + Builder art hookup** → **E3-4 laps & checkpoints** →
+  **E3-5 polish & 2-player** — pending.
 
 ## 3.5 Open questions (flagged)
 CHR budget for rotated frames (may force ≤16 dirs); fixed-point trig perf under

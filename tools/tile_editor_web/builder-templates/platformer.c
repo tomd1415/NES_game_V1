@@ -603,6 +603,26 @@ unsigned char px_sub, py_sub;     /* sub-pixel position accumulators */
 /* cos(angle) in Q7 (+-127 ~ +-1.0); sin(h) = COS16[(h + 12) & 15]. */
 const signed char COS16[16] = { 127, 117, 90, 49, 0, -49, -90, -117,
                                 -127, -117, -90, -49, 0, 49, 90, 117 };
+
+/* E3-2 track-edge collision: true if the car's PLAYER_W x PLAYER_H box
+ * currently overlaps a track-edge cell (SOLID_GROUND or WALL on the Behaviour
+ * page — the same "solid" vocabulary the platformer/top-down use, so pupils
+ * paint barriers exactly as they already know).  Scans every 8x8 cell the car
+ * covers so a one-cell-thick barrier between corners still blocks. */
+unsigned char racer_on_edge(void) {
+    unsigned char c0 = (unsigned char)(px >> 3);
+    unsigned char c1 = (unsigned char)((px + PLAYER_W * 8 - 1) >> 3);
+    unsigned char r0 = (unsigned char)(py >> 3);
+    unsigned char r1 = (unsigned char)((py + PLAYER_H * 8 - 1) >> 3);
+    unsigned char cc, rr, bb;
+    for (rr = r0; rr <= r1; rr++) {
+        for (cc = c0; cc <= c1; cc++) {
+            bb = behaviour_at((unsigned int)cc, (unsigned int)rr);
+            if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;
+        }
+    }
+    return 0;
+}
 #endif
 
 void main(void) {
@@ -718,15 +738,25 @@ void main(void) {
 #endif
 
 #if BW_GAME_STYLE == 3
-        // Top-down racer (E3-1 movement spike): steer rotates the 16-direction
-        // heading, A/UP accelerates along it (8.8 fixed-point), friction bleeds
-        // speed off, and vx/vy come from COS16.  Position advances through the
-        // sub-pixel accumulators so fractional velocity isn't lost.  No
-        // collision, laps, or rotated art yet (E3-2..E3-4).  The replaced
-        // horizontal/vertical walk below is skipped for this style.
+        // Top-down racer: steer rotates the 16-direction heading, A/UP
+        // accelerates along it (8.8 fixed-point), friction bleeds speed off, and
+        // vx/vy come from COS16.  Position advances through the sub-pixel
+        // accumulators so fractional velocity isn't lost.
+        //
+        // E3-2 track-edge collision: each axis is moved and resolved on its own,
+        // so a move that would put the car onto a track-edge cell (SOLID_GROUND/
+        // WALL, painted on the Behaviour page) is undone on THAT axis only — the
+        // car slides along barriers instead of sticking.  Speed is only bled when
+        // the DOMINANT velocity axis is the one blocked (a head-on / steep hit);
+        // a shallow graze slides along the wall keeping its speed, which feels far
+        // better than grinding to a halt against every barrier.  No laps or
+        // rotated art yet (E3-3/E3-4).
         {
             signed long pfx;       // 24.8 fixed-point work value for one axis
             signed int  vx, vy;    // 8.8 velocity components
+            signed int  avx, avy;  // |vx|, |vy| for the dominant-axis test
+            pxcoord_t   keep;      // pre-move coord for push-back
+            unsigned char keep_sub, hit_x = 0, hit_y = 0;
             if (pad & 0x02) racer_heading = (racer_heading + 15) & 15;  // LEFT  = turn CCW
             if (pad & 0x01) racer_heading = (racer_heading + 1) & 15;   // RIGHT = turn CW
             if (pad & 0x88) {                                           // A or UP = accelerate
@@ -737,16 +767,27 @@ void main(void) {
             }
             vx = (signed int)(((signed long)racer_speed * COS16[racer_heading]) >> 7);
             vy = (signed int)(((signed long)racer_speed * COS16[(racer_heading + 12) & 15]) >> 7);
+            avx = vx < 0 ? -vx : vx;  avy = vy < 0 ? -vy : vy;
+            // Advance X (clamped to the world), then push back out of any edge.
+            keep = px;  keep_sub = px_sub;
             pfx = (((signed long)px) << 8) + px_sub + vx;
             if (pfx < 0) pfx = 0;
             if (pfx > (((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8))
                 pfx = ((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8;
             px = (pxcoord_t)(pfx >> 8);  px_sub = (unsigned char)(pfx & 0xFF);
+            if (racer_on_edge()) { px = keep;  px_sub = keep_sub;  hit_x = 1; }
+            // Advance Y likewise (independent axis → the car slides along walls).
+            keep = py;  keep_sub = py_sub;
             pfx = (((signed long)py) << 8) + py_sub + vy;
             if (pfx < 0) pfx = 0;
             if (pfx > (((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8))
                 pfx = ((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8;
             py = (pxcoord_t)(pfx >> 8);  py_sub = (unsigned char)(pfx & 0xFF);
+            if (racer_on_edge()) { py = keep;  py_sub = keep_sub;  hit_y = 1; }
+            // Bleed speed only on a head-on / steep hit (the blocked axis carried
+            // the bulk of the velocity); a shallow graze keeps its speed.
+            if ((hit_x && avx >= avy) || (hit_y && avy >= avx))
+                racer_speed >>= 1;
         }
 #endif
 
