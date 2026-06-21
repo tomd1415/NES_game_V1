@@ -383,10 +383,12 @@ per-heading CHR, **deferred to E3-3** (D9); laps = N ordered checkpoints + finis
 - **E3-3 rotated car art** — ✅ **done** (option A: server auto-rotates one
   right-facing drawn car into 8 frames in spare CHR; engine draws by heading,
   `racer-rotation.mjs` green; no-op for non-racers). *Pending the user's visual pass.*
-- **E3-5 polish & 2-player** — **started**: ✅ brake (DOWN), ✅ numeric lap HUD
-  (`racer-brake.mjs`, `racer-hud.mjs`). Remaining: 2-player (shared-screen camera
-  decision), full reverse (signed-speed), ordered checkpoints, flip-shared
-  rotation CHR. *Pending the user's feel pass.*
+- **E3-5 polish & 2-player** — **mostly done**: ✅ brake (DOWN), ✅ numeric lap
+  HUD, ✅ 2-player (shared screen, follow P1) — `racer-brake.mjs`, `racer-hud.mjs`,
+  `racer-2p.mjs`. **Perf: two cars run ~2× over the NTSC budget** → the 16-bit
+  velocity-math optimisation is the priority follow-up (design doc §7). Then full
+  reverse (signed-speed), ordered checkpoints, flip-shared rotation CHR. *Pending
+  the user's feel pass.*
 
 ## 3.5 Open questions (flagged)
 CHR budget for rotated frames (may force ≤16 dirs); fixed-point trig perf under

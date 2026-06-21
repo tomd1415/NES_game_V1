@@ -51,8 +51,8 @@ try {
   const s = makeState();
   const asm = win.BuilderAssembler.assemble(s, tpl);
   // The collision helper must be present in a racer build.
-  if (/racer_on_edge/.test(asm)) ok('racer build emits the track-edge collision helper');
-  else bad('racer build is missing racer_on_edge()');
+  if (/racer_box_on_edge/.test(asm)) ok('racer build emits the track-edge collision helper');
+  else bad('racer build is missing racer_box_on_edge()');
 
   let c = asm.replace('while (oam_idx < 256) {',
     '(*(unsigned char*)0x0700)=(unsigned char)(px&0xFF);(*(unsigned char*)0x0701)=(unsigned char)(px>>8);' +

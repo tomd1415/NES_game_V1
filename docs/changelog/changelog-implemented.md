@@ -21,6 +21,31 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — E3-5 2-player (shared screen, follow P1) — 2026-06-21
+
+Two cars race on one screen (the user chose the follow-P1 camera; the NES has no
+true split-screen). All racer-gated → other ROMs byte-identical.
+
+- **Engine** (`platformer.c`): a second car with its own `racer_heading2`,
+  `racer_speed2`, sub-pixel accumulators and lap state, driven by `pad2` with
+  identical angle-physics. The collision helper was generalised to
+  `racer_box_on_edge(bx,by,bw,bh)` so both cars use it. The camera still follows
+  P1 (so P2 can scroll off). P2 draws **rotated** (reusing P1's rotation frames,
+  in sprite **palette 1** so the cars look distinct). Both count laps; the race
+  ends when **either** finishes (winner's screen tint: P1 = red, P2 = green) and
+  both cars freeze (`RACER_RACE_OVER`). P2's lap shows **top-right**. The
+  platformer-style P2 walk/jump movement + draw are gated off for the racer.
+- **Test** `tools/builder-tests/racer-2p.mjs`: controller 2 drives P2 and not P1,
+  controller 1 drives P1 and not P2 — proven independent (Δ61 vs 0 each way).
+  Full suite + the byte-identical ROM golden invariant green.
+- **Perf caveat (flagged):** with two cars the per-frame `long` velocity math
+  pushes the loop ~2× over the NTSC budget (single car ~1.3–1.5×), so 2-player is
+  **noticeably slow**. The fix is specified in the design doc §7 (16-bit velocity
+  + position math, numerically ~unchanged) and is now the priority follow-up.
+
+Pending the user's feel pass (race a friend; check the slowdown). Remaining E3-5:
+the 16-bit perf optimisation, full reverse, ordered checkpoints, flip-shared CHR.
+
 ## Arc E §3 top-down racer — E3-5 brake + lap HUD (+ perf trim) — 2026-06-21
 
 First polish slice of E3-5.

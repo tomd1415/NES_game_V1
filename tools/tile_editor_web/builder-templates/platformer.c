@@ -620,20 +620,33 @@ unsigned char px_sub, py_sub;     /* sub-pixel position accumulators */
 unsigned char racer_laps;         /* completed laps */
 unsigned char racer_armed;        /* passed a checkpoint since the last finish? */
 unsigned char racer_finished;     /* reached RACER_LAPS_TO_WIN -> race won */
+#if PLAYER2_ENABLED
+/* E3-5 2-player: a second car with its own heading/speed/laps, driven by pad2.
+ * The camera follows P1 (chosen model), so P2 can scroll off-screen.  The race
+ * ends as soon as EITHER car finishes. */
+unsigned char racer_heading2;
+unsigned int  racer_speed2;
+unsigned char px2_sub, py2_sub;
+unsigned char racer_laps2, racer_armed2, racer_finished2;
+#define RACER_RACE_OVER (racer_finished || racer_finished2)
+#else
+#define RACER_RACE_OVER (racer_finished)
+#endif
 /* cos(angle) in Q7 (+-127 ~ +-1.0); sin(h) = COS16[(h + 12) & 15]. */
 const signed char COS16[16] = { 127, 117, 90, 49, 0, -49, -90, -117,
                                 -127, -117, -90, -49, 0, 49, 90, 117 };
 
-/* E3-2 track-edge collision: true if the car's PLAYER_W x PLAYER_H box
- * currently overlaps a track-edge cell (SOLID_GROUND or WALL on the Behaviour
- * page — the same "solid" vocabulary the platformer/top-down use, so pupils
- * paint barriers exactly as they already know).  Scans every 8x8 cell the car
- * covers so a one-cell-thick barrier between corners still blocks. */
-unsigned char racer_on_edge(void) {
-    unsigned char c0 = (unsigned char)(px >> 3);
-    unsigned char c1 = (unsigned char)((px + PLAYER_W * 8 - 1) >> 3);
-    unsigned char r0 = (unsigned char)(py >> 3);
-    unsigned char r1 = (unsigned char)((py + PLAYER_H * 8 - 1) >> 3);
+/* E3-2 track-edge collision: true if a bw x bh-tile box at (bx,by) overlaps a
+ * track-edge cell (SOLID_GROUND or WALL on the Behaviour page — the same "solid"
+ * vocabulary the platformer/top-down use, so pupils paint barriers exactly as
+ * they already know).  Scans every 8x8 cell the box covers so a one-cell-thick
+ * barrier between corners still blocks.  Parameterised so both cars can use it. */
+unsigned char racer_box_on_edge(pxcoord_t bx, pxcoord_t by,
+                                unsigned char bw, unsigned char bh) {
+    unsigned char c0 = (unsigned char)(bx >> 3);
+    unsigned char c1 = (unsigned char)((bx + bw * 8 - 1) >> 3);
+    unsigned char r0 = (unsigned char)(by >> 3);
+    unsigned char r1 = (unsigned char)((by + bh * 8 - 1) >> 3);
     unsigned char cc, rr, bb;
     for (rr = r0; rr <= r1; rr++) {
         for (cc = c0; cc <= c1; cc++) {
@@ -771,11 +784,10 @@ void main(void) {
         // a shallow graze slides along the wall keeping its speed, which feels far
         // better than grinding to a halt against every barrier.
         //
-        // E3-4 laps: once the race is won the car freezes (movement guarded);
+        // E3-4 laps: once the race is won BOTH cars freeze (RACER_RACE_OVER);
         // otherwise, after moving, driving over a checkpoint arms a lap and
-        // crossing the finish line while armed counts one.  No rotated art yet
-        // (E3-3).
-        if (!racer_finished) {
+        // crossing the finish line while armed counts one.
+        if (!RACER_RACE_OVER) {
             signed long pfx;       // 24.8 fixed-point work value for one axis
             signed int  vx, vy;    // 8.8 velocity components
             signed int  avx, avy;  // |vx|, |vy| for the dominant-axis test
@@ -801,7 +813,7 @@ void main(void) {
             if (pfx > (((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8))
                 pfx = ((signed long)(WORLD_W_PX - PLAYER_W * 8)) << 8;
             px = (pxcoord_t)(pfx >> 8);  px_sub = (unsigned char)(pfx & 0xFF);
-            if (racer_on_edge()) { px = keep;  px_sub = keep_sub;  hit_x = 1; }
+            if (racer_box_on_edge(px, py, PLAYER_W, PLAYER_H)) { px = keep;  px_sub = keep_sub;  hit_x = 1; }
             // Advance Y likewise (independent axis → the car slides along walls).
             keep = py;  keep_sub = py_sub;
             pfx = (((signed long)py) << 8) + py_sub + vy;
@@ -809,7 +821,7 @@ void main(void) {
             if (pfx > (((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8))
                 pfx = ((signed long)(WORLD_H_PX - PLAYER_H * 8)) << 8;
             py = (pxcoord_t)(pfx >> 8);  py_sub = (unsigned char)(pfx & 0xFF);
-            if (racer_on_edge()) { py = keep;  py_sub = keep_sub;  hit_y = 1; }
+            if (racer_box_on_edge(px, py, PLAYER_W, PLAYER_H)) { py = keep;  py_sub = keep_sub;  hit_y = 1; }
             // Bleed speed only on a head-on / steep hit (the blocked axis carried
             // the bulk of the velocity); a shallow graze keeps its speed.
             if ((hit_x && avx >= avy) || (hit_y && avy >= avx))
@@ -827,6 +839,56 @@ void main(void) {
                 else if (racer_armed && mid == BW_RACER_FINISH_ID) {
                     racer_armed = 0;
                     if (++racer_laps >= RACER_LAPS_TO_WIN) racer_finished = 1;
+                }
+            }
+        }
+#endif
+
+#if BW_GAME_STYLE == 3 && PLAYER2_ENABLED
+        // E3-5 2-player: the second car, identical physics driven by pad2.  The
+        // camera follows P1, so P2 may scroll off-screen until it catches up.
+        if (!RACER_RACE_OVER) {
+            signed long pfx;
+            signed int  vx, vy, avx, avy;
+            pxcoord_t   keep;
+            unsigned char keep_sub, hit_x = 0, hit_y = 0;
+            if (pad2 & 0x02) racer_heading2 = (racer_heading2 + 15) & 15;
+            if (pad2 & 0x01) racer_heading2 = (racer_heading2 + 1) & 15;
+            if (pad2 & 0x88) {
+                racer_speed2 += RACER_ACCEL;
+                if (racer_speed2 > RACER_MAX_SPEED) racer_speed2 = RACER_MAX_SPEED;
+            } else if (pad2 & 0x04) {
+                racer_speed2 = (racer_speed2 > RACER_BRAKE) ? (racer_speed2 - RACER_BRAKE) : 0;
+            } else {
+                racer_speed2 = (racer_speed2 > RACER_FRICTION) ? (racer_speed2 - RACER_FRICTION) : 0;
+            }
+            vx = (signed int)(((signed long)racer_speed2 * COS16[racer_heading2]) >> 7);
+            vy = (signed int)(((signed long)racer_speed2 * COS16[(racer_heading2 + 12) & 15]) >> 7);
+            avx = vx < 0 ? -vx : vx;  avy = vy < 0 ? -vy : vy;
+            keep = px2;  keep_sub = px2_sub;
+            pfx = (((signed long)px2) << 8) + px2_sub + vx;
+            if (pfx < 0) pfx = 0;
+            if (pfx > (((signed long)(WORLD_W_PX - PLAYER2_W * 8)) << 8))
+                pfx = ((signed long)(WORLD_W_PX - PLAYER2_W * 8)) << 8;
+            px2 = (pxcoord_t)(pfx >> 8);  px2_sub = (unsigned char)(pfx & 0xFF);
+            if (racer_box_on_edge(px2, py2, PLAYER2_W, PLAYER2_H)) { px2 = keep;  px2_sub = keep_sub;  hit_x = 1; }
+            keep = py2;  keep_sub = py2_sub;
+            pfx = (((signed long)py2) << 8) + py2_sub + vy;
+            if (pfx < 0) pfx = 0;
+            if (pfx > (((signed long)(WORLD_H_PX - PLAYER2_H * 8)) << 8))
+                pfx = ((signed long)(WORLD_H_PX - PLAYER2_H * 8)) << 8;
+            py2 = (pxcoord_t)(pfx >> 8);  py2_sub = (unsigned char)(pfx & 0xFF);
+            if (racer_box_on_edge(px2, py2, PLAYER2_W, PLAYER2_H)) { py2 = keep;  py2_sub = keep_sub;  hit_y = 1; }
+            if ((hit_x && avx >= avy) || (hit_y && avy >= avx))
+                racer_speed2 >>= 1;
+            {
+                unsigned char mid = behaviour_at(
+                    (unsigned int)((px2 + (PLAYER2_W << 2)) >> 3),
+                    (unsigned int)((py2 + (PLAYER2_H << 2)) >> 3));
+                if (mid == BW_RACER_CHECKPOINT_ID) racer_armed2 = 1;
+                else if (racer_armed2 && mid == BW_RACER_FINISH_ID) {
+                    racer_armed2 = 0;
+                    if (++racer_laps2 >= RACER_LAPS_TO_WIN) racer_finished2 = 1;
                 }
             }
         }
@@ -1170,9 +1232,11 @@ void main(void) {
 //<<
 #endif  /* BW_GAME_STYLE == 0 — top-down has no gravity */
 
-#if PLAYER2_ENABLED
+#if PLAYER2_ENABLED && BW_GAME_STYLE != 3
         /* ----------------------------------------------------------
-         * Phase B chunk 5 — Player 2 movement.
+         * Phase B chunk 5 — Player 2 movement.  (The racer, == 3, drives P2
+         * with its own angle-based block above, so this platformer-style P2
+         * walk/jump is skipped for it.)
          *
          * Mirrors P1's walk / jump / gravity block with px2, py2,
          * pad2, walk_speed2, etc.  Deliberately omits ladder and
@@ -1307,9 +1371,13 @@ void main(void) {
         if (bw_won) PPU_MASK = 0x1E | 0x20;
 #endif
 #if BW_GAME_STYLE == 3
-        // E3-4: finishing the race tints the screen (same "you win" cue), and the
-        // car is already frozen by the !racer_finished movement guard above.
+        // E3-4/E3-5: finishing the race tints the screen (the "you win" cue); both
+        // cars are already frozen by the RACER_RACE_OVER movement guard.  In a
+        // 2-player race the winner picks the emphasis colour: P1 = red, P2 = green.
         if (racer_finished) PPU_MASK = 0x1E | 0x20;
+#if PLAYER2_ENABLED
+        else if (racer_finished2) PPU_MASK = 0x1E | 0x40;
+#endif
 #endif
 
 #ifdef SCROLL_BUILD
@@ -1386,8 +1454,9 @@ void main(void) {
             }
         }
 
-#if PLAYER2_ENABLED
+#if PLAYER2_ENABLED && BW_GAME_STYLE != 3
         /* --- Player 2 ---------------------------------------------
+         * (The racer, == 3, draws P2 rotated below.)
          * Uses player2_tiles / player2_attrs emitted by scene.inc
          * by default.  When the pupil has tagged an animation
          * `role=player2, style=walk`, ANIM_PLAYER2_WALK_COUNT flips
@@ -1526,6 +1595,37 @@ void main(void) {
 #endif
 #endif
 
+#if BW_GAME_STYLE == 3 && PLAYER2_ENABLED
+        // E3-5: draw P2's car — rotated by its heading when rotation art exists
+        // (assumes P2 is the same size as P1, the rotated car), else the static
+        // P2 tiles.  P2 uses sprite palette 1 so the two cars look distinct.
+        {
+#if BW_RACER_ROT
+            const unsigned char *p2t = car_rot_tiles
+                + (unsigned int)(racer_heading2 >> 1) * PLAYER_TILES_PER_FRAME;
+#else
+            const unsigned char *p2t = player2_tiles;
+#endif
+            for (r = 0; r < PLAYER2_H; r++) {
+                if (oam_idx > 252) break;
+                for (c = 0; c < PLAYER2_W; c++) {
+                    if (oam_idx > 252) break;
+#ifdef SCROLL_BUILD
+                    sy = world_to_screen_y((unsigned int)py2 + (r << 3));
+                    sx = world_to_screen_x((unsigned int)px2 + (c << 3));
+#else
+                    sy = py2 + (r << 3);
+                    sx = px2 + (c << 3);
+#endif
+                    oam_buf[oam_idx++] = sy;
+                    oam_buf[oam_idx++] = p2t[r * PLAYER2_W + c];
+                    oam_buf[oam_idx++] = 0x01;   // sprite palette 1
+                    oam_buf[oam_idx++] = sx;
+                }
+            }
+        }
+#endif
+
 #if BW_SPAWN_ENABLED
         /* R-3/R-6 — draw the active spawn-pool effects, tick their TTL, and
          * free a slot when it expires.  BR-05 (model B): each slot's spawn_kind
@@ -1630,7 +1730,8 @@ void main(void) {
 #if BW_GAME_STYLE == 3 && BW_RACER_HUD
         // E3-5 lap HUD: the current lap (1-based, clamped to the target) as one
         // digit sprite at the top-left.  Sprites don't scroll, so it stays put as
-        // the track scrolls past.
+        // the track scrolls past.  In 2-player, P2's lap shows at the top-right
+        // (palette 1, matching P2's car).
         {
             unsigned char lap = (unsigned char)(racer_laps + 1);
             if (lap > RACER_LAPS_TO_WIN) lap = RACER_LAPS_TO_WIN;
@@ -1638,6 +1739,16 @@ void main(void) {
             oam_buf[oam_idx++] = racer_digit_tiles[lap];   // digit glyph tile
             oam_buf[oam_idx++] = 0;                        // attr: sprite palette 0
             oam_buf[oam_idx++] = 8;                        // x
+#if PLAYER2_ENABLED
+            {
+                unsigned char lap2 = (unsigned char)(racer_laps2 + 1);
+                if (lap2 > RACER_LAPS_TO_WIN) lap2 = RACER_LAPS_TO_WIN;
+                oam_buf[oam_idx++] = 8;                         // y
+                oam_buf[oam_idx++] = racer_digit_tiles[lap2];   // digit glyph tile
+                oam_buf[oam_idx++] = 0x01;                       // sprite palette 1 (P2)
+                oam_buf[oam_idx++] = 240;                        // x: top-right
+            }
+#endif
         }
 #endif
 
