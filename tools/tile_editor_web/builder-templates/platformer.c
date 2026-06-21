@@ -636,25 +636,30 @@ unsigned char racer_laps2, racer_armed2, racer_finished2;
 const signed char COS16[16] = { 127, 117, 90, 49, 0, -49, -90, -117,
                                 -127, -117, -90, -49, 0, 49, 90, 117 };
 
-/* E3-2 track-edge collision: true if a bw x bh-tile box at (bx,by) overlaps a
- * track-edge cell (SOLID_GROUND or WALL on the Behaviour page — the same "solid"
- * vocabulary the platformer/top-down use, so pupils paint barriers exactly as
- * they already know).  Scans every 8x8 cell the box covers so a one-cell-thick
- * barrier between corners still blocks.  Parameterised so both cars can use it. */
+/* True if a cell is a track edge (SOLID_GROUND or WALL on the Behaviour page —
+ * the same "solid" vocabulary the platformer/top-down use). */
+unsigned char racer_cell_solid(unsigned char c, unsigned char r) {
+    unsigned char b = behaviour_at((unsigned int)c, (unsigned int)r);
+    return (b == BEHAVIOUR_SOLID_GROUND || b == BEHAVIOUR_WALL);
+}
+
+/* E3-2/E3-5 track-edge collision: true if a bw x bh-tile box at (bx,by) overlaps
+ * a track edge.  Probes the four corners + the centre (5 lookups) rather than the
+ * full 3x3 cell span (up to 9) — about half the `behaviour_at` calls, which keeps
+ * the 2-player loop within the frame budget.  Trade-off: a one-cell-thick wall in
+ * the box's mid edge could be missed on a 3-column straddle, acceptable for a
+ * forgiving racer where barriers are multi-cell lines.  Both cars use it. */
 unsigned char racer_box_on_edge(pxcoord_t bx, pxcoord_t by,
                                 unsigned char bw, unsigned char bh) {
     unsigned char c0 = (unsigned char)(bx >> 3);
     unsigned char c1 = (unsigned char)((bx + bw * 8 - 1) >> 3);
     unsigned char r0 = (unsigned char)(by >> 3);
     unsigned char r1 = (unsigned char)((by + bh * 8 - 1) >> 3);
-    unsigned char cc, rr, bb;
-    for (rr = r0; rr <= r1; rr++) {
-        for (cc = c0; cc <= c1; cc++) {
-            bb = behaviour_at((unsigned int)cc, (unsigned int)rr);
-            if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) return 1;
-        }
-    }
-    return 0;
+    unsigned char cm = (unsigned char)((bx + bw * 4) >> 3);   /* centre column */
+    unsigned char rm = (unsigned char)((by + bh * 4) >> 3);   /* centre row */
+    return racer_cell_solid(c0, r0) || racer_cell_solid(c1, r0)
+        || racer_cell_solid(c0, r1) || racer_cell_solid(c1, r1)
+        || racer_cell_solid(cm, rm);
 }
 #endif
 
