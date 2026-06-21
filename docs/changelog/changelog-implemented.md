@@ -48,7 +48,28 @@ both recovery routes; manual sync; many projects per account; HTTPS).
   one. Full suite + the **byte-identical ROM golden invariant** stay green — this
   is server/editor infra, not codegen.
 
-Next: P2 (per-user project save/load endpoints), then P3 (editor UI wiring).
+Then P2 (below). Next after that: P3 (editor UI wiring).
+
+## Pupil accounts (T4.2) — P2 per-user project storage — 2026-06-21
+
+The actual cross-device save, on top of P1's auth. Authenticated REST over
+`/me/projects`: `GET` lists a pupil's saved games (metadata only), `POST`
+creates one (returns an id), `GET /me/projects/{id}` round-trips the project
+blob, `PUT` updates, `DELETE` removes. Blobs (the editor's serialised project
+state, opaque to the server) are size-capped at 4 MB.
+
+**Ownership is enforced in SQL** (`WHERE user_id = ?` on every query), so a
+session can only ever see or change its own projects — never another pupil's.
+`tools/accounts.py` gained `create/get/update/delete/list_project(s)`; the
+server added `do_PUT`/`do_DELETE` and the `/me/projects` routes behind a
+`_require_user` session check.
+
+Test `tools/builder-tests/account-projects.mjs` (16 assertions): signed-out →
+401 on every route; create/list/get/update/delete round-trip; **cross-user
+isolation** (a second pupil gets 404 trying to see/fetch/change/delete the
+first's project, and the original is left intact); oversize blob → 413. Full
+suite + the byte-identical ROM golden invariant stay green. Next: P3 (editor UI
+— "Save to / Load from my account", needs an in-person pass).
 
 ## Arc E §3 top-down racer — design doc + E3-1 movement spike — 2026-06-21
 

@@ -2985,6 +2985,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
         if parsed.path == "/auth/me":
             return self._auth_me()
+        if parsed.path == "/me/projects" or parsed.path.startswith("/me/projects/"):
+            return self._me_projects_get(parsed.path)
         if parsed.path == "/default-main-c":
             return self._default_main_c()
         if parsed.path == "/default-main-s":
@@ -3164,6 +3166,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._auth_reset()
         if parsed.path == "/auth/admin/reset":
             return self._auth_admin_reset()
+        if parsed.path == "/me/projects":
+            return self._me_projects_post()
+        return self.send_error(404)
+
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/me/projects/"):
+            return self._me_projects_put(parsed.path)
+        return self.send_error(404)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/me/projects/"):
+            return self._me_projects_delete(parsed.path)
         return self.send_error(404)
 
     def _read_json_body(self, max_bytes):
@@ -3446,6 +3462,83 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             ACCOUNTS.admin_reset(body.get("username", ""), body.get("newPassword", ""),
                                  body.get("adminSecret", ""))
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+        return self._json(200, {"ok": True})
+
+    # ----- Per-user projects (T4.2 — P2) --------------------------------
+
+    def _require_user(self):
+        """Return the logged-in user dict, or send 401 and return None."""
+        user = ACCOUNTS.user_for_session(self._session_token())
+        if user is None:
+            self._json(401, {"ok": False, "code": "not_logged_in",
+                             "error": "Please sign in to save or load your work."})
+            return None
+        return user
+
+    def _project_path_id(self, path):
+        """Parse /me/projects[/<id>] → (is_collection, project_id|None).  An
+        unparseable id yields (False, -1) so callers 404 it."""
+        rest = path[len("/me/projects"):]
+        if rest in ("", "/"):
+            return True, None
+        if rest.startswith("/"):
+            try:
+                return False, int(rest[1:])
+            except ValueError:
+                return False, -1
+        return None, None
+
+    def _me_projects_get(self, path):
+        user = self._require_user()
+        if user is None:
+            return
+        is_coll, pid = self._project_path_id(path)
+        if is_coll:
+            return self._json(200, {"ok": True,
+                                    "projects": ACCOUNTS.list_projects(user["id"])})
+        try:
+            return self._json(200, {"ok": True, **ACCOUNTS.get_project(user["id"], pid)})
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+
+    def _me_projects_post(self):
+        user = self._require_user()
+        if user is None:
+            return
+        body, err = self._read_json_body(accounts.PROJECT_BLOB_MAX + 65536)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
+        try:
+            proj = ACCOUNTS.create_project(user["id"], body.get("name", ""),
+                                           body.get("blob", ""))
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+        return self._json(200, {"ok": True, **proj})
+
+    def _me_projects_put(self, path):
+        user = self._require_user()
+        if user is None:
+            return
+        _, pid = self._project_path_id(path)
+        body, err = self._read_json_body(accounts.PROJECT_BLOB_MAX + 65536)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
+        try:
+            proj = ACCOUNTS.update_project(user["id"], pid, body.get("name", ""),
+                                           body.get("blob", ""))
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+        return self._json(200, {"ok": True, **proj})
+
+    def _me_projects_delete(self, path):
+        user = self._require_user()
+        if user is None:
+            return
+        _, pid = self._project_path_id(path)
+        try:
+            ACCOUNTS.delete_project(user["id"], pid)
         except accounts.AccountError as e:
             return self._auth_err(e)
         return self._json(200, {"ok": True})

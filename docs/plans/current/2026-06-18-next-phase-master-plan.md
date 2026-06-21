@@ -192,8 +192,10 @@ record verbatim into `docs/feedback/` (per the
   resolved (class join-code, both recovery routes, manual sync, many projects,
   HTTPS). **P1 backend DONE** — `tools/accounts.py` (SQLite + scrypt + sessions +
   rate-limit + join-code) wired into `playground_server.py` as `/auth/*`, tested
-  by `accounts.mjs` (20 assertions), ROM golden untouched. **Remaining:** P2
-  per-user project save/load endpoints → P3 editor UI → P4 recovery/gate UI →
+  by `accounts.mjs` (20 assertions), ROM golden untouched. **P2 project storage
+  DONE** — authenticated `/me/projects` CRUD with SQL-enforced ownership, tested
+  by `account-projects.mjs` (16 assertions incl. cross-user isolation). **Remaining:**
+  P3 editor UI (needs an in-person pass) → P4 recovery/gate UI →
   P5 gallery ownership (answers feedback item 24) → P6 lifecycle. (Anonymous
   per-browser gallery-deletion nonce remains a promotable Tier-2-sized first step.)
 Listed so they're not forgotten; each needs its own doc before code.

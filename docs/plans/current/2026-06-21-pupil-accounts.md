@@ -116,10 +116,15 @@ even though the accounts are "low value".
   limiting) — green; the suite's other server-based tests now use a temp accounts
   DB so they never touch the real one. **Engine/ROM golden invariant untouched.**
   *(No editor UI yet — that's P3; the recovery code is already issued at signup.)*
-- **P2 — Per-user project storage.** Authenticated `GET /me/projects`,
-  `GET /me/projects/{id}`, `PUT /me/projects/{id}` (push a project blob, size-
-  capped like the gallery), `DELETE /me/projects/{id}`. Headless test for the
-  round-trip + auth enforcement (no session → 401).
+- **P2 — Per-user project storage. ✅ DONE (2026-06-21).** Authenticated
+  `GET /me/projects` (list, metadata only), `POST /me/projects` (create →
+  returns id), `GET /me/projects/{id}` (round-trips the blob), `PUT
+  /me/projects/{id}` (update), `DELETE /me/projects/{id}`; blob size-capped at
+  4 MB (413 over). **Ownership enforced in the SQL `WHERE user_id = ?`** — a
+  session only ever sees/changes its own projects. Test
+  `account-projects.mjs` (16 assertions incl. signed-out → 401, create/list/
+  get/update/delete round-trip, **cross-user isolation** (Bob can't see/fetch/
+  change/delete Alice's project → 404), oversize → 413). Suite + golden green.
 - **P3 — Editor UI.** A small sign-in / create-account panel (in the project
   menu or a top bar) + "Save to my account" / "My projects" wired into
   `storage.js`. Local autosave unchanged.

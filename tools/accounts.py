@@ -346,7 +346,26 @@ class AccountStore:
             self._db.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
             self._db.commit()
 
-    # ----- projects (P2 lands the HTTP routes; store API ready here) --------
+    # ----- projects (P2) ----------------------------------------------------
+    #
+    # A pupil's saved games.  Every method scopes by user_id, so a session can
+    # only ever see or change its OWN projects — ownership is enforced in the
+    # WHERE clause, not trusted from the request.  ``blob`` is the editor's
+    # serialised project state (opaque to the server); we only size-cap it.
+
+    def _clean_name(self, name: str) -> str:
+        name = (name or "").strip()
+        if not name:
+            raise AccountError("bad_project_name", "Give your project a name.")
+        return name[:80]
+
+    def _clean_blob(self, blob) -> str:
+        if not isinstance(blob, str):
+            raise AccountError("bad_project", "Project data must be text.")
+        if len(blob.encode("utf-8")) > PROJECT_BLOB_MAX:
+            raise AccountError("project_too_big",
+                               "That project is too big to save.", status=413)
+        return blob
 
     def list_projects(self, user_id: int):
         with self._lock:
@@ -355,6 +374,53 @@ class AccountStore:
                 "WHERE user_id = ? ORDER BY updated_at DESC", (user_id,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def create_project(self, user_id: int, name: str, blob) -> dict:
+        name = self._clean_name(name)
+        blob = self._clean_blob(blob)
+        now = _now()
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO projects (user_id, name, blob, size, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)", (user_id, name, blob, len(blob), now))
+            self._db.commit()
+            new_id = cur.lastrowid
+        return {"id": new_id, "name": name, "size": len(blob), "updated_at": now}
+
+    def update_project(self, user_id: int, project_id: int, name: str, blob) -> dict:
+        name = self._clean_name(name)
+        blob = self._clean_blob(blob)
+        now = _now()
+        with self._lock:
+            cur = self._db.execute(
+                "UPDATE projects SET name = ?, blob = ?, size = ?, updated_at = ? "
+                "WHERE id = ? AND user_id = ?",
+                (name, blob, len(blob), now, project_id, user_id))
+            self._db.commit()
+            if cur.rowcount == 0:
+                raise AccountError("no_such_project",
+                                   "That project doesn't exist.", status=404)
+        return {"id": project_id, "name": name, "size": len(blob), "updated_at": now}
+
+    def get_project(self, user_id: int, project_id: int) -> dict:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT id, name, blob, size, updated_at FROM projects "
+                "WHERE id = ? AND user_id = ?", (project_id, user_id)).fetchone()
+        if row is None:
+            raise AccountError("no_such_project", "That project doesn't exist.",
+                               status=404)
+        return dict(row)
+
+    def delete_project(self, user_id: int, project_id: int):
+        with self._lock:
+            cur = self._db.execute(
+                "DELETE FROM projects WHERE id = ? AND user_id = ?",
+                (project_id, user_id))
+            self._db.commit()
+        if cur.rowcount == 0:
+            raise AccountError("no_such_project", "That project doesn't exist.",
+                               status=404)
 
     def close(self):
         with self._lock:
