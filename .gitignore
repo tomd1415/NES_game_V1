@@ -15,6 +15,13 @@ tools/accounts.db-*
 accounts.db
 accounts.db-*
 
+# Local server config (PLAYGROUND_* — class join code, admin secret, port…).
+# Loaded by playground_server.py at startup; the committed template is
+# .env.example.  Never commit the real .env.
+.env
+.env.*
+!.env.example
+
 # Python bytecode cache
 __pycache__/
 *.pyc

@@ -47,6 +47,43 @@ from urllib.parse import unquote, urlparse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
+
+
+def _load_dotenv(path):
+    """Populate os.environ from a .env file so config (class join code, admin
+    secret, port, …) can live in one gitignored file instead of being exported
+    by hand on every launch.  Zero-dependency, deliberately tiny.
+
+    Rules: a real environment variable ALWAYS wins (so launchers, systemd units
+    and the test harness override the file); blank lines and ``#`` comments are
+    skipped; an optional ``export`` prefix and surrounding quotes are stripped.
+    Set ``PLAYGROUND_SKIP_DOTENV=1`` to ignore the file entirely (the test
+    harness does this so a developer's .env can never change test behaviour)."""
+    if os.environ.get("PLAYGROUND_SKIP_DOTENV"):
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        key, sep, val = line.partition("=")
+        if not sep:
+            continue
+        key, val = key.strip(), val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            val = val[1:-1]
+        if key and key not in os.environ:   # real env wins over the file
+            os.environ[key] = val
+
+
+# Load before any os.environ.get() reads below, so .env can set PORT, the
+# account join code/admin secret, etc.
+_load_dotenv(ROOT / ".env")
 STEP_DIR = ROOT / "steps" / "Step_Playground"
 SCENE_INC = STEP_DIR / "src" / "scene.inc"
 PAL_INC = STEP_DIR / "src" / "palettes.inc"

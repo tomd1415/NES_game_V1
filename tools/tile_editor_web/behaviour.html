@@ -52,6 +52,7 @@ label { -webkit-user-select: none; user-select: none; }
 /* --- Header / nav (mirrors other pages) --------------------- */
 .app-header {
   display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap; row-gap: 8px;
   padding: 10px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -80,6 +81,7 @@ label { -webkit-user-select: none; user-select: none; }
 .app-header .toolbar {
   margin-left: auto;
   display: flex; gap: 4px; align-items: center;
+  flex-wrap: wrap; row-gap: 6px; justify-content: flex-end;
 }
 .tb-group {
   display: flex; align-items: center; gap: 6px;
@@ -405,7 +407,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
     <span id="save-status" class="saved" title="Loading…">●</span>
     <div class="tb-group" role="group" aria-label="File">
       <details class="projects-menu" id="projects-menu">
-        <summary title="Project + Save / Open"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
+        <summary title="Project + Save / Open / Recover"><span aria-hidden="true">📁 </span><span id="active-project-label">…</span> <span aria-hidden="true">▾</span></summary>
         <div class="menu-body">
           <div class="tb-section-label">Projects</div>
           <div class="projects-list" id="projects-list" role="listbox" aria-label="Projects"></div>

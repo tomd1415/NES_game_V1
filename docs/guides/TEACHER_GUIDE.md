@@ -144,9 +144,24 @@ WantedBy=multi-user.target
 
 Then `systemctl enable --now nesgame`. Pupils open `http://<lxc-ip>:8765/sprites.html`.
 
+### Configuration (`.env` or env vars)
+
+The server reads `PLAYGROUND_*` settings from the real environment, and — for convenience — from a **`.env` file at the repo root** (loaded by `_load_dotenv()` at startup; a real env var or systemd `Environment=` always overrides the file). Copy [.env.example](../../.env.example) to `.env` and edit it; `.env` is gitignored (it holds the join code + admin secret). Restart the server after editing.
+
+Key vars: `PLAYGROUND_HOST` / `PLAYGROUND_PORT`, `PLAYGROUND_JOIN_CODE`, `PLAYGROUND_ADMIN_SECRET`, `PLAYGROUND_SESSION_TTL`, `PLAYGROUND_ACCOUNTS_DB`, `PLAYGROUND_FORCE_SECURE_COOKIES`. (The test harness sets `PLAYGROUND_SKIP_DOTENV=1` so a dev `.env` never affects test runs.)
+
+### Optional pupil accounts
+
+Pupils can optionally sign in (📁 menu → **Account (optional)**) to save projects to the server and reopen them on another machine. Data-minimised by design: the only stored data is a non-real-name **username + a scrypt-hashed password** (no email, no analytics). Accounts are entirely optional — the editor works fully without one, and the account panel hides itself if the server is unreachable.
+
+- **Self-signup is gated on a class join code.** With `PLAYGROUND_JOIN_CODE` unset, "Create account" is closed (`/auth/me` reports `signupsOpen:false`). Set it to the code your class types when signing up.
+- **Forgotten passwords**: each pupil gets a one-time recovery code at signup (shown once). A teacher can also reset a password via `POST /auth/admin/reset` if `PLAYGROUND_ADMIN_SECRET` is set.
+- **Behind HTTPS** (reverse proxy): the session cookie is marked `Secure` when the request arrives over HTTPS (`X-Forwarded-Proto: https`), or force it with `PLAYGROUND_FORCE_SECURE_COOKIES=1`. If the editor is served as static files by a separate web server, that server must **proxy `/auth/*` and `/me/projects*`** to this playground server (same origin) for accounts to work; otherwise the account panel just stays hidden.
+- The accounts DB is a single SQLite file (`tools/accounts.db` by default), gitignored. Back it up if pupils rely on server saves.
+
 **No fceux on the server.** The classroom path is browser-only — `/health` reports `fceux: false` and the Play dialog only shows "This browser (jsnes)" as the Run-on option. Pupils who want the real FCEUX emulator run the stack on their own laptop (see the single-user dev instructions above).
 
-**Per-pupil state.** Everything lives in each pupil's `localStorage`, keyed to the origin. Clearing browser data wipes their project — the **Export → JSON** button is the escape hatch. There is intentionally no user-facing account system.
+**Per-pupil state.** Everything lives in each pupil's `localStorage`, keyed to the origin. Clearing browser data wipes their project — the **Export → JSON** button is the escape hatch. Pupils can *optionally* also sign in and save to the server (see **Optional pupil accounts** below); without an account the editor works exactly as before, entirely in the browser.
 
 **Concurrency.** A `threading.Lock()` wraps the shared `steps/Step_Playground/` writes + `make` invocation, so two pupils pressing Play at the same instant serialise on the ~1 s build rather than clobbering each other's `scene.inc`. Pupils using the Code page (Phase 3a) bypass this lock — their builds clone `Step_Playground` into a throwaway tempdir and compile in parallel.
 

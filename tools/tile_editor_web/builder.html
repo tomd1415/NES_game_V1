@@ -45,6 +45,7 @@ label { -webkit-user-select: none; user-select: none; }
 /* --- Header / nav (matches other pages) --------------------- */
 .app-header {
   display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap; row-gap: 8px;
   padding: 10px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -61,6 +62,7 @@ label { -webkit-user-select: none; user-select: none; }
 .app-header .toolbar {
   margin-left: auto;
   display: flex; gap: 4px; align-items: center;
+  flex-wrap: wrap; row-gap: 6px; justify-content: flex-end;
 }
 .tb-group { display: flex; align-items: center; gap: 6px; }
 .tb-group + .tb-group {

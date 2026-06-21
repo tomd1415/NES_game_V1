@@ -30,6 +30,7 @@ for (const f of [DB, DB + '-wal', DB + '-shm']) { try { fs.unlinkSync(f); } catc
 
 const srv = spawn('python3', [path.join(ROOT, 'tools', 'playground_server.py')], {
   env: { ...process.env,
+    PLAYGROUND_SKIP_DOTENV: '1',           // ignore any dev .env so this test is deterministic
     PLAYGROUND_PORT: String(PORT), PLAYGROUND_ACCOUNTS_DB: DB,
     PLAYGROUND_JOIN_CODE: JOIN, PLAYGROUND_AUTH_RATE_MAX: '1000' },
   stdio: ['ignore', 'pipe', 'pipe'],

@@ -89,6 +89,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 
 .app-header {
   display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap; row-gap: 8px;
   padding: 10px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -102,7 +103,7 @@ dialog::backdrop { background: rgba(0,0,0,0.6); }
 .page-link:hover { background: #3a3560; }
 .page-link.active { background: #3a2f50; border-color: var(--accent); color: var(--accent); font-weight: bold; }
 
-.app-header .toolbar { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+.app-header .toolbar { margin-left: auto; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; row-gap: 6px; justify-content: flex-end; }
 .tb-group { display: flex; align-items: center; gap: 6px; }
 .tb-group + .tb-group {
   margin-left: 6px; padding-left: 10px;

@@ -36,6 +36,7 @@ function makeEl(tag) {
       toggle(c, on) { if (on === undefined) on = !this._s.has(c); on ? this._s.add(c) : this._s.delete(c); },
     },
     appendChild(c) { c.parent = el; el.children.push(c); return c; },
+    insertBefore(node, ref) { node.parent = el; const i = ref ? el.children.indexOf(ref) : -1; if (i < 0) el.children.push(node); else el.children.splice(i, 0, node); return node; },
     replaceChildren(...k) { el.children.length = 0; k.forEach(x => el.appendChild(x)); },
     remove() { if (el.parent) { const i = el.parent.children.indexOf(el); if (i >= 0) el.parent.children.splice(i, 1); } },
     setAttribute(k, v) { el.attrs[k] = String(v); if (k === 'id') el.id = String(v); },
@@ -50,6 +51,8 @@ function makeEl(tag) {
   };
   Object.defineProperty(el, 'className', { get() { return [...el.classList._s].join(' '); }, set(v) { el.classList._s = new Set(String(v).split(/\s+/).filter(Boolean)); } });
   Object.defineProperty(el, 'style', { get() { return el._style; }, set(v) { if (typeof v === 'string') { el._style = {}; parseStyle(v, el._style); } else el._style = v || {}; } });
+  Object.defineProperty(el, 'parentNode', { get() { return el.parent || null; } });
+  Object.defineProperty(el, 'nextSibling', { get() { const p = el.parent; if (!p) return null; const i = p.children.indexOf(el); return p.children[i + 1] || null; } });
   return el;
 }
 function matches(el, sel) {
@@ -98,15 +101,18 @@ function load(env, fetchImpl, Storage) {
 
 function jsonResp(ok, obj, status) { return Promise.resolve({ ok, status: status || (ok ? 200 : 400), json: () => Promise.resolve(obj) }); }
 
+// Find a <button> by visible text within a root element.
+const btn = (root, re) => root && root.querySelectorAll('button').find(b => re.test(b.textContent));
+const control = (env) => env.document_.getElementById('account-control');
+
 // ---- 1) graceful hide when /auth/me is unreachable ----------------------
 {
   const env = makeEnv();
   const fetchImpl = () => Promise.reject(new Error('network down'));
   load(env, fetchImpl, { loadCurrent: () => ({ name: 'x' }), flushPending() {} });
   await tick(); await tick();
-  const section = env.document_.getElementById('account-section');
-  if (!section) ok('account section hidden/removed when /auth/me is unreachable (accounts stay optional)');
-  else bad('account section was left in the DOM despite /auth/me failing: ' + JSON.stringify(section && section.style));
+  if (!control(env)) ok('account control hidden/removed when /auth/me is unreachable (accounts stay optional)');
+  else bad('account control was left in the DOM despite /auth/me failing');
 }
 
 // ---- 2) signed-out rendering -------------------------------------------
@@ -115,10 +121,11 @@ function jsonResp(ok, obj, status) { return Promise.resolve({ ok, status: status
   const fetchImpl = (p) => p === '/auth/me' ? jsonResp(true, { ok: true, username: null, signupsOpen: true }) : jsonResp(false, {});
   load(env, fetchImpl, { loadCurrent: () => ({ name: 'x' }), flushPending() {} });
   await tick(); await tick();
-  const section = env.document_.getElementById('account-section');
-  const txt = section ? allText(section) : '';
-  if (section && section.style.display !== 'none' && /Sign in/.test(txt)) ok('signed-out shows "Sign in / Create account"');
-  else bad('signed-out did not render the sign-in entry: ' + JSON.stringify(txt));
+  const ctrl = control(env);
+  const signin = env.document_.getElementById('account-signin');
+  if (ctrl && ctrl.style.display !== 'none' && signin && /Sign in/.test(signin.textContent))
+    ok('signed-out shows a top-bar "👤 Sign in" button');
+  else bad('signed-out did not render the top-bar Sign in button: ' + JSON.stringify(ctrl && allText(ctrl)));
 }
 
 // ---- 3) signed-in rendering --------------------------------------------
@@ -127,10 +134,10 @@ function jsonResp(ok, obj, status) { return Promise.resolve({ ok, status: status
   const fetchImpl = (p) => p === '/auth/me' ? jsonResp(true, { ok: true, username: 'pixel_kid', signupsOpen: true }) : jsonResp(false, {});
   load(env, fetchImpl, { loadCurrent: () => ({ name: 'x' }), flushPending() {} });
   await tick(); await tick();
-  const txt = allText(env.document_.getElementById('account-section'));
-  if (/pixel_kid/.test(txt) && /Save to my account/.test(txt) && /Load from my account/.test(txt) && /Sign out/.test(txt))
-    ok('signed-in shows the username + Save / Load / Sign out');
-  else bad('signed-in section missing expected controls: ' + JSON.stringify(txt));
+  const txt = allText(control(env));
+  if (/pixel_kid/.test(txt) && /Save to my account/.test(txt) && /Open from my account/.test(txt) && /Sign out/.test(txt))
+    ok('signed-in shows the username + Save / Open / Sign out');
+  else bad('signed-in control missing expected items: ' + JSON.stringify(txt));
 }
 
 // ---- 4) Save to account: PUT when the name already exists --------------
@@ -147,9 +154,7 @@ function jsonResp(ok, obj, status) { return Promise.resolve({ ok, status: status
   };
   load(env, fetchImpl, { loadCurrent: () => ({ name: 'Castle', data: 1 }), flushPending() {} });
   await tick(); await tick();
-  const section = env.document_.getElementById('account-section');
-  const saveBtn = section.children.find(c => /Save to my account/.test(c.textContent));
-  saveBtn.click();
+  btn(control(env), /Save to my account/).click();
   await tick(); await tick(); await tick();
   const put = calls.find(c => c.p === '/me/projects/7' && c.m === 'PUT');
   const post = calls.find(c => c.p === '/me/projects' && c.m === 'POST');
@@ -170,15 +175,14 @@ function jsonResp(ok, obj, status) { return Promise.resolve({ ok, status: status
   };
   load(env, fetchImpl, { loadCurrent: () => ({ name: 'Brand New', data: 2 }), flushPending() {} });
   await tick(); await tick();
-  const section = env.document_.getElementById('account-section');
-  section.children.find(c => /Save to my account/.test(c.textContent)).click();
+  btn(control(env), /Save to my account/).click();
   await tick(); await tick(); await tick();
   const post = calls.find(c => c.p === '/me/projects' && c.m === 'POST');
   if (post && /Brand New/.test(post.body)) ok('Save to account POSTs a new cloud project when none matches the name');
   else bad('Save-to-account did not POST a new project: ' + JSON.stringify(calls));
 }
 
-// ---- 6) Load from account creates a NEW local project + reloads --------
+// ---- 6) Open from account creates a NEW local project + reloads --------
 {
   const env = makeEnv();
   let created = null;
@@ -194,8 +198,7 @@ function jsonResp(ok, obj, status) { return Promise.resolve({ ok, status: status
     createProject: (name, st) => { created = { name, st }; return { id: 'L1' }; },
   });
   await tick(); await tick();
-  const section = env.document_.getElementById('account-section');
-  section.children.find(c => /Load from my account/.test(c.textContent)).click();
+  btn(control(env), /Open from my account/).click();
   await tick(); await tick();
   // The load dialog is appended to body; find its Open button and click it.
   const openBtn = env.body.querySelectorAll('button').find(b => b.textContent === 'Open');

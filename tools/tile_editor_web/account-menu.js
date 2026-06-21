@@ -1,9 +1,11 @@
 /* Optional pupil accounts — editor UI (T4.2 P3).
  *
- * Adds an "Account (optional)" section to the shared project menu on every
- * editor page, plus a sign-in / create-account dialog and a load-from-account
- * dialog.  Talks to the playground server's /auth/* and /me/projects endpoints
- * (same origin, session cookie).
+ * Adds a discoverable account control to the top toolbar (next to the 📁
+ * project menu) on every editor page — "👤 Sign in" when signed out, a
+ * "👤 username ▾" dropdown (Save / Open / Sign out) when signed in — plus the
+ * sign-in / create-account and open-from-account dialogs.  Talks to the
+ * playground server's /auth/* and /me/projects endpoints (same origin, session
+ * cookie).
  *
  * DESIGN RULES (per teacher requirements):
  *   * Accounts are OPTIONAL.  Pupils use the editor fully without one.  If the
@@ -27,8 +29,30 @@
   function injectStyles() {
     if (document.getElementById('account-menu-css')) return;
     var css = [
-      '#account-section .acct-line { font-size: 0.9em; color: var(--muted, #9a97ad); margin: 2px 0; }',
-      '#account-section .acct-user { color: var(--accent, #ffd866); font-weight: 600; }',
+      // Top-bar control (sits next to the 📁 project menu on every page).
+      '#account-control { display: inline-flex; align-items: center; }',
+      '.account-signin {',
+      '  background: var(--panel2, #2a2440); color: var(--fg, #f4f4f4);',
+      '  border: 1px solid var(--border, #3a3352); border-radius: 4px;',
+      '  padding: 5px 10px; cursor: pointer; font: inherit; white-space: nowrap;',
+      '}',
+      '.account-signin:hover { background: #3a3560; }',
+      '.account-menu { position: relative; }',
+      '.account-menu > summary {',
+      '  list-style: none; cursor: pointer; padding: 5px 10px;',
+      '  background: var(--panel2, #2a2440); border: 1px solid var(--border, #3a3352);',
+      '  border-radius: 4px; max-width: 180px; overflow: hidden;',
+      '  text-overflow: ellipsis; white-space: nowrap;',
+      '}',
+      '.account-menu[open] > summary { background: #3a3560; }',
+      '.account-menu .acct-user { color: var(--accent, #ffd866); font-weight: 600; }',
+      '.account-menu > .menu-body {',
+      '  position: absolute; right: 0; top: calc(100% + 4px);',
+      '  background: var(--panel, #1f1b30); border: 1px solid var(--border, #3a3352);',
+      '  border-radius: 4px; padding: 6px; display: flex; flex-direction: column; gap: 4px;',
+      '  min-width: 220px; box-shadow: 0 6px 18px rgba(0,0,0,0.5); z-index: 30;',
+      '}',
+      '.account-menu > .menu-body button { text-align: left; }',
       'dialog.acct-dialog {',
       '  background: var(--bg, #14121f); color: var(--fg, #f4f4f4);',
       '  border: 1px solid var(--border, #3a3352); border-radius: 6px;',
@@ -93,32 +117,44 @@
     });
   }
 
-  // --- render the menu section ----------------------------------------
-  function findMenuBody() {
-    var menu = document.getElementById('projects-menu');
-    if (!menu) return null;
-    return menu.querySelector('.menu-body') || menu;
+  // --- top-bar control (next to the 📁 project menu) ------------------
+  // A discoverable entry that sits in the toolbar rather than hidden inside the
+  // project dropdown.  Signed-out: a plain "👤 Sign in" button.  Signed-in: a
+  // little "👤 username ▾" dropdown with Save / Open / Sign out.
+  function placeControl() {
+    var anchor = document.getElementById('projects-menu');
+    if (!anchor || !anchor.parentNode) return null;
+    var ctrl = document.getElementById('account-control');
+    if (!ctrl) {
+      ctrl = el('span', { id: 'account-control' });
+      anchor.parentNode.insertBefore(ctrl, anchor.nextSibling);
+    }
+    return ctrl;
   }
 
-  function renderSection() {
-    var section = document.getElementById('account-section');
-    if (!section) return;
-    section.replaceChildren();
-    section.appendChild(el('hr', { class: 'tb-inline-divider' }));
-    section.appendChild(el('div', { class: 'tb-section-label', text: 'Account (optional)' }));
-
+  function renderControl() {
+    var ctrl = document.getElementById('account-control');
+    if (!ctrl) return;
+    ctrl.replaceChildren();
     if (me && me.username) {
-      section.appendChild(el('div', { class: 'acct-line' }, [
-        document.createTextNode('Signed in as '),
+      var summary = el('summary', { title: 'Your account' }, [
+        document.createTextNode('👤 '),
         el('span', { class: 'acct-user', text: me.username }),
-      ]));
-      section.appendChild(el('button', { type: 'button', text: '☁ Save to my account', onclick: saveToAccount }));
-      section.appendChild(el('button', { type: 'button', text: '☁ Load from my account…', onclick: openLoadDialog }));
-      section.appendChild(el('button', { type: 'button', text: '🚪 Sign out', onclick: signOut }));
+        document.createTextNode(' ▾'),
+      ]);
+      var body = el('div', { class: 'menu-body' }, [
+        el('button', { type: 'button', text: '☁ Save to my account', onclick: saveToAccount }),
+        el('button', { type: 'button', text: '☁ Open from my account…', onclick: openLoadDialog }),
+        el('hr', { class: 'tb-inline-divider' }),
+        el('button', { type: 'button', text: '🚪 Sign out', onclick: signOut }),
+      ]);
+      ctrl.appendChild(el('details', { class: 'account-menu', id: 'account-menu' }, [summary, body]));
     } else {
-      section.appendChild(el('div', { class: 'acct-line',
-        text: 'Sign in to save your work to the class server (so you can open it on another computer). Totally optional — your work is always saved in this browser too.' }));
-      section.appendChild(el('button', { type: 'button', text: '👤 Sign in / Create account…', onclick: openAuthDialog }));
+      ctrl.appendChild(el('button', {
+        type: 'button', class: 'account-signin', id: 'account-signin',
+        title: 'Sign in or create an account to save your work to the class server (optional)',
+        text: '👤 Sign in', onclick: openAuthDialog,
+      }));
     }
   }
 
@@ -199,7 +235,7 @@
     });
 
     function afterAuth() {
-      refreshMe().then(renderSection);
+      refreshMe().then(renderControl);
     }
 
     dlg.appendChild(title);
@@ -221,7 +257,7 @@
   function signOut() {
     api('POST', '/auth/logout').catch(function () {}).then(function () {
       me = { username: null, signupsOpen: me ? me.signupsOpen : true };
-      renderSection();
+      renderControl();
     });
   }
 
@@ -247,7 +283,7 @@
     }).then(function () {
       alert('Saved “' + proj.name + '” to your account.');
     }).catch(function (e) {
-      if (e.status === 401) { me = { username: null, signupsOpen: true }; renderSection(); }
+      if (e.status === 401) { me = { username: null, signupsOpen: true }; renderControl(); }
       alert('Could not save to your account: ' + (e.message || e));
     });
   }
@@ -287,7 +323,7 @@
         list.appendChild(el('li', null, [meta, open]));
       });
     }).catch(function (e) {
-      if (e.status === 401) { dlg.close(); me = { username: null, signupsOpen: true }; renderSection(); }
+      if (e.status === 401) { dlg.close(); me = { username: null, signupsOpen: true }; renderControl(); }
       else setStatus(msg, 'Could not load your projects: ' + (e.message || e), 'err');
     });
   }
@@ -317,18 +353,18 @@
 
   function mount() {
     if (mounted) return;
-    var body = findMenuBody();
-    if (!body || !global.Storage) return;   // no menu / no storage → nothing to do
+    if (!global.Storage) return;            // no storage layer → nothing to do
+    var ctrl = placeControl();
+    if (!ctrl) return;                      // no project menu to anchor to
     mounted = true;
     injectStyles();
-    var section = el('div', { id: 'account-section', style: 'display:none' });
-    body.appendChild(section);
-    // Only reveal the section once we know the server is reachable; on any
+    ctrl.style.display = 'none';
+    // Only reveal the control once we know the server is reachable; on any
     // failure it stays hidden so accounts are truly optional.
     refreshMe().then(function (m) {
-      if (m === null) { section.remove(); mounted = false; return; }
-      section.style.display = '';
-      renderSection();
+      if (m === null) { ctrl.remove(); mounted = false; return; }
+      ctrl.style.display = '';
+      renderControl();
     });
   }
 

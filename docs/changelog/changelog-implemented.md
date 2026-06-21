@@ -21,6 +21,30 @@ deferred.
 
 ---
 
+## Account control in the top bar, responsive toolbars, `.env` config — 2026-06-21
+
+Follow-up polish to the accounts batch below.
+
+- **Account entry moved to the top toolbar.** The optional account UI was tucked
+  inside the 📁 project dropdown; it's now a discoverable control next to it
+  (`account-menu.js` → `#account-control`): **👤 Sign in** when signed out, a
+  **👤 username ▾** dropdown (Save to / Open from account, Sign out) when signed
+  in. Same graceful-hide-if-offline rule. `account-ui.mjs` updated.
+- **Responsive toolbars.** The page headers/toolbars were `display:flex` with no
+  wrap, so on a standard screen they overflowed once the account control was
+  added. `.app-header` and `.app-header .toolbar` now `flex-wrap: wrap` (with
+  row-gaps) on every editor page, so the toolbar wraps to a second line instead
+  of overflowing.
+- **Project-menu tooltip** aligned (Behaviour said "Project + Save / Open").
+- **`.env` config file.** `playground_server.py` now loads a gitignored
+  root-level `.env` at startup (`_load_dotenv`, zero-dependency; real env vars
+  and systemd `Environment=` still win; `PLAYGROUND_SKIP_DOTENV=1` opts out and
+  is set by the test harness). Committed `.env.example` documents every
+  `PLAYGROUND_*` var; `.gitignore` covers `.env`. Setting `PLAYGROUND_JOIN_CODE`
+  there opens self-signup. Teacher Guide updated.
+
+---
+
 ## Project-menu unification, save-reliability, optional accounts UI + cookie notice — 2026-06-21
 
 A batch of pupil/teacher-reported project-management fixes. **All headless

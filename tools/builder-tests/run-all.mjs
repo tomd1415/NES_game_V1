@@ -35,6 +35,10 @@ if (!process.env.PLAYGROUND_ACCOUNTS_DB) {
     try { fs.unlinkSync(process.env.PLAYGROUND_ACCOUNTS_DB + s); } catch {}
   }
 }
+// Every spawned server inherits this, so a developer's local .env (join code,
+// admin secret…) can never leak into a test run and make it environment-
+// dependent.  Suites set the exact env they need explicitly.
+process.env.PLAYGROUND_SKIP_DOTENV = '1';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
