@@ -1118,25 +1118,32 @@ body.emu-single-player #emu-p2-controls { display: none; }
     // Click to add; drag to move.  The number-input rows below still work for
     // precise placement.  (drawPreview resizes the canvas to fit the world.)
     let preview = null;
+    // The preview is a nicety; if anything in it throws (e.g. an unexpected
+    // background shape or a canvas the browser can't size), log it and carry on
+    // so the instance list below still renders — never blank the whole panel.
     if (placeable.length > 0) {
-      preview = document.createElement('div');
-      preview.className = 'scene-preview-wrap';
-      const canvas = document.createElement('canvas');
-      const _w0 = sceneWorld();
-      canvas.width = _w0.wpx * _w0.scale;
-      canvas.height = _w0.hpx * _w0.scale;
-      canvas.className = 'scene-preview-canvas';
-      canvas.title = 'Click to add a sprite here.  Drag an existing sprite to move it.';
-      preview.appendChild(canvas);
-      const hint = document.createElement('div');
-      hint.className = 'scene-preview-hint';
-      hint.textContent =
-        'Click an empty spot to drop a new sprite. Drag to move it. The whole ' +
-        'level is shown — yellow lines mark where each screen begins.';
-      preview.appendChild(hint);
-      host.appendChild(preview);
-      wireScenePreview(canvas, node, placeable, () => { drawPreview(canvas, node); rerender(); });
-      drawPreview(canvas, node);
+      try {
+        preview = document.createElement('div');
+        preview.className = 'scene-preview-wrap';
+        const canvas = document.createElement('canvas');
+        const _w0 = sceneWorld();
+        canvas.width = _w0.wpx * _w0.scale;
+        canvas.height = _w0.hpx * _w0.scale;
+        canvas.className = 'scene-preview-canvas';
+        canvas.title = 'Click to add a sprite here.  Drag an existing sprite to move it.';
+        preview.appendChild(canvas);
+        const hint = document.createElement('div');
+        hint.className = 'scene-preview-hint';
+        hint.textContent =
+          'Click an empty spot to drop a new sprite. Drag to move it. The whole ' +
+          'level is shown — yellow lines mark where each screen begins.';
+        preview.appendChild(hint);
+        host.appendChild(preview);
+        wireScenePreview(canvas, node, placeable, () => { drawPreview(canvas, node); rerender(); });
+        drawPreview(canvas, node);
+      } catch (err) {
+        console.error('[builder] scene preview failed to render:', err);
+      }
     }
 
     const list = document.createElement('div');
@@ -1368,8 +1375,13 @@ body.emu-single-player #emu-p2-controls { display: none; }
     const bgs = (state && state.backgrounds) || [];
     const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0] || {};
     const dim = (bg && bg.dimensions) || {};
-    const cols = (((dim.screens_x | 0) || 1)) * 32;
-    const rows = (((dim.screens_y | 0) || 1)) * 30;
+    // Clamp screens to a sane range so a missing/odd/corrupt `dimensions` can
+    // never size the canvas to something the browser can't allocate (which would
+    // throw and blank the whole preview).  The editor caps worlds at 2×2; 8 is
+    // generous headroom and still bounds the canvas to ≤2048px.
+    const clampScreens = (v) => Math.max(1, Math.min(8, (v | 0) || 1));
+    const cols = clampScreens(dim.screens_x) * 32;
+    const rows = clampScreens(dim.screens_y) * 30;
     const wpx = cols * 8, hpx = rows * 8;
     const scale = Math.max(1, Math.min(Math.floor(512 / wpx), Math.floor(480 / hpx))) || 1;
     return { cols, rows, wpx, hpx, scale };
