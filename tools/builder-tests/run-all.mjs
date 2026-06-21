@@ -21,9 +21,20 @@
 // root, or `./tools/builder-tests/run-all.mjs`.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
+// Every suite that boots playground_server.py inherits this env, so the pupil-
+// accounts store (T4.2) writes to a throwaway temp DB for the whole run rather
+// than creating the real tools/accounts.db.  (accounts.mjs sets its own.)
+if (!process.env.PLAYGROUND_ACCOUNTS_DB) {
+  process.env.PLAYGROUND_ACCOUNTS_DB = path.join(os.tmpdir(), 'pg-suite-accounts.db');
+  for (const s of ['', '-wal', '-shm']) {
+    try { fs.unlinkSync(process.env.PLAYGROUND_ACCOUNTS_DB + s); } catch {}
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

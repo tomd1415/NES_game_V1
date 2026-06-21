@@ -503,6 +503,35 @@ SNIPPET_HEADER_RE = re.compile(r"/\*!\s*SNIPPET\s*(\{.*?\})\s*\*/", re.DOTALL)
 HOST = os.environ.get("PLAYGROUND_HOST", "127.0.0.1")
 PORT = int(os.environ.get("PLAYGROUND_PORT", "8765"))
 
+# --- Pupil accounts (T4.2 — P1) --------------------------------------------
+# See docs/plans/current/2026-06-21-pupil-accounts.md.  Data-minimisation:
+# only a non-real-name username + a scrypt-hashed password are stored.  Self-
+# signup is gated on a class join code (PLAYGROUND_JOIN_CODE); with no code set
+# enrolment is closed (safe default for the public instance).  Forgotten
+# passwords recover via a one-time code (issued at signup) or a teacher reset
+# using PLAYGROUND_ADMIN_SECRET.  The DB is a single SQLite file kept out of
+# git.  Cookies are marked Secure when the request arrives over HTTPS (the
+# classroom instance is behind an HTTPS reverse proxy that sets
+# X-Forwarded-Proto); PLAYGROUND_FORCE_SECURE_COOKIES forces it on.
+import accounts  # local module (tools/accounts.py)
+
+ACCOUNTS_DB = os.environ.get("PLAYGROUND_ACCOUNTS_DB", str(ROOT / "tools" / "accounts.db"))
+ACCOUNTS = accounts.AccountStore(
+    ACCOUNTS_DB,
+    join_code=os.environ.get("PLAYGROUND_JOIN_CODE", ""),
+    admin_secret=os.environ.get("PLAYGROUND_ADMIN_SECRET", ""),
+    session_ttl=int(os.environ.get("PLAYGROUND_SESSION_TTL", "0") or "0")
+    or accounts.SESSION_TTL_SECONDS,
+)
+COOKIE_FORCE_SECURE = os.environ.get("PLAYGROUND_FORCE_SECURE_COOKIES", "") == "1"
+AUTH_MAX_BODY = 16 * 1024  # signup/login/reset bodies are tiny
+# Per-IP rate limit on auth attempts (signup + login + reset): 12 / minute by
+# default; both bounds overridable so tests can exercise the limiter cheaply.
+AUTH_RATE = accounts.RateLimiter(
+    max_attempts=int(os.environ.get("PLAYGROUND_AUTH_RATE_MAX", "12") or "12"),
+    window_seconds=int(os.environ.get("PLAYGROUND_AUTH_RATE_WINDOW", "60") or "60"),
+)
+
 # All filesystem writes + `make` invocations funnel through this lock, so
 # multiple pupils pressing Play at once serialise on the shared
 # steps/Step_Playground work dir instead of racing.  cc65 builds in ~1 s,
@@ -2954,6 +2983,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "fceux": FCEUX_PATH is not None,
                 "modes": ["browser"] + (["native"] if FCEUX_PATH else []),
             })
+        if parsed.path == "/auth/me":
+            return self._auth_me()
         if parsed.path == "/default-main-c":
             return self._default_main_c()
         if parsed.path == "/default-main-s":
@@ -3123,6 +3154,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._gallery_publish_response()
         if parsed.path == "/gallery/remove":
             return self._gallery_remove_response()
+        if parsed.path == "/auth/signup":
+            return self._auth_signup()
+        if parsed.path == "/auth/login":
+            return self._auth_login()
+        if parsed.path == "/auth/logout":
+            return self._auth_logout()
+        if parsed.path == "/auth/reset":
+            return self._auth_reset()
+        if parsed.path == "/auth/admin/reset":
+            return self._auth_admin_reset()
         return self.send_error(404)
 
     def _read_json_body(self, max_bytes):
@@ -3291,6 +3332,123 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self._json(200, {"ok": True})
 
     # --------------------------------------------------------------------
+
+    # ----- Pupil accounts (T4.2 — P1) -----------------------------------
+
+    def _client_ip(self):
+        """Best-effort client IP for rate limiting — first X-Forwarded-For hop
+        (set by the HTTPS reverse proxy) else the socket peer."""
+        xff = self.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
+        return self.client_address[0] if self.client_address else ""
+
+    def _session_token(self):
+        """Extract the opaque session token from the Cookie header, if any."""
+        for part in (self.headers.get("Cookie", "") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "session":
+                return v or None
+        return None
+
+    def _auth_cookie(self, token=None, clear=False):
+        """Build a Set-Cookie value for the session cookie.  Secure only over
+        HTTPS (or when forced) so local http dev still works."""
+        secure = COOKIE_FORCE_SECURE or \
+            self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        attrs = ["session=" + ("" if clear else token), "Path=/", "HttpOnly", "SameSite=Lax"]
+        if secure:
+            attrs.append("Secure")
+        attrs.append("Max-Age=0" if clear else f"Max-Age={ACCOUNTS.session_ttl}")
+        return "; ".join(attrs)
+
+    def _json_cookie(self, code, obj, set_cookie):
+        data = json.dumps(obj).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Set-Cookie", set_cookie)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _auth_err(self, e):
+        return self._json(e.status, {"ok": False, "code": e.code, "error": e.message})
+
+    def _auth_rate_ok(self):
+        if AUTH_RATE.check("auth:" + self._client_ip()):
+            return True
+        self._json(429, {"ok": False, "code": "rate_limited",
+                         "error": "Too many tries — wait a minute and try again."})
+        return False
+
+    def _auth_signup(self):
+        if not self._auth_rate_ok():
+            return
+        body, err = self._read_json_body(AUTH_MAX_BODY)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
+        try:
+            username, recovery, token = ACCOUNTS.signup(
+                body.get("username", ""), body.get("password", ""),
+                body.get("joinCode", ""))
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+        return self._json_cookie(200, {
+            "ok": True, "username": username, "recoveryCode": recovery,
+        }, self._auth_cookie(token))
+
+    def _auth_login(self):
+        if not self._auth_rate_ok():
+            return
+        body, err = self._read_json_body(AUTH_MAX_BODY)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
+        try:
+            username, token = ACCOUNTS.login(
+                body.get("username", ""), body.get("password", ""))
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+        return self._json_cookie(200, {"ok": True, "username": username},
+                                 self._auth_cookie(token))
+
+    def _auth_logout(self):
+        ACCOUNTS.logout(self._session_token())
+        return self._json_cookie(200, {"ok": True}, self._auth_cookie(clear=True))
+
+    def _auth_me(self):
+        user = ACCOUNTS.user_for_session(self._session_token())
+        return self._json(200, {
+            "ok": True,
+            "username": user["username"] if user else None,
+            "signupsOpen": ACCOUNTS.signups_open(),
+        })
+
+    def _auth_reset(self):
+        if not self._auth_rate_ok():
+            return
+        body, err = self._read_json_body(AUTH_MAX_BODY)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
+        try:
+            new_code = ACCOUNTS.reset_with_recovery_code(
+                body.get("username", ""), body.get("recoveryCode", ""),
+                body.get("newPassword", ""))
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+        return self._json(200, {"ok": True, "recoveryCode": new_code})
+
+    def _auth_admin_reset(self):
+        if not self._auth_rate_ok():
+            return
+        body, err = self._read_json_body(AUTH_MAX_BODY)
+        if err:
+            return self._json(400, {"ok": False, "error": err})
+        try:
+            ACCOUNTS.admin_reset(body.get("username", ""), body.get("newPassword", ""),
+                                 body.get("adminSecret", ""))
+        except accounts.AccountError as e:
+            return self._auth_err(e)
+        return self._json(200, {"ok": True})
 
     def _json(self, code, obj):
         data = json.dumps(obj).encode("utf-8")

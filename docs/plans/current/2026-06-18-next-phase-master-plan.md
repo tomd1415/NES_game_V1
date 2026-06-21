@@ -185,14 +185,16 @@ record verbatim into `docs/feedback/` (per the
 ### Parked (Tier 4 — own design conversation, not in this plan)
 - **Tablet/mobile UX** (T4.1) — the editor assumes pointer + keyboard; in-browser
   play assumes a keyboard.
-- **Pupil accounts + cross-device project save** (T4.2) — biggest item.
-  **Design doc now written:** [`2026-06-21-pupil-accounts.md`](2026-06-21-pupil-accounts.md)
-  — per the user's spec, an account stores **only a username (never a real name)
-  + a password (hashed)**, purely so pupils can save and resume work from home.
-  Settles backend (SQLite), hashing (`hashlib.scrypt`), sessions, sync model, and
-  gallery ownership (answers feedback item 24); flags 5 open decisions (signup
-  gate, recovery, sync, projects-per-account, HTTPS). Still parked until those are
-  picked, but no longer needs the up-front design conversation. (Anonymous
+- **Pupil accounts + cross-device project save** (T4.2) — biggest item, now
+  **under way.** Design doc:
+  [`2026-06-21-pupil-accounts.md`](2026-06-21-pupil-accounts.md) (account stores
+  **only a non-real-name username + a hashed password**); all 5 decisions
+  resolved (class join-code, both recovery routes, manual sync, many projects,
+  HTTPS). **P1 backend DONE** — `tools/accounts.py` (SQLite + scrypt + sessions +
+  rate-limit + join-code) wired into `playground_server.py` as `/auth/*`, tested
+  by `accounts.mjs` (20 assertions), ROM golden untouched. **Remaining:** P2
+  per-user project save/load endpoints → P3 editor UI → P4 recovery/gate UI →
+  P5 gallery ownership (answers feedback item 24) → P6 lifecycle. (Anonymous
   per-browser gallery-deletion nonce remains a promotable Tier-2-sized first step.)
 Listed so they're not forgotten; each needs its own doc before code.
 

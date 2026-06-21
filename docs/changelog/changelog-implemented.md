@@ -21,6 +21,35 @@ deferred.
 
 ---
 
+## Pupil accounts (T4.2) — P1 backend foundation — 2026-06-21
+
+First slice of cross-device project save. Per the user's spec, an account stores
+**only a non-real-name username + a scrypt-hashed password** — no email, no real
+name, no analytics. All five design decisions were settled (class join-code gate;
+both recovery routes; manual sync; many projects per account; HTTPS).
+
+- **`tools/accounts.py`** (new, pure stdlib): a SQLite store
+  (`users`/`sessions`/`projects`), `hashlib.scrypt` hashing for passwords and
+  one-time recovery codes, sliding 30-day sessions, a per-IP `RateLimiter`, and
+  username validation (3–20 chars, charset that rejects spaces/dots so common
+  real-name shapes can't be used). Transport-agnostic so it unit-tests directly.
+- **`playground_server.py`**: routes `POST /auth/signup` (gated on the class
+  join-code, issues a session + one-time recovery code), `/auth/login`,
+  `/auth/logout`, `/auth/reset` (recovery code), `/auth/admin/reset` (teacher,
+  via `PLAYGROUND_ADMIN_SECRET`), and `GET /auth/me`. Session cookie is
+  `HttpOnly`+`SameSite=Lax`, and `Secure` when the request is HTTPS. Config via
+  env (`PLAYGROUND_JOIN_CODE`, `PLAYGROUND_ADMIN_SECRET`, `PLAYGROUND_ACCOUNTS_DB`,
+  …). The DB is git-ignored (it holds password hashes).
+- **Tests**: `tools/builder-tests/accounts.mjs` drives the live endpoints (20
+  assertions incl. join-code gate, bad username/password, duplicate +
+  case-insensitive usernames, login/logout, session expiry, recovery + admin
+  reset with old credentials dying, rate-limiting). The harness + run-all now
+  point server-based suites at a temp accounts DB so they never touch the real
+  one. Full suite + the **byte-identical ROM golden invariant** stay green — this
+  is server/editor infra, not codegen.
+
+Next: P2 (per-user project save/load endpoints), then P3 (editor UI wiring).
+
 ## Arc E §3 top-down racer — design doc + E3-1 movement spike — 2026-06-21
 
 The third game style is under way. Wrote the dedicated design doc

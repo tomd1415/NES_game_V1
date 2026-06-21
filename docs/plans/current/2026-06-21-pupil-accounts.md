@@ -103,11 +103,19 @@ even though the accounts are "low value".
   No analytics ever.
 
 ## 4. Build phases
-- **P1 — Backend foundation.** SQLite schema; scrypt hashing; `POST /auth/signup`,
-  `POST /auth/login`, `POST /auth/logout`; session cookies; rate-limiting on
-  signup/login (per-IP, in-memory token bucket). No editor UI yet. Headless test
-  covers signup → login → wrong-password reject → duplicate-username reject →
-  session expiry.
+- **P1 — Backend foundation. ✅ DONE (2026-06-21).** `tools/accounts.py` —
+  SQLite store (`users`/`sessions`/`projects`), `hashlib.scrypt` password +
+  recovery-code hashing, sliding 30-day sessions, a per-IP `RateLimiter`, and the
+  class-join-code gate. Wired into `playground_server.py` as `POST /auth/signup`,
+  `/auth/login`, `/auth/logout`, `/auth/reset` (recovery code), `/auth/admin/reset`
+  (teacher), and `GET /auth/me`, with `HttpOnly`+`SameSite=Lax` session cookies
+  (`Secure` when the request is HTTPS). DB is git-ignored. Headless test
+  `tools/builder-tests/accounts.mjs` (20 assertions: join-code gate, bad
+  username/password, duplicate + case-insensitive usernames, login/logout,
+  **session expiry**, recovery-code + admin reset with old creds dying, rate
+  limiting) — green; the suite's other server-based tests now use a temp accounts
+  DB so they never touch the real one. **Engine/ROM golden invariant untouched.**
+  *(No editor UI yet — that's P3; the recovery code is already issued at signup.)*
 - **P2 — Per-user project storage.** Authenticated `GET /me/projects`,
   `GET /me/projects/{id}`, `PUT /me/projects/{id}` (push a project blob, size-
   capped like the gallery), `DELETE /me/projects/{id}`. Headless test for the
@@ -136,13 +144,17 @@ even though the accounts are "low value".
   `HttpOnly`+`Secure`+`SameSite`; constant-time hash compare; size caps on blobs;
   per-IP rate limits; admin secret only in env; SQL via parameterised queries.
 
-## 6. Open decisions for the user (before P1)
-1. **D5 signup gate** — class join-code (recommended for the public instance) vs
-   pure-open signup vs teacher-provisioned?
-2. **D6 recovery** — teacher-reset only, or also a pupil recovery code (recommended: both)?
-3. **D7 sync** — manual Save/Load buttons (recommended v1) vs auto-sync?
-4. **D8 projects-per-account** — many (recommended) vs one?
-5. Is the public instance behind **HTTPS** (needed for `Secure` cookies)?
+## 6. Decisions — RESOLVED (2026-06-21, by the user)
+All five went with the recommendation, so the doc's defaults stand and P1 was
+built to them:
+1. **D5 signup gate → class join-code.** (`PLAYGROUND_JOIN_CODE`; signups closed
+   if unset.)
+2. **D6 recovery → both:** a one-time recovery code (issued at signup) *and* a
+   teacher/admin reset (`PLAYGROUND_ADMIN_SECRET`).
+3. **D7 sync → manual Save/Load** for v1.
+4. **D8 → many named projects** per account.
+5. **HTTPS → yes**, so session cookies are marked `Secure` in production (the
+   server detects `X-Forwarded-Proto: https`).
 
 ## 7. Dependencies & sequencing
 Independent of the racer / metatiles / codegen arcs — it's server + editor infra,

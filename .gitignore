@@ -9,6 +9,12 @@ scene.inc
 feedback.jsonl
 feedback-handled.json
 
+# Pupil accounts DB (T4.2) — holds usernames + password hashes; never commit.
+tools/accounts.db
+tools/accounts.db-*
+accounts.db
+accounts.db-*
+
 # Python bytecode cache
 __pycache__/
 *.pyc

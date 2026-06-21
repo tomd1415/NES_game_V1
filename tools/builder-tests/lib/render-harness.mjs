@@ -8,6 +8,7 @@
 // it as a suite). Suites import it as `./lib/render-harness.mjs`.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -51,8 +52,12 @@ export function readTemplate() {
 
 // --- Server lifecycle ------------------------------------------------------
 export async function startServer(port) {
+  // Point the accounts store (T4.2) at a throwaway temp DB so render/build
+  // suites never create or touch the real tools/accounts.db.
+  const acctDb = path.join(os.tmpdir(), `pg-harness-accounts-${port}.db`);
+  for (const f of [acctDb, acctDb + '-wal', acctDb + '-shm']) { try { fs.unlinkSync(f); } catch {} }
   const srv = spawn('python3', [path.join(ROOT, 'tools', 'playground_server.py')],
-    { env: { ...process.env, PLAYGROUND_PORT: String(port) },
+    { env: { ...process.env, PLAYGROUND_PORT: String(port), PLAYGROUND_ACCOUNTS_DB: acctDb },
       stdio: ['ignore', 'pipe', 'pipe'] });
   const log = { text: '' };
   srv.stdout.on('data', d => { log.text += d.toString(); });
