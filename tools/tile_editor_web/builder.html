@@ -1498,7 +1498,10 @@ body.emu-single-player #emu-p2-controls { display: none; }
       : bg.nametable;
     if (!Array.isArray(nt)) return;
     const W = sceneWorld();
-    const tiles = (state && state.bg_tiles) || [];
+    // bg_tiles is the current split pool; fall back to the legacy single `tiles`
+    // pool so older projects (opened straight in the Builder, which doesn't run
+    // the full data migration) still show their background.
+    const tiles = (state && (state.bg_tiles || state.tiles)) || [];
     const rows = Math.min(W.rows, nt.length);
     const s = W.scale;
     for (let y = 0; y < rows; y++) {
