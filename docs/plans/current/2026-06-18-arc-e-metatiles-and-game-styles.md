@@ -380,10 +380,11 @@ per-heading CHR, **deferred to E3-3** (D9); laps = N ordered checkpoints + finis
   alternation (no ordering needed), `RACER_LAPS_TO_WIN` tunable, win-tint + freeze,
   `racer-laps-need-markers` validator, `racer-laps.mjs` green (anti-farm + win).
   *Pending the user's feel pass.*
-- **E3-3 rotated car art + Builder art hookup** — pending an **art-pipeline
-  decision** (auto-rotate vs draw-each-frame vs default car).
-- **E3-5 polish & 2-player** (+ numeric lap HUD, ordered checkpoints, reverse/brake)
-  — pending.
+- **E3-3 rotated car art** — ✅ **done** (option A: server auto-rotates one
+  right-facing drawn car into 8 frames in spare CHR; engine draws by heading,
+  `racer-rotation.mjs` green; no-op for non-racers). *Pending the user's visual pass.*
+- **E3-5 polish & 2-player** (+ numeric lap HUD, ordered checkpoints, reverse/brake,
+  flip-shared rotation CHR) — pending.
 
 ## 3.5 Open questions (flagged)
 CHR budget for rotated frames (may force ≤16 dirs); fixed-point trig perf under

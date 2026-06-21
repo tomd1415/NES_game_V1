@@ -1135,6 +1135,15 @@ void main(void) {
             if (anim_tick >= anim_frame_ticks) { anim_tick = 0; attack_playing = 0; }
         }
 #endif
+#if BW_GAME_STYLE == 3 && BW_RACER_ROT
+        // E3-3: the racer ignores walk/idle frames — the car's drawn orientation
+        // comes from its heading.  car_rot_tiles holds RACER_ROT_FRAMES rotated
+        // frames (baked by the server); 16 headings map to 8 frames (heading>>1),
+        // so adjacent headings reuse a frame.
+        anim_tiles = car_rot_tiles;
+        anim_attrs = car_rot_attrs;
+        anim_frame = (unsigned char)(racer_heading >> 1);
+#endif
         anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
 
 #if BW_GAME_STYLE == 0

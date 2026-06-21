@@ -21,6 +21,36 @@ deferred.
 
 ---
 
+## Arc E §3 top-down racer — E3-3 auto-rotated car art — 2026-06-21
+
+The racer car now faces its heading. The pupil draws the car **once (facing
+right → = heading 0)** and the build auto-rotates it — option A, the user's
+choice.
+
+- **Server** (`playground_server.py`, `_inject_racer_rotation`): for a racer
+  game, assembles the player car's pixels, bakes **8 rotated frames** (45° steps,
+  nearest-neighbour) into spare sprite-CHR slots — chosen as blank slots **not
+  referenced by any sprite**, so nothing else is clobbered — and stashes their
+  tile indices. Runs before `build_chr` (mutates the pool) and is a **no-op for
+  non-racer games**, so every other ROM stays byte-identical. Falls back to the
+  un-rotated car if there isn't CHR room (needs `8 × pw×ph` free tiles, 32 for a
+  2×2 car). `build_scene_inc` emits `car_rot_tiles[]`/`car_rot_attrs[]` +
+  `BW_RACER_ROT`.
+- **Engine** (`platformer.c`, `#if BW_GAME_STYLE == 3 && BW_RACER_ROT`): the
+  player draw reuses the existing animation path — `anim_tiles = car_rot_tiles`,
+  `anim_frame = racer_heading >> 1` — so 16 headings map to 8 frames (adjacent
+  headings reuse a frame). The 4 right-angle frames are exact; the 4 diagonals
+  are rougher (inherent to rotating 16×16 pixel art).
+- **Test** `tools/builder-tests/racer-rotation.mjs`: the drawn player tile index
+  changes with heading, headings 0 & 1 share a frame (the 16→8 mapping), and
+  headings 0/2/8 are distinct frames. Full suite + the byte-identical ROM golden
+  invariant green.
+
+Pending the user's visual pass (draw a right-facing car, watch it rotate as it
+drives — especially the diagonals). NES can't rotate sprites in hardware, so this
+is per-heading CHR; a future option is flip-sharing (3 drawn frames → 8 via
+H/V flips) to cut the CHR cost.
+
 ## Arc E §3 top-down racer — E3-4 laps & race goal — 2026-06-21
 
 The racer is now an actual *game with a goal*: complete N laps to win. Built

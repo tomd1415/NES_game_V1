@@ -1287,6 +1287,112 @@ def _flatten_sprite(sp):
     return tiles, attrs
 
 
+# --- E3-3: top-down racer auto-rotated car art -----------------------------
+# The NES can't rotate sprites in hardware, so a racer car can't face its
+# heading on its own.  At build time we take the player's single drawn car
+# (assumed to face RIGHT → heading 0) and bake RACER_ROT_FRAMES rotated copies
+# (45° steps) into spare sprite-CHR slots; the engine picks the frame from
+# racer_heading (16 headings → 8 frames, "8 directions reused across 16").
+# Nearest-neighbour rotation is rough on the 45° diagonals at 16×16 but fine for
+# a pupil tool; the 90° frames are exact.  Runs ONLY for racer games (and only
+# when there's CHR room), so every other ROM stays byte-identical.
+RACER_ROT_FRAMES = 8
+
+def _pool_pixels(pool, idx):
+    t = pool[idx] if (isinstance(pool, list) and 0 <= idx < len(pool)) else None
+    px = t.get("pixels") if isinstance(t, dict) else None
+    if not (isinstance(px, list) and len(px) == 8 and all(isinstance(r, list) and len(r) == 8 for r in px)):
+        return [[0] * 8 for _ in range(8)]
+    return px
+
+def _assemble_player_image(sp, pool):
+    """Player car as a (ph*8)×(pw*8) pixel grid, honouring per-cell flips."""
+    pw, ph = int(sp["width"]), int(sp["height"])
+    W, H = pw * 8, ph * 8
+    img = [[0] * W for _ in range(H)]
+    cells = sp["cells"]
+    for cr in range(ph):
+        for cc in range(pw):
+            cell = cells[cr][cc]
+            px = _pool_pixels(pool, cell_tile(cell))
+            attr = cell_attr(cell)
+            fh, fv = bool(attr & 0x40), bool(attr & 0x80)
+            for y in range(8):
+                sy = 7 - y if fv else y
+                for x in range(8):
+                    sx = 7 - x if fh else x
+                    img[cr * 8 + y][cc * 8 + x] = px[sy][sx] & 3
+    return img, W, H
+
+def _rotate_image(img, W, H, deg):
+    """Nearest-neighbour clockwise rotation (screen coords, y down) about the
+    centre; samples off the source are transparent (0)."""
+    import math
+    rad = math.radians(deg)
+    cs, sn = math.cos(rad), math.sin(rad)
+    cx, cy = (W - 1) / 2.0, (H - 1) / 2.0
+    out = [[0] * W for _ in range(H)]
+    for dy in range(H):
+        oy = dy - cy
+        for dx in range(W):
+            ox = dx - cx
+            sx = int(round(cx + ox * cs + oy * sn))
+            sy = int(round(cy - ox * sn + oy * cs))
+            if 0 <= sx < W and 0 <= sy < H:
+                out[dy][dx] = img[sy][sx]
+    return out
+
+def _inject_racer_rotation(state, player_idx):
+    """For a racer game, bake 8 rotated car frames into spare sprite-CHR slots
+    and stash their tile indices in state['_racer_rot'] for build_scene_inc.
+    Mutates state['sprite_tiles'] in place, so it MUST run before build_chr."""
+    game = (((state.get("builder") or {}).get("modules") or {}).get("game") or {}).get("config") or {}
+    if game.get("type") != "racer":
+        return
+    sprites = state.get("sprites") or []
+    if not (isinstance(player_idx, int) and 0 <= player_idx < len(sprites)):
+        return
+    pool = state.get("sprite_tiles")
+    if not (isinstance(pool, list) and len(pool) == NUM_TILES):
+        return
+    sp = sprites[player_idx]
+    try:
+        pw, ph = int(sp["width"]), int(sp["height"])
+    except (KeyError, TypeError, ValueError):
+        return
+    if pw <= 0 or ph <= 0:
+        return
+    need = RACER_ROT_FRAMES * pw * ph
+    # Free = blank AND not referenced by ANY sprite cell, so we never clobber a
+    # tile some sprite uses (even a blank one used as a transparent quadrant).
+    # Tile 0 is the canonical transparent tile — always keep it.
+    referenced = {0}
+    for s in sprites:
+        for row in (s.get("cells") or []):
+            for cell in row:
+                referenced.add(cell_tile(cell))
+    free = [i for i in range(NUM_TILES)
+            if i not in referenced and _pixels_blank(_pool_pixels(pool, i))]
+    if len(free) < need:
+        return  # not enough CHR room — engine falls back to the un-rotated car
+    img, W, H = _assemble_player_image(sp, pool)
+    tiles, attrs, k = [], [], 0
+    for f in range(RACER_ROT_FRAMES):
+        rimg = _rotate_image(img, W, H, f * (360.0 / RACER_ROT_FRAMES))
+        for cr in range(ph):
+            for cc in range(pw):
+                idx = free[k]; k += 1
+                sub = [[rimg[cr * 8 + y][cc * 8 + x] for x in range(8)] for y in range(8)]
+                if isinstance(pool[idx], dict):
+                    pool[idx]["pixels"] = sub
+                else:
+                    pool[idx] = {"pixels": sub}
+                tiles.append(idx)
+                attrs.append(0)
+    state["_racer_rot"] = {"tiles": tiles, "attrs": attrs,
+                           "frames": RACER_ROT_FRAMES, "w": pw, "h": ph}
+
+
 # T7.6a: single source of truth for sprite role codes.  Both scene emitters
 # render this — the C path as `#define ROLE_<NAME> <code>` and the asm path as
 # `.define ROLE_<NAME> <code>` — so the two tables can no longer drift (they
@@ -1367,6 +1473,25 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         "};",
         "",
     ]
+
+    # E3-3: racer auto-rotated car frames (only emitted when _inject_racer_rotation
+    # baked them, i.e. a racer game with CHR room).  The engine selects a frame
+    # from racer_heading; BW_RACER_ROT gates the whole feature off otherwise, so
+    # non-racer ROMs are byte-identical.
+    rot = state.get("_racer_rot")
+    if rot and rot.get("tiles"):
+        rt, ra = rot["tiles"], rot["attrs"]
+        lines += [
+            "#define BW_RACER_ROT 1",
+            f"#define RACER_ROT_FRAMES {rot['frames']}",
+            f"static const unsigned char car_rot_tiles[{len(rt)}] = {{",
+            "    " + ", ".join(f"0x{t:02X}" for t in rt),
+            "};",
+            f"static const unsigned char car_rot_attrs[{len(ra)}] = {{",
+            "    " + ", ".join(f"0x{a:02X}" for a in ra),
+            "};",
+            "",
+        ]
 
     # R-3/R-6 spawn-pool art (only when a spawn/damage-on-hit sprite is chosen,
     # so a no-spawn ROM stays byte-identical).  BR-04/BR-05 model B: validate the
@@ -2255,6 +2380,10 @@ def _build_rom(body):
         player_idx2 = -1
     start_x2 = int(start2.get("x", 180)) if start2 else 180
     start_y2 = int(start2.get("y", 120)) if start2 else 120
+
+    # E3-3: bake the racer's rotated car frames into spare CHR slots (mutates the
+    # sprite pool) before encoding it.  No-op for non-racer games → byte-identical.
+    _inject_racer_rotation(state, player_idx)
 
     chr_bytes = build_chr(state)
     nam_bytes = build_nam(state)

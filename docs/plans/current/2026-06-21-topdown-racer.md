@@ -60,11 +60,17 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   fixed the feel.) Edge = `SOLID_GROUND`/`WALL` (D6). 8×8 granularity; fine for v1.
 - **D8 — camera: reuse `scroll_follow`** centred on the car (it already eases via
   the deadzone). A fast car may want a smaller deadzone; tune at E3-2/E3-3.
-- **D9 — rotated art (E3-3): per-heading CHR.** 16 headings × the car's tiles is
-  a real CHR cost — mitigate by (a) supporting **8-direction art reused for 16**
-  (each art frame covers two adjacent headings) or (b) a smaller car (2×2). For
-  the **E3-1 spike, skip rotation**: draw a single fixed car sprite that *moves*
-  in the heading direction (proves the physics); rotation lands at E3-3.
+- **D9 — rotated art (E3-3): auto-rotate one drawn car, 8 dirs across 16.** ✅
+  *Built (option A, the user's choice).* The pupil draws the car **once, facing
+  right (→ = heading 0)**; the **server bakes 8 rotated frames** (45° steps) into
+  spare sprite-CHR slots at build time, and the engine draws the frame for the
+  current heading (`heading >> 1`, so each frame covers two adjacent headings —
+  "8 directions reused across 16"). Nearest-neighbour rotation: the 4 right-angle
+  frames are exact, the 4 diagonals are rougher (inherent at 16×16). Needs
+  `8 × pw×ph` free CHR slots (32 for a 2×2 car); if a project is too full it
+  silently falls back to the un-rotated car. NES can't flip→rotate in hardware,
+  so per-heading CHR is the only option; flip-sharing (3 drawn → 8) is a future
+  CHR optimisation.
 - **D10 — laps (E3-4): finish line + one checkpoint (alternation).** ✅ *Built —
   simpler than the original "N ordered checkpoints" idea, which sidesteps the
   flagged checkpoint-ordering UX (§3.5).* A lap = cross the **finish line**
@@ -106,11 +112,13 @@ checkpoints — sequence-sensitive, unlike stateless `behaviour_at`).
   car-freeze on completion, `racer-laps-need-markers` validator. Test
   `racer-laps.mjs`: a lap counts, anti-farm holds, the last lap wins + freezes.
   Golden unchanged. **Pending the user's feel pass.**
-- **E3-3 — rotated car art + Builder art hookup** (D9); FCEUX CHR check. **Next —
-  but needs an art-pipeline decision** (auto-rotate one drawn car vs draw-each-
-  frame vs a default car) — tee up with the user.
+- **E3-3 — rotated car art.** ✅ **Built + headless-green** (option A: server
+  auto-rotates one drawn car into 8 frames; engine draws by heading). Test
+  `racer-rotation.mjs` (drawn tile changes with heading; adjacent headings reuse
+  a frame). Golden unchanged (no-op for non-racers). **Pending the user's visual
+  pass** (draw a car facing right → does it look right rotating, esp. diagonals?).
 - **E3-5 — polish + 2-player** (D11). Also: numeric lap HUD, multiple ordered
-  checkpoints, reverse/brake (D4).
+  checkpoints, reverse/brake (D4), flip-sharing to cut rotation CHR.
 
 ## 6. Verification & invariants
 Same rules as the runner: every block `#if BW_GAME_STYLE == 3`-gated so the
