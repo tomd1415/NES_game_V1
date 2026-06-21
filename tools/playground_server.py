@@ -1297,6 +1297,22 @@ def _flatten_sprite(sp):
 # a pupil tool; the 90° frames are exact.  Runs ONLY for racer games (and only
 # when there's CHR room), so every other ROM stays byte-identical.
 RACER_ROT_FRAMES = 8
+# E3-5 flip-sharing: the NES OAM attr can H/V-flip a tile, so the 8 headings need
+# only 3 UNIQUE drawn frames — E (right, 0°), SE (down-right, 45°), S (down, 90°)
+# — and the other 5 are those mirrored.  Cuts the car's rotation CHR from 32
+# tiles to 12.  Each entry: (source frame, flipH, flipV).  (For a left-facing car
+# we MIRROR the right one, not rotate it 180°, so its roof stays up.)
+RACER_ROT_UNIQUE = 3
+_RACER_FRAME_SRC = [
+    (0, False, False),  # 0 E  (right)   — drawn
+    (1, False, False),  # 1 SE           — drawn
+    (2, False, False),  # 2 S  (down)    — drawn
+    (1, True,  False),  # 3 SW = SE H-flip
+    (0, True,  False),  # 4 W  = E  H-flip
+    (1, True,  True),   # 5 NW = SE H+V-flip
+    (2, False, True),   # 6 N  = S  V-flip
+    (1, False, True),   # 7 NE = SE V-flip
+]
 
 def _pool_pixels(pool, idx):
     t = pool[idx] if (isinstance(pool, list) and 0 <= idx < len(pool)) else None
@@ -1362,7 +1378,7 @@ def _inject_racer_rotation(state, player_idx):
         return
     if pw <= 0 or ph <= 0:
         return
-    need = RACER_ROT_FRAMES * pw * ph
+    need = RACER_ROT_UNIQUE * pw * ph
     # Free = blank AND not referenced by ANY sprite cell, so we never clobber a
     # tile some sprite uses (even a blank one used as a transparent quadrant).
     # Tile 0 is the canonical transparent tile — always keep it.
@@ -1376,9 +1392,12 @@ def _inject_racer_rotation(state, player_idx):
     if len(free) < need:
         return  # not enough CHR room — engine falls back to the un-rotated car
     img, W, H = _assemble_player_image(sp, pool)
-    tiles, attrs, k = [], [], 0
-    for f in range(RACER_ROT_FRAMES):
-        rimg = _rotate_image(img, W, H, f * (360.0 / RACER_ROT_FRAMES))
+    # Bake the 3 unique frames (E 0°, SE 45°, S 90°) into spare slots.
+    unique = []   # unique[u] = list of pw*ph pool tile indices, row-major
+    k = 0
+    for u in range(RACER_ROT_UNIQUE):
+        rimg = _rotate_image(img, W, H, u * 45.0)
+        fr = []
         for cr in range(ph):
             for cc in range(pw):
                 idx = free[k]; k += 1
@@ -1387,8 +1406,20 @@ def _inject_racer_rotation(state, player_idx):
                     pool[idx]["pixels"] = sub
                 else:
                     pool[idx] = {"pixels": sub}
-                tiles.append(idx)
-                attrs.append(0)
+                fr.append(idx)
+        unique.append(fr)
+    # Build the 8-frame (tile, attr) table from the 3 unique frames, mirroring the
+    # 5 derived headings via H/V flip (with the tile positions swapped to match).
+    tiles, attrs = [], []
+    for src, fh, fv in _RACER_FRAME_SRC:
+        fr = unique[src]
+        attr = (0x40 if fh else 0) | (0x80 if fv else 0)
+        for r in range(ph):
+            for c in range(pw):
+                sr = (ph - 1 - r) if fv else r
+                sc = (pw - 1 - c) if fh else c
+                tiles.append(fr[sr * pw + sc])
+                attrs.append(attr)
     state["_racer_rot"] = {"tiles": tiles, "attrs": attrs,
                            "frames": RACER_ROT_FRAMES, "w": pw, "h": ph}
 

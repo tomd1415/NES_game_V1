@@ -1644,8 +1644,9 @@ void main(void) {
         // P2 tiles.  P2 uses sprite palette 1 so the two cars look distinct.
         {
 #if BW_RACER_ROT
-            const unsigned char *p2t = car_rot_tiles
-                + (unsigned int)(racer_heading2 >> 1) * PLAYER_TILES_PER_FRAME;
+            unsigned int p2_base = (unsigned int)(racer_heading2 >> 1) * PLAYER_TILES_PER_FRAME;
+            const unsigned char *p2t = car_rot_tiles + p2_base;
+            const unsigned char *p2a = car_rot_attrs + p2_base;   // per-frame flip bits
 #else
             const unsigned char *p2t = player2_tiles;
 #endif
@@ -1662,7 +1663,13 @@ void main(void) {
 #endif
                     oam_buf[oam_idx++] = sy;
                     oam_buf[oam_idx++] = p2t[r * PLAYER2_W + c];
-                    oam_buf[oam_idx++] = 0x01;   // sprite palette 1
+                    // Sprite palette 1 (distinct from P1) + the frame's flip bits
+                    // so P2's mirrored rotation frames render correctly.
+#if BW_RACER_ROT
+                    oam_buf[oam_idx++] = p2a[r * PLAYER2_W + c] | 0x01;
+#else
+                    oam_buf[oam_idx++] = 0x01;
+#endif
                     oam_buf[oam_idx++] = sx;
                 }
             }
