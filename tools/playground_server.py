@@ -1750,6 +1750,14 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         )
         lines.append(stub)
     else:
+        # Scene-sprite positions are world pixels so sprites can sit anywhere in a
+        # multi-screen level, not just the first screen.  Clamp to the active
+        # background's world bounds (ss_x/ss_y go 16-bit below if any exceed 255).
+        _bgs = state.get("backgrounds") or []
+        _bg = _bgs[selected_bg_idx_safe(state)] if _bgs else {}
+        _dims = (_bg.get("dimensions") or {}) if isinstance(_bg, dict) else {}
+        world_w = ((int(_dims.get("screens_x", 1)) or 1)) * 256
+        world_h = ((int(_dims.get("screens_y", 1)) or 1)) * 240
         xs, ys, ws, hs, offsets, roles, flying = [], [], [], [], [], [], []
         tiles_flat, attrs_flat = [], []
         for item in scene_sprites:
@@ -1759,8 +1767,8 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             sp = sprites[idx]
             w = int(sp["width"])
             h = int(sp["height"])
-            xs.append(int(item.get("x", 0)) & 0xFF)
-            ys.append(int(item.get("y", 0)) & 0xFF)
+            xs.append(max(0, min(world_w - 1, int(item.get("x", 0)))))
+            ys.append(max(0, min(world_h - 1, int(item.get("y", 0)))))
             ws.append(w)
             hs.append(h)
             offsets.append(len(tiles_flat))
@@ -1775,22 +1783,27 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
                     tiles_flat.append(cell_tile(cell))
                     attrs_flat.append(cell_attr(cell))
 
-        def arr(name, values, as_hex=False, mutable=False):
+        def arr(name, values, as_hex=False, mutable=False, wide=False):
             fmt = (lambda v: f"0x{v:02X}") if as_hex else (lambda v: str(v))
             qualifier = "static" if mutable else "static const"
-            return (f"{qualifier} unsigned char {name}[{len(values)}] = {{ "
+            ctype = "unsigned int" if wide else "unsigned char"
+            return (f"{qualifier} {ctype} {name}[{len(values)}] = {{ "
                     + ", ".join(fmt(v) for v in values) + " };")
         # ss_x / ss_y are mutable so movement / AI snippets can modify
         # positions at runtime; cc65's DATA segment is copied ROM->RAM at
-        # startup per the nes.cfg linker script.
+        # startup per the nes.cfg linker script.  They go 16-bit (unsigned int)
+        # only when a sprite sits past the first screen (x or y > 255), so
+        # single-screen ROMs keep the 8-bit layout — which matches the asm /play
+        # path, so the asm/C rom-equiv parity holds for first-screen projects.
+        wide_pos = any(v > 255 for v in xs) or any(v > 255 for v in ys)
         # Per-instance animation state — one frame counter + one
         # tick counter per scene sprite.  Zero-initialised; the
         # template advances them when a matching tagged animation
         # exists (Phase B finale chunk B).
         anim_zero = [0] * n
         lines += [
-            arr("ss_x", xs, mutable=True),
-            arr("ss_y", ys, mutable=True),
+            arr("ss_x", xs, mutable=True, wide=wide_pos),
+            arr("ss_y", ys, mutable=True, wide=wide_pos),
             arr("ss_w", ws),
             arr("ss_h", hs),
             arr("ss_offset", offsets),

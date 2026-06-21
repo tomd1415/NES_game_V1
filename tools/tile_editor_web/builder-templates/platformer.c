@@ -1858,12 +1858,15 @@ void main(void) {
 #endif
 
         // --- Static scene sprites ---------------------------------------
-        // Scene sprites stay u8 world-space (inside screen 1) — as the
-        // camera scrolls away from screen 1 the world_to_screen helpers
-        // return 0xFF, which hides the sprite by writing y = 0xFF (the
-        // NES OAM "off-screen" sentinel) and the sprite simply scrolls
-        // out of view.  Matches pupil mental model: sprites live in the
-        // world, not glued to the camera.
+        // Scene sprites live at world-pixel positions (ss_x/ss_y; 16-bit when the
+        // level places any sprite past the first screen — see build_scene_inc),
+        // so they can sit anywhere in a scrolling level and scroll into view as
+        // the camera reaches them.  world_to_screen_x/y subtract the camera and
+        // clamp off-screen positions to 0xFF.  (Known minor limitation: a sprite
+        // off the screen's RIGHT clamps to x=255 — a 1px sliver at the right edge —
+        // rather than fully hiding; fixing that means an engine-wide change to the
+        // off-screen sentinel + re-pinning the golden, deferred.  Off-screen
+        // sprites still occupy an OAM slot; tile count is OAM-limited as before.)
         //
         // Phase B+ round 1c: the render loop now picks an animation
         // source for enemy+walk, enemy+idle, or pickup+idle per
