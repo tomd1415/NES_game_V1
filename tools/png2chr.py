@@ -27,6 +27,9 @@ except ImportError:
     print("  pip install Pillow")
     sys.exit(1)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from chr_codec import pixels_to_tile  # noqa: E402  (local import after sys.path tweak)
+
 
 def png_to_chr_tiles(image_path):
     """
@@ -69,23 +72,13 @@ def png_to_chr_tiles(image_path):
 
     for ty in range(tiles_down):
         for tx in range(tiles_across):
-            # Extract this 8x8 tile
-            plane0 = []
-            plane1 = []
-            for row in range(8):
-                p0_byte = 0
-                p1_byte = 0
-                for col in range(8):
-                    px = pixels[(ty * 8 + row) * width + (tx * 8 + col)]
-                    # Clamp to 0-3 (in case palette has more entries)
-                    px = px & 3
-                    if px & 1:
-                        p0_byte |= (0x80 >> col)
-                    if px & 2:
-                        p1_byte |= (0x80 >> col)
-                plane0.append(p0_byte)
-                plane1.append(p1_byte)
-            tiles.append(bytes(plane0 + plane1))
+            # Extract this 8x8 tile's pixels (clamped to 0-3) and encode it.
+            rows = [
+                [pixels[(ty * 8 + row) * width + (tx * 8 + col)] & 3
+                 for col in range(8)]
+                for row in range(8)
+            ]
+            tiles.append(pixels_to_tile(rows))
 
     return tiles
 

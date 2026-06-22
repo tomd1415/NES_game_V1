@@ -13,25 +13,10 @@ NES tile format:
 
 import os
 import struct
+import sys
 
-def pixels_to_tile(rows):
-    """Convert 8 rows of 8 pixel values (0-3) into 16 bytes of NES tile data."""
-    assert len(rows) == 8
-    plane0 = []
-    plane1 = []
-    for row in rows:
-        assert len(row) == 8
-        p0 = 0
-        p1 = 0
-        for bit in range(8):
-            pixel = row[bit]
-            if pixel & 1:
-                p0 |= (0x80 >> bit)
-            if pixel & 2:
-                p1 |= (0x80 >> bit)
-        plane0.append(p0)
-        plane1.append(p1)
-    return bytes(plane0 + plane1)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from chr_codec import pixels_to_tile  # noqa: E402  (local import after sys.path tweak)
 
 def empty_tile():
     """All transparent / color 0."""

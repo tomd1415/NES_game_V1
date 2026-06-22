@@ -23,6 +23,9 @@ except ImportError:
     print("ERROR: Pillow required. pip install Pillow")
     sys.exit(1)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from chr_codec import decode_tile  # noqa: E402  (local import after sys.path tweak)
+
 
 # Directories
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -91,23 +94,8 @@ def pick_font(size):
 # -----------------------------------------------------------------------------
 # CHR decoder - reverse of the encoder in generate_chr.py
 # -----------------------------------------------------------------------------
-def decode_tile(tile_bytes):
-    """Return an 8x8 grid of pixel values (0-3) from 16 bytes of NES tile data."""
-    plane0 = tile_bytes[:8]
-    plane1 = tile_bytes[8:16]
-    pixels = []
-    for row in range(8):
-        row_px = []
-        p0 = plane0[row]
-        p1 = plane1[row]
-        for col in range(8):
-            bit = 0x80 >> col
-            value = 0
-            if p0 & bit: value |= 1
-            if p1 & bit: value |= 2
-            row_px.append(value)
-        pixels.append(row_px)
-    return pixels
+# decode_tile() lives in chr_codec.py (imported above) so the planar codec is
+# defined once and shared with generate_chr.py / png2chr.py.
 
 
 def read_chr(path):
