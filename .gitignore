@@ -4,22 +4,11 @@ build/
 level.nam
 game.chr
 scene.inc
-palettes.inc
 *.bak
 
 # Runtime gallery entries — pupil publishes land here; the playground
 # server creates the dir at startup (GALLERY_DIR.mkdir). Never commit them.
 tools/gallery/
-
-# Step_Playground engine files the playground server regenerates on every
-# build (write_text/write_bytes into the tracked source tree — see
-# playground_server.py build_shared). Keeping them tracked made every local
-# playtest/test dirty the repo. game.chr/level.nam are covered by the generic
-# rules above; these four need explicit paths because the names are generic.
-steps/Step_Playground/src/collision.h
-steps/Step_Playground/src/behaviour.c
-steps/Step_Playground/src/bg_world.h
-steps/Step_Playground/src/bg_world.c
 
 # Pupil starter assets generated from assets/pupil/my_tiles.txt — regenerable,
 # so not tracked (keep my_tiles.txt, the source):
