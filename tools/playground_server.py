@@ -3230,9 +3230,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if parsed.path == "/me/projects" or parsed.path.startswith("/me/projects/"):
             return self._me_projects_get(parsed.path)
         if parsed.path == "/default-main-c":
-            return self._default_main_c()
+            return self._serve_text_file(DEFAULT_MAIN_C, "main.c")
         if parsed.path == "/default-main-s":
-            return self._default_main_s()
+            return self._serve_text_file(DEFAULT_MAIN_S, "main.s")
         if parsed.path == "/lessons":
             return self._lessons_index()
         if parsed.path.startswith("/lessons/"):
@@ -3342,22 +3342,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _default_main_c(self):
+    def _serve_text_file(self, path, label):
         try:
-            data = DEFAULT_MAIN_C.read_bytes()
+            data = path.read_bytes()
         except OSError as e:
-            return self.send_error(500, f"could not read default main.c: {e}")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def _default_main_s(self):
-        try:
-            data = DEFAULT_MAIN_S.read_bytes()
-        except OSError as e:
-            return self.send_error(500, f"could not read default main.s: {e}")
+            return self.send_error(500, f"could not read default {label}: {e}")
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
