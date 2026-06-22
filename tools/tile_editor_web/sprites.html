@@ -7217,12 +7217,13 @@ async function pgProbeServer() {
   pgServerCaps.probed = true;
   const sel = document.getElementById('pg-runon');
   if (!sel) return;
+  const ns = window.PlayPipeline.nativeStatus(pgServerCaps);
   const nativeOpt = sel.querySelector('option[value="native"]');
-  if (nativeOpt) nativeOpt.disabled = !pgServerCaps.fceux;
+  if (nativeOpt) { nativeOpt.disabled = !ns.usable; nativeOpt.textContent = ns.label; }
   // Restore saved preference, coercing native→browser when unavailable.
   let pref = null;
   try { pref = localStorage.getItem(RUNON_KEY); } catch {}
-  if (pref === 'native' && !pgServerCaps.fceux) pref = 'browser';
+  if (pref === 'native' && !ns.usable) pref = 'browser';
   if (pref === 'native' || pref === 'browser') sel.value = pref;
   sel.addEventListener('change', () => {
     try { localStorage.setItem(RUNON_KEY, sel.value); } catch {}

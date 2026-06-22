@@ -1620,11 +1620,12 @@ async function pgProbeServer() {
   } catch { /* server not reachable; play click will surface it */ }
   pgServerCaps.probed = true;
   const sel = document.getElementById('pg-runon');
+  const ns = window.PlayPipeline.nativeStatus(pgServerCaps);
   const nativeOpt = sel.querySelector('option[value="native"]');
-  if (nativeOpt) nativeOpt.disabled = !pgServerCaps.fceux;
+  if (nativeOpt) { nativeOpt.disabled = !ns.usable; nativeOpt.textContent = ns.label; }
   let pref = null;
   try { pref = localStorage.getItem(RUNON_KEY); } catch {}
-  if (pref === 'native' && !pgServerCaps.fceux) pref = 'browser';
+  if (pref === 'native' && !ns.usable) pref = 'browser';
   if (pref === 'native' || pref === 'browser') sel.value = pref;
   sel.addEventListener('change', () => {
     try { localStorage.setItem(RUNON_KEY, sel.value); } catch {}

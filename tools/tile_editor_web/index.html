@@ -4315,13 +4315,13 @@ function init() {
       run({ mode: 'browser', download: true }));
     if (sel) {
       window.PlayPipeline.capabilities().then(caps => {
+        const ns = window.PlayPipeline.nativeStatus(caps);
         const nativeOpt = sel.querySelector('option[value="native"]');
         if (nativeOpt) {
-          nativeOpt.disabled = !caps.fceux;
-          nativeOpt.textContent = caps.fceux ? 'Local (fceux)' :
-            'Local (fceux — not installed)';
+          nativeOpt.disabled = !ns.usable;
+          nativeOpt.textContent = ns.label;
         }
-        if (sel.value === 'native' && !caps.fceux) sel.value = 'browser';
+        if (sel.value === 'native' && !ns.usable) sel.value = 'browser';
       }).catch(() => {});
     }
   })();

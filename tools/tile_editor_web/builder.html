@@ -2093,14 +2093,16 @@ body.emu-single-player #emu-p2-controls { display: none; }
       e.preventDefault();
       doPublish();
     });
-    // Disable the Local option if fceux isn't installed on the server.
+    // Disable the Local option unless fceux is installed AND the page is served
+    // from this machine (native fceux runs on the server's desktop).
     window.PlayPipeline.capabilities().then(caps => {
+      const ns = window.PlayPipeline.nativeStatus(caps);
       const nativeOpt = modeSelect.querySelector('option[value="native"]');
       if (nativeOpt) {
-        nativeOpt.disabled = !caps.fceux;
-        nativeOpt.textContent = caps.fceux ? 'Local (fceux)' : 'Local (fceux — not installed)';
+        nativeOpt.disabled = !ns.usable;
+        nativeOpt.textContent = ns.label;
       }
-      if (modeSelect.value === 'native' && !caps.fceux) modeSelect.value = 'browser';
+      if (modeSelect.value === 'native' && !ns.usable) modeSelect.value = 'browser';
     }).catch(() => {});
     function showHelp() {
       const dlg = document.getElementById('help-dialog');

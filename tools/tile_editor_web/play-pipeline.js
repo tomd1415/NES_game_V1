@@ -45,6 +45,24 @@
     return _capsPromise;
   }
 
+  // Native fceux runs on the SERVER's desktop (the playground server spawns
+  // `fceux <rom>`), so it's only useful to the viewer when the page is served
+  // from that same machine.  On a hosted instance (production over the
+  // internet, or the classroom LAN box) the fceux window would open on the
+  // server where the pupil can't see it — so treat native as unusable there
+  // even if /health reports fceux present, and steer everyone to "Download
+  // ROM" / in-browser play instead.
+  function isLocalHost() {
+    var h = (typeof location !== 'undefined' && location.hostname) || '';
+    return h === '' || h === 'localhost' || h === '::1' || h === '[::1]' || /^127\./.test(h);
+  }
+  function nativeStatus(caps) {
+    caps = caps || {};
+    if (!caps.fceux)    return { usable: false, label: 'Local (fceux — not installed)' };
+    if (!isLocalHost()) return { usable: false, label: 'Local (fceux — host machine only)' };
+    return { usable: true, label: 'Local (fceux)' };
+  }
+
   // --------------------------------------------------------------------
   // Template fetch — cached.  BuilderAssembler needs the platformer.c
   // text to substitute module output into.
@@ -416,9 +434,11 @@
   // --------------------------------------------------------------------
   window.PlayPipeline = {
     capabilities: capabilities,
+    nativeStatus: nativeStatus,
     buildPlayRequest: buildPlayRequest,
     play: play,
     // Internals exposed for tests + page code that wants to reuse bits:
+    _isLocalHost: isLocalHost,
     _fortifyState: fortifyState,
     _derivePlayers: derivePlayers,
     _deriveSceneSprites: deriveSceneSprites,
