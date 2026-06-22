@@ -1946,6 +1946,9 @@ details.collapsible > summary .sub-count {
           <label>Jump
             <select id="anim-assign-jump" title="Which animation to play while jumping (UP held) in the Play-in-NES test. Auto-filled by Player + Jump tagged animations."></select>
           </label>
+          <label>Attack
+            <select id="anim-assign-attack" title="Which animation to play when the attack button (set in the Builder) is pressed in the Play-in-NES test. Auto-filled by Player + Attack tagged animations."></select>
+          </label>
         </div>
         <div id="anim-assign-warn" class="anim-assign-warn" style="display:none" role="status"></div>
       </div>
@@ -4097,6 +4100,7 @@ function animFrameSizeMismatch(anim, player) {
 function renderAnimationAssignments() {
   for (const kind of ASSIGN_KINDS) {
     const sel = document.getElementById('anim-assign-' + kind);
+    if (!sel) continue;  // no <select> for this kind — skip rather than throw
     const current = state.animation_assignments[kind];
     sel.innerHTML = '';
     const none = document.createElement('option');
@@ -4288,7 +4292,13 @@ function initAnimationHandlers() {
     if (animPreview.playing) startAnimPreview();
   });
   for (const kind of ASSIGN_KINDS) {
-    document.getElementById('anim-assign-' + kind).addEventListener('change', e => {
+    // Guard against an ASSIGN_KINDS entry that has no matching <select> in the
+    // markup. A missing animation control must never throw here — this runs
+    // before renderAll() in init(), so an unguarded null would abort the whole
+    // page load and leave the sprite list empty + the canvases blacked out.
+    const sel = document.getElementById('anim-assign-' + kind);
+    if (!sel) continue;
+    sel.addEventListener('change', e => {
       pushUndo();
       const v = e.target.value;
       state.animation_assignments[kind] = v === '' ? null : parseInt(v, 10);
