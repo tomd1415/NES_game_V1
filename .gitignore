@@ -21,6 +21,15 @@ steps/Step_Playground/src/behaviour.c
 steps/Step_Playground/src/bg_world.h
 steps/Step_Playground/src/bg_world.c
 
+# Pupil starter assets generated from assets/pupil/my_tiles.txt — regenerable,
+# so not tracked (keep my_tiles.txt, the source):
+#   my_project.json       <- python3 tools/convert_my_tiles.py
+#   palette_reference.png  <- python3 tools/generate_palette_reference.py
+#   preview.png            <- python3 tools/tile_editor.py my_tiles.txt --watch
+assets/pupil/my_project.json
+assets/pupil/palette_reference.png
+assets/pupil/preview.png
+
 # Pupil feedback log + handled-set (local teacher state)
 feedback.jsonl
 feedback-handled.json

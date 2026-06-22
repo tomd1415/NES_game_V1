@@ -171,7 +171,8 @@ If you break a rule, the preview shows a red banner with the line number.
 
 ### Picking colours
 
-Open **`palette_reference.png`** side-by-side. Every NES colour is there
+Open **`palette_reference.png`** side-by-side (generate it once with
+`python3 tools/generate_palette_reference.py`). Every NES colour is there
 with its hex code. Popular ones:
 
 - `0x21` sky blue · `0x29` grass · `0x07` dirt

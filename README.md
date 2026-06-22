@@ -213,7 +213,8 @@ To move a text-format file into the visual editor, run
 **Import…** and pick the resulting `assets/pupil/my_project.json`.
 
 Full editor instructions: **[`docs/guides/TILE_EDITOR_GUIDE.md`](docs/guides/TILE_EDITOR_GUIDE.md)**.
-All 64 NES colours: **`assets/pupil/palette_reference.png`**.
+All 64 NES colours: **`assets/pupil/palette_reference.png`** — generate it with
+`python3 tools/generate_palette_reference.py`.
 
 ---
 
