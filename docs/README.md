@@ -14,7 +14,7 @@ of how we got here.
 | [`plans/current/`](plans/current/) | Active plan(s) the project is currently executing against. Should be a small number of files at any time. |
 | [`plans/archive/`](plans/archive/) | Superseded plans, named `YYYY-MM-DD-<slug>.md` so they sort chronologically. Old code/comment cross-references that point here are still meaningful — please don't delete or rename them. |
 | [`feedback/`](feedback/) | Pupil and teacher bug reports / feature requests, plus broader feedback summaries. The [running bugs list](feedback/recently-observed-bugs.md) feeds the next plan. |
-| [`changelog/`](changelog/) | What shipped, when. The [changelog-implemented](changelog/changelog-implemented.md) is a single growing file with one section per shipped change, newest at the bottom. |
+| [`changelog/`](changelog/) | What shipped, when. The [changelog-implemented](changelog/changelog-implemented.md) is a single growing file with one section per shipped change, newest at the top. |
 
 ## What to read first
 
@@ -30,7 +30,7 @@ of how we got here.
   [`plans/archive/`](plans/archive/) — the chronological filenames
   let you scan quickly, and most of the recent entries
   cross-reference each other.
-- **Adding a feature?**  Append a line to
+- **Adding a feature?**  Prepend a section at the top of
   [`changelog/changelog-implemented.md`](changelog/changelog-implemented.md)
   when it ships, and link the planning entry it came from.
 - **Pupil reported a bug?**  Append to

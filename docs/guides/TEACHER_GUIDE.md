@@ -835,24 +835,26 @@ The NES's limitations (256 colors but only 25 on screen, 64 sprites max, 8 per s
 
 ---
 
-## Future development roadmap
+## Development roadmap
 
-### Immediate next steps
-1. **Background tiles**: Load a nametable to display platforms. Use the existing `.nam` placeholder files as a starting point.
-2. **Tile-based collision**: Check the player's position against the background tile map to detect floors and walls.
-3. **NMI handler + OAM DMA**: Replace direct OAM writes with a proper NMI interrupt handler that uses DMA ($4014) for reliable sprite updates. This requires a custom startup in assembly (reset.s) to replace nes.lib's crt0.
+Most of the original roadmap has since shipped: the platform now covers
+backgrounds, tile collision, scrolling, enemies, an attack, an HP/damage
+system, and sound + music. Only the last two items remain genuinely future.
 
-### Medium-term goals (Zelda 2 features)
-4. **Horizontal scrolling**: Update PPU_SCROLL each frame, swap nametables when crossing screen boundaries.
-5. **Enemies**: Add enemy sprites with patrol AI and player-enemy collision.
-6. **Sword attack**: Add an attack animation and hitbox when pressing A/B.
-7. **Health/damage system**: Track player and enemy HP, implement knockback.
+### Shipped ✅
+1. **Background tiles**: the Backgrounds editor loads and renders nametables to draw platforms and levels.
+2. **Tile-based collision**: floors, walls and hazards via the Behaviour editor's tile map.
+3. **NMI-driven rendering**: sprite/screen updates happen during vblank. Note: the build uses cc65's stock `nes.lib` crt0, *not* a custom `reset.s` — `src/reset.s` is kept only as a reference startup model and is not compiled.
+4. **Horizontal scrolling**: the camera scrolls and swaps nametables across screen boundaries.
+5. **Enemies**: enemy sprites with patrol/AI and player-enemy collision.
+6. **Attack**: an attack animation + hitbox on a configurable A/B button.
+7. **Health/damage system**: player/enemy HP, damage and knockback, with an optional HUD.
+8. **Sound effects**: APU square/triangle/noise channels via the Audio page.
+9. **Music**: a FamiStudio-driven music engine integrated into the build.
 
-### Advanced goals
-8. **Sound effects**: Write to the APU registers ($4000-$4013) for square wave, triangle, and noise channels.
-9. **Music**: Implement a simple music engine or use an existing one (like FamiTone).
-10. **Bank switching**: Move to Mapper 1 (MMC1) for more code and graphics space.
-11. **Overworld map**: Zelda 2's signature feature - a top-down map that transitions to side-scrolling action scenes.
+### Still future
+10. **Bank switching**: move to Mapper 1 (MMC1) for more code and graphics space.
+11. **Overworld map**: Zelda 2's signature feature — a top-down map that transitions to side-scrolling action scenes.
 
 ---
 

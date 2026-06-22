@@ -1231,14 +1231,6 @@ def _spawn_hit_index(state):
     return _as_sprite_int(dcfg.get("spawnSpriteIdx", -1))
 
 
-def _spawn_required(state):
-    """True when the assembled C will turn the spawn pool on — i.e. either the
-    trigger or the hit effect is configured.  Used to decide whether a valid
-    spawn-art sprite is mandatory (BR-04)."""
-    return (_spawn_trigger_index(state) is not None
-            or _spawn_hit_index(state) is not None)
-
-
 def _spawn_art_one(sprites, idx, suffix):
     """C lines for one SPAWN<suffix>_W/H + SPAWN<suffix>_TILES/ATTRS art block,
     or [] when idx is out of range (caller validates / fails early)."""
@@ -2012,16 +2004,6 @@ def _behaviour_world_dims(state):
     sx = max(1, int(dims.get("screens_x") or 1))
     sy = max(1, int(dims.get("screens_y") or 1))
     return SCREEN_COLS * sx, SCREEN_ROWS * sy
-
-
-def _behaviour_world_map(state):
-    """Build the flat world behaviour map as a bytes() of length cols*rows."""
-    cols, rows = _behaviour_world_dims(state)
-    bg = None
-    bgs = state.get("backgrounds")
-    if isinstance(bgs, list) and bgs:
-        bg = bgs[selected_bg_idx_safe(state)] or {}
-    return _behaviour_map_for_bg(bg, cols, rows), cols, rows
 
 
 def _behaviour_map_for_bg(bg, cols, rows):

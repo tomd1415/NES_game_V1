@@ -10,28 +10,28 @@ Designed for on-screen viewing, with a Nintendo-history tone for bright but relu
 Install the **Marp for VS Code** extension:
 
 - Extension ID: `marp-team.marp-vscode`
-- Open any `slides/step*.md`
+- Open any `docs/guides/slides/step*.md`
 - Click the **Marp preview** icon (top right) to get a side-by-side rendered view
 - Works offline, no extra tools needed
 
 ### Option 2 — Browser (HTML export)
 
 ```bash
-npx @marp-team/marp-cli slides/step1.md --html -o slides/step1.html
-xdg-open slides/step1.html
+npx @marp-team/marp-cli docs/guides/slides/step1.md --html -o docs/guides/slides/step1.html
+xdg-open docs/guides/slides/step1.html
 ```
 
 ### Option 3 — PDF (for printing)
 
 ```bash
-npx @marp-team/marp-cli slides/step1.md --pdf -o slides/step1.pdf
+npx @marp-team/marp-cli docs/guides/slides/step1.md --pdf -o docs/guides/slides/step1.pdf
 ```
 
 The first `npx` run will fetch Marp (~40 MB). After that it's instant.
 
 ## Regenerating diagrams
 
-The diagrams under `slides/assets/` are generated programmatically from
+The diagrams under `docs/guides/slides/assets/` are generated programmatically from
 the game's own sprite data so they stay in sync with the code.
 
 ```bash

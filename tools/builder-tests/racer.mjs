@@ -14,7 +14,7 @@
 //      (the car moves in the steered direction — the heart of the spike).
 import * as H from './lib/render-harness.mjs';
 
-const PORT = 18839;
+const PORT = 18863;
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

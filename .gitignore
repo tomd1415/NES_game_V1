@@ -4,6 +4,12 @@ build/
 level.nam
 game.chr
 scene.inc
+palettes.inc
+*.bak
+
+# Runtime gallery entries — pupil publishes land here; the playground
+# server creates the dir at startup (GALLERY_DIR.mkdir). Never commit them.
+tools/gallery/
 
 # Pupil feedback log + handled-set (local teacher state)
 feedback.jsonl

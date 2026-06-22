@@ -89,17 +89,6 @@
     }).join('\n');
   }
 
-  // Find the first sprite with the given role (same convention as the
-  // server's build_scene_inc — role strings match state.sprites[i].role).
-  // Returns the index or -1.
-  function findSpriteByRole(state, role) {
-    const sprites = (state && state.sprites) || [];
-    for (let i = 0; i < sprites.length; i++) {
-      if (sprites[i] && sprites[i].role === role) return i;
-    }
-    return -1;
-  }
-
   // Return every sprite index whose role matches.  Used by the Player
   // 2 wiring — findSpritesByRole(state, 'player')[1] is the second
   // Player-tagged sprite, i.e. P2's art.  Preserves list order so the
@@ -191,7 +180,6 @@
     replaceRegion,
     appendToSlot,
     stripSlotMarkers,
-    findSpriteByRole,
     findSpritesByRole,
     clampInt,
   };
