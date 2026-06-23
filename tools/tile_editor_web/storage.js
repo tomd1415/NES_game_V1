@@ -169,6 +169,13 @@
       // No v2 catalog. Either migrate legacy, or initialise fresh.
       catalog = migrateLegacy();
       if (catalog) return catalog;
+      // Re-read once more before initialising fresh: another tab booting at the
+      // same time may have just migrated the legacy keys and written the v2
+      // catalog (migrateLegacy deletes the legacy keys, so this tab would
+      // otherwise see "no legacy, no catalog" and clobber the other tab's
+      // migrated projects with an empty one).  This narrows that first-boot race.
+      catalog = readCatalog();
+      if (catalog) return catalog;
       // No legacy either: create a first empty project.
       const defaultId = 'default';
       catalog = freshCatalog(defaultId);

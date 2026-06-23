@@ -232,6 +232,15 @@ FEEDBACK_PAGES = ("index", "sprites", "behaviour", "code", "builder")
 FEEDBACK_MAX_BODY = 1024 * 1024
 # 4 MB body cap for /play — project state + custom C/asm source + audio asm.
 PLAY_MAX_BODY = 4 * 1024 * 1024
+# Shown when placed scene sprites carry more than 256 tiles of art total — the
+# ss_offset table the engine indexes is byte-wide, so it cannot address beyond
+# that.  Raised as a BuildError so the pupil sees it on the build pill.
+_SCENE_TILE_BUDGET_MSG = (
+    "Too many scene sprites (or too much scene-sprite art) to fit the NES "
+    "sprite-tile budget — the engine can only address the first 256 tiles of "
+    "placed scene sprites. Remove some placed sprites, or make them smaller, "
+    "and try again."
+)
 FEEDBACK_MAX_MESSAGE = 500
 FEEDBACK_MAX_NAME = 80
 FEEDBACK_MAX_PROJECT = 80
@@ -1138,6 +1147,10 @@ def build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y):
                     cell = sp["cells"][r][c]
                     tiles_flat.append(cell_tile(cell))
                     attrs_flat.append(cell_attr(cell))
+        # Same NES sprite-tile budget as the C emitter (see _SCENE_TILE_BUDGET_MSG):
+        # an ss_offset past 255 would make ca65 abort with a Range error.
+        if offsets and offsets[-1] > 255:
+            raise BuildError(_SCENE_TILE_BUDGET_MSG)
         data += [
             "ss_x:      .byte " + ", ".join(str(v) for v in xs),
             "ss_y:      .byte " + ", ".join(str(v) for v in ys),
@@ -1833,6 +1846,15 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
                     cell = sp["cells"][r][c]
                     tiles_flat.append(cell_tile(cell))
                     attrs_flat.append(cell_attr(cell))
+
+        # ss_offset is emitted as `unsigned char` and read into `unsigned char
+        # off` in the engine.  Once the cumulative scene-sprite tile data passes
+        # 256 bytes an offset no longer fits a byte — cc65 SILENTLY truncates
+        # the initializer (a later sprite then renders another sprite's art) and
+        # the asm path makes ca65 hard-error.  Fail loudly with a pupil-facing
+        # message instead of shipping garbled sprites.
+        if offsets and offsets[-1] > 255:
+            raise BuildError(_SCENE_TILE_BUDGET_MSG)
 
         def arr(name, values, as_hex=False, mutable=False, wide=False):
             fmt = (lambda v: f"0x{v:02X}") if as_hex else (lambda v: str(v))
@@ -2622,6 +2644,27 @@ clean:
 """
 
 
+# Hard ceiling on a single build.  A pathological pupil source (e.g. an
+# assembler `.repeat` macro bomb, or C the compiler can't finish) must not hang
+# a worker thread forever — and on the shared-dir path the build runs while
+# holding BUILD_LOCK, so one stuck build would block every other pupil's build.
+BUILD_TIMEOUT = 60
+
+
+def _run_make(args):
+    """subprocess.run for the make/cc65/ca65 toolchain with a hard timeout.
+    On timeout the child is killed; we surface a friendly BuildError instead of
+    leaving the request (and BUILD_LOCK) hung."""
+    try:
+        return subprocess.run(args, capture_output=True, text=True,
+                              timeout=BUILD_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise BuildError(
+            f"Build timed out after {BUILD_TIMEOUT} seconds — your code may be "
+            "too large, or stuck in something the compiler can't finish. "
+            "Simplify it and try again.")
+
+
 def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_asm):
     with tempfile.TemporaryDirectory(prefix="nesgame_build_asm_") as td:
         tmp_root = pathlib.Path(td) / "Step_Playground"
@@ -2642,10 +2685,7 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
         (tmp_root / "assets" / "backgrounds" / "level.nam").write_bytes(nam_bytes)
         (tmp_root / "Makefile").write_text(ASM_MAKEFILE)
 
-        build = subprocess.run(
-            ["make", "-C", str(tmp_root)],
-            capture_output=True, text=True,
-        )
+        build = _run_make(["make", "-C", str(tmp_root)])
         build_log = (build.stdout or "") + (build.stderr or "")
         build_log = build_log.replace(str(tmp_root) + "/", "").replace(str(tmp_root), "")
         if build.returncode != 0:
@@ -2697,10 +2737,7 @@ def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
                 try: p.unlink()
                 except FileNotFoundError: pass
 
-        build = subprocess.run(
-            make_args,
-            capture_output=True, text=True,
-        )
+        build = _run_make(make_args)
         build_log = (build.stdout or "") + (build.stderr or "")
         if build.returncode != 0:
             raise BuildError(build_log)
@@ -2752,10 +2789,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
             # has no `tools/` sibling, so the relative form would 404.
             make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
 
-        build = subprocess.run(
-            make_args,
-            capture_output=True, text=True,
-        )
+        build = _run_make(make_args)
         build_log = (build.stdout or "") + (build.stderr or "")
         # Strip the tempdir prefix out of diagnostics so clickable error
         # locations in the editor read as "src/main.c(42): Error ..." rather
@@ -2910,8 +2944,13 @@ def run_play(body):
         return {"ok": False, "stage": "build", "log": str(e),
                 "build_time_ms": int((time.time() - started) * 1000)}
     except Exception as e:
+        # Log the full traceback to the server console (the teacher can read it)
+        # but DON'T return it to the browser — format_exc() leaks absolute
+        # server paths and internal structure to anyone hitting the public
+        # instance.  The exception type + message is enough for a pupil.
+        traceback.print_exc()
         return {"ok": False, "stage": "generate",
-                "log": f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}",
+                "log": f"{type(e).__name__}: {e}",
                 "build_time_ms": int((time.time() - started) * 1000)}
 
     built_epoch = time.time()
@@ -3376,8 +3415,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json(400, {"ok": False, "stage": "input", "log": f"bad JSON: {e}"})
             try:
                 result = run_play(body)
-            except Exception:
-                result = {"ok": False, "stage": "server", "log": traceback.format_exc()}
+            except Exception as e:
+                # Server-side log only; don't leak the traceback to the client.
+                traceback.print_exc()
+                result = {"ok": False, "stage": "server",
+                          "log": f"{type(e).__name__}: {e}"}
             return self._json(200 if result.get("ok") else 500, result)
         if parsed.path == "/feedback":
             return self._feedback()
@@ -3583,12 +3625,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # ----- Pupil accounts (T4.2 — P1) -----------------------------------
 
     def _client_ip(self):
-        """Best-effort client IP for rate limiting — first X-Forwarded-For hop
-        (set by the HTTPS reverse proxy) else the socket peer."""
-        xff = self.headers.get("X-Forwarded-For", "")
-        if xff:
-            return xff.split(",")[0].strip()
-        return self.client_address[0] if self.client_address else ""
+        """Best-effort client IP for rate limiting.
+
+        Only trust the X-Forwarded-For header when the request actually reached
+        us from the local reverse proxy (loopback) — the documented deployment
+        has nginx terminating TLS on the same host.  A direct client must NOT be
+        able to set XFF, or it could hand itself a fresh rate-limit bucket on
+        every request and defeat the auth brute-force throttle.  (If your proxy
+        is not on localhost, add its address to the trusted set below.)"""
+        peer = self.client_address[0] if self.client_address else ""
+        if peer in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+            xff = self.headers.get("X-Forwarded-For", "")
+            if xff:
+                return xff.split(",")[0].strip()
+        return peer
 
     def _session_token(self):
         """Extract the opaque session token from the Cookie header, if any."""

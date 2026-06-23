@@ -4400,6 +4400,13 @@ function init() {
         // parsed.backgrounds[], so we can always just copy the whole list.
         state.backgrounds = parsed.backgrounds;
         state.selectedBgIdx = Math.min(parsed.selectedBgIdx || 0, state.backgrounds.length - 1);
+        // Importing can shrink the background list; the in-editor add/delete/
+        // duplicate handlers all remap the doors module's target via
+        // remapDoorTargetBg, but import replaces backgrounds wholesale and
+        // bypassed that — leaving a door pointing at a now-nonexistent room.
+        // Reset any out-of-range door target to -1 (same-room), matching the
+        // delete handler's fallback.
+        remapDoorTargetBg(t => (t >= state.backgrounds.length ? -1 : t));
         resizeNametable(state);
 
         afterStateReplaced();
@@ -4626,11 +4633,15 @@ function init() {
   document.getElementById('btn-bg-dup').addEventListener('click', () => {
     pushUndo();
     const src = activeBg();
-    const copy = {
-      name: nextCopyName(src.name, state.backgrounds.map(b => b.name)),
-      dimensions: { ...src.dimensions },
-      nametable: src.nametable.map(row => row.map(c => ({ ...c }))),
-    };
+    // Deep-clone EVERY background field, not just name/dimensions/nametable.
+    // The old field-by-field copy dropped bg.behaviour (the per-cell collision
+    // grid painted on the Behaviour page) and the 16×16 metatile data
+    // (tileMode/metatiles/mtmap), so a duplicated background lost all its wall/
+    // ground/door markup and a duplicated metatile background was silently
+    // downgraded to plain 8×8.  A JSON round-trip is already how cloneState/undo
+    // copy this same state shape, so it is safe here.
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.name = nextCopyName(src.name, state.backgrounds.map(b => b.name));
     const insPos = state.selectedBgIdx + 1;
     state.backgrounds.splice(insPos, 0, copy);
     remapDoorTargetBg(t => (t >= insPos ? t + 1 : t));

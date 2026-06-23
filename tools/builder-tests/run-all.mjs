@@ -552,6 +552,163 @@ check('invariant: dialogue font char set agrees across server, editor + validato
 
 console.log('');
 
+// --- Bug sweep 2026-06-23 — guards for the confirmed fixes -------------
+//
+// Source-text guards (the project's established cheap-regression style) for the
+// 14 defects found + fixed in the 2026-06-23 multi-agent bug sweep.  The
+// browser-DOM ones (code-Play, animation-delete item 32, background-duplicate)
+// also have full Playwright coverage under tools/e2e/; these add a fast,
+// dependency-free backstop and cover the server/JS fixes the browser suite
+// doesn't reach.  See docs/changelog/changelog-implemented.md.
+const SERVER_PY = path.join(ROOT, 'tools', 'playground_server.py');
+const ACCOUNTS_PY = path.join(ROOT, 'tools', 'accounts.py');
+
+check('bug-sweep: code.html play() reads state.customMain*, not a dangling `src`', () => {
+  const html = fs.readFileSync(path.join(WEB, 'code.html'), 'utf8');
+  const start = html.indexOf('async function play(');
+  const end = html.indexOf('function onLogClick(', start);
+  const body = (start >= 0 && end >= 0) ? html.slice(start, end) : html;
+  if (/pipelineOpts\.customMain(?:C|Asm)\s*=\s*src\b/.test(body)) {
+    throw new Error('code.html play() assigns pipelineOpts.customMain* = src (removed in the flush ' +
+      'refactor) — ReferenceError under strict mode broke Play entirely; read from state instead');
+  }
+  if (!/pipelineOpts\.customMainC\s*=\s*state\.customMainC/.test(body)) {
+    throw new Error('code.html play() must set pipelineOpts.customMainC = state.customMainC');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: renderAnimStrip is display-only (no selectedAnimId write — item 32)', () => {
+  const html = fs.readFileSync(path.join(WEB, 'sprites.html'), 'utf8');
+  const start = html.indexOf('function renderAnimStrip(');
+  // End at the NEXT top-level function (startAnimationWithCurrentSprite), not a
+  // later one — the intervening functions legitimately set selectedAnimId on an
+  // explicit user action.
+  const end = start >= 0 ? html.indexOf('\nfunction ', start + 25) : -1;
+  const block = (start >= 0 && end >= 0) ? html.slice(start, end) : '';
+  if (/\bselectedAnimId\s*=\s*[^=]/.test(block)) {
+    throw new Error('renderAnimStrip assigns selectedAnimId — that desyncs the animation-list ' +
+      'selection from Delete/Rename/Duplicate (recently-observed-bugs item 32)');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: Backgrounds duplicate deep-clones the whole background', () => {
+  const html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
+  const start = html.indexOf("getElementById('btn-bg-dup')");
+  const end = html.indexOf("getElementById('btn-mt-promote')", start);
+  const block = (start >= 0 && end >= 0) ? html.slice(start, end) : '';
+  if (!/JSON\.parse\(JSON\.stringify\(src\)\)/.test(block)) {
+    throw new Error('btn-bg-dup must deep-clone the source background so the copy keeps behaviour ' +
+      '+ 16x16 metatile data (the field-by-field copy dropped them)');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: afterStateReplaced aborts an in-flight pencil drag', () => {
+  const html = fs.readFileSync(path.join(WEB, 'sprites.html'), 'utf8');
+  const start = html.indexOf('function afterStateReplaced(');
+  const block = start >= 0 ? html.slice(start, start + 1000) : '';
+  if (!/spDragging\s*=\s*false/.test(block) || !/teDragging\s*=\s*false/.test(block)) {
+    throw new Error('afterStateReplaced must reset spDragging/teDragging so undo during a pencil ' +
+      'drag cannot re-stamp a pixel into the restored state with no undo entry');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: builder-validators expand 16x16 behaviour maps', () => {
+  const v = fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8');
+  if (!/MetatileLib\.expand\(bg\)/.test(v)) {
+    throw new Error('activeBehaviourMap must expand 16x16 metatile backgrounds via ' +
+      'MetatileLib.expand or win/door validators falsely block Play on metatile projects');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: scene off-screen validator bounds against world size, not screen 1', () => {
+  const v = fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8');
+  const start = v.indexOf('function instanceOffScreen');
+  const block = start >= 0 ? v.slice(start, start + 1100) : '';
+  if (/inst\.x\s*>\s*240/.test(block)) {
+    throw new Error('instanceOffScreen still hard-codes the 240px single-screen bound — ' +
+      'false-positives on valid multi-screen placements');
+  }
+  if (!/worldW/.test(block)) {
+    throw new Error('instanceOffScreen must compute worldW/worldH from the background dimensions');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: scene per-instance AI indexes ss_x[] by a compacted slot', () => {
+  const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
+  if (!/ss_x\['\s*\+\s*slot\s*\+\s*'\]/.test(mods)) {
+    throw new Error('scene AI must index ss_x[] by the dense `slot` counter, not the raw instance ' +
+      'index, to stay aligned with the compacted sceneSprites payload (deriveSceneSprites)');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: level import remaps doors targetBgIdx to the new background count', () => {
+  const html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
+  const idx = html.indexOf('state.backgrounds = parsed.backgrounds');
+  const block = idx >= 0 ? html.slice(idx, idx + 700) : '';
+  if (!/remapDoorTargetBg/.test(block)) {
+    throw new Error('the level-import handler must remap/clamp doors targetBgIdx after replacing ' +
+      'state.backgrounds, or a door can point at a missing room');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: storage ensureCatalog re-reads before writing a fresh catalog', () => {
+  const s = fs.readFileSync(path.join(WEB, 'storage.js'), 'utf8');
+  const start = s.indexOf('function ensureCatalog');
+  const block = start >= 0 ? s.slice(start, start + 800) : '';
+  const after = block.slice(block.indexOf('migrateLegacy()'));
+  if (!/readCatalog\(\)/.test(after)) {
+    throw new Error('ensureCatalog must re-read the catalog after migrateLegacy returns null so a ' +
+      'second tab cannot clobber a just-migrated catalog');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: server caps the scene-sprite tile budget (ss_offset byte overflow)', () => {
+  const py = fs.readFileSync(SERVER_PY, 'utf8');
+  if (!/_SCENE_TILE_BUDGET_MSG/.test(py) || (py.match(/offsets\[-1\]\s*>\s*255/g) || []).length < 2) {
+    throw new Error('build_scene_inc and build_scene_asminc must reject scene sprites whose ' +
+      'cumulative tile offset exceeds 255 (ss_offset is byte-wide) with a BuildError');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: make/cc65 builds run through _run_make with a timeout', () => {
+  const py = fs.readFileSync(SERVER_PY, 'utf8');
+  if (!/def _run_make\(/.test(py) || !/timeout=BUILD_TIMEOUT/.test(py)) {
+    throw new Error('builds must run via _run_make(timeout=BUILD_TIMEOUT) so a crafted source ' +
+      'cannot hang a worker thread (and BUILD_LOCK)');
+  }
+  if (/subprocess\.run\(\s*\r?\n?\s*\[\s*"make"/.test(py)) {
+    throw new Error('a make subprocess.run bypasses the _run_make timeout wrapper');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: /play error paths do not return tracebacks to the client', () => {
+  const py = fs.readFileSync(SERVER_PY, 'utf8');
+  if (/"log":\s*[^\n]*traceback\.format_exc\(\)/.test(py)) {
+    throw new Error('a /play error path returns traceback.format_exc() in the client `log` ' +
+      '(leaks server paths) — log it server-side, return type+message only');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: _client_ip only trusts X-Forwarded-For from a loopback peer', () => {
+  const py = fs.readFileSync(SERVER_PY, 'utf8');
+  const start = py.indexOf('def _client_ip');
+  const block = start >= 0 ? py.slice(start, start + 700) : '';
+  if (!/client_address\[0\]/.test(block) || !/127\.0\.0\.1/.test(block)) {
+    throw new Error('_client_ip must gate X-Forwarded-For trust on a loopback socket peer, else ' +
+      'the auth rate limiter is bypassable by spoofing XFF');
+  }
+}) || (anyFail = true);
+
+check('bug-sweep: accounts RateLimiter evicts drained keys (no unbounded growth)', () => {
+  const py = fs.readFileSync(ACCOUNTS_PY, 'utf8');
+  if (!/_hits\.pop\(/.test(py)) {
+    throw new Error('RateLimiter.check must evict empty/stale keys (self._hits.pop) so the dict ' +
+      'cannot grow unbounded from distinct client keys');
+  }
+}) || (anyFail = true);
+
+console.log('');
+
 // --- Step 3: byte-identical ROM invariant (golden-hash form) -----------
 //
 // FROZEN GOLDEN HASHES — regenerate DELIBERATELY (procedure below) only when

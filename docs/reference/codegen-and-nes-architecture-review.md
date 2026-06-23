@@ -60,10 +60,10 @@ re-found the byte-identical test so it stops blocking compiler optimisation.
 ## 1. How the codegen works today
 
 ```
-builder.html  ──fetch──▶  builder-templates/platformer.c   (the engine, with slots)
+builder.html  ──fetch──▶  tools/tile_editor_web/builder-templates/platformer.c   (the engine, with slots)
      │
      ▼
-BuilderAssembler.assemble(state, template)        (builder-assembler.js:133)
+BuilderAssembler.assemble(state, template)        (builder-assembler.js:125)
      │   walks MODULE_ORDER; each enabled module's applyToTemplate() either:
      │     • replaceRegion('//>> id … //<<', body)        — swap a hint region
      │     • appendToSlot('//@ insert: <slot>', text)     — fill a slot
@@ -108,7 +108,7 @@ could be absorbed the same way.
 | S2 | **The byte-identical invariant proves the opposite of what matters** | It builds the *zero-module* template and asserts it equals the stock `main.c`.  No module is ticked, no `scene.inc` is emitted — so **no `applyToTemplate` output is ever compiled by the test**, and no module *combination* is checked for "does it even compile." | `run-all.mjs` byte-identical check; comment "no modules ticked" |
 | S3 | **`build_scene_inc` (~480 ln) vs `build_scene_asminc` (~130 ln) have silently diverged** | The asm `/play` path is a frozen subset — no P2, HUD, scene-animation or per-NPC dialogue.  Every feature added since the asm path was written exists only in the C emitter, and nothing enforces parity.  The role-code table is duplicated verbatim. | `playground_server.py` `build_scene_inc` / `build_scene_asminc` |
 | S4 | **Six modules still string-build per-frame C loops** | These are where B-1 (enemy AI) and B-4 (tint) lived.  Their AABB/`behaviour_at` shapes are the same ones already absorbed into the engine for HUD/P2/anim — the seam between "data-driven" and "string-emitted" is exactly where fragility concentrates. | `scene` / `pickups` / `damage` / `doors` / `win_condition` / `dialogue` in `builder-modules.js` |
-| S5 | **Cross-module coupling is convention-only** | `MODULE_ORDER` array position is the *sole* guarantee that `pickups` (declares `bw_pickup_total`) precedes `win_condition` (reads it).  File-scope emissions rely on a `bw_` prefix, not a namespace.  The loop var `i` is shared by every emitted loop.  A dead `events` id sits in `MODULE_ORDER` with **no catalogue entry** and is silently skipped. | `builder-assembler.js` `MODULE_ORDER`, `assemble()` |
+| S5 | **Cross-module coupling is convention-only** | `MODULE_ORDER` array position is the *sole* guarantee that `pickups` (declares `bw_pickup_total`) precedes `win_condition` (reads it).  File-scope emissions rely on a `bw_` prefix, not a namespace.  The loop var `i` is shared by every emitted loop. | `builder-assembler.js` `MODULE_ORDER`, `assemble()` |
 | S6 | **No compile-check until a full ROM build** | `assemble()` is pure string concatenation; the first validation of emitted C is cc65 in the tempdir.  The validators catch *config* mistakes, not malformed emission (brace balance, typo'd symbol). | `builder-assembler.js` `assemble`; `builder-validators.js` |
 
 None of these is a live crash today — the engine ships working ROMs.  They
@@ -124,7 +124,7 @@ The most important finding: **there are two frame architectures in this
 repo.**  The hand-written Zelda-2 base (`src/reset.s`) uses the *correct*
 NMI-driven model (OAM DMA inside the NMI handler) — but the **playground
 pipeline that pupils actually ship** (`steps/Step_Playground`,
-`builder-templates/platformer.c`) uses a `waitvsync()` busy-wait and does all
+`tools/tile_editor_web/builder-templates/platformer.c`) uses a `waitvsync()` busy-wait and does all
 PPU work in the main-loop body.  The good model exists but the pipeline
 doesn't use it.  The audit targets the pipeline.
 
@@ -132,13 +132,18 @@ doesn't use it.  The audit targets the pipeline.
 |---|-------------------|------------------------|----------|-----------|
 | N1 | **NMI-driven VRAM update**: main loop fills a buffer; the NMI flushes it to `$2006/$2007` in vblank; never write VRAM mid-frame. | `waitvsync()` then PPU writes from the **main loop**.  Works only because rendering is force-blanked around the scroll burst. | Med | Move OAM DMA + a bounded VRAM-update queue into the crt0 NMI (the model already exists in `src/reset.s`). |
 | N2 | **Forced blank** (`PPUMASK=0` → write → `PPUMASK` on) is fine only wholly *within* vblank / at init. | `draw_text` / `clear_text_row` force-blank from the main loop with **no length bound** — a long string's `$2007` writes spill past the ~2273-cycle vblank into active render. **This is the "dialogue glitches the stage for a split second" bug (B-2 / item 31).** | **High** | Route text through the engine's single `vblank_writes` window; cap to one row + a byte budget/frame; never toggle `PPU_MASK` outside that window. |
-| N3 | **A font must physically exist in CHR**; reserve a fixed glyph range (often `tile = ascii − offset`). A nametable byte is a tile index, not a character. | No font seeding at all — `build_chr()` packs the pupil's painted tiles (or blank CHR).  Dialogue writes raw ASCII indices, so a project without a hand-painted font shows **garbage** (B-2 / item 31). | **High** | Seed a default font into a reserved CHR sub-range when dialogue is enabled; convert text at emit time with one offset.  (The 2026-06-17 `dialogue-no-font` validator is the *warning*; this is the *fix*.) |
+| N3 ✅ | **A font must physically exist in CHR**; reserve a fixed glyph range (often `tile = ascii − offset`). A nametable byte is a tile index, not a character. | **SHIPPED 2026-06-18.** Was: no font seeding — `build_chr()` only packed the pupil's painted tiles, so dialogue on a project without a hand-painted font showed garbage (B-2 / item 31). | ~~High~~ | **DONE:** `build_chr()` now calls `_seed_dialogue_font(state)`, filling blank bg tile slots with a built-in UPPERCASE font at the glyphs' ASCII indices whenever the dialogue module is on; the assembler uppercases text at emit. Verified by `dialogue-font.mjs`. |
 | N4 | **16×16 metatiles** for backgrounds — 1:1 with attribute granularity (32×32-px attr byte = 4 metatiles), ~75 % smaller maps, palettes correct by construction. | None — raw 8×8 nametables with attributes stored separately (`bg_world_attrs[]`), which is *why* the history has recurring attribute/palette-desync bugs. | Med | A metatile layer is the right answer to the pupils' "bigger worlds" + "make the squares half" asks **and** structurally prevents the palette bugs. |
 | N5 | **Vblank budget ≈ 2273 cycles NTSC** — ~1 OAM DMA (513) + ~160 bytes to `$2007`. | Mostly disciplined (OAM DMA single + first; scroll bursts prepared outside vblank then unrolled inside) — **except** the unbudgeted `draw_text` (see N2). | Med | Enforce a per-frame byte ceiling; split long text across frames. |
 | N6 | **OAM**: page-aligned shadow OAM, single `$4014` DMA, respect 64-sprite + 8-per-scanline limits. | **Strong.** Page-aligned shadow OAM, single DMA, 64-cap guarded, parked slots at Y=`0xFF`.  Minor: no 8-per-scanline awareness (wide player + HUD + scene row can silently flicker). | Low | Optional: document the 8/line limit; optional OAM round-robin to even out flicker. |
-| N7 | **cc65**: `-Osir`, `unsigned char`, no recursion, static locals, zeropage hot vars, struct-of-arrays. | Follows the *manual* equivalents (globals not stack locals, `unsigned char`, struct-of-arrays `ss_x[]/ss_y[]…`, ZP-tight) — but compiles with **no optimisation at all** (empty `CFLAGS`) to keep the byte-identical invariant.  See [§3.1](#31-the-no-optimisation-tradeoff). | Med | Re-found the invariant on a frozen reference so the engine can be built `-Os` (below). |
+| N7 ✅ | **cc65**: `-Osir`, `unsigned char`, no recursion, static locals, zeropage hot vars, struct-of-arrays. | Follows the *manual* equivalents (globals not stack locals, `unsigned char`, struct-of-arrays `ss_x[]/ss_y[]…`, ZP-tight). **SHIPPED 2026-06-20 (Arc D Sprint 4):** the engine now builds `-Os` (`Step_Playground/Makefile` `CFLAGS = -Os`); the byte-identical invariant was re-founded on golden ROM hashes (`run-all.mjs`) so `-Os` no longer trips a cross-file comparison. See [§3.1](#31-the-no-optimisation-tradeoff). | ~~Med~~ DONE | — |
 
 ### 3.1 The no-optimisation tradeoff (N7, the subtle one)
+
+> **✅ RESOLVED 2026-06-20 (Arc D Sprint 4).** The fix below shipped: the
+> byte-identical invariant was re-founded on frozen golden ROM hashes
+> (`run-all.mjs`), and `Step_Playground/Makefile` now builds `-Os`. The
+> analysis is kept for context.
 
 The Makefile disables `-O` on purpose, and the stated reason is sharper than
 "the bytes change": with `-O`, cc65 makes **different inline/register
@@ -228,19 +233,19 @@ Ordered safest/highest-value first.  Cross-linked to the bug list and the
 fixes plan; none requires an asm rewrite.
 
 **Now — close the loops the recent bugs exposed**
-1. **Re-found the byte-identical test on a frozen golden ROM** and unify
-   `Step_Playground/main.c` with the template (§3.1).  Unblocks `-Os` and
-   fixes S2's "tests the wrong thing."  *Prereq for everything perf-related.*
-2. **Add a real codegen test**: build one project with *every* module ticked
-   and assert it compiles (closes the S2/S4 gap that lets a malformed emission
-   reach pupils).
+1. ✅ **DONE (2026-06-20).** **Re-found the byte-identical test on a frozen
+   golden ROM** (§3.1).  Unblocked `-Os` and fixed S2's "tests the wrong thing."
+2. ✅ **DONE.** **A real codegen test** now exists: `_rom-equiv.mjs` /
+   `all-modules.mjs` build an every-module-ticked project and assert it compiles
+   (closes the S2/S4 gap that let a malformed emission reach pupils).
 
 **Next — adopt the three NES conventions the pipeline breaks**
-3. **Dialogue frame model + font** (N2 + N3): route text through the
-   `vblank_writes` window with a per-frame byte budget, and seed a default
-   CHR font when dialogue is enabled.  This is the *fix* behind the 2026-06-17
-   `dialogue-no-font` *warning* — closes web-feedback bug 31 / item 28 / the
-   deferred item 11, together.
+3. **Dialogue frame model + font** (N2 + N3): ✅ **font half DONE (2026-06-18)** —
+   `_seed_dialogue_font` seeds a default CHR font when dialogue is enabled (the
+   *fix* behind the 2026-06-17 `dialogue-no-font` warning; closes the garbage
+   half of web-feedback bug 31).  Still open: routing text through the
+   `vblank_writes` window with a per-frame byte budget (the brief forced-blank
+   flash — N2).
 4. **Begin the data-driven migration** with the two safest modules
    (`win_condition`, `damage` — their tint + AABB are small and self-
    contained) into `platformer.c` behind flags.  Proves the pattern; deletes

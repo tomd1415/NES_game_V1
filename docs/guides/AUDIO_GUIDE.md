@@ -163,7 +163,7 @@ existing keywords below and drop the matching line in.
 
 | Event   | Where to add the call (search for…) | Snippet |
 | ------- | ----------------------------------- | ------- |
-| Jump start | `jumping = 1;` (the line that starts a new jump, around the `JOY_A` button check) | `famistudio_sfx_play(0, FAMISTUDIO_SFX_CH0);` |
+| Jump start | `jumping = 1;` (the line that starts a new jump, around the UP-button `pad & 0x08` check) | `famistudio_sfx_play(0, FAMISTUDIO_SFX_CH0);` |
 | Landing | `jumping = 0;` immediately after the player hits the ground (look for the comment `feet on a surface`) | `famistudio_sfx_play(3, FAMISTUDIO_SFX_CH1);` |
 | Hit / damage taken | wherever your code decreases the player's HP | `famistudio_sfx_play(1, FAMISTUDIO_SFX_CH0);` |
 | Pickup collected | wherever your code marks a pickup as collected | `famistudio_sfx_play(2, FAMISTUDIO_SFX_CH1);` |

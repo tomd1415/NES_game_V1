@@ -302,16 +302,16 @@ re-tuned it thousands of times. Yours is the same shape.</span>
 
 ## Sprite editing — the Nintendo way
 
-Open `tools/generate_chr.py`. Find `sprite_head_left()`.
+A sprite is an 8×8 grid of pixels, each cell picking one of four palette
+colours. You paint them in the browser **Sprites** page (the visual tile
+editor) and watch the sprite update live. The Step 1 player art lives in
+`assets/sprites/walk1.chr` — the same kind of grid Nintendo's artists drew:
 
-```python
-pattern = [
-    "..XXXX..",     # X = pixel on, . = transparent
-    ".XXXXXX.",
-    "XX.XX.XX",
-    "XX.XX.XX",
-    ...
-]
+```text
+..XXXX..     X = pixel on, . = transparent
+.XXXXXX.
+XX.XX.XX
+XX.XX.XX
 ```
 
 <div class="fact">

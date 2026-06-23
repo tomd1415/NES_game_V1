@@ -59,6 +59,8 @@ The project ships a self-contained web-based tile editor in `tools/tile_editor_w
 - **`behaviour.html`** — the Behaviour page (per-tile behaviour map: ground / wall / platform / ladder / door / trigger).
 - **`builder.html`** — the Builder page (tick modules to build a game without writing C).
 - **`code.html`** — the Code page (free-form C or asm main).
+- **`audio.html`** — the Audio page (APU sound effects + FamiStudio music).
+- **`gallery.html`** — the Gallery page (browse / publish finished projects).
 - **Shared modules**:
   - **`play-pipeline.js`** — one "assemble + build + launch" helper every page calls.  Handles state fortification (stub player when the project has none), `customMainC` / `customMainAsm` overrides for the Code page, the native-vs-browser mode selector, and the Download-ROM flow.
   - **`emulator.js`** — the embedded jsnes dialog + keyboard mapping.  Injects its own `<dialog>` + CSS on first call, idempotent when a host page already has one.
@@ -359,7 +361,7 @@ The starter ships two regions (`player_start`, `movement`) so Guided mode and th
 
 **Server endpoints:**
 
-- `GET /default-main-c` → stock `main.c.starter` (unchanged from 3b/3c).
+- `GET /default-main-c` → stock `main.c` (the Step_Playground engine; unchanged from 3b/3c).
 - `GET /default-main-s` → stock `main.s.starter`.
 
 **`/play` accepts either language.** The contract now allows `customMainC` *or* `customMainAsm` (never both — the server 400s if both are present). Dispatch in `_build_rom()`:
@@ -381,7 +383,7 @@ The asm path copies `STEP_DIR` to a tempdir, removes `main.c` / `scene.inc` / `p
 - **Restore default** is lang-aware: it confirms `"Replace your main.s with the default?"` in asm mode and invalidates only that lang's cache slot.
 - CodeMirror still uses the `clike` mode for both languages (asm mode is not loaded). 6502 highlighting is close enough to C for this classroom use — authoring a proper ca65 mode is a future task.
 
-**Authoring notes.** The asm starter is deliberately minimal — no walk animation, no jump — so the 6502 bookkeeping doesn't drown the interesting bits. Compare `main.s.starter` side-by-side with `main.c.starter` to see the same game in both languages. Asm lessons / snippets are not implemented yet; if you add them, gate them on `lang === 'asm'` in the lesson/snippet pickers and reuse the `;>>` / `;<<` marker style for editable regions.
+**Authoring notes.** The asm starter is deliberately minimal — no walk animation, no jump — so the 6502 bookkeeping doesn't drown the interesting bits. Compare `main.s.starter` side-by-side with `main.c` to see the same game in both languages. Asm lessons / snippets are not implemented yet; if you add them, gate them on `lang === 'asm'` in the lesson/snippet pickers and reuse the `;>>` / `;<<` marker style for editable regions.
 
 ### `/play` endpoint contract
 
@@ -473,12 +475,13 @@ reference.  A few teacher-relevant bits:
 
 Run `node tools/builder-tests/run-all.mjs` from the repo root.
 It syntax-checks every module + inline script, verifies the
-byte-identical baseline invariant, and runs eight smoke-test
-suites covering Player 2, HP+HUD, runtime animations, teleport
-doors, multi-background doors, the polish sweep (P2 HP + P2
-animation + enemy/pickup idle), and dialogue (including a
-regression guard against the old `draw_text()` / `clear_text_row()`
-from-per-frame pattern that caused a one-frame sprite stutter).
+byte-identical baseline invariant (golden-hash form), and runs
+every smoke-test suite it auto-discovers in `tools/builder-tests/`
+(~60 suites covering Player 2, HP+HUD, runtime animations, doors,
+dialogue, scrolling, enemies, the top-down racer, accounts and
+more — including a regression guard against the old
+`draw_text()` / `clear_text_row()` per-frame pattern that caused a
+one-frame sprite stutter, and headless jsnes render checks).
 
 The suite should be green before any Builder change ships.
 

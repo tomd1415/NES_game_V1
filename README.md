@@ -231,8 +231,9 @@ short version:
   [TILE_EDITOR_GUIDE](docs/guides/TILE_EDITOR_GUIDE.md)) plus
   teacher / debugging / Aseprite workflow docs.
 - **[`docs/plans/current/`](docs/plans/current/)** — what we're
-  working on now.  The active plan is
-  [2026-04-26-fixes-and-features.md](docs/plans/current/2026-04-26-fixes-and-features.md).
+  working on now.  The current entry point is
+  [2026-06-18-next-phase-master-plan.md](docs/plans/current/2026-06-18-next-phase-master-plan.md),
+  which links the per-arc plans and the racer/accounts design docs.
 - **[`docs/plans/archive/`](docs/plans/archive/)** — superseded
   plans, named chronologically (`YYYY-MM-DD-name.md`) so you can
   walk the history of how the project evolved.

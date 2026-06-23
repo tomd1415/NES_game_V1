@@ -3821,14 +3821,15 @@ function renderAnimStrip() {
     return;
   }
 
-  // Frames mode: the active animation is the one containing this
-  // sprite.  Sync selectedAnimId so the full editor below picks up
-  // the same animation when the pupil opens it.
-  if (selectedAnimId !== anim.id) {
-    selectedAnimId = anim.id;
-    // Also refresh the full panel's selection highlight on next paint;
-    // renderAnimationList already runs from renderAnimations().
-  }
+  // Frames mode: render the strip for the animation that contains the
+  // selected sprite, but do NOT write back to selectedAnimId.  Doing so
+  // (the old behaviour) fought the animation-list selection: clicking
+  // animation B in the list while a sprite belonging to animation A was
+  // still selected re-pointed selectedAnimId back at A, so the list showed
+  // B highlighted while Delete/Rename/Duplicate acted on A — the
+  // long-unsolved "deleting the 2nd animation removes the 1st" report
+  // (recently-observed-bugs item 32).  selectedAnimId is owned solely by
+  // explicit clicks now; the strip is display-only.
   framesMode.hidden = false;
   offerMode.hidden  = true;
 
@@ -7189,6 +7190,15 @@ function afterStateReplaced() {
   toolDrag = null;
   selectedRegion = null;
   selectedRegionSpriteIdx = -1;
+  // Same hazard for an active pencil drag: if undo/redo runs while the mouse
+  // is still held down, the next mousemove fires spApply/teApply with
+  // initial=false, which stamps a pixel into the just-restored state WITHOUT
+  // pushing an undo entry — silently desyncing the undo stack from the canvas.
+  // Abort the live stroke so the pupil has to start a fresh (undoable) one.
+  spDragging = false;
+  teDragging = false;
+  spGuardChecked = false;
+  teGuardChecked = false;
   // Clamp selection
   if (selectedSpriteIdx >= state.sprites.length) {
     selectedSpriteIdx = state.sprites.length ? 0 : -1;

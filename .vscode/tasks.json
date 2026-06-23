@@ -146,11 +146,11 @@
         },
         {
             "label": "Open Editor via Playground Server",
-            "detail": "Open the editor through the Playground Server so the '▶ Play in NES' button works. Starts the server (via dependsOn) and opens the sprites page in your browser.",
+            "detail": "Open the editor through the Playground Server so the '▶ Play in NES' button works. Starts the server (via dependsOn) and opens the Backgrounds page in your browser.",
             "dependsOn": ["Start Playground Server"],
             "type": "shell",
             "command": "xdg-open",
-            "args": ["http://127.0.0.1:8765/sprites.html"],
+            "args": ["http://127.0.0.1:8765/index.html"],
             "options": {
                 "cwd": "${workspaceFolder}"
             },

@@ -69,6 +69,14 @@ class RateLimiter:
                 return False
             recent.append(now)
             self._hits[key] = recent
+            # Opportunistically evict keys whose window has fully drained, so the
+            # dict can't grow without bound from a churn of distinct keys (one
+            # per client IP).  Cheap amortised sweep on each call.
+            if len(self._hits) > 256:
+                stale = [k for k, ts in self._hits.items()
+                         if not ts or ts[-1] <= now - self.window]
+                for k in stale:
+                    self._hits.pop(k, None)
             return True
 
 

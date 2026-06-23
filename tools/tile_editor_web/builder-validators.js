@@ -34,7 +34,20 @@
     const bgs = (state && state.backgrounds) || [];
     const idx = (state && state.selectedBgIdx) | 0;
     const bg = bgs[idx] || bgs[0];
-    if (!bg || !Array.isArray(bg.behaviour)) return [];
+    if (!bg) return [];
+    // For a 16×16 metatile background the live behaviour data lives in the
+    // metatile library (bg.metatiles[].behaviour + bg.mtmap), NOT in
+    // bg.behaviour — that flat grid is only re-synced on downgrade, so it goes
+    // stale while the pupil authors in 16×16 mode.  Expand the same way the
+    // Builder's own preview (drawBackgroundBehind) does, so validators that
+    // count painted behaviour tiles agree with what the server actually builds
+    // — otherwise win/door validators can falsely block Play.  Falls back to
+    // the flat grid when MetatileLib is unavailable (e.g. headless tests).
+    if (bg.tileMode === '16x16' && typeof window !== 'undefined' && window.MetatileLib) {
+      const expanded = window.MetatileLib.expand(bg);
+      if (expanded && Array.isArray(expanded.behaviour)) return expanded.behaviour;
+    }
+    if (!Array.isArray(bg.behaviour)) return [];
     return bg.behaviour;
   }
   // Look up the behaviour-type id for a named type (e.g. 'trigger',
@@ -214,16 +227,26 @@
       if (!moduleEnabled(state, 'scene')) return null;
       const node = moduleNode(state, 'scene');
       const instances = (node && node.config && node.config.instances) || [];
+      // Bound against the actual world size, not a single screen.  Multi-screen
+      // placement is a supported feature — clampSpritePos lets a non-player
+      // sprite go anywhere in the world (x up to worldW, y from 0), and
+      // scene-multiscreen.mjs builds a sprite at world x=400.  The old fixed
+      // 0..240 / 16..216 bounds false-positived on every screen-2 placement.
+      const bgs = (state && state.backgrounds) || [];
+      const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0] || {};
+      const dim = bg.dimensions || {};
+      const worldW = ((((dim.screens_x | 0) || 1)) * 256);
+      const worldH = ((((dim.screens_y | 0) || 1)) * 240);
       for (const inst of instances) {
-        if (inst.x < 0 || inst.x > 240 || inst.y < 16 || inst.y > 216) {
+        if (inst.x < 0 || inst.x >= worldW || inst.y < 0 || inst.y >= worldH) {
           return {
             id: 'scene-off-screen',
             severity: 'warn',
-            message: 'One of your Scene instances is placed off the ' +
-              'visible screen.',
-            fix: 'Check the x / y numbers on each Scene row — keep ' +
-              'x between 0 and 240, and y between 16 and 216, to ' +
-              'stay on screen.',
+            message: 'One of your Scene instances is placed outside the ' +
+              'game world.',
+            fix: 'Check the x / y numbers on each Scene row — keep x ' +
+              'between 0 and ' + (worldW - 1) + ' and y between 0 and ' +
+              (worldH - 1) + ' so the sprite is somewhere in the world.',
             jumpTo: null,
           };
         }

@@ -21,6 +21,80 @@ deferred.
 
 ---
 
+## Multi-agent bug sweep + Playwright browser tests + doc accuracy pass — 2026-06-23
+
+A whole-platform bug hunt (server / editor JS / NES engine / pupil code), each
+finding verified against the current code before fixing.  14 confirmed defects
+fixed; the full `tools/builder-tests/run-all.mjs` suite (incl. the byte-identical
+golden-hash invariant) stays green, and 14 new `bug-sweep:` source-text guards in
+`run-all.mjs` keep them from regressing.
+
+**Editor (browser JS) fixes:**
+
+- **Code page "▶ Play in NES" was completely broken.** `play()` referenced an
+  undeclared `src` (removed in the BR-02 flush refactor) — a `ReferenceError`
+  under strict mode threw before the build ran, so the pill stuck on "compiling…"
+  forever.  Now reads `state.customMainC` / `state.customMainAsm` (`code.html`).
+- **"Deleting the 2nd animation removes the 1st" (recently-observed-bugs item 32,
+  open for months).** Root cause found: `renderAnimStrip` wrote the selected
+  *sprite's* animation back into `selectedAnimId` on every render, so the list
+  highlighted one animation while Delete/Rename/Duplicate acted on another.  The
+  strip is now display-only (`sprites.html`).
+- **Background "⎘ Duplicate" silently lost data.** It copied only
+  name/dimensions/nametable, dropping the per-cell behaviour grid and 16×16
+  metatile data (a duplicated metatile background downgraded to plain 8×8).  Now
+  deep-clones the whole background (`index.html`).
+- **Scene per-instance AI indexed the wrong sprite.** The Builder's walker/chaser
+  AI used the raw instance index while the server's `ss_*` arrays are *compacted*
+  (deleted-sprite instances dropped), so a dropped non-last instance desynced the
+  two and the AI wrote out-of-bounds `ss_x[]`.  AI now uses a dense `slot` index
+  matching `deriveSceneSprites` (`builder-modules.js`).
+- **16×16 metatile projects could be falsely blocked from Play.** `activeBehaviourMap`
+  read the stale flat `bg.behaviour`; it now expands the metatile map like the
+  Builder preview does (`builder-validators.js`).
+- **Scene off-screen warning false-positived on multi-screen worlds** (hard-coded
+  single-screen bounds → now bounds against the actual world size).
+- **Undo during a pencil drag** re-stamped a pixel into the restored state with no
+  undo entry — `afterStateReplaced` now aborts the live stroke (`sprites.html`).
+- **Level import** didn't clamp the doors module's `targetBgIdx` to the new
+  background count (a door could point at a missing room) — now remapped.
+- **First-boot two-tab race** in `storage.js` could wipe a just-migrated catalog —
+  `ensureCatalog` now re-reads before writing a fresh one.
+
+**Server (`playground_server.py` / `accounts.py`) fixes:**
+
+- **Scene-sprite tile budget overflow** (`ss_offset` is byte-wide): once placed
+  scene-sprite art passed 256 tiles, cc65 silently truncated the offset and a
+  sprite rendered another's art (and the asm path hard-errored).  Now fails loudly
+  with a pupil-facing `BuildError` instead of shipping garbled sprites.
+- **No build timeout** — `make`/cc65/ca65 could be driven into a hang by a crafted
+  source, blocking a worker thread (and `BUILD_LOCK`).  All builds now go through
+  `_run_make` with a `BUILD_TIMEOUT`.
+- **Auth rate-limit bypass** — `_client_ip` trusted `X-Forwarded-For` from any
+  client; it now only trusts it from a loopback (reverse-proxy) peer, so a direct
+  client can't spoof a fresh bucket per request and brute-force logins.
+- **`RateLimiter` grew unbounded** (one dict key per client IP, never evicted) —
+  now sweeps drained keys.
+- **Tracebacks leaked to the client** — `/play` errors returned `format_exc()`
+  (absolute server paths); now logged server-side, with only the exception
+  type + message returned.
+
+**Playwright browser tests (new — `tools/e2e/`).** The Node harness never loaded
+the pages in a real browser, so DOM-level regressions sailed past it.  A new
+Playwright suite drives the actual editor pages in headless Chromium against a
+live `playground_server.py`: a 10-test **smoke** suite (every page loads with no
+uncaught JS errors + boots a valid project) plus regression specs for the
+Code-page Play bug, item 32, and background-duplicate data loss.  See
+`tools/e2e/README.md`.
+
+**Documentation accuracy pass.** ~20 verified inaccuracies fixed across README,
+the guides and the codegen review: the "Open Editor" task now opens the page the
+README describes; stale `main.c.starter` references → `main.c`; a fabricated
+`sprite_head_left()` slide retargeted to the real Sprites-page workflow; the
+"create png2chr.py" section points at the shipped tool; broken doc links fixed;
+the active-plan pointers updated; and the codegen review's shipped items
+(`-Os`, dialogue font seeding, the `events` removal) marked done.
+
 ## Account control in the top bar, responsive toolbars, `.env` config — 2026-06-21
 
 Follow-up polish to the accounts batch below.

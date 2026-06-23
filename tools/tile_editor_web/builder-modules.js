@@ -501,10 +501,20 @@
         '        // [builder] scene — per-instance AI for manually-placed sprites.',
       ];
       let emitted = 0;
+      // `slot` is the DENSE index into the compiled ss_* arrays.  The server
+      // builds those arrays from play-pipeline.js deriveSceneSprites, which
+      // COMPACTS the instance list (drops any instance whose sprite no longer
+      // resolves) — so ss_x[k] is the k-th *valid* instance, not the k-th raw
+      // instance.  Indexing by the raw loop counter `i` desynced the two the
+      // moment a non-last instance referenced a deleted sprite, making the AI
+      // read/write the wrong (or an out-of-bounds) ss_x[] slot.  Increment
+      // `slot` with exactly the same skip rule deriveSceneSprites uses.
+      let slot = -1;
       for (let i = 0; i < instances.length; i++) {
         const inst = instances[i] || {};
         const sp = sprites[inst.spriteIdx];
         if (!sp) continue;
+        slot++;
         const ai = inst.ai || 'static';
         // R-4: per-instance speed (px/frame).  1 = today's feel; clamp 1..4.
         // NB bw_sprite_blocked probes 1px ahead, so at speed >= 2 a fast enemy
@@ -514,32 +524,32 @@
         if (sp.role === 'enemy' && ai === 'walker') {
           emitted++;
           parts.push(
-            '        // instance ' + i + ' — ' + (sp.name || '?') +
+            '        // instance ' + slot + ' — ' + (sp.name || '?') +
               ' walks side to side, turning at walls and the screen edge');
           parts.push('        {');
-          parts.push('            static signed char bw_dir_' + i + ' = 1;');
-          parts.push('            if (bw_dir_' + i + ' > 0) {');
-          parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) bw_dir_' + i + ' = -1;');
-          parts.push('                else ss_x[' + i + '] += ' + speed + ';');
+          parts.push('            static signed char bw_dir_' + slot + ' = 1;');
+          parts.push('            if (bw_dir_' + slot + ' > 0) {');
+          parts.push('                if (bw_sprite_blocked(ss_x[' + slot + '], ss_y[' + slot + '], ss_w[' + slot + '], ss_h[' + slot + '], 0)) bw_dir_' + slot + ' = -1;');
+          parts.push('                else ss_x[' + slot + '] += ' + speed + ';');
           parts.push('            } else {');
-          parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) bw_dir_' + i + ' = 1;');
-          parts.push('                else ss_x[' + i + '] -= ' + speed + ';');
+          parts.push('                if (bw_sprite_blocked(ss_x[' + slot + '], ss_y[' + slot + '], ss_w[' + slot + '], ss_h[' + slot + '], 1)) bw_dir_' + slot + ' = 1;');
+          parts.push('                else ss_x[' + slot + '] -= ' + speed + ';');
           parts.push('            }');
           parts.push('        }');
         } else if (sp.role === 'enemy' && ai === 'chaser') {
           emitted++;
           parts.push(
-            '        // instance ' + i + ' — ' + (sp.name || '?') +
+            '        // instance ' + slot + ' — ' + (sp.name || '?') +
               ' chases the player, stopping at solid tiles');
-          parts.push('        if (ss_x[' + i + '] + ' + speed + ' <= px) {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ss_x[' + i + '] += ' + speed + ';');
-          parts.push('        } else if (ss_x[' + i + '] >= px + ' + speed + ') {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ss_x[' + i + '] -= ' + speed + ';');
+          parts.push('        if (ss_x[' + slot + '] + ' + speed + ' <= px) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + slot + '], ss_y[' + slot + '], ss_w[' + slot + '], ss_h[' + slot + '], 0)) ss_x[' + slot + '] += ' + speed + ';');
+          parts.push('        } else if (ss_x[' + slot + '] >= px + ' + speed + ') {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + slot + '], ss_y[' + slot + '], ss_w[' + slot + '], ss_h[' + slot + '], 1)) ss_x[' + slot + '] -= ' + speed + ';');
           parts.push('        }');
-          parts.push('        if (ss_y[' + i + '] + ' + speed + ' <= py) {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 2)) ss_y[' + i + '] += ' + speed + ';');
-          parts.push('        } else if (ss_y[' + i + '] >= py + ' + speed + ') {');
-          parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= ' + speed + ';');
+          parts.push('        if (ss_y[' + slot + '] + ' + speed + ' <= py) {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + slot + '], ss_y[' + slot + '], ss_w[' + slot + '], ss_h[' + slot + '], 2)) ss_y[' + slot + '] += ' + speed + ';');
+          parts.push('        } else if (ss_y[' + slot + '] >= py + ' + speed + ') {');
+          parts.push('            if (!bw_sprite_blocked(ss_x[' + slot + '], ss_y[' + slot + '], ss_w[' + slot + '], ss_h[' + slot + '], 3)) ss_y[' + slot + '] -= ' + speed + ';');
           parts.push('        }');
         }
         // `static` and non-enemy roles: nothing to emit.  Pickups and

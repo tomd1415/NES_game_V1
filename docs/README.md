@@ -14,6 +14,7 @@ of how we got here.
 | [`plans/current/`](plans/current/) | Active plan(s) the project is currently executing against. Should be a small number of files at any time. |
 | [`plans/archive/`](plans/archive/) | Superseded plans, named `YYYY-MM-DD-<slug>.md` so they sort chronologically. Old code/comment cross-references that point here are still meaningful — please don't delete or rename them. |
 | [`feedback/`](feedback/) | Pupil and teacher bug reports / feature requests, plus broader feedback summaries. The [running bugs list](feedback/recently-observed-bugs.md) feeds the next plan. |
+| [`reference/`](reference/) | Standing reference docs (the [NES architecture / codegen review](reference/codegen-and-nes-architecture-review.md), external [NES resources](reference/nes-resources.md)) that the plans link back to. |
 | [`changelog/`](changelog/) | What shipped, when. The [changelog-implemented](changelog/changelog-implemented.md) is a single growing file with one section per shipped change, newest at the top. |
 
 ## What to read first
@@ -23,9 +24,11 @@ of how we got here.
   [`guides/PUPIL_GUIDE.md`](guides/PUPIL_GUIDE.md) for the editor
   walkthrough.
 - **Picking up active work?**
-  [`plans/current/2026-04-26-fixes-and-features.md`](plans/current/2026-04-26-fixes-and-features.md)
-  is the live plan; it lists open items in tiered order and links
-  back to the bugs/feedback that motivated each one.
+  [`plans/current/2026-06-18-next-phase-master-plan.md`](plans/current/2026-06-18-next-phase-master-plan.md)
+  is the current entry point; it links the per-arc plans and the
+  racer/accounts design docs.  (The older
+  [`2026-04-26-fixes-and-features.md`](plans/current/2026-04-26-fixes-and-features.md)
+  is kept for historical context.)
 - **Looking for context on a past decision?**  Walk
   [`plans/archive/`](plans/archive/) — the chronological filenames
   let you scan quickly, and most of the recent entries
