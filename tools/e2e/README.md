@@ -34,6 +34,11 @@ on the dev machine.
 | `code-play.spec.js` | The Code page's "▶ Play in NES" builds + boots end-to-end (assemble → `/play` → cc65 → jsnes), a regression for the `ReferenceError: src is not defined` that silently broke the whole button. |
 | `animation-delete.spec.js` | Deleting the animation selected in the list deletes **that** one — regression for the months-open "deleting the 2nd animation removes the 1st" (recently-observed-bugs item 32). |
 | `background-duplicate.spec.js` | Duplicating a background preserves its behaviour grid and 16×16 metatile data (no silent data loss / downgrade). |
+| `sprite-duplicate.spec.js` | Duplicating a sprite clones its tiles into fresh slots (item 18) — the behavioural test `run-all.mjs` only source-text-guards. |
+| `undo-redo.spec.js` | Undo/redo round-trips a document change on the Backgrounds page (browser-only undo stack). |
+| `background-delete-door-remap.spec.js` | Deleting a background remaps the Doors module's `targetBgIdx` so a door never points at a missing/wrong room (2026-06-15 fix). |
+| `project-lifecycle.spec.js` | New / Duplicate / Delete project through the real menu, asserted against the shared storage catalog. |
+| `cross-page-consistency.spec.js` | A change on one page is the same project every other page loads (the shared-catalog contract). |
 
 ## Adding a test
 
