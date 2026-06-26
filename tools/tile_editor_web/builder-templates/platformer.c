@@ -1463,7 +1463,12 @@ void main(void) {
         bob = (bob_phase & 8) ? 1 : 0;
 #endif
         for (r = 0; r < PLAYER_H; r++) {
+            /* BR-03 — an 8x8 P1 is 64 hw sprites = the whole 256-byte buffer,
+             * so guard every four-byte write and stop once full, exactly like
+             * the P2/spawn/HUD writers below. */
+            if (oam_idx > 252) break;
             for (c = 0; c < PLAYER_W; c++) {
+                if (oam_idx > 252) break;
 #ifdef SCROLL_BUILD
 #if BW_BOB_WHEN_WALKING
                 sy = world_to_screen_y((unsigned int)py + (r << 3) + bob);
@@ -1783,14 +1788,18 @@ void main(void) {
         // the track scrolls past.  In 2-player, P2's lap shows at the top-right
         // (palette 1, matching P2's car).
         {
-            unsigned char lap = (unsigned char)(racer_laps + 1);
-            if (lap > RACER_LAPS_TO_WIN) lap = RACER_LAPS_TO_WIN;
-            oam_buf[oam_idx++] = 8;                        // y
-            oam_buf[oam_idx++] = racer_digit_tiles[lap];   // digit glyph tile
-            oam_buf[oam_idx++] = 0;                        // attr: sprite palette 0
-            oam_buf[oam_idx++] = 8;                        // x
+            /* BR-03 — guard each lap digit so a full OAM (large P1/P2) can't
+             * overrun oam_buf[255] when the HUD draws last. */
+            if (oam_idx <= 252) {
+                unsigned char lap = (unsigned char)(racer_laps + 1);
+                if (lap > RACER_LAPS_TO_WIN) lap = RACER_LAPS_TO_WIN;
+                oam_buf[oam_idx++] = 8;                        // y
+                oam_buf[oam_idx++] = racer_digit_tiles[lap];   // digit glyph tile
+                oam_buf[oam_idx++] = 0;                        // attr: sprite palette 0
+                oam_buf[oam_idx++] = 8;                        // x
+            }
 #if PLAYER2_ENABLED
-            {
+            if (oam_idx <= 252) {
                 unsigned char lap2 = (unsigned char)(racer_laps2 + 1);
                 if (lap2 > RACER_LAPS_TO_WIN) lap2 = RACER_LAPS_TO_WIN;
                 oam_buf[oam_idx++] = 8;                         // y
