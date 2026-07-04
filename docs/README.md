@@ -11,6 +11,7 @@ of how we got here.
 | Folder | What's in it |
 | ------ | ------------ |
 | [`guides/`](guides/) | Pupil-, teacher- and developer-facing reference docs. These change less often than plans and tend to grow in place. |
+| [`design/`](design/) | Design intent for the UI/UX redesign — vision, principles, wireframes, component specs, and design decisions. Plans say *what/when*; design docs say *why/how it should look and feel*. |
 | [`plans/current/`](plans/current/) | Active plan(s) the project is currently executing against. Should be a small number of files at any time. |
 | [`plans/archive/`](plans/archive/) | Superseded plans, named `YYYY-MM-DD-<slug>.md` so they sort chronologically. Old code/comment cross-references that point here are still meaningful — please don't delete or rename them. |
 | [`feedback/`](feedback/) | Pupil and teacher bug reports / feature requests, plus broader feedback summaries. The [running bugs list](feedback/recently-observed-bugs.md) feeds the next plan. |
