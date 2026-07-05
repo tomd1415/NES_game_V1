@@ -198,6 +198,15 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .attn-item .fix{color:var(--muted);margin-top:4px}
 .attn-empty{color:var(--ok);font-size:11px;border:2px dashed var(--line);padding:10px}
 
+/* Cartridge budget meters */
+.budget{margin-bottom:8px;font-size:11px}
+.budget .blabel{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:3px}
+.budget .bar{height:8px;background:#111;border:1px solid var(--line);overflow:hidden}
+.budget .fill{height:100%;background:var(--ok);transition:width .2s}
+.budget.warn .fill{background:var(--accent)}
+.budget.full .fill{background:var(--warn)}
+.budget .blabel .val{color:var(--text)}
+
 /* --- Dialog (Time Machine) ---------------------------------------- */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;
   align-items:center;justify-content:center;z-index:50}
@@ -353,6 +362,8 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   <!-- Quest log + needs attention -->
   <aside class="region quest-region" aria-label="Quests and needs attention">
     <div class="quest-inner">
+      <h2>Cartridge</h2>
+      <div id="budget-list"></div>
       <h2>Quests</h2>
       <div id="quest-list"></div>
       <h2 class="attn">Needs attention</h2>

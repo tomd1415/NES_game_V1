@@ -426,7 +426,38 @@
         hint: 'Use “+ Background” in the World dock to grow your world.' },
     ];
   }
+  // ---- CHR / OAM budget meters (Phase 3.1) ------------------------------
+  function countUsedTiles(pool) {
+    var n = 0;
+    for (var i = 0; i < pool.length; i++) { if (!window.StudioUI.isTileBlank(pool[i])) n++; }
+    return n;
+  }
+  function budgetBar(label, used, max, hint) {
+    var pct = Math.min(100, Math.round(used / max * 100));
+    var cls = 'budget' + (pct >= 100 ? ' full' : (pct >= 80 ? ' warn' : ''));
+    var d = document.createElement('div');
+    d.className = cls;
+    d.innerHTML = '<div class="blabel"><span>' + escapeHtml(label) + '</span>' +
+      '<span class="val">' + used + '/' + max + '</span></div>' +
+      '<div class="bar"><div class="fill" style="width:' + pct + '%"></div></div>' +
+      (hint ? '<div class="dock-note" style="margin-top:2px">' + escapeHtml(hint) + '</div>' : '');
+    return d;
+  }
+  function refreshBudgets() {
+    var bl = $('budget-list');
+    if (!bl) return;
+    bl.innerHTML = '';
+    var bgUsed = countUsedTiles(state.bg_tiles || []);
+    var spUsed = countUsedTiles(state.sprite_tiles || []);
+    var sprN = (state.sprites || []).length;
+    bl.appendChild(budgetBar('CHR — background tiles', bgUsed, 256,
+      bgUsed > 200 ? 'Reuse tiles to fit the cartridge.' : ''));
+    bl.appendChild(budgetBar('CHR — sprite tiles', spUsed, 256, ''));
+    bl.appendChild(budgetBar('Characters (OAM 64)', sprN, 64, ''));
+  }
+
   function refreshQuestsAndAttention() {
+    refreshBudgets();
     var ql = $('quest-list');
     ql.innerHTML = '';
     computeQuests().forEach(function (q) {
