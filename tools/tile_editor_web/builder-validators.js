@@ -381,6 +381,35 @@
       };
     },
 
+    // V19 (SMB blocks, engine v6): a ? block is set to dispense a
+    // power-up (mushroom / fire flower / star / 1-Up) but the
+    // Power-ups module is off.  The engine falls back to a coin
+    // (blocks emit `#else bw_coins++` at builder-modules.js ~1319),
+    // so the game still builds — the pupil just silently gets a coin
+    // instead of what they picked.  Warn so intent + result line up.
+    function questionBlockPowerupWithoutModule(state) {
+      if (!moduleEnabled(state, 'blocks')) return null;
+      if (moduleEnabled(state, 'powerups')) return null;   // module present → fine
+      const b = moduleNode(state, 'blocks');
+      const list = (b && b.config && b.config.blockList) || [];
+      const wantsPowerup = list.some(function (blk) {
+        return blk && (blk.kind || 'question') === 'question' &&
+          blk.contents && blk.contents !== 'coin';
+      });
+      if (!wantsPowerup) return null;
+      return {
+        id: 'question-block-powerup-no-module',
+        severity: 'warn',
+        message: 'A ? block is set to give a power-up (mushroom / fire ' +
+          'flower / star / 1-Up) but the Power-ups module is off — it ' +
+          'will give a coin instead.',
+        fix: 'Turn on the Power-ups module (Style tab) so the power-up ' +
+          'can pop out, or set the ? block’s contents to Coin so it ' +
+          'matches what will actually happen.',
+        jumpTo: null,
+      };
+    },
+
     // V18: doors with targetBgIdx set beyond the painted
     // backgrounds → room swap would reference a nonexistent
     // bg_nametable_<n>[].  Error because the build will actually

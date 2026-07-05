@@ -126,6 +126,13 @@ audio on but ROM budget exceeded; **8-sprites-per-scanline** warning surfaced in
 Maker/Advanced. Plus a **bug-reproduction-card** template in
 `recently-observed-bugs.md`.
 
+**Started 2026-07-05:** added `questionBlockPowerupWithoutModule` — a ? block
+set to dispense a power-up while the Power-ups module is off silently falls back
+to a coin in the engine, so it now warns that intent ≠ result
+(`tools/builder-tests/smb-block-validators.mjs`). Audit found the door/pipe
+gap is already covered (`doorsTargetBgOutOfRange`; pipes are same-room only,
+so they can't target a missing background). Remaining Sprint 4 items unstarted.
+
 ### Sprint 5 — Old-page retirement + audio config  *(ADVICE #6, audio)*
 Freeze old pages except critical fixes; keep import/export compat tests; redirect
 default nav to Studio. Surface FamiStudio `FAMISTUDIO_USE_*` config + warn on
