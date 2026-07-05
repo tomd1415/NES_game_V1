@@ -87,6 +87,54 @@ test('Type tool paints the behaviour map', async ({ page }) => {
   expect(b).toBe(3);
 });
 
+// Helper: drag the TV from one cell to another (for the Select tool).
+async function dragCells(page, x0, y0, x1, y1) {
+  const box = await page.locator('#tv-canvas').boundingBox();
+  const px = (cx) => box.x + (cx + 0.5) * (box.width / 32);
+  const py = (cy) => box.y + (cy + 0.5) * (box.height / 30);
+  await page.mouse.move(px(x0), py(y0));
+  await page.mouse.down();
+  await page.mouse.move(px(x1), py(y1), { steps: 5 });
+  await page.mouse.up();
+}
+
+test('region select → copy → paste duplicates a chunk of the level', async ({ page }) => {
+  // Lay down two known tiles.
+  await page.locator('.stage-toolbar .tool[data-tool="stamp"]').click();
+  await page.locator('.tile-grid .tile-cell').nth(1).click();
+  await clickCell(page, 5, 3);
+  await page.locator('.tile-grid .tile-cell').nth(2).click();
+  await clickCell(page, 6, 3);
+
+  // Select tool → marquee over (5,3)-(6,3).
+  await page.locator('.stage-toolbar .more-tools-btn').click();
+  await page.locator('.stage-toolbar .tool[data-tool="select"]').click();
+  await dragCells(page, 5, 3, 6, 3);
+  await page.locator('.btn', { hasText: 'Copy' }).click();
+  const clip = await page.evaluate(() => window.StudioModes.world._get().clipboard);
+  expect(clip.length).toBe(1);
+  expect(clip[0].map((c) => c.tile)).toEqual([1, 2]);
+
+  // Select a destination anchor at (5,10) and paste.
+  await dragCells(page, 5, 10, 5, 10);
+  await page.locator('.btn', { hasText: 'Paste' }).click();
+  const pasted = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    const nt = s.backgrounds[s.selectedBgIdx].nametable;
+    return [nt[10][5].tile, nt[10][6].tile];
+  });
+  expect(pasted).toEqual([1, 2]);
+});
+
+test('full-screen preview opens a modal with a canvas', async ({ page }) => {
+  await page.locator('.btn', { hasText: 'Full-screen preview' }).click();
+  const dlg = page.locator('.modal-backdrop.open');
+  await expect(dlg).toBeVisible();
+  await expect(dlg.locator('canvas')).toBeVisible();
+  await dlg.locator('.btn', { hasText: 'Close' }).click();
+  await expect(dlg).toHaveCount(0);
+});
+
 test('adding a background switches selection and the picker grows', async ({ page }) => {
   const before = await page.locator('.bg-row').count();
   await page.locator('#world-add-bg').click();

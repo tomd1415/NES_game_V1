@@ -132,6 +132,53 @@
     }
   }
 
+  // ---- Region select / copy / paste -------------------------------------
+  var selRect = null;     // {x0,y0,x1,y1} in cell coords (may be un-normalised while dragging)
+  var selecting = false;
+  var clipboard = null;   // 2D array of {tile,palette}
+  function normRect(r) {
+    return { x0: Math.min(r.x0, r.x1), y0: Math.min(r.y0, r.y1),
+             x1: Math.max(r.x0, r.x1), y1: Math.max(r.y0, r.y1) };
+  }
+  function copyRegion(ctx) {
+    if (!selRect) return;
+    var bg = activeBg(ctx); if (isMetatileBg(bg)) return;
+    var r = normRect(selRect), nt = bg.nametable, rows = [];
+    for (var y = r.y0; y <= r.y1; y++) {
+      var row = [];
+      for (var x = r.x0; x <= r.x1; x++) {
+        var c = (nt[y] && nt[y][x]) || { tile: 0, palette: 0 };
+        row.push({ tile: c.tile | 0, palette: c.palette | 0 });
+      }
+      rows.push(row);
+    }
+    clipboard = rows;
+  }
+  function pasteRegion(ctx) {
+    if (!clipboard || !selRect) return;
+    var bg = activeBg(ctx); if (isMetatileBg(bg)) return;
+    var r = normRect(selRect), nt = bg.nametable;
+    ctx.pushUndo();
+    for (var dy = 0; dy < clipboard.length; dy++) {
+      for (var dx = 0; dx < clipboard[dy].length; dx++) {
+        var yy = r.y0 + dy, xx = r.x0 + dx;
+        if (yy >= SCREEN_H || xx >= SCREEN_W) continue;
+        if (nt[yy] && nt[yy][xx]) nt[yy][xx] = { tile: clipboard[dy][dx].tile, palette: clipboard[dy][dx].palette };
+      }
+    }
+    ctx.markDirty(); ctx.renderLive();
+  }
+  function clearRegion(ctx) {
+    if (!selRect) return;
+    var bg = activeBg(ctx); if (isMetatileBg(bg)) return;
+    var r = normRect(selRect), nt = bg.nametable;
+    ctx.pushUndo();
+    for (var y = r.y0; y <= r.y1; y++) for (var x = r.x0; x <= r.x1; x++) {
+      if (nt[y] && nt[y][x]) nt[y][x] = { tile: 0, palette: 0 };
+    }
+    ctx.markDirty(); ctx.renderLive();
+  }
+
   var strokeOpen = false;
   function beginStroke(ctx, cell) {
     if (!cell.inBounds) return;
@@ -213,6 +260,14 @@
     if (hover) {
       g.strokeStyle = '#FA9E00'; g.lineWidth = 2;
       g.strokeRect(hover.cx * 8, hover.cy * 8, 8, 8);
+    }
+    if (selRect) {
+      var r = normRect(selRect);
+      g.strokeStyle = '#43F611'; g.lineWidth = 2;
+      g.strokeRect(r.x0 * 8, r.y0 * 8, (r.x1 - r.x0 + 1) * 8, (r.y1 - r.y0 + 1) * 8);
+      g.globalAlpha = 0.12; g.fillStyle = '#43F611';
+      g.fillRect(r.x0 * 8, r.y0 * 8, (r.x1 - r.x0 + 1) * 8, (r.y1 - r.y0 + 1) * 8);
+      g.globalAlpha = 1;
     }
   }
 
@@ -384,6 +439,30 @@
     }
     dock.appendChild(entSec);
 
+    // --- Selection / clipboard (region copy-paste) ---
+    var selSec = UI.section('Selection', el('span', { class: 'chip', text: '▦ region' }));
+    selSec.appendChild(el('div', { class: 'dock-note', text: selRect
+      ? 'Region ' + (normRect(selRect).x1 - normRect(selRect).x0 + 1) + '×' + (normRect(selRect).y1 - normRect(selRect).y0 + 1)
+        + ' selected. Copy it, then select a spot and Paste (paste anchors at the region’s top-left).'
+      : 'Pick ▦ Select and drag a box on the screen to copy/paste chunks of your level.' }));
+    selSec.appendChild(el('div', { class: 'row' }, [
+      el('button', { class: 'btn', text: '⧉ Copy', onclick: function () { copyRegion(ctx); ctx.renderDock(); } }),
+      el('button', { class: 'btn' + (clipboard ? '' : ' disabled'), text: '📋 Paste',
+        onclick: function () { if (clipboard) pasteRegion(ctx); } }),
+    ]));
+    selSec.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
+      el('button', { class: 'btn', text: '⌫ Clear region', onclick: function () { clearRegion(ctx); } }),
+      el('button', { class: 'btn', text: '✕ Deselect', onclick: function () { selRect = null; ctx.renderLive(); ctx.renderDock(); } }),
+    ]));
+    if (clipboard) selSec.appendChild(el('div', { class: 'dock-note', text: 'Clipboard holds ' + clipboard[0].length + '×' + clipboard.length + ' tiles.' }));
+    dock.appendChild(selSec);
+
+    // --- Full-screen preview ---
+    var prevSec = el('div', { class: 'dock-section' }, [
+      el('button', { class: 'btn', text: '⛶ Full-screen preview', onclick: function () { openPreview(ctx); } }),
+    ]);
+    dock.appendChild(prevSec);
+
     // --- Grid toggle ---
     var gridSec = el('div', { class: 'dock-section' }, [
       el('label', { class: 'switch' }, [
@@ -393,6 +472,36 @@
       ]),
     ]);
     dock.appendChild(gridSec);
+  }
+
+  // Render a background's nametable cleanly (no grid/entities) into a canvas.
+  function renderBgInto(cv, bg, state, scale) {
+    var g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    var backdrop = global.NesRender.nesRgb(state.universal_bg);
+    g.fillStyle = backdrop; g.fillRect(0, 0, cv.width, cv.height);
+    if (isMetatileBg(bg)) return;
+    var nt = bg.nametable;
+    for (var cy = 0; cy < SCREEN_H; cy++) for (var cx = 0; cx < SCREEN_W; cx++) {
+      var c = (nt[cy] && nt[cy][cx]) || { tile: 0, palette: 0 };
+      var tile = state.bg_tiles[c.tile | 0];
+      var pal = global.NesRender.bgPaletteFor(state, c.palette | 0);
+      UI.drawTilePixels(g, tile, pal, cx * 8 * scale, cy * 8 * scale, scale);
+    }
+  }
+  function openPreview(ctx) {
+    var state = ctx.getState();
+    var bg = activeBg(ctx);
+    var scale = 2;
+    var cv = el('canvas', { width: SCREEN_W * 8 * scale, height: SCREEN_H * 8 * scale,
+      style: 'image-rendering:pixelated;max-width:100%;border:2px solid var(--line);display:block;margin:0 auto' });
+    renderBgInto(cv, bg, state, scale);
+    UI.modal({
+      title: '⛶ ' + (bg.name || 'background'),
+      sub: 'Full-screen preview — the background exactly as the NES draws it (no grid or entities).',
+      bodyNodes: [cv],
+      actions: [{ label: 'Close', value: 'close', kind: 'primary' }],
+    });
   }
 
   function swatchEl(css, cls) {
@@ -421,24 +530,36 @@
       { id: 'palette', label: '🎨 Colour' },
       { id: 'type', label: '⛰ Type' },
       { id: 'place', label: '🧍 Place' },
+      { id: 'select', label: '▦ Select' },
     ],
     renderDock: renderDock,
     onRenderOverlay: onRenderOverlay,
-    onEnter: function () { hover = null; },
+    onEnter: function () { hover = null; selecting = false; },
     onToolChange: function (id, ctx) { ctx.renderDock(); ctx.renderLive(); },
     onTvDown: function (cell, ctx) {
-      if (ctx.getActiveTool() === 'place') { placeDown(ctx, cell); return; }
+      var tool = ctx.getActiveTool();
+      if (tool === 'place') { placeDown(ctx, cell); return; }
+      if (tool === 'select') {
+        if (!cell.inBounds) return;
+        selecting = true; selRect = { x0: cell.cx, y0: cell.cy, x1: cell.cx, y1: cell.cy };
+        ctx.renderLive(); return;
+      }
       beginStroke(ctx, cell);
     },
     onTvMove: function (cell, ctx) {
-      if (ctx.getActiveTool() === 'place') { if (dragInst) moveSelected(ctx, cell); return; }
-      if (!strokeOpen || !cell.inBounds) return;
       var tool = ctx.getActiveTool();
+      if (tool === 'place') { if (dragInst) moveSelected(ctx, cell); return; }
+      if (tool === 'select') {
+        if (!selecting || !cell.inBounds) return;
+        selRect.x1 = cell.cx; selRect.y1 = cell.cy; ctx.renderLive(); return;
+      }
+      if (!strokeOpen || !cell.inBounds) return;
       if (tool === 'fill') return; // fill is a single action
       paintCell(ctx, cell.cx, cell.cy);
       ctx.renderLive();
     },
     onTvUp: function (cell, ctx) {
+      if (selecting) { selecting = false; selRect = normRect(selRect); ctx.renderDock(); return; }
       if (dragInst) { dragInst = false; ctx.markDirty(); ctx.renderDock(); return; }
       if (strokeOpen) { strokeOpen = false; ctx.markDirty(); ctx.refresh(); }
     },
@@ -456,7 +577,7 @@
       if (c) { stampTile = c.tile | 0; paintPalette = c.palette | 0; ctx.renderDock(); }
     },
     // Test/inspection hooks.
-    _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid }; },
+    _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, selRect: selRect, clipboard: clipboard }; },
     _set: function (o) { if (o.stampTile != null) stampTile = o.stampTile; if (o.paintPalette != null) paintPalette = o.paintPalette; if (o.paintType != null) paintType = o.paintType; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);
