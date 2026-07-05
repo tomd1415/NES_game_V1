@@ -22,6 +22,15 @@ shippable plan for the redesign. It links the three docs that give it its
 | [`ui-architecture.md`](ui-architecture.md) | The unified-workspace IA: mode rail, contextual dock, the central "TV", quest log; how the old seven pages map to the new modes. |
 | [`target-data-model.md`](target-data-model.md) | The tile-first data model + an honest gap analysis: what the current build already stores correctly vs. the real gaps. |
 | [`feature-parity.md`](feature-parity.md) | **The parity yardstick.** Everything the current seven pages do (from a 2026-07-05 code audit), page by page — no page retires until its checklist is covered. |
+| [`engine-versioning.md`](engine-versioning.md) | **The NES-engine versioning system.** How every ROM/project is stamped with an engine version, how each engine is snapshotted for rollback, and how the site falls back to the engine a game was authored for. **Read before changing the ROM-building engine.** |
+
+### Decisions (ADR-style, under `decisions/`)
+
+| Doc | What it holds |
+| --- | ------------- |
+| [`decisions/2026-07-05-data-model-audit.md`](decisions/2026-07-05-data-model-audit.md) | Data-model gap tickets DM-1..DM-5 and their status. |
+| [`decisions/2026-07-05-engine-items-feasibility.md`](decisions/2026-07-05-engine-items-feasibility.md) | Feasibility + golden-ROM risk of each Phase-4 engine item; recommends per-door as the lowest-risk. |
+| [`decisions/2026-07-05-deliberate-parity-drops.md`](decisions/2026-07-05-deliberate-parity-drops.md) | Old-page affordances deliberately dropped/deferred and where each landed. |
 
 ### Source material (incoming design documents)
 
