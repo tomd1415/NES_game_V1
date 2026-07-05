@@ -94,15 +94,32 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 > reuses the koopa sprite); and a dedicated `MAX_ENEMIES` fixed actor pool
 > (today's scene-sprite array already serves as the pool).
 
-### v5 — Projectiles + power‑up state machine
-- **Fireballs:** 2‑slot pool gated on `state==inactive`; spawn X±4, ±4 px/f,
-  gravity‑bounce (fall cap 3 px/f), despawn off‑screen/on wall; defeat enemies.
-- **Power‑up state** = `PlayerStatus` small/super/fire; hit steps straight to
-  small; fire only in fire state.
-- **Items:** Super Mushroom (moves like a walker), Fire Flower (static),
-  Starman (invincibility timer), 1‑Up. Spawn from blocks (v6 wires the
-  dispense).
-- Tests: compile; headless fireball spawns/limits to 2; mushroom promotes.
+### v5 — Projectiles + power‑up state machine  *(✅ LANDED 2026-07-05)*
+
+> **Landed (engine v5):** the SMB power‑up system, behind a new **Power‑ups**
+> module (`BW_SMB_POWERUPS`, gated on the smb style + engine v5 → byte‑identical
+> otherwise):
+> - **Power state** `smb_pstate` small→super→fire + a **Starman** timer. A hit
+>   **demotes** a super/fire player to small (instead of costing HP); a Starman
+>   ignores hits.
+> - **Fireballs:** a 2‑slot pool — **B** in the fire state throws one; it steps
+>   ±3 px/f, arcs under 8.8 gravity (capped fall) and **bounces** off the ground,
+>   **despawns** on a wall / world edge, and **defeats enemies** on contact.
+>   Drawn as one 8×8 sprite (`BW_FIREBALL_TILE`/`PAL`).
+> - **Items** as a new Scene AI kind (`ai:'item'` + `power`): **Super Mushroom**
+>   (→super), **Fire Flower** (→fire), **Starman** (invincible), **1‑Up** (full
+>   heal — a true lives counter arrives with the v7 HUD).
+> - **SMB tuning:** the smb style now **falls a touch faster than it rises** for
+>   a snappier arc; the SMB showcase starter is now a **two‑screen scrolling
+>   level** with the power‑ups wired and jump/speed tuned toward the original.
+>
+> Studio: a Power‑ups module card (RULES) and an `item` AI option with a power
+> picker (WORLD). `smb-powerups.mjs` + the updated `starter-smb.mjs` cover
+> codegen, engine/game‑type gating, and cc65 compile; golden ROM byte‑identical.
+>
+> **Deferred:** items don't yet **spawn from ? blocks** (that dispensing lands
+> with the block interactions in **v6**); the mushroom is static rather than
+> walking; fireballs cap at 2 (as SMB does).
 
 ### v6 — 16×16 block interactions
 - Per‑metatile **property table**; the tile‑hit path folds in: **? block**
