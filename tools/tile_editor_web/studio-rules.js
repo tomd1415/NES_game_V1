@@ -18,7 +18,7 @@
 
   // Card order (top-level module ids). Submodules render nested.
   var CARD_ORDER = ['game', 'globals', 'players', 'scene', 'pickups', 'spawn',
-    'damage', 'hud', 'doors', 'dialogue', 'behaviour_walls', 'win_condition'];
+    'damage', 'powerups', 'hud', 'doors', 'dialogue', 'behaviour_walls', 'win_condition'];
   // Modules that are structural — no on/off toggle.
   var REQUIRED = { game: 1, players: 1, scene: 1 };
 

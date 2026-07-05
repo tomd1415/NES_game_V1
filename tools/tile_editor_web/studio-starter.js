@@ -169,6 +169,49 @@
     '........',
   ]);
 
+  // --- Power-up + fireball art (engine v5) --------------------------------
+  // Single 8x8 sprite tiles so the items read clearly without eating the bank.
+  var FIREBALL = tileFrom('fireball', [
+    '..1111..',
+    '.113311.',
+    '11333311',
+    '13333331',
+    '13333331',
+    '11333311',
+    '.113311.',
+    '..1111..',
+  ]);
+  var MUSHROOM = tileFrom('mushroom', [
+    '..1111..',
+    '.133331.',
+    '13313331',
+    '13133131',
+    '11333311',
+    '..1221..',
+    '..1221..',
+    '..1111..',
+  ]);
+  var FLOWER = tileFrom('flower', [
+    '..1..1..',
+    '.131131.',
+    '13313311',
+    '13333331',
+    '.133331.',
+    '...22...',
+    '..2222..',
+    '...22...',
+  ]);
+  var STAR = tileFrom('star', [
+    '...11...',
+    '...11...',
+    '.111111.',
+    '.111111.',
+    '11111111',
+    '.111111.',
+    '.11..11.',
+    '.1....1.',
+  ]);
+
   function cell(tile, palette) {
     return { tile: tile, palette: palette, flipH: false, flipV: false, priority: false, empty: false };
   }
@@ -363,76 +406,109 @@
       '..1.....',
     ]);
     state.bg_tiles[5].defaultBehaviour = 5;
+    // Power-up + fireball sprite tiles (9..12).  The engine draws the fireball
+    // from tile 9 (BW_FIREBALL_TILE below); the item sprites use 10..12.
+    state.sprite_tiles[9] = FIREBALL;
+    state.sprite_tiles[10] = MUSHROOM;
+    state.sprite_tiles[11] = FLOWER;
+    state.sprite_tiles[12] = STAR;
 
+    // A two-screen-wide scrolling level (64 tiles across) so the SMB run
+    // physics and one-way scroll actually have room to breathe.
     var bg = state.backgrounds[0];
-    var SCREEN_W = 32, SCREEN_H = 30;
+    var SCREEN_H = 30, WORLD_W = 64;   // 2 screens of 32 columns
+    bg.dimensions = { screens_x: 2, screens_y: 1 };
+    bg.nametable = [];
     bg.behaviour = [];
     for (var r = 0; r < SCREEN_H; r++) {
-      var brow = [];
-      for (var c = 0; c < SCREEN_W; c++) brow.push(0);
-      bg.behaviour.push(brow);
+      var ntrow = [], brow = [];
+      for (var c = 0; c < WORLD_W; c++) { ntrow.push({ tile: 0, palette: 0 }); brow.push(0); }
+      bg.nametable.push(ntrow); bg.behaviour.push(brow);
     }
     function put(x, y, tile, beh) { bg.nametable[y][x] = { tile: tile, palette: 0 }; bg.behaviour[y][x] = beh; }
+    function ground(x0, x1) { for (var x = x0; x <= x1; x++) { put(x, 28, 1, 1); put(x, 29, 1, 1); } }
+    function platform(x0, x1, y) { for (var x = x0; x <= x1; x++) put(x, y, 2, 3); }
 
-    // Two-row ground floor with a single gap (cols 15-16) — a jump to clear,
-    // and a ledge for the Goombas to walk off (they have no ledge sensing).
-    for (var gy = SCREEN_H - 2; gy < SCREEN_H; gy++) {
-      for (var gx = 0; gx < SCREEN_W; gx++) {
-        if (gx === 15 || gx === 16) continue; // the pit
-        put(gx, gy, 1, 1);
-      }
-    }
-    // A staircase of brick platforms at rising heights — showing off how a
-    // running take-off clears the higher, farther jumps.
-    for (var s1 = 4; s1 <= 7; s1++) put(s1, 24, 2, 3);
-    for (var s2 = 10; s2 <= 13; s2++) put(s2, 20, 2, 3);
-    for (var s3 = 24; s3 <= 27; s3++) put(s3, 22, 2, 3);
-    // A ladder from the floor up to the first platform (col 3).
+    // Ground with two pits to jump (a Goomba can walk off a ledge into them).
+    ground(0, 14);
+    ground(17, 46);
+    ground(49, 63);
+    // A ladder up to the first platform, then a rising run of platforms across
+    // both screens — a running take-off clears the higher, farther gaps.
     for (var ly = 25; ly <= 27; ly++) put(3, ly, 3, 6);
-    // The goal flag on top of the highest right-hand platform — climb the
-    // staircase (or run-jump the gap) to win.
-    put(26, 21, 5, 5);
-    // A door on the floor near the right edge (per-door warp back to start).
-    put(30, 27, 4, 4);
+    platform(4, 7, 24);
+    platform(10, 13, 20);
+    platform(24, 27, 22);
+    platform(40, 43, 21);
+    platform(54, 57, 18);
+    // The goal flag on the far-right ground — scroll the whole level to win.
+    put(61, 27, 5, 5);
+    // A warp door back to the start, on the first screen's right ledge.
+    put(45, 27, 4, 4);
 
     state.behaviour_types = defaultBehaviourTypes();
-    // Sprites: hero, a Goomba + a Koopa (both drawn with the slime art but
-    // separate definitions so the AI reads clearly), and an NPC villager.
+    // Sprites: hero, a Goomba + a Koopa (slime art, separate defs so the AI
+    // reads clearly), an NPC villager, and the three power-up items (1x1,
+    // flying so they stay put where they are placed).
     var goomba = enemySprite(); goomba.name = 'Goomba';
     var koopa = enemySprite(); koopa.name = 'Koopa';
-    state.sprites = [playerSprite(), goomba, koopa, npcSprite()];
+    function itemSprite(name, tile, pal) {
+      return { name: name, role: 'pickup', flying: true, width: 1, height: 1, cells: [[cell(tile, pal)]] };
+    }
+    state.sprites = [
+      playerSprite(), goomba, koopa, npcSprite(),
+      itemSprite('Mushroom', 10, 2), itemSprite('Fire Flower', 11, 1), itemSprite('Starman', 12, 3),
+    ];
 
     if (typeof global.BuilderDefaults === 'function') {
       state.builder = global.BuilderDefaults();
       var m = state.builder.modules;
       // v3: the SMB game style (variable jump + fixed-point horizontal).
       if (m.game) { m.game.config = m.game.config || {}; m.game.config.type = 'smb'; }
-      // Hearts / HP: 3 HP + damage-on-touch, so the enemies are a real threat
-      // and the stomp/hurt interplay is visible.
+      // SMB-tuned physics: a snappy rise (3 px/f) paired with the engine's
+      // slightly-faster smb fall, and a jump-height budget that clears ~4-5
+      // tiles standing / more with a running take-off — closer to the original.
+      // (The globals module isn't in the default tree, so create it here.)
+      m.globals = { enabled: true, config: { gravityPx: 2, jumpSpeedPx: 3, bobWhenWalking: false } };
+      // Hearts / HP + damage, so enemies are a real threat and the stomp /
+      // demote-on-hit interplay is visible.  Jump height tuned for the arc.
       if (m.players && m.players.submodules && m.players.submodules.player1) {
         m.players.submodules.player1.config.maxHp = 3;
         m.players.submodules.player1.config.startX = 16;
         m.players.submodules.player1.config.startY = 200;
+        m.players.submodules.player1.config.jumpHeight = 14;  // × 3 px = ~5 tiles
       }
       if (m.damage) { m.damage.enabled = true; m.damage.config = m.damage.config || {}; m.damage.config.amount = 1; }
+      // v5: power-ups + fireballs.  Fireball draws from sprite tile 9.
+      if (m.powerups) {
+        m.powerups.enabled = true;
+        m.powerups.config = m.powerups.config || {};
+        m.powerups.config.fireballTile = 9;
+        m.powerups.config.fireballPal = 2;
+      }
       // NPC dialogue near the start.
-      if (m.dialogue) { m.dialogue.enabled = true; m.dialogue.config = m.dialogue.config || {}; m.dialogue.config.text = 'STOMP THE GOOMBAS!'; }
-      // Scene: two Goombas to stomp (one on the ground, one on the high
-      // platform) and a Koopa to turn into a kickable shell, plus the NPC.
+      if (m.dialogue) { m.dialogue.enabled = true; m.dialogue.config = m.dialogue.config || {}; m.dialogue.config.text = 'GRAB THE FLOWER!'; }
+      // Scene: enemies to stomp/kick + fireball, and the three power-ups spread
+      // across the two screens (Mushroom early, Fire Flower mid, Starman late).
       if (m.scene) {
         m.scene.config = m.scene.config || {};
         m.scene.config.instances = [
-          { id: 1, spriteIdx: 3, x: 40, y: 200, ai: 'static', speed: 1 },  // NPC villager
-          { id: 2, spriteIdx: 1, x: 96, y: 200, ai: 'goomba', speed: 1 },  // ground Goomba
-          { id: 3, spriteIdx: 1, x: 88, y: 152, ai: 'goomba', speed: 1 },  // Goomba on the s2 platform
-          { id: 4, spriteIdx: 2, x: 200, y: 200, ai: 'koopa', speed: 1 },  // Koopa on the right ground
+          { id: 1, spriteIdx: 3, x: 40,  y: 200, ai: 'static', speed: 1 },                 // NPC villager
+          { id: 2, spriteIdx: 4, x: 88,  y: 152, ai: 'item', power: 'mushroom' },          // Mushroom on the row-20 platform
+          { id: 3, spriteIdx: 1, x: 96,  y: 200, ai: 'goomba', speed: 1 },                 // ground Goomba
+          { id: 4, spriteIdx: 1, x: 200, y: 176, ai: 'goomba', speed: 1 },                 // Goomba on the row-22 platform
+          { id: 5, spriteIdx: 2, x: 260, y: 200, ai: 'koopa', speed: 1 },                  // Koopa on the right of screen 1
+          { id: 6, spriteIdx: 5, x: 336, y: 160, ai: 'item', power: 'fireflower' },        // Fire Flower on the row-21 platform
+          { id: 7, spriteIdx: 1, x: 380, y: 200, ai: 'goomba', speed: 1 },                 // screen-2 ground Goomba
+          { id: 8, spriteIdx: 6, x: 440, y: 136, ai: 'item', power: 'star' },              // Starman on the high row-18 platform
+          { id: 9, spriteIdx: 1, x: 500, y: 200, ai: 'goomba', speed: 1 },                 // last Goomba before the flag
         ];
       }
       // Per-door warp (engine v2): the door loops back to the spawn point.
       if (m.doors) {
         m.doors.enabled = true;
         m.doors.config = m.doors.config || {};
-        m.doors.config.doorList = [{ bg: 0, tx: 30, ty: 27, spawnX: 16, spawnY: 200, targetBgIdx: -1 }];
+        m.doors.config.doorList = [{ bg: 0, tx: 45, ty: 27, spawnX: 16, spawnY: 200, targetBgIdx: -1 }];
       }
     }
 
@@ -453,8 +529,8 @@
         create: create,
       },
       {
-        id: 'smb', emoji: '🍄', label: 'SMB showcase', min: 4,
-        desc: 'Every new engine feature wired up: SMB variable-height jump + run physics (v3), Goomba stomps and a kickable Koopa shell (v4), hearts, dialogue, a ladder and a warp door.',
+        id: 'smb', emoji: '🍄', label: 'SMB showcase', min: 5,
+        desc: 'A two-screen scrolling level with every new engine feature: SMB run physics + variable jump (v3), Goomba stomps and a kickable Koopa shell (v4), and Super Mushroom / Fire Flower / Starman power-ups with B-button fireballs (v5) — plus hearts, dialogue, a ladder, a warp door and a goal flag.',
         create: createSmb,
       },
     ];

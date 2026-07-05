@@ -641,6 +641,31 @@
           parts.push('                }');
           parts.push('            }');
           parts.push('        }');
+        } else if (ai === 'item' && targetEngine >= 5) {
+          // Engine v5 — power-up item.  Touching it applies its effect and the
+          // sprite vanishes.  Wrapped in #ifdef BW_SMB_POWERUPS so it is a
+          // no-op (the item just sits there) unless the Power-ups module is on,
+          // which is what declares smb_pstate / smb_star.
+          emitted++; needSmb = true;
+          const power = inst.power || 'mushroom';
+          parts.push('#ifdef BW_SMB_POWERUPS');
+          parts.push('        // instance ' + i + ' — ' + (sp.name || '?') +
+            ' power-up item (' + power + ')');
+          parts.push('        if (ss_y[' + i + '] < 240 && BW_SMB_TOUCH(' + i + ')) {');
+          if (power === 'fireflower') {
+            parts.push('            smb_pstate = 2;             /* Fire Flower → fire */');
+          } else if (power === 'star') {
+            parts.push('            smb_star = BW_STAR_FRAMES;  /* Starman → invincible */');
+          } else if (power === 'oneup') {
+            parts.push('#if PLAYER_HP_ENABLED');
+            parts.push('            player_hp = PLAYER_MAX_HP;  /* 1-Up → full heal (lives arrive with the HUD) */');
+            parts.push('#endif');
+          } else {
+            parts.push('            if (smb_pstate < 1) smb_pstate = 1;  /* Super Mushroom → super */');
+          }
+          parts.push('            ss_y[' + i + '] = 0xFF;');
+          parts.push('        }');
+          parts.push('#endif');
         }
         // `static` and non-enemy roles: nothing to emit.  Pickups and
         // decorations just sit where they were placed.
@@ -728,6 +753,23 @@
           '#define BW_SMB_STOMP(_n) (jumping && jmp_up == 0 && \\',
           '                          (py + (PLAYER_H << 3)) <= ss_y[_n] + (ss_h[_n] << 2))',
           '#if PLAYER_HP_ENABLED',
+          '#ifdef BW_SMB_POWERUPS',
+          '/* Power-ups (v5): a Starman ignores the hit; a super/fire player is',
+          ' * knocked down to small instead of losing HP; only a small player',
+          ' * actually loses HP.  (This #ifdef resolves after the power-ups',
+          ' * module\'s BW_SMB_POWERUPS define, since the macro lives at the top',
+          ' * of per_frame — well below the declarations slot.) */',
+          '#define BW_SMB_HURT() do { \\',
+          '    if (!smb_star && !player_iframes) { \\',
+          '        if (smb_pstate > 0) { smb_pstate = 0; player_iframes = INVINCIBILITY_FRAMES; } \\',
+          '        else { \\',
+          '            player_hp = (player_hp > DAMAGE_AMOUNT) ? (player_hp - DAMAGE_AMOUNT) : 0; \\',
+          '            player_iframes = INVINCIBILITY_FRAMES; \\',
+          '            if (player_hp == 0) player_dead = 1; \\',
+          '        } \\',
+          '    } \\',
+          '} while (0)',
+          '#else',
           '#define BW_SMB_HURT() do { \\',
           '    if (!player_iframes) { \\',
           '        player_hp = (player_hp > DAMAGE_AMOUNT) ? (player_hp - DAMAGE_AMOUNT) : 0; \\',
@@ -735,6 +777,7 @@
           '        if (player_hp == 0) player_dead = 1; \\',
           '    } \\',
           '} while (0)',
+          '#endif',
           '/* Grant iframes on a stomp/kick so the same frame\'s Damage-module',
           ' * check (any apply order) doesn\'t also count it as a side-hit. */',
           '#define BW_SMB_GUARD() do { player_iframes = INVINCIBILITY_FRAMES; } while (0)',
@@ -1042,6 +1085,60 @@
         '        // This module only sets player_dead / player2_dead above.',
       ].join('\n');
       return A.appendToSlot(template, 'per_frame', body);
+    },
+  };
+
+  // --------------------------------------------------------------------
+  // Power-ups & fireballs (engine v5) — the SMB power-up state machine.
+  // Turns on `#define BW_SMB_POWERUPS`, which the engine (platformer.c) gates
+  // the whole feature on: a player power state (small -> super -> fire) set by
+  // touching Super Mushroom / Fire Flower items, a Starman invincibility timer,
+  // 1-Up heals, and — in the fire state — a 2-slot fireball pool thrown with B.
+  // Items are placed on the Scene page with AI = item + a power kind; the
+  // hurt path (shared with the Goomba/Koopa AIs) demotes a big player to small
+  // instead of losing HP.  Needs the SMB game type; emits nothing otherwise, so
+  // every non-SMB game (and pre-v5 targets) stays byte-identical.
+  // --------------------------------------------------------------------
+  modules['powerups'] = {
+    label: 'Power-ups & fireballs',
+    description: 'The classic SMB power-ups: a Super Mushroom makes the player ' +
+      'super, a Fire Flower lets them throw fireballs with B, a Starman gives ' +
+      'brief invincibility, and a 1-Up heals.  Getting hit while super/fire ' +
+      'knocks you back down to small instead of costing a life.  Place the ' +
+      'items on the Scene page (AI = item).  Needs the 🍄 SMB game type.',
+    detailedHelp: [
+      'A power state — small, super, fire — lives on the player.  Super ' +
+      'Mushroom steps small→super; Fire Flower jumps straight to fire.',
+      'In the fire state, pressing B throws a fireball (two can be on screen ' +
+      'at once).  Fireballs arc, bounce off the ground, and defeat enemies.',
+      'A Starman sets an invincibility timer.  A 1-Up refills HP (a full ' +
+      'lives system arrives with the HUD in a later engine version).',
+      'This is a v5 engine feature: it only builds when your game targets ' +
+      'engine v5+ and uses the SMB game type.',
+    ],
+    defaultConfig: { fireballTile: 9, fireballPal: 2 },
+    schema: [
+      { key: 'fireballTile', label: 'Fireball sprite tile (0–255)', type: 'int', min: 0, max: 255,
+        help: 'Which sprite tile draws the fireball.  Draw a small flame on the Tiles page and put its index here.' },
+      { key: 'fireballPal', label: 'Fireball palette (0–3)', type: 'int', min: 0, max: 3,
+        help: 'Which sprite palette colours the fireball.' },
+    ],
+    applyToTemplate(template, node, state) {
+      // Power-ups build on the SMB style (physics) and land in engine v5.
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      const gt = state && state.builder && state.builder.modules && state.builder.modules.game &&
+                 state.builder.modules.game.config && state.builder.modules.game.config.type;
+      if (targetEngine < 5 || gt !== 'smb') return template;   // gated → byte-identical otherwise
+      const c = (node && node.config) || {};
+      const tile = A.clampInt(c.fireballTile, 0, 255, 9);
+      const pal = A.clampInt(c.fireballPal, 0, 3, 2);
+      return A.appendToSlot(template, 'declarations', [
+        '/* [builder] power-ups (engine v5) — enable the SMB power-up state',
+        ' * machine + fireballs; the engine gates the whole feature on this. */',
+        '#define BW_SMB_POWERUPS 1',
+        '#define BW_FIREBALL_TILE ' + tile,
+        '#define BW_FIREBALL_PAL ' + pal,
+      ].join('\n'));
     },
   };
 
@@ -2052,6 +2149,10 @@
         damage: {
           enabled: false,
           config: Object.assign({}, modules['damage'].defaultConfig),
+        },
+        powerups: {
+          enabled: false,
+          config: Object.assign({}, modules['powerups'].defaultConfig),
         },
         hud: {
           enabled: false,

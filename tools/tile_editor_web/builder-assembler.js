@@ -119,7 +119,7 @@
   // catalogue entry, validator, or emission ever existed, so the assemble loop
   // silently skipped it every build.  Removed.
   const MODULE_ORDER = ['game', 'globals', 'players', 'scene',
-    'behaviour_walls', 'pickups', 'spawn', 'damage', 'hud', 'doors',
+    'behaviour_walls', 'pickups', 'spawn', 'damage', 'powerups', 'hud', 'doors',
     'dialogue', 'win_condition'];
 
   function assemble(state, templateText) {

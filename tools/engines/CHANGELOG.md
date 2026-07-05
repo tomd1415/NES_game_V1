@@ -9,6 +9,35 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v5 — 2026-07-05
+
+### Added
+- **Power-ups & fireballs** — the SMB power-up state machine, behind a new
+  **Power-ups** module (`#define BW_SMB_POWERUPS`, SMB game type + engine v5):
+  - A player **power state** — small → super → fire — set by touching items.
+  - **Items** as a new Scene AI kind (`ai: 'item'`) with a `power`:
+    **Super Mushroom** (→ super), **Fire Flower** (→ fire), **Starman**
+    (invincibility timer), **1-Up** (full heal; true lives arrive with the HUD).
+  - **Fireballs**: in the fire state, **B** throws one from a 2-slot pool —
+    it arcs under gravity, bounces off the ground, despawns on a wall / off the
+    world edge, and **defeats enemies** on contact.
+  - The shared hurt path now **demotes a super/fire player to small** (instead
+    of costing HP), and a **Starman** ignores hits entirely.
+- **SMB-tuned jump/fall** for the smb style: the fall is now a touch faster
+  than the rise (3 vs the rise speed) so the arc lands snappily — closer to the
+  original. Gated on `BW_SMB_JUMP`, so all other styles are unchanged.
+
+### Changed / migration
+- No migration. All power-up code is gated on `BW_SMB_POWERUPS` (only emitted
+  for the SMB game type on engine v5+) and the faster fall on `BW_SMB_JUMP`, so
+  every existing game (and pre-v5 targets) builds byte-identically — golden-ROM
+  hashes unchanged. The **SMB showcase** starter now spans **two scrolling
+  screens** and wires the power-ups; the Studio adds a Power-ups module card and
+  an `item` Scene-AI option (with a power picker).
+
+### Breaking
+- (none.)
+
 ## v4 — 2026-07-05
 
 ### Added

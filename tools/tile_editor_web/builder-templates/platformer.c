@@ -175,6 +175,33 @@ signed int    smb_vx = 0;
 unsigned char smb_px_sub = 0;
 #endif
 
+#ifdef BW_SMB_POWERUPS
+/* SMB power-ups (engine v5).  The player has a power state — 0 small,
+ * 1 super, 2 fire — set by touching Super Mushroom / Fire Flower items; a
+ * Starman grants smb_star frames of invincibility; and in the fire state the
+ * fire button throws a fireball from a 2-slot projectile pool.  Fireballs use
+ * world-space coordinates (like px/py) so they scroll with the level, an 8.8
+ * vertical velocity so they arc + bounce off the ground, and despawn on a wall
+ * / off-screen / on hitting an enemy.  All gated on BW_SMB_POWERUPS so games
+ * without power-ups are byte-identical. */
+unsigned char smb_pstate = 0;      /* 0 small, 1 super, 2 fire */
+unsigned int  smb_star = 0;        /* Starman invincibility frames remaining */
+pxcoord_t     fb_x[2];
+pxcoord_t     fb_y[2];
+signed char   fb_vx[2];            /* +/-3 px/frame horizontal */
+signed int    fb_vy[2];            /* 8.8 fixed-point vertical (gravity + bounce) */
+unsigned char fb_active[2];
+#ifndef BW_FIREBALL_TILE
+#define BW_FIREBALL_TILE 0
+#endif
+#ifndef BW_FIREBALL_PAL
+#define BW_FIREBALL_PAL 2
+#endif
+#ifndef BW_STAR_FRAMES
+#define BW_STAR_FRAMES 480         /* ~8 seconds of Starman at 60 fps */
+#endif
+#endif
+
 /* Gravity application macro — Builder's Globals module
  * (T1.6 in docs/plans/current/2026-04-26-fixes-and-features.md)
  * overrides this via the declarations slot above.  The default
@@ -754,6 +781,14 @@ void main(void) {
     player_dead = 0;
 #endif
 
+#ifdef BW_SMB_POWERUPS
+    /* Fresh run: back to small, no star, no fireballs in flight. */
+    smb_pstate = 0;
+    smb_star = 0;
+    fb_active[0] = 0;
+    fb_active[1] = 0;
+#endif
+
 #if PLAYER2_HP_ENABLED
     player2_hp = PLAYER2_MAX_HP;
     player2_iframes = 0;
@@ -1140,6 +1175,23 @@ void main(void) {
          * and a hold is a full jump. Only trims an in-progress rise. */
         if (jumping && jmp_up > 4 && !(pad & 0x88)) jmp_up = 4;
 #endif
+#ifdef BW_SMB_POWERUPS
+        /* Fire!  In the fire state, a fresh B press throws a fireball from the
+         * 2-slot pool (B is also "run", exactly like SMB — holding it still
+         * runs, the edge press fires).  It launches from the player's front at
+         * +/-3 px/f in the facing direction with no initial vertical speed. */
+        if (smb_pstate == 2 && (pad & 0x40) && !(prev_pad & 0x40)) {
+            unsigned char fbs = 2;
+            if (!fb_active[0]) fbs = 0; else if (!fb_active[1]) fbs = 1;
+            if (fbs < 2) {
+                fb_active[fbs] = 1;
+                fb_vy[fbs] = 0;
+                if (plrdir == 0x40) { fb_vx[fbs] = -3; fb_x[fbs] = (px >= 4) ? (px - 4) : 0; }
+                else                { fb_vx[fbs] = 3;  fb_x[fbs] = px + (PLAYER_W << 3); }
+                fb_y[fbs] = py + 4;
+            }
+        }
+#endif
         prev_pad = pad;
 
         // Jump ascent: while jmp_up ticks remain, rise 2 px/frame. Once
@@ -1183,7 +1235,14 @@ void main(void) {
                 py = ((pxcoord_t)foot_row << 3) - (PLAYER_H << 3);
                 jumping = 0;   // feet on a surface — stop falling
             } else {
+#ifdef BW_SMB_JUMP
+                /* SMB feel: fall a touch faster than the rise so the arc is
+                 * snappy and lands quickly — closer to the original's gravity.
+                 * (Gated on the smb style, so every other game is unchanged.) */
+                if (py < (WORLD_H_PX - 8)) py += 3;
+#else
                 if (py < (WORLD_H_PX - 8)) py += 2;
+#endif
                 jumping = 1;   // airborne (jump descent or walked off a ledge)
             }
         }
@@ -1461,6 +1520,61 @@ void main(void) {
         jmp_up2  = 0;
 #endif  /* BW_GAME_STYLE == 1 (P2 top-down vertical) */
 #endif  /* PLAYER2_ENABLED */
+
+#ifdef BW_SMB_POWERUPS
+        /* Starman timer counts down to 0 (0 = not invincible). */
+        if (smb_star) smb_star--;
+        /* Fireball pool — each active shot steps horizontally (despawning on a
+         * wall or the world edge), arcs under gravity and bounces off the
+         * ground, and is consumed when it overlaps an enemy (which it defeats).
+         * Runs before the scene AI (appended at the marker below) so a fireball
+         * that kills an enemy this frame stops that enemy hurting the player. */
+        {
+            unsigned char fbi, fbj, fbb;
+            signed int fbacc;
+            for (fbi = 0; fbi < 2; fbi++) {
+                if (!fb_active[fbi]) continue;
+                /* Horizontal step + wall check. */
+                if (fb_vx[fbi] > 0) {
+                    if ((unsigned int)fb_x[fbi] + 8 >= WORLD_W_PX) { fb_active[fbi] = 0; continue; }
+                    fbb = behaviour_at((unsigned int)((fb_x[fbi] + 8) >> 3), (unsigned int)(fb_y[fbi] >> 3));
+                    if (fbb == BEHAVIOUR_SOLID_GROUND || fbb == BEHAVIOUR_WALL) { fb_active[fbi] = 0; continue; }
+                    fb_x[fbi] += 3;
+                } else {
+                    if (fb_x[fbi] < 3) { fb_active[fbi] = 0; continue; }
+                    fbb = behaviour_at((unsigned int)((fb_x[fbi] - 1) >> 3), (unsigned int)(fb_y[fbi] >> 3));
+                    if (fbb == BEHAVIOUR_SOLID_GROUND || fbb == BEHAVIOUR_WALL) { fb_active[fbi] = 0; continue; }
+                    fb_x[fbi] -= 3;
+                }
+                /* Gravity (8.8), capped fall speed, then vertical step. */
+                fb_vy[fbi] += 48;
+                if (fb_vy[fbi] > 768) fb_vy[fbi] = 768;   /* fall cap 3 px/f */
+                fbacc = (signed int)fb_y[fbi] + (fb_vy[fbi] >> 8);
+                if (fbacc < 0) fbacc = 0;
+                fb_y[fbi] = (pxcoord_t)fbacc;
+                if ((unsigned int)fb_y[fbi] + 8 >= WORLD_H_PX) { fb_active[fbi] = 0; continue; }
+                /* Bounce off a solid/platform tile under the ball. */
+                fbb = behaviour_at((unsigned int)(fb_x[fbi] >> 3), (unsigned int)((fb_y[fbi] + 8) >> 3));
+                if (fbb == BEHAVIOUR_SOLID_GROUND || fbb == BEHAVIOUR_WALL || fbb == BEHAVIOUR_PLATFORM) {
+                    fb_y[fbi] = (pxcoord_t)((((unsigned int)fb_y[fbi] + 8) & 0xFFF8) - 8);
+                    fb_vy[fbi] = -512;            /* rebound ~2 px/f up */
+                }
+                /* Enemy hit → defeat it and consume the fireball. */
+                for (fbj = 0; fbj < NUM_STATIC_SPRITES; fbj++) {
+                    if (ss_role[fbj] != ROLE_ENEMY) continue;
+                    if (ss_y[fbj] >= 240) continue;
+                    if (!((unsigned int)fb_x[fbi] + 8 <= (unsigned int)ss_x[fbj] ||
+                          (unsigned int)fb_x[fbi] >= (unsigned int)ss_x[fbj] + (ss_w[fbj] << 3) ||
+                          (unsigned int)fb_y[fbi] + 8 <= (unsigned int)ss_y[fbj] ||
+                          (unsigned int)fb_y[fbi] >= (unsigned int)ss_y[fbj] + (ss_h[fbj] << 3))) {
+                        ss_y[fbj] = 0xFF;
+                        fb_active[fbi] = 0;
+                        break;
+                    }
+                }
+            }
+        }
+#endif
 
         //@ insert: per_frame
 
@@ -1793,6 +1907,28 @@ void main(void) {
 #endif
                     }
                 }
+            }
+        }
+#endif
+
+#ifdef BW_SMB_POWERUPS
+        /* --- Fireballs: one 8x8 hardware sprite per active shot. --- */
+        {
+            unsigned char fbi;
+            for (fbi = 0; fbi < 2; fbi++) {
+                if (!fb_active[fbi]) continue;
+                if (oam_idx > 252) break;
+#ifdef SCROLL_BUILD
+                oam_buf[oam_idx++] = world_to_screen_y((unsigned int)fb_y[fbi]);
+                oam_buf[oam_idx++] = BW_FIREBALL_TILE;
+                oam_buf[oam_idx++] = BW_FIREBALL_PAL;
+                oam_buf[oam_idx++] = world_to_screen_x((unsigned int)fb_x[fbi]);
+#else
+                oam_buf[oam_idx++] = (unsigned char)fb_y[fbi];
+                oam_buf[oam_idx++] = BW_FIREBALL_TILE;
+                oam_buf[oam_idx++] = BW_FIREBALL_PAL;
+                oam_buf[oam_idx++] = (unsigned char)fb_x[fbi];
+#endif
             }
         }
 #endif

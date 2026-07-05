@@ -805,10 +805,25 @@
         aiOpts.push(['goomba', 'goomba (stomp to defeat)']);
         aiOpts.push(['koopa', 'koopa (stomp → shell → kick)']);
       }
+      // v5 — a power-up item the player collects (needs the Power-ups module).
+      if (stEng >= 5 || selected.ai === 'item') {
+        aiOpts.push(['item', 'item (power-up the player collects)']);
+      }
       aiOpts.forEach(function (a) { aiSel.appendChild(el('option', { value: a[0], text: a[1] })); });
       aiSel.value = selected.ai || 'static';
-      aiSel.addEventListener('change', function () { ctx.pushUndo(); selected.ai = aiSel.value; ctx.markDirty(); });
+      aiSel.addEventListener('change', function () { ctx.pushUndo(); selected.ai = aiSel.value; ctx.markDirty(); ctx.renderDock(); });
       cfg.appendChild(el('div', { class: 'field' }, [el('span', { text: 'AI' }), aiSel]));
+      // Power kind — only meaningful for an `item` entity.
+      if (selected.ai === 'item') {
+        var powSel = el('select');
+        [['mushroom', '🍄 Super Mushroom (→ super)'], ['fireflower', '🌼 Fire Flower (→ fire)'],
+         ['star', '⭐ Starman (invincible)'], ['oneup', '🍄 1-Up (heal)']].forEach(function (p) {
+          powSel.appendChild(el('option', { value: p[0], text: p[1] }));
+        });
+        powSel.value = selected.power || 'mushroom';
+        powSel.addEventListener('change', function () { ctx.pushUndo(); selected.power = powSel.value; ctx.markDirty(); });
+        cfg.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Power' }), powSel]));
+      }
       // Speed
       var spd = el('input', { type: 'number', min: 1, max: 4 }); spd.value = selected.speed || 1;
       spd.addEventListener('change', function () { ctx.pushUndo(); selected.speed = Math.max(1, Math.min(4, parseInt(spd.value, 10) || 1)); ctx.markDirty(); });
