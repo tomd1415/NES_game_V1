@@ -9,6 +9,36 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v4 — 2026-07-05
+
+### Added
+- **SMB actor AIs** — two new per-instance enemy behaviours on the Scene page,
+  the meat of the SMB‑1‑1 enemy set:
+  - **Goomba** (`ai: 'goomba'`): walks side to side, reverses at walls, **walks
+    off ledges** (no ledge sensing, exactly like SMB). **Stomping** it from
+    above (player descending, feet in the sprite's top half) defeats it and
+    bounces the player; any other touch hurts.
+  - **Koopa Troopa** (`ai: 'koopa'`): a three-state machine — **walk → stomp
+    turns it into a still shell → touching the still shell kicks it** into a
+    shell that slides at 3 px/f away from the player, **chains kills** on other
+    enemies it overtakes, and hurts the player on contact; stomping a sliding
+    shell stops it again.
+- Shared, index-parameterised `BW_SMB_TOUCH` / `BW_SMB_STOMP` / `BW_SMB_BOUNCE`
+  / `BW_SMB_HURT` / `BW_SMB_GUARD` helpers. `BW_SMB_HURT`/`GUARD` respect the
+  Damage module's invincibility frames (with sane fallbacks when Damage is off),
+  so a stomp never also counts as a side-hit — the actor AIs compose with the
+  Damage module in either apply order.
+
+### Changed / migration
+- No migration. The `goomba`/`koopa` AIs only emit when the design targets
+  **engine v4+**; a pre-v4 target (and the pinned v1 pages) degrades them to the
+  plain `walker`, so every existing game builds byte-identically — golden‑ROM
+  hashes unchanged. The advisor tells v3 designs that upgrading to v4 unlocks
+  the SMB enemies.
+
+### Breaking
+- (none.)
+
 ## v3 — 2026-07-05
 
 ### Added
@@ -19,6 +49,10 @@ for the full design (snapshots, fallback, upgrade advisor).
   Emitted as `#define BW_SMB_JUMP 1` on top of `BW_GAME_STYLE 0`, so it reuses
   the proven platformer path. First step of the SMB‑1‑1 roadmap
   (`docs/plans/current/2026-07-05-smb-engine-roadmap.md`).
+- **SMB fixed-point horizontal physics**: signed 8.8 velocity (`smb_vx`) with a
+  sub-pixel accumulator — accelerate to a walk (1.5 px/f) or run (2.5 px/f, hold
+  B) max, friction decel on release, **2× skid** on reversal, leading-edge
+  solid/wall collision cancels the step.
 
 ### Changed / migration
 - No migration. `BW_SMB_JUMP` is emitted only for the new `smb` game type on

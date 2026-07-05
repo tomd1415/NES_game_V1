@@ -792,9 +792,20 @@
       cSel.value = String(selected.spriteIdx);
       cSel.addEventListener('change', function () { ctx.pushUndo(); selected.spriteIdx = parseInt(cSel.value, 10); ctx.markDirty(); ctx.renderDock(); ctx.renderLive(); });
       cfg.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Character' }), cSel]));
-      // AI
+      // AI.  The SMB actor AIs (goomba/koopa) need engine v4+; show them once
+      // the project targets v4 or later (they degrade to a walker on older
+      // engines, so an old design that already picked one still loads fine).
       var aiSel = el('select', { 'data-ent-ai': '1' });
-      ['static', 'walker', 'chaser'].forEach(function (a) { aiSel.appendChild(el('option', { value: a, text: a })); });
+      var aiOpts = [
+        ['static', 'static'], ['walker', 'walker'], ['chaser', 'chaser'],
+      ];
+      var stEng = (ctx.getState() && ctx.getState().engineVersion) ||
+                  (typeof window !== 'undefined' && window.NES_ENGINE_VERSION) || 1;
+      if (stEng >= 4 || selected.ai === 'goomba' || selected.ai === 'koopa') {
+        aiOpts.push(['goomba', 'goomba (stomp to defeat)']);
+        aiOpts.push(['koopa', 'koopa (stomp → shell → kick)']);
+      }
+      aiOpts.forEach(function (a) { aiSel.appendChild(el('option', { value: a[0], text: a[1] })); });
       aiSel.value = selected.ai || 'static';
       aiSel.addEventListener('change', function () { ctx.pushUndo(); selected.ai = aiSel.value; ctx.markDirty(); });
       cfg.appendChild(el('div', { class: 'field' }, [el('span', { text: 'AI' }), aiSel]));

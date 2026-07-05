@@ -509,15 +509,24 @@
       if (instances.length === 0) return template;  // auto-placement handles it
 
       const sprites = (state && state.sprites) || [];
+      // Engine v4 gate: the SMB actor AIs (goomba/koopa) only emit when the
+      // design targets engine v4+.  Older targets (and the pinned v1 pages)
+      // fall the new kinds back to the plain `walker` so the codegen — and the
+      // golden ROM — is byte-identical to what shipped before v4.
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
       const parts = [
         '        // [builder] scene — per-instance AI for manually-placed sprites.',
       ];
-      let emitted = 0;
+      let emitted = 0;      // walker/chaser/goomba/koopa all need bw_sprite_blocked
+      let needSmb = false;  // goomba/koopa need the shared SMB stomp/hurt helper
       for (let i = 0; i < instances.length; i++) {
         const inst = instances[i] || {};
         const sp = sprites[inst.spriteIdx];
         if (!sp) continue;
-        const ai = inst.ai || 'static';
+        let ai = inst.ai || 'static';
+        // Pre-v4 targets don't have the actor engine — degrade the SMB
+        // enemies to the plain walker so old designs stay byte-identical.
+        if ((ai === 'goomba' || ai === 'koopa') && targetEngine < 4) ai = 'walker';
         // R-4: per-instance speed (px/frame).  1 = today's feel; clamp 1..4.
         // NB bw_sprite_blocked probes 1px ahead, so at speed >= 2 a fast enemy
         // can step its body slightly into a wall before reversing on the next
@@ -552,6 +561,85 @@
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 2)) ss_y[' + i + '] += ' + speed + ';');
           parts.push('        } else if (ss_y[' + i + '] >= py + ' + speed + ') {');
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= ' + speed + ';');
+          parts.push('        }');
+        } else if (sp.role === 'enemy' && ai === 'goomba') {
+          // Engine v4 — Goomba: walks (and off ledges, no ledge sensing),
+          // reverses at walls, STOMP from above defeats + bounces the player,
+          // any other touch hurts.  Self-contained (BW_SMB_HURT respects the
+          // damage iframes so it composes with the Damage module without
+          // double-hitting, in either apply order).
+          emitted++; needSmb = true;
+          const g = 'bw_gdir_' + i;
+          parts.push(
+            '        // instance ' + i + ' — ' + (sp.name || '?') +
+              ' Goomba: walks + off ledges, stomp to defeat, side-touch hurts');
+          parts.push('        {');
+          parts.push('            static signed char ' + g + ' = 1;');
+          parts.push('            if (ss_y[' + i + '] < 240) {');
+          parts.push('                if (' + g + ' > 0) {');
+          parts.push('                    if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ' + g + ' = -1;');
+          parts.push('                    else ss_x[' + i + '] += ' + speed + ';');
+          parts.push('                } else {');
+          parts.push('                    if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ' + g + ' = 1;');
+          parts.push('                    else ss_x[' + i + '] -= ' + speed + ';');
+          parts.push('                }');
+          parts.push('                if (BW_SMB_TOUCH(' + i + ')) {');
+          parts.push('                    if (BW_SMB_STOMP(' + i + ')) { ss_y[' + i + '] = 0xFF; BW_SMB_BOUNCE(); }');
+          parts.push('                    else BW_SMB_HURT();');
+          parts.push('                }');
+          parts.push('            }');
+          parts.push('        }');
+        } else if (sp.role === 'enemy' && ai === 'koopa') {
+          // Engine v4 — Koopa Troopa: walk → stomp turns it into a still shell
+          // → touching the still shell KICKS it (slides at 3 px/f away from the
+          // player); a sliding shell defeats other enemies it overtakes and
+          // hurts the player on contact; stomping a sliding shell stops it.
+          emitted++; needSmb = true;
+          const st = 'bw_kst_' + i, kd = 'bw_kdir_' + i, kj = 'bw_kj_' + i;
+          parts.push(
+            '        // instance ' + i + ' — ' + (sp.name || '?') +
+              ' Koopa: walk / shell / kicked-shell state machine');
+          parts.push('        {');
+          parts.push('            static unsigned char ' + st + ' = 0;   /* 0 walk, 1 shell, 2 kicked */');
+          parts.push('            static signed char ' + kd + ' = 1;');
+          parts.push('            unsigned char ' + kj + ';');
+          parts.push('            if (ss_y[' + i + '] < 240) {');
+          parts.push('                if (' + st + ' == 0) {');
+          parts.push('                    if (' + kd + ' > 0) {');
+          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ' + kd + ' = -1;');
+          parts.push('                        else ss_x[' + i + '] += ' + speed + ';');
+          parts.push('                    } else {');
+          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ' + kd + ' = 1;');
+          parts.push('                        else ss_x[' + i + '] -= ' + speed + ';');
+          parts.push('                    }');
+          parts.push('                } else if (' + st + ' == 2) {');
+          parts.push('                    if (' + kd + ' > 0) {');
+          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ' + kd + ' = -1;');
+          parts.push('                        else ss_x[' + i + '] += 3;');
+          parts.push('                    } else {');
+          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ' + kd + ' = 1;');
+          parts.push('                        else ss_x[' + i + '] -= 3;');
+          parts.push('                    }');
+          parts.push('                    for (' + kj + ' = 0; ' + kj + ' < NUM_STATIC_SPRITES; ' + kj + '++) {');
+          parts.push('                        if (' + kj + ' == ' + i + ') continue;');
+          parts.push('                        if (ss_role[' + kj + '] != ROLE_ENEMY) continue;');
+          parts.push('                        if (ss_y[' + kj + '] >= 240) continue;');
+          parts.push('                        if (!(ss_x[' + i + '] + (ss_w[' + i + '] << 3) <= ss_x[' + kj + '] || ss_x[' + i + '] >= ss_x[' + kj + '] + (ss_w[' + kj + '] << 3) ||');
+          parts.push('                              ss_y[' + i + '] + (ss_h[' + i + '] << 3) <= ss_y[' + kj + '] || ss_y[' + i + '] >= ss_y[' + kj + '] + (ss_h[' + kj + '] << 3)))');
+          parts.push('                            ss_y[' + kj + '] = 0xFF;');
+          parts.push('                    }');
+          parts.push('                }');
+          parts.push('                if (BW_SMB_TOUCH(' + i + ')) {');
+          parts.push('                    if (BW_SMB_STOMP(' + i + ')) {');
+          parts.push('                        ' + st + ' = 1; BW_SMB_BOUNCE();   /* walk/kicked -> still shell */');
+          parts.push('                    } else if (' + st + ' == 1) {');
+          parts.push('                        ' + kd + ' = (px < ss_x[' + i + ']) ? 1 : -1;   /* kick away from player */');
+          parts.push('                        ' + st + ' = 2; BW_SMB_GUARD();');
+          parts.push('                    } else {');
+          parts.push('                        BW_SMB_HURT();   /* walking koopa or sliding shell hurts */');
+          parts.push('                    }');
+          parts.push('                }');
+          parts.push('            }');
           parts.push('        }');
         }
         // `static` and non-enemy roles: nothing to emit.  Pickups and
@@ -611,6 +699,54 @@
         '}',
       ].join('\n');
       const withHelper = A.appendToSlot(template, 'declarations', blockedHelper);
+      if (needSmb) {
+        // [builder] SMB enemies (engine v4) — shared stomp/touch/hurt macros,
+        // parameterised by the scene-sprite index so one definition serves
+        // every goomba/koopa instance.  Emitted at the TOP of per_frame (not
+        // declarations) so the `#if PLAYER_HP_ENABLED` guard is resolved AFTER
+        // the template's own PLAYER_HP_ENABLED block regardless of module apply
+        // order.  BW_SMB_HURT/GUARD respect the damage module's iframes
+        // (falling back to sane constants when Damage is off) so a stomp never
+        // also registers as a side-hit, in either apply order.  (Preprocessor
+        // directives are file-scoped, so defining them inside the frame loop is
+        // valid C and simply takes effect for the rest of the file.)
+        const smbHelper = [
+          '/* [builder] SMB enemies (engine v4) — stomp / touch / hurt helpers. */',
+          '#ifndef DAMAGE_AMOUNT',
+          '#define DAMAGE_AMOUNT 1',
+          '#endif',
+          '#ifndef INVINCIBILITY_FRAMES',
+          '#define INVINCIBILITY_FRAMES 60',
+          '#endif',
+          '/* AABB: is the player overlapping scene sprite _n? */',
+          '#define BW_SMB_TOUCH(_n) (!(px + (PLAYER_W << 3) <= ss_x[_n] || \\',
+          '                            px >= ss_x[_n] + (ss_w[_n] << 3) || \\',
+          '                            py + (PLAYER_H << 3) <= ss_y[_n] || \\',
+          '                            py >= ss_y[_n] + (ss_h[_n] << 3)))',
+          '/* Stomp: player descending (airborne, ascent spent) with its feet in',
+          ' * the top half of sprite _n. */',
+          '#define BW_SMB_STOMP(_n) (jumping && jmp_up == 0 && \\',
+          '                          (py + (PLAYER_H << 3)) <= ss_y[_n] + (ss_h[_n] << 2))',
+          '#if PLAYER_HP_ENABLED',
+          '#define BW_SMB_HURT() do { \\',
+          '    if (!player_iframes) { \\',
+          '        player_hp = (player_hp > DAMAGE_AMOUNT) ? (player_hp - DAMAGE_AMOUNT) : 0; \\',
+          '        player_iframes = INVINCIBILITY_FRAMES; \\',
+          '        if (player_hp == 0) player_dead = 1; \\',
+          '    } \\',
+          '} while (0)',
+          '/* Grant iframes on a stomp/kick so the same frame\'s Damage-module',
+          ' * check (any apply order) doesn\'t also count it as a side-hit. */',
+          '#define BW_SMB_GUARD() do { player_iframes = INVINCIBILITY_FRAMES; } while (0)',
+          '#else',
+          '#define BW_SMB_HURT() do {} while (0)',
+          '#define BW_SMB_GUARD() do {} while (0)',
+          '#endif',
+          '/* Rebound off a stomped enemy (defined last so BW_SMB_GUARD exists). */',
+          '#define BW_SMB_BOUNCE() do { jumping = 1; jmp_up = 12; BW_SMB_GUARD(); } while (0)',
+        ];
+        parts.splice(1, 0, ...smbHelper);
+      }
       return A.appendToSlot(withHelper, 'per_frame', parts.join('\n'));
     },
   };

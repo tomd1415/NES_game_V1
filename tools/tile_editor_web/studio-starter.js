@@ -283,12 +283,15 @@
       if (m.damage) { m.damage.enabled = true; m.damage.config = m.damage.config || {}; m.damage.config.amount = 1; }
       // NPC dialogue.
       if (m.dialogue) { m.dialogue.enabled = true; m.dialogue.config = m.dialogue.config || {}; m.dialogue.config.text = 'HI THERE'; }
-      // Scene: place the slime and the villager on the floor.
+      // Scene: SMB-style enemies (engine v4) + the villager.  The slime art is
+      // reused for a Goomba (stomp to defeat) and a Koopa (stomp -> shell ->
+      // kick).  On a pre-v4 engine both fall back to a plain walker.
       if (m.scene) {
         m.scene.config = m.scene.config || {};
         m.scene.config.instances = [
-          { id: 1, spriteIdx: 1, x: 200, y: 200, ai: 'walker', speed: 1 },
+          { id: 1, spriteIdx: 1, x: 200, y: 200, ai: 'goomba', speed: 1 },
           { id: 2, spriteIdx: 2, x: 64, y: 200, ai: 'static', speed: 1 },
+          { id: 3, spriteIdx: 1, x: 150, y: 136, ai: 'koopa', speed: 1 },
         ];
       }
       // Per-door destination (engine v2): the door loops back to the start.
