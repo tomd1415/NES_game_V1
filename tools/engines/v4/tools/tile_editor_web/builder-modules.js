@@ -58,7 +58,7 @@
         type: 'enum',
         options: [
           { value: 'platformer', label: '🏃 Platformer (side-on, gravity + jump)' },
-          { value: 'smb',        label: '🍄 SMB platformer (variable-height jump)' },
+          { value: 'smb',        label: '🍄 SMB platformer (run physics + variable jump)' },
           { value: 'topdown',    label: '🧭 Top-down (four-way, no gravity)' },
           { value: 'runner',     label: '🏃‍➡️ Auto-runner (auto-scroll, tap to jump)' },
           { value: 'racer',      label: '🏎 Racer (steer + accelerate, top-down)' },
