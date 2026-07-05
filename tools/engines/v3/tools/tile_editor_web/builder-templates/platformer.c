@@ -165,6 +165,16 @@ unsigned char attr;
 
 //@ insert: declarations
 
+#ifdef BW_SMB_JUMP
+/* SMB style — signed 8.8 fixed-point horizontal velocity + a sub-pixel X
+ * accumulator, so the player accelerates to a run/walk max, decelerates by
+ * friction when you let go, and skids (double friction) when you reverse —
+ * the SMB "feel". Units: 1/256 px per frame (2.5 px/f = 640). Declared after
+ * the declarations slot so BW_SMB_JUMP is already defined. */
+signed int    smb_vx = 0;
+unsigned char smb_px_sub = 0;
+#endif
+
 /* Gravity application macro — Builder's Globals module
  * (T1.6 in docs/plans/current/2026-04-26-fixes-and-features.md)
  * overrides this via the declarations slot above.  The default
@@ -937,7 +947,7 @@ void main(void) {
         }
 #endif
 
-#if BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3
+#if (BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3) && !defined(BW_SMB_JUMP)
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
         // tiles painted on the Behaviour page block the player from walking
         // through them — the column just ahead of the player's leading edge
@@ -983,7 +993,53 @@ void main(void) {
             }
             plrdir = 0x40;
         }
-#endif  /* BW_GAME_STYLE != 2 && != 3 */
+#endif  /* BW_GAME_STYLE != 2 && != 3 && !BW_SMB_JUMP */
+
+#ifdef BW_SMB_JUMP
+        // ----- SMB horizontal: accelerate to a run/walk max, friction, skid.
+        // 8.8 fixed-point velocity (1/256 px/frame). Hold B to run.
+        {
+            signed int target, accel, acc;
+            signed int np;
+            signed int maxs = (pad & 0x40) ? 640 : 384;   /* run 2.5 / walk 1.5 px/f */
+            if (pad & 0x01) target = maxs;                 /* RIGHT */
+            else if (pad & 0x02) target = -maxs;           /* LEFT  */
+            else target = 0;
+            /* Accelerate toward the target; skid (2x) when reversing. */
+            if (smb_vx < target) {
+                accel = (smb_vx < 0) ? 48 : 24;            /* 0x30 skid / 0x18 accel */
+                smb_vx += accel; if (smb_vx > target) smb_vx = target;
+            } else if (smb_vx > target) {
+                accel = (smb_vx > 0) ? 48 : 24;
+                smb_vx -= accel; if (smb_vx < target) smb_vx = target;
+            }
+            if (target > 0) plrdir = 0x00;
+            else if (target < 0) plrdir = 0x40;
+            /* Advance the sub-pixel accumulator; carry into whole pixels. */
+            acc = (signed int)smb_px_sub + smb_vx;
+            np = (signed int)px + (acc >> 8);
+            smb_px_sub = (unsigned char)(acc & 0xFF);
+            if (np < 0) { np = 0; smb_vx = 0; smb_px_sub = 0; }
+            else if (np > (signed int)(WORLD_W_PX - PLAYER_W * 8)) {
+                np = (signed int)(WORLD_W_PX - PLAYER_W * 8); smb_vx = 0; smb_px_sub = 0;
+            }
+            /* Solid/wall collision at the leading edge — cancel the step. */
+            if (np != (signed int)px) {
+                unsigned char edge_col = (np > (signed int)px)
+                    ? (unsigned char)((np + (PLAYER_W << 3) - 1) >> 3)
+                    : (unsigned char)((unsigned int)np >> 3);
+                unsigned char top_row = py >> 3;
+                unsigned char bot_row = (py + (PLAYER_H << 3) - 1) >> 3;
+                unsigned char rr, bb, blocked = 0;
+                for (rr = top_row; rr <= bot_row; rr++) {
+                    bb = behaviour_at((unsigned int)edge_col, (unsigned int)rr);
+                    if (bb == BEHAVIOUR_SOLID_GROUND || bb == BEHAVIOUR_WALL) { blocked = 1; break; }
+                }
+                if (blocked) { smb_vx = 0; smb_px_sub = 0; }
+                else px = (pxcoord_t)np;
+            }
+        }
+#endif  /* BW_SMB_JUMP */
 
 #if BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2
         // ----- Platformer vertical movement: ladders + jump + gravity -----
