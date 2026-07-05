@@ -46,7 +46,8 @@ function makeState() {
   m.blocks.enabled = true;
   m.blocks.config.blockList = [
     { x: 10, y: 20, kind: 'coin' },
-    { x: 12, y: 18, kind: 'question' },
+    { x: 12, y: 18, kind: 'question', contents: 'mushroom' },
+    { x: 13, y: 18, kind: 'question', contents: 'star' },
     { x: 14, y: 18, kind: 'brick' },
   ];
   return s;
@@ -55,11 +56,11 @@ function makeState() {
 // Codegen: v6 emits the block table + all three kinds; pre-v6 / non-smb emit nothing.
 {
   const out = window.BuilderAssembler.assemble(makeState(), tpl);
-  for (const re of [/#define BW_SMB_BLOCKS 1/, /#define BW_BLOCK_COUNT 3/, /bw_block_tbl\[\]/, /bw_coins\+\+/,
-    /bw_poke_n/, /PPU_ADDR = bw_poke_hi/, /bw_poke_tile\[bw_poke_n\] = bw_block_tbl\[bw_bb \+ 3\]/]) {
+  for (const re of [/#define BW_SMB_BLOCKS 1/, /#define BW_BLOCK_COUNT 4/, /bw_block_tbl\[\]/, /bw_coins\+\+/,
+    /bw_poke_n/, /PPU_ADDR = bw_poke_hi/, /#define BW_DISP_TILE0/, /bw_disp_active = 1;/, /bw_disp_kind = bw_cont - 1;/]) {
     if (!re.test(out)) { console.error('FAIL: v6 blocks codegen missing', re); process.exit(1); }
   }
-  console.log('✓ engine v6 emits the block table + coin/?/brick handling + tile-swap pokes');
+  console.log('✓ engine v6 emits blocks + ? contents choice + dispense pop-out + tile-swap');
 
   globalThis.NES_TARGET_ENGINE = 5;
   if (/#define BW_SMB_BLOCKS/.test(window.BuilderAssembler.assemble(makeState(), tpl))) {

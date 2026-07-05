@@ -182,8 +182,19 @@
       [['coin', '🪙 Coin (touch)'], ['question', '❓ ? block (bump)'], ['brick', '🧱 Brick (bump / break)']]
         .forEach(function (k) { kindSel.appendChild(el('option', { value: k[0], text: k[1] })); });
       kindSel.value = b.kind || 'question';
-      kindSel.addEventListener('change', function () { ctx.pushUndo(); b.kind = kindSel.value; ctx.markDirty(); });
+      kindSel.addEventListener('change', function () { ctx.pushUndo(); b.kind = kindSel.value; ctx.markDirty(); ctx.renderDock(); });
       card.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Kind' }), kindSel]));
+      // What comes out of a ? block (needs the Power-ups module for the items).
+      if ((b.kind || 'question') === 'question') {
+        var contentSel = el('select');
+        [['coin', '🪙 Coin'], ['mushroom', '🍄 Super Mushroom'], ['fireflower', '🌼 Fire Flower'],
+         ['star', '⭐ Starman'], ['oneup', '🍄 1-Up']].forEach(function (c) {
+          contentSel.appendChild(el('option', { value: c[0], text: c[1] }));
+        });
+        contentSel.value = b.contents || 'coin';
+        contentSel.addEventListener('change', function () { ctx.pushUndo(); b.contents = contentSel.value; ctx.markDirty(); });
+        card.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Contents' }), contentSel]));
+      }
       function num(label, key, max) {
         var inp = el('input', { type: 'number', min: 0, max: max, style: 'width:56px' });
         inp.value = b[key] | 0;

@@ -28,8 +28,15 @@ for the full design (snapshots, fallback, upgrade advisor).
   nametable byte). *Limitation:* a block that scrolls off-screen and back is
   re-streamed from the `const` world map, so its art reverts even though it
   stays logically inert — fine for a forward-scrolling level.
+- **? block contents choice + item pop-out** — each ? block picks what it gives:
+  **coin**, **Super Mushroom**, **Fire Flower**, **Starman**, or **1-Up**. A
+  power-up **rises out of the block** (a 1-slot dispense pool) — the mushroom
+  then walks and falls onto the ground, the others sit — and applies its effect
+  when the player touches it (reusing the v5 power state). Gated so a coin (or a
+  power-up with no Power-ups module) just adds a coin.
 - Studio: a **Blocks editor** in the WORLD dock (Maker+, SMB, engine v6) to
-  place blocks and pick each one's kind, tile position, and used tile.
+  place blocks and pick each one's kind, **contents** (for ? blocks), tile
+  position, and used tile.
 
 ### Changed / migration
 - No migration. All block code is gated on `BW_SMB_BLOCKS` (only emitted for the
@@ -38,9 +45,8 @@ for the full design (snapshots, fallback, upgrade advisor).
   unchanged.
 
 ### Not yet
-- The `? → dispensed item that visibly jumps out` animation (vs. the current
-  direct power-up grant), invisible/hidden blocks, multi-coin bricks, and
-  coin→score — the last lands with the v7 HUD.
+- Invisible/hidden blocks (need runtime solidity change) and multi-coin bricks
+  (bump-window timer) — deferred; and coin→**score** lands with the v7 HUD.
 
 ### Breaking
 - (none.)
