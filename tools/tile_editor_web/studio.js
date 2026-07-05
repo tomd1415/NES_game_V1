@@ -163,6 +163,13 @@
   function renderLive() {
     var canvas = $('tv-canvas');
     var g = canvas.getContext('2d');
+    var mod = window.StudioModes && window.StudioModes[currentMode];
+    // A mode may take over the TV entirely (e.g. CHARS/TILES paint canvas).
+    if (mod && typeof mod.renderTV === 'function') {
+      try { mod.renderTV(g, ctx); } catch (e) { console.error('[studio] renderTV', e); }
+      if (typeof mod.onRenderOverlay === 'function') { try { mod.onRenderOverlay(g, ctx); } catch (e2) {} }
+      return;
+    }
     var img = g.createImageData(256, 240);
     var buf = new Uint32Array(img.data.buffer);
     var nt = activeNametable();
@@ -189,7 +196,6 @@
     }
     g.putImageData(img, 0, 0);
     // Modes may suppress the idle hero preview while painting.
-    var mod = window.StudioModes && window.StudioModes[currentMode];
     if (!(mod && mod.hidePlayerPreview)) drawPlayerPreview(g);
     // Modes may draw an overlay (grid, hover cell, selection) on top.
     if (mod && typeof mod.onRenderOverlay === 'function') {
