@@ -181,6 +181,7 @@
     return (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0]; // ABGR little-endian
   }
   function renderLive() {
+    renderRulers();
     var canvas = $('tv-canvas');
     var g = canvas.getContext('2d');
     var mod = window.StudioModes && window.StudioModes[currentMode];
@@ -368,6 +369,40 @@
       cy: Math.max(0, Math.min(SCREEN_H - 1, Math.floor(py / 8))),
       inBounds: px >= 0 && py >= 0 && px < canvas.width && py < canvas.height,
     };
+  }
+
+  // Live cursor read-out — the WORLD tile (x, y) under the pointer, shown in the
+  // box below the screen.  Blank outside WORLD mode (other modes edit a
+  // different coordinate space).
+  function updateCoords(evt) {
+    var el = $('tv-coords'); if (!el) return;
+    if (currentMode !== 'world') { el.textContent = ''; return; }
+    var cell = tvCellFromEvent(evt);
+    if (!cell.inBounds) { el.textContent = 'x –, y –'; return; }
+    var off = { cx: 0, cy: 0 };
+    try { off = ctx.viewOffset(); } catch (e) {}
+    el.textContent = 'x ' + (cell.cx + off.cx) + ', y ' + (cell.cy + off.cy);
+  }
+
+  // Faint tile-coordinate guides around the screen edges (WORLD only).  Numbers
+  // reflect the world column/row (the on-screen tile + the current view offset).
+  function renderRulers() {
+    var el = $('tv-rulers'); if (!el) return;
+    if (currentMode !== 'world') { el.innerHTML = ''; var c = $('tv-coords'); if (c) c.textContent = ''; return; }
+    var off = { cx: 0, cy: 0 };
+    try { off = ctx.viewOffset(); } catch (e) {}
+    var html = '';
+    [0, 4, 8, 12, 16, 20, 24, 28, 31].forEach(function (c) {
+      var pct = c / SCREEN_W * 100;
+      html += '<span class="rt col" style="left:' + pct + '%"></span>' +
+              '<span class="rk col" style="left:' + pct + '%">' + (c + off.cx) + '</span>';
+    });
+    [0, 4, 8, 12, 16, 20, 24, 29].forEach(function (r) {
+      var pct = r / SCREEN_H * 100;
+      html += '<span class="rt row" style="top:' + pct + '%"></span>' +
+              '<span class="rk row" style="top:' + pct + '%">' + (r + off.cy) + '</span>';
+    });
+    el.innerHTML = html;
   }
   function renderDock() {
     var dock = $('dock');
@@ -1225,6 +1260,7 @@
       tvDispatch('onTvDown', evt);
     });
     tv.addEventListener('pointermove', function (evt) {
+      updateCoords(evt);
       tvDispatch('onTvHover', evt);
       if (painting) tvDispatch('onTvMove', evt);
     });
@@ -1236,8 +1272,40 @@
     tv.addEventListener('pointerup', endPaint);
     tv.addEventListener('pointercancel', endPaint);
     tv.addEventListener('pointerleave', function (evt) {
+      var cel = $('tv-coords'); if (cel) cel.textContent = (currentMode === 'world') ? 'x –, y –' : '';
       tvDispatch('onTvLeave', evt);
     });
+
+    // Resizable edit column — drag the dock's right edge; width persists.
+    (function () {
+      var resizer = $('dock-resizer'); if (!resizer) return;
+      try {
+        var saved = parseInt(localStorage.getItem('studio.dockWidth'), 10);
+        if (saved >= 220 && saved <= 640) document.documentElement.style.setProperty('--dock-w', saved + 'px');
+      } catch (e) {}
+      var dragging = false;
+      resizer.addEventListener('pointerdown', function (evt) {
+        evt.preventDefault(); dragging = true; resizer.classList.add('dragging');
+        try { resizer.setPointerCapture(evt.pointerId); } catch (e) {}
+      });
+      resizer.addEventListener('pointermove', function (evt) {
+        if (!dragging) return;
+        var left = resizer.parentNode.getBoundingClientRect().left;
+        var w = Math.max(220, Math.min(640, Math.round(evt.clientX - left)));
+        document.documentElement.style.setProperty('--dock-w', w + 'px');
+      });
+      function endResize() {
+        if (!dragging) return; dragging = false; resizer.classList.remove('dragging');
+        var w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dock-w'), 10);
+        try { if (w) localStorage.setItem('studio.dockWidth', w); } catch (e) {}
+      }
+      resizer.addEventListener('pointerup', endResize);
+      resizer.addEventListener('pointercancel', endResize);
+      resizer.addEventListener('dblclick', function () {
+        document.documentElement.style.setProperty('--dock-w', '310px');
+        try { localStorage.setItem('studio.dockWidth', '310'); } catch (e) {}
+      });
+    })();
     tv.addEventListener('contextmenu', function (evt) {
       // Right-click is the eyedropper in paint modes — never a browser menu.
       var mod = window.StudioModes && window.StudioModes[currentMode];

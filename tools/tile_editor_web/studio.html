@@ -38,7 +38,7 @@
   --warn:var(--nes-red);
 
   --rail-w:74px;
-  --dock-w:230px;
+  --dock-w:310px;
   --quest-w:290px;
   --mono:ui-monospace,'Menlo','Consolas','Courier New',monospace;
 }
@@ -123,8 +123,14 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .level-hint.flash{color:var(--accent);font-weight:700}
 
 /* Contextual dock */
-.dock{background:var(--panel)}
+.dock{background:var(--panel);position:relative}
 .dock-inner{padding:12px}
+/* Drag handle on the dock's right edge to resize the edit column. */
+.dock-resizer{position:absolute;top:0;right:0;width:8px;height:100%;
+  cursor:col-resize;z-index:20;touch-action:none}
+.dock-resizer::after{content:"";position:absolute;top:0;right:0;width:2px;height:100%;
+  background:transparent;transition:background .12s}
+.dock-resizer:hover::after,.dock-resizer.dragging::after{background:var(--accent)}
 .dock h2{color:var(--sel);font-size:13px;margin-bottom:6px}
 .dock .dock-sub{color:var(--muted);font-size:11px;margin-bottom:12px}
 .dock .placeholder{
@@ -177,6 +183,19 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .tv-state .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);
   box-shadow:0 0 6px var(--ok)}
 .tv-hint{color:var(--muted)}
+.tv-coords{color:var(--accent);font-family:Menlo,Consolas,monospace;font-size:11px;
+  min-width:110px;font-variant-numeric:tabular-nums}
+/* Edge rulers — faint tile-coordinate guides overlaid on the screen edges.
+   Positioned to match the canvas (the .crt has 16px padding around it). */
+.tv-rulers{position:absolute;inset:16px;pointer-events:none;overflow:hidden;
+  font-family:Menlo,Consolas,monospace;font-size:9px}
+.tv-rulers .rk{position:absolute;color:var(--accent);opacity:.75;
+  text-shadow:0 0 2px #000,0 0 2px #000;line-height:1}
+.tv-rulers .rk.col{top:1px}
+.tv-rulers .rk.row{left:1px}
+.tv-rulers .rt{position:absolute;background:var(--accent);opacity:.4}
+.tv-rulers .rt.col{top:0;width:1px;height:5px}
+.tv-rulers .rt.row{left:0;height:1px;width:5px}
 
 /* Quest log + needs attention */
 .quest-region{background:var(--panel)}
@@ -356,8 +375,11 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   <!-- Mode rail -->
   <nav class="region mode-rail" id="mode-rail" aria-label="Modes"></nav>
 
-  <!-- Contextual dock -->
-  <section class="region dock" aria-label="Tools"><div class="dock-inner" id="dock"></div></section>
+  <!-- Contextual dock (the edit column) — draggable right edge to resize -->
+  <section class="region dock" aria-label="Tools">
+    <div class="dock-inner" id="dock"></div>
+    <div class="dock-resizer" id="dock-resizer" title="Drag to make the edit column wider or narrower" role="separator" aria-label="Resize edit column"></div>
+  </section>
 
   <!-- The TV -->
   <section class="region tv-region" aria-label="Game screen">
@@ -370,10 +392,12 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
     <div class="tv-stage">
       <div class="crt">
         <canvas id="tv-canvas" width="256" height="240" aria-label="Live game screen"></canvas>
+        <div class="tv-rulers" id="tv-rulers" aria-hidden="true"></div>
       </div>
     </div>
     <div class="tv-footer">
       <span class="tv-state" id="tv-state"><span class="dot"></span><span id="tv-state-label">Live</span></span>
+      <span class="tv-coords" id="tv-coords" title="Tile the cursor is over (world x, y)">x –, y –</span>
       <span class="tv-hint" id="tv-hint">Editing the current screen live — press ▶ Play to run it.</span>
     </div>
   </section>
