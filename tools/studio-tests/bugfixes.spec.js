@@ -88,13 +88,16 @@ test('WORLD exposes the v6 Blocks editor for an SMB project', async ({ page }) =
   await picker.locator('.btn', { hasText: 'SMB showcase' }).click();
   await page.locator('#level-select').selectOption('maker');
   // The Blocks editor renders in the WORLD dock — its "+ Add block" button is
-  // unique, so target it directly and confirm it adds a block to state.
+  // unique, so target it directly and confirm it adds a block to state (the
+  // showcase already ships with some blocks, so assert the count increments).
+  const before = await page.evaluate(() =>
+    window.Studio.getState().builder.modules.blocks.config.blockList.length);
   const addBlock = page.locator('.btn', { hasText: '+ Add block' });
   await expect(addBlock).toBeVisible();
   await addBlock.click();
-  const n = await page.evaluate(() =>
+  const after = await page.evaluate(() =>
     window.Studio.getState().builder.modules.blocks.config.blockList.length);
-  expect(n).toBe(1);
+  expect(after).toBe(before + 1);
 });
 
 // Bug 4 — beginner mode is signposted (level hint + locked modes visible).
