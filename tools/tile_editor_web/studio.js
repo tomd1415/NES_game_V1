@@ -467,6 +467,42 @@
     bl.appendChild(budgetBar('Characters (OAM 64)', sprN, 64, ''));
   }
 
+  // ---- 8-sprites-per-scanline analysis (Phase 3.2) ----------------------
+  // The PPU draws at most 8 hardware (8×8) sprites on any scanline; extras
+  // flicker or drop out. Each non-empty metasprite cell of a placed scene
+  // instance is one hardware sprite spanning 8 scanlines from its top.
+  function computeScanlineLoad(s) {
+    var rows = new Array(240);
+    for (var i = 0; i < 240; i++) rows[i] = 0;
+    var scene = s.builder && s.builder.modules && s.builder.modules.scene;
+    var insts = (scene && scene.config && scene.config.instances) || [];
+    insts.forEach(function (inst) {
+      var sp = (s.sprites || [])[inst.spriteIdx];
+      if (!sp) return;
+      var W = sp.width || 2, H = sp.height || 2;
+      for (var cr = 0; cr < H; cr++) for (var cc = 0; cc < W; cc++) {
+        var cell = sp.cells && sp.cells[cr] && sp.cells[cr][cc];
+        if (!cell || cell.empty) continue;
+        var top = (inst.y | 0) + cr * 8;
+        for (var yy = top; yy < top + 8; yy++) if (yy >= 0 && yy < 240) rows[yy]++;
+      }
+    });
+    var maxLoad = 0, overflowRows = 0;
+    for (var y = 0; y < 240; y++) { if (rows[y] > maxLoad) maxLoad = rows[y]; if (rows[y] > 8) overflowRows++; }
+    return { rows: rows, maxLoad: maxLoad, overflowRows: overflowRows };
+  }
+  function scanlineProblem(s) {
+    var load = computeScanlineLoad(s);
+    if (load.overflowRows <= 0) return null;
+    return {
+      severity: 'warn',
+      message: load.overflowRows + ' scanline' + (load.overflowRows === 1 ? '' : 's') +
+        ' have more than 8 sprites (busiest: ' + load.maxLoad + '). The NES draws only 8 sprites per line — the extras flicker or vanish.',
+      fix: 'Spread placed characters out vertically, or use fewer / smaller ones.',
+      jumpTo: 'background',
+    };
+  }
+
   function refreshQuestsAndAttention() {
     refreshBudgets();
     var ql = $('quest-list');
@@ -486,6 +522,8 @@
     try {
       if (window.BuilderValidators) problems = window.BuilderValidators.validate(state) || [];
     } catch (e) { problems = []; }
+    // Studio-side supplemental checks the shared validators don't cover yet.
+    try { var sl = scanlineProblem(state); if (sl) problems.push(sl); } catch (e) {}
     // Progressive disclosure (1.7): Beginners see only build-blocking errors —
     // warnings (often pointing at Maker-level controls) wait until Maker.
     if ((LEVELS[currentLevel] || 0) < LEVELS.maker) {
@@ -594,6 +632,75 @@
     setSaveState('saved');
     return true;
   }
+  // ---- CHR (.chr) round-trip (Phase 3.5) --------------------------------
+  // NES pattern-table format: 16 bytes/tile — 8 bytes of bitplane 0 (bit per
+  // pixel: value & 1) then 8 bytes of bitplane 1 (value >> 1). Two banks
+  // (BG then sprite), 256 tiles each = 8192 bytes total.
+  function encodeChr(state) {
+    var banks = [state.bg_tiles || [], state.sprite_tiles || []];
+    var out = new Uint8Array(2 * 256 * 16);
+    var o = 0;
+    banks.forEach(function (pool) {
+      for (var i = 0; i < 256; i++) {
+        var px = (pool[i] && pool[i].pixels) || null;
+        for (var y = 0; y < 8; y++) {
+          var p0 = 0, p1 = 0;
+          for (var x = 0; x < 8; x++) {
+            var v = px ? (px[y][x] | 0) : 0;
+            p0 = (p0 << 1) | (v & 1);
+            p1 = (p1 << 1) | ((v >> 1) & 1);
+          }
+          out[o + y] = p0; out[o + 8 + y] = p1;
+        }
+        o += 16;
+      }
+    });
+    return out;
+  }
+  function decodeChrInto(state, bytes) {
+    // Accept exactly two banks (8192 bytes); tolerate a single 4096-byte bank
+    // by treating it as BG only.
+    var banks = [state.bg_tiles, state.sprite_tiles];
+    var o = 0;
+    for (var b = 0; b < 2; b++) {
+      var pool = banks[b];
+      for (var i = 0; i < 256; i++) {
+        if (o + 16 > bytes.length) return;
+        var tile = pool[i] || (pool[i] = { name: '', pixels: [] });
+        if (!Array.isArray(tile.pixels) || tile.pixels.length !== 8) {
+          tile.pixels = []; for (var r = 0; r < 8; r++) tile.pixels.push([0, 0, 0, 0, 0, 0, 0, 0]);
+        }
+        for (var y = 0; y < 8; y++) {
+          var p0 = bytes[o + y], p1 = bytes[o + 8 + y];
+          for (var x = 0; x < 8; x++) {
+            var bit = 7 - x;
+            tile.pixels[y][x] = ((p0 >> bit) & 1) | (((p1 >> bit) & 1) << 1);
+          }
+        }
+        o += 16;
+      }
+    }
+  }
+  function exportChr() {
+    Storage.flushPending();
+    var blob = new Blob([encodeChr(state)], { type: 'application/octet-stream' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (state.name || 'game').replace(/[^a-zA-Z0-9_-]+/g, '_') + '.chr';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  function importChrBytes(bytes) {
+    if (!bytes || bytes.length < 16) { alert('That .chr file looks empty.'); return false; }
+    Storage.saveSnapshot(state, 'before_import');
+    decodeChrInto(state, bytes);
+    Storage.saveCurrent(state);
+    renderLive(); renderDock(); refreshQuestsAndAttention();
+    setSaveState('saved');
+    return true;
+  }
+
   function snapRow(entry, isBackup) {
     var row = document.createElement('div');
     row.className = 'snap-row';
@@ -777,6 +884,17 @@
       reader.readAsText(f);
       this.value = '';
     });
+    $('tm-export-chr').addEventListener('click', exportChr);
+    $('tm-import-chr').addEventListener('click', function () { $('tm-import-chr-file').click(); });
+    $('tm-import-chr-file').addEventListener('change', function () {
+      var f = this.files[0]; if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        if (importChrBytes(new Uint8Array(reader.result))) $('tm-backdrop').classList.remove('open');
+      };
+      reader.readAsArrayBuffer(f);
+      this.value = '';
+    });
     $('tm-backdrop').addEventListener('click', function (e) {
       if (e.target === $('tm-backdrop')) $('tm-backdrop').classList.remove('open');
     });
@@ -864,6 +982,9 @@
       ctx: ctx,
       exportJson: function () { return JSON.stringify(state); },
       importText: importProjectText,
+      scanlineLoad: function () { return computeScanlineLoad(state); },
+      exportChrBytes: function () { return encodeChr(state); },
+      importChrBytes: importChrBytes,
       _play: onPlay,
     };
     document.body.dataset.studioReady = '1';

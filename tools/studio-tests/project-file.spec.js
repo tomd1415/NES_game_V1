@@ -45,3 +45,19 @@ test('importing a distinct project replaces the live state', async ({ page }) =>
   expect(await page.evaluate(() => window.Studio.getState().universal_bg)).toBe(5);
   await expect(page.locator('#project-name')).toHaveValue('Imported World');
 });
+
+test('CHR export → import round-trips losslessly (3.5)', async ({ page }) => {
+  const before = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().bg_tiles.map((t) => t.pixels)));
+  const chr = await page.evaluate(() => Array.from(window.Studio.exportChrBytes()));
+  expect(chr.length).toBe(2 * 256 * 16);
+  // Corrupt a tile, then re-import the saved CHR.
+  await page.evaluate(() => {
+    const px = window.Studio.getState().bg_tiles[1].pixels;
+    px[0][0] = (px[0][0] + 1) % 4;
+  });
+  await page.evaluate((bytes) => window.Studio.importChrBytes(new Uint8Array(bytes)), chr);
+  const after = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().bg_tiles.map((t) => t.pixels)));
+  expect(after).toEqual(before);
+});

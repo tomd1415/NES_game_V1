@@ -32,3 +32,25 @@ test('drawing a new tile increases the CHR budget', async ({ page }) => {
   const after = await readBg();
   expect(after).toBe(before + 1);
 });
+
+test('8-per-scanline overflow is detected and warned (3.2)', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  // A clean starter has no scanline overflow.
+  expect((await page.evaluate(() => window.Studio.scanlineLoad())).overflowRows).toBe(0);
+  // Crowd ten 2×2 characters onto the same row → ~20 hardware sprites/line.
+  await page.evaluate(() => {
+    const s = window.Studio.getState();
+    const scene = s.builder.modules.scene;
+    scene.config = scene.config || {};
+    scene.config.instances = scene.config.instances || [];
+    for (let i = 0; i < 10; i++) {
+      scene.config.instances.push({ id: 100 + i, spriteIdx: 0, x: i * 10, y: 100, ai: 'static', speed: 1 });
+    }
+  });
+  const load = await page.evaluate(() => window.Studio.scanlineLoad());
+  expect(load.maxLoad).toBeGreaterThan(8);
+  expect(load.overflowRows).toBeGreaterThan(0);
+  // The warning surfaces in "Needs attention".
+  await page.evaluate(() => window.Studio.refresh());
+  await expect(page.locator('#attn-list')).toContainText('8 sprites per line');
+});

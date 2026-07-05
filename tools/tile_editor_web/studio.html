@@ -389,6 +389,13 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
       <button class="btn" id="tm-import" type="button">⬆ Open project file</button>
       <input id="tm-import-file" type="file" accept=".json" style="display:none">
     </div>
+    <div class="tm-section-title">Pattern tables (.chr)</div>
+    <div class="dock-note">Export or import the raw 8×8 tiles for an emulator or another tool. Import replaces both banks (a snapshot is taken first).</div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="tm-export-chr" type="button">⬇ Export .chr</button>
+      <button class="btn" id="tm-import-chr" type="button">⬆ Import .chr</button>
+      <input id="tm-import-chr-file" type="file" accept=".chr,.bin" style="display:none">
+    </div>
     <div class="modal-actions">
       <button class="btn" id="tm-close" type="button">Close</button>
     </div>
