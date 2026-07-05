@@ -21,6 +21,35 @@ deferred.
 
 ---
 
+## NES Studio redesign, engine versioning, per-door destinations — 2026-07-05
+
+The `redesign/ui-ux` work merged to `main` (the unified **Studio** at
+`studio.html` ships alongside the untouched seven pages), and a new
+`feature/nes-engine` branch added a versioned engine + its first feature.
+
+- **NES Studio** — the seven pages collapsed into one game-first workspace
+  (World / Chars / Tiles / Pals / Rules / Sound / Code) on the NES palette,
+  with progressive-disclosure levels, quest log + validators, CHR/OAM budgets,
+  `.chr`/`.pal`/`.nam`/JSON round-trips, the 16×16 metatile block library, and
+  eject-to-hand-coded-C (CodeMirror). A dismissible promo banner points the old
+  pages at it. See [`docs/plans/current/2026-07-05-studio-redesign.md`](../plans/current/2026-07-05-studio-redesign.md).
+- **The 7 Studio bugs** from `docs/design/notes.md` fixed (sprite palette,
+  Line/Rect tools, starter game + account-menu loader, Beginner signposting,
+  solid-collision, multi-screen backgrounds).
+- **NES-engine versioning** — every project stamped `engineVersion`; per-version
+  snapshots (`tools/engines/v1`, `v2`) via `scripts/snapshot-engine.mjs`;
+  `CHANGELOG.md`; builder-tests enforce version-agreement + snapshot integrity.
+  The **multi-page site is pinned to engine v1**, the Studio targets the latest;
+  an in-Studio **⚙ Engine advisor** shows "what changed" and updates a game.
+  Design: [`docs/design/engine-versioning.md`](../design/engine-versioning.md).
+- **Engine v2 — per-door destinations** (same-room + cross-room); empty door
+  list stays byte-identical to v1.
+- **Tile default-behaviour** (auto-type on place) + tile-type overlay; **richer
+  starter game** (platforms, ladder, enemy, NPC + dialogue, door, hearts).
+- **Roadmap** to an SMB-1-1-complete game + research:
+  [`docs/plans/current/2026-07-05-smb-engine-roadmap.md`](../plans/current/2026-07-05-smb-engine-roadmap.md),
+  [`docs/design/research/smb-1-1-and-nes-engines.md`](../design/research/smb-1-1-and-nes-engines.md).
+
 ## Account control in the top bar, responsive toolbars, `.env` config — 2026-06-21
 
 Follow-up polish to the accounts batch below.
