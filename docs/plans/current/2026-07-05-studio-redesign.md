@@ -149,10 +149,12 @@ off here and update the status note in
       (racer → Checkpoint 1 / Checkpoint 2 / Finish line; platformer →
       Trigger / Ladder / Spike). Fully separate *stored* slots per game
       type remains a shared-schema + build change (flagged with 2.5).
-- [x] 3.5 CHR (`.chr`) export **and** import with a lossless round-trip
-      test (both banks). *(Still open: `.nam` / `.pal` / `my_tiles.txt` /
-      `sprites.inc`+`.h` imports — same pattern, lower priority; whole-
-      project JSON already round-trips.)*
+- [x] 3.5 Round-trippable exports **and** imports: `.chr` (both banks),
+      `.pal` (32-byte NES palette), `.nam` (960 tiles + 64 attribute bytes,
+      active 8×8 screen) — each with a lossless round-trip test; whole-
+      project JSON already round-trips. *(Still open, lower priority:
+      `my_tiles.txt` / `sprites.inc`+`.h` text/asm imports for external
+      toolchains.)*
 - [~] 3.6 Advanced level: ✅ **raw whole-file C editing via a real ejected
       state** — "✂ Edit as hand-coded C" (Advanced) assembles the current
       C into `state.customMainC`, sets `state.ejected`, and PLAY compiles

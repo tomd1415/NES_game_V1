@@ -706,6 +706,92 @@
     return true;
   }
 
+  // ---- Palette (.pal) round-trip (Phase 3.5) ----------------------------
+  // 32-byte NES palette: 4 BG groups then 4 sprite groups of 4 bytes each
+  // ([backdrop, slot1, slot2, slot3]); backdrop is shared, stored once.
+  function encodePal(s) {
+    var out = new Uint8Array(32);
+    var ub = (s.universal_bg | 0) & 0x3F;
+    for (var i = 0; i < 4; i++) {
+      var bp = ((s.bg_palettes || [])[i] || { slots: [0, 0, 0] }).slots;
+      var sp = ((s.sprite_palettes || [])[i] || { slots: [0, 0, 0] }).slots;
+      out[i * 4] = ub; out[i * 4 + 1] = bp[0] & 0x3F; out[i * 4 + 2] = bp[1] & 0x3F; out[i * 4 + 3] = bp[2] & 0x3F;
+      out[16 + i * 4] = ub; out[16 + i * 4 + 1] = sp[0] & 0x3F; out[16 + i * 4 + 2] = sp[1] & 0x3F; out[16 + i * 4 + 3] = sp[2] & 0x3F;
+    }
+    return out;
+  }
+  function importPalBytes(bytes) {
+    if (!bytes || bytes.length < 32) { alert('That .pal file must be at least 32 bytes.'); return false; }
+    Storage.saveSnapshot(state, 'before_import');
+    state.universal_bg = bytes[0] & 0x3F;
+    if (!Array.isArray(state.bg_palettes)) state.bg_palettes = [];
+    if (!Array.isArray(state.sprite_palettes)) state.sprite_palettes = [];
+    for (var i = 0; i < 4; i++) {
+      state.bg_palettes[i] = { slots: [bytes[i * 4 + 1] & 0x3F, bytes[i * 4 + 2] & 0x3F, bytes[i * 4 + 3] & 0x3F] };
+      state.sprite_palettes[i] = { slots: [bytes[16 + i * 4 + 1] & 0x3F, bytes[16 + i * 4 + 2] & 0x3F, bytes[16 + i * 4 + 3] & 0x3F] };
+    }
+    Storage.saveCurrent(state);
+    renderLive(); renderDock(); refreshQuestsAndAttention();
+    setSaveState('saved');
+    return true;
+  }
+
+  // ---- Nametable (.nam) round-trip (Phase 3.5) --------------------------
+  // 1024 bytes: 960 tile indices (32×30 row-major) + 64 attribute bytes
+  // (8×8 grid; each byte packs four 2×2-tile quadrants, 2 bits each). Acts
+  // on the active 8×8 background (metatile bgs are skipped).
+  var NAM_QUADS = [[0, 0], [0, 1], [1, 0], [1, 1]];
+  function encodeNam(bg) {
+    var out = new Uint8Array(1024);
+    var nt = bg.nametable || [];
+    for (var r = 0; r < 30; r++) for (var c = 0; c < 32; c++) {
+      out[r * 32 + c] = ((nt[r] && nt[r][c]) ? (nt[r][c].tile | 0) : 0) & 0xFF;
+    }
+    for (var ar = 0; ar < 8; ar++) for (var ac = 0; ac < 8; ac++) {
+      var byte = 0;
+      for (var q = 0; q < 4; q++) {
+        var qr = ar * 4 + NAM_QUADS[q][0] * 2, qc = ac * 4 + NAM_QUADS[q][1] * 2;
+        var cell = nt[qr] && nt[qr][qc];
+        byte |= (((cell ? cell.palette : 0) & 3) << (q * 2));
+      }
+      out[960 + ar * 8 + ac] = byte;
+    }
+    return out;
+  }
+  function importNamBytes(bytes) {
+    if (!bytes || bytes.length < 1024) { alert('That .nam file must be at least 1024 bytes.'); return false; }
+    var bg = activeBackground();
+    if (bg && bg.tileMode === '16x16') { alert('This background uses 16×16 blocks — revert to 8×8 in WORLD before importing a .nam.'); return false; }
+    Storage.saveSnapshot(state, 'before_import');
+    var nt = bg.nametable;
+    for (var r = 0; r < 30; r++) for (var c = 0; c < 32; c++) {
+      if (nt[r] && nt[r][c]) nt[r][c].tile = bytes[r * 32 + c];
+    }
+    for (var ar = 0; ar < 8; ar++) for (var ac = 0; ac < 8; ac++) {
+      var byte = bytes[960 + ar * 8 + ac];
+      for (var q = 0; q < 4; q++) {
+        var pal = (byte >> (q * 2)) & 3;
+        var qr = ar * 4 + NAM_QUADS[q][0] * 2, qc = ac * 4 + NAM_QUADS[q][1] * 2;
+        for (var dr = 0; dr < 2; dr++) for (var dc = 0; dc < 2; dc++) {
+          var rr = qr + dr, cc = qc + dc;
+          if (rr < 30 && cc < 32 && nt[rr] && nt[rr][cc]) nt[rr][cc].palette = pal;
+        }
+      }
+    }
+    Storage.saveCurrent(state);
+    renderLive(); renderDock(); refreshQuestsAndAttention();
+    setSaveState('saved');
+    return true;
+  }
+  function downloadBytes(bytes, filename) {
+    var blob = new Blob([bytes], { type: 'application/octet-stream' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
   function snapRow(entry, isBackup) {
     var row = document.createElement('div');
     row.className = 'snap-row';
@@ -900,6 +986,29 @@
       reader.readAsArrayBuffer(f);
       this.value = '';
     });
+    // .pal / .nam export + import (same pattern as .chr).
+    function wireBinIo(exportId, importBtnId, fileId, encodeFn, ext, importFn) {
+      $(exportId).addEventListener('click', function () {
+        var bytes = encodeFn();
+        if (bytes) downloadBytes(bytes, (state.name || 'game').replace(/[^a-zA-Z0-9_-]+/g, '_') + ext);
+      });
+      $(importBtnId).addEventListener('click', function () { $(fileId).click(); });
+      $(fileId).addEventListener('change', function () {
+        var f = this.files[0]; if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          if (importFn(new Uint8Array(reader.result))) $('tm-backdrop').classList.remove('open');
+        };
+        reader.readAsArrayBuffer(f);
+        this.value = '';
+      });
+    }
+    wireBinIo('tm-export-pal', 'tm-import-pal', 'tm-import-pal-file', function () { return encodePal(state); }, '.pal', importPalBytes);
+    wireBinIo('tm-export-nam', 'tm-import-nam', 'tm-import-nam-file', function () {
+      var bg = activeBackground();
+      if (bg && bg.tileMode === '16x16') { alert('This background uses 16×16 blocks — revert to 8×8 to export a .nam.'); return null; }
+      return encodeNam(bg);
+    }, '.nam', importNamBytes);
     $('tm-backdrop').addEventListener('click', function (e) {
       if (e.target === $('tm-backdrop')) $('tm-backdrop').classList.remove('open');
     });
@@ -990,6 +1099,10 @@
       scanlineLoad: function () { return computeScanlineLoad(state); },
       exportChrBytes: function () { return encodeChr(state); },
       importChrBytes: importChrBytes,
+      exportPalBytes: function () { return encodePal(state); },
+      importPalBytes: importPalBytes,
+      exportNamBytes: function () { return encodeNam(activeBackground()); },
+      importNamBytes: importNamBytes,
       _play: onPlay,
     };
     document.body.dataset.studioReady = '1';

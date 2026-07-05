@@ -61,3 +61,48 @@ test('CHR export → import round-trips losslessly (3.5)', async ({ page }) => {
     JSON.stringify(window.Studio.getState().bg_tiles.map((t) => t.pixels)));
   expect(after).toEqual(before);
 });
+
+test('PAL export → import round-trips the palettes (3.5)', async ({ page }) => {
+  // Set distinctive palettes.
+  await page.evaluate(() => {
+    const s = window.Studio.getState();
+    s.universal_bg = 0x11;
+    s.bg_palettes[1] = { slots: [0x21, 0x22, 0x23] };
+    s.sprite_palettes[2] = { slots: [0x14, 0x15, 0x16] };
+  });
+  const before = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    return JSON.stringify([s.universal_bg, s.bg_palettes, s.sprite_palettes]);
+  });
+  const pal = await page.evaluate(() => Array.from(window.Studio.exportPalBytes()));
+  expect(pal.length).toBe(32);
+  // Corrupt, then re-import.
+  await page.evaluate(() => { window.Studio.getState().universal_bg = 0x0F; });
+  await page.evaluate((b) => window.Studio.importPalBytes(new Uint8Array(b)), pal);
+  const after = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    return JSON.stringify([s.universal_bg, s.bg_palettes, s.sprite_palettes]);
+  });
+  expect(after).toEqual(before);
+});
+
+test('NAM export → import round-trips the active screen (3.5)', async ({ page }) => {
+  // Paint a couple of distinctive cells with a non-zero palette in one chunk.
+  await page.evaluate(() => {
+    const nt = window.Studio.getState().backgrounds[0].nametable;
+    nt[4][4] = { tile: 9, palette: 2 };
+    nt[4][5] = { tile: 9, palette: 2 };
+    nt[5][4] = { tile: 9, palette: 2 };
+    nt[5][5] = { tile: 9, palette: 2 };
+  });
+  const before = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().backgrounds[0].nametable));
+  const nam = await page.evaluate(() => Array.from(window.Studio.exportNamBytes()));
+  expect(nam.length).toBe(1024);
+  // Corrupt a tile, re-import.
+  await page.evaluate(() => { window.Studio.getState().backgrounds[0].nametable[4][4].tile = 0; });
+  await page.evaluate((b) => window.Studio.importNamBytes(new Uint8Array(b)), nam);
+  const after = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().backgrounds[0].nametable));
+  expect(after).toEqual(before);
+});
