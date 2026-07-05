@@ -261,6 +261,28 @@
       g.strokeStyle = '#FA9E00'; g.lineWidth = 2;
       g.strokeRect(hover.cx * 8, hover.cy * 8, 8, 8);
     }
+    // Attribute-conflict flag (2.5): a 2×2 chunk can show only ONE palette on
+    // the NES. If a pupil's four cells disagree, outline the chunk so the
+    // "compile-time lie" is visible — colouring visibly respects the 2×2 rule.
+    var cbg = _octx && activeBg(_octx);
+    if (cbg && !isMetatileBg(cbg) && Array.isArray(cbg.nametable)) {
+      var nt = cbg.nametable;
+      g.lineWidth = 2; g.strokeStyle = '#C72E00';
+      for (var qy = 0; qy < SCREEN_H; qy += 2) {
+        for (var qx = 0; qx < SCREEN_W; qx += 2) {
+          var seen = -1, clash = false;
+          for (var dy = 0; dy < 2 && !clash; dy++) for (var dx = 0; dx < 2; dx++) {
+            var cc = nt[qy + dy] && nt[qy + dy][qx + dx];
+            var pv = cc ? (cc.palette | 0) : 0;
+            if (seen < 0) seen = pv; else if (pv !== seen) { clash = true; break; }
+          }
+          if (clash) {
+            g.strokeRect(qx * 8 + 1, qy * 8 + 1, 16 - 2, 16 - 2);
+            g.beginPath(); g.moveTo(qx * 8 + 1, qy * 8 + 1); g.lineTo(qx * 8 + 15, qy * 8 + 15); g.stroke();
+          }
+        }
+      }
+    }
     if (selRect) {
       var r = normRect(selRect);
       g.strokeStyle = '#43F611'; g.lineWidth = 2;
@@ -345,6 +367,11 @@
       palSec.appendChild(strip);
     })(p);
     palSec.appendChild(el('div', { class: 'dock-note', text: 'Backdrop colour is shared by every palette. Colour is chosen per 2×2 block on the NES — use the 🎨 Colour tool.' }));
+    var clashes = countAttrConflicts(bg);
+    if (clashes > 0) {
+      palSec.appendChild(el('div', { class: 'dock-note', style: 'color:var(--warn)',
+        text: '⚠ ' + clashes + ' block' + (clashes === 1 ? '' : 's') + ' mix two palettes (red X on screen). The NES shows one palette per 2×2 block — recolour with 🎨 to fix.' }));
+    }
     dock.appendChild(palSec);
 
     // --- Tiles ---
@@ -515,6 +542,22 @@
     });
   }
 
+  // Count 2×2 chunks whose four cells disagree on palette (attribute lie).
+  function countAttrConflicts(bg) {
+    if (!bg || isMetatileBg(bg) || !Array.isArray(bg.nametable)) return 0;
+    var nt = bg.nametable, n = 0;
+    for (var qy = 0; qy < SCREEN_H; qy += 2) for (var qx = 0; qx < SCREEN_W; qx += 2) {
+      var seen = -1, clash = false;
+      for (var dy = 0; dy < 2 && !clash; dy++) for (var dx = 0; dx < 2; dx++) {
+        var cc = nt[qy + dy] && nt[qy + dy][qx + dx];
+        var pv = cc ? (cc.palette | 0) : 0;
+        if (seen < 0) seen = pv; else if (pv !== seen) { clash = true; break; }
+      }
+      if (clash) n++;
+    }
+    return n;
+  }
+
   function swatchEl(css, cls) {
     return el('span', { class: 'swatch' + (cls ? ' ' + cls : ''), style: 'width:18px;height:18px;background:' + css });
   }
@@ -589,6 +632,7 @@
     },
     // Test/inspection hooks.
     _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, selRect: selRect, clipboard: clipboard }; },
+    _conflicts: function () { var s = global.Studio.getState(); return countAttrConflicts(s.backgrounds[s.selectedBgIdx] || s.backgrounds[0]); },
     _set: function (o) { if (o.stampTile != null) stampTile = o.stampTile; if (o.paintPalette != null) paintPalette = o.paintPalette; if (o.paintType != null) paintType = o.paintType; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

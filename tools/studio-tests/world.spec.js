@@ -140,6 +140,22 @@ test('region select → copy → paste duplicates a chunk of the level', async (
   expect(pasted).toEqual([1, 2]);
 });
 
+test('attribute conflict in a 2×2 chunk is detected and warned (2.5)', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  // Clean starter → no conflicts.
+  expect(await page.evaluate(() => window.StudioModes.world._conflicts())).toBe(0);
+  // Force two different palettes inside one 2×2 chunk (cells (0,0) and (1,0)).
+  await page.evaluate(() => {
+    const s = window.Studio.getState();
+    const nt = s.backgrounds[s.selectedBgIdx].nametable;
+    nt[0][0].palette = 0;
+    nt[0][1].palette = 2;
+  });
+  await page.locator('.mode-btn[data-mode="world"]').click(); // force a dock re-render
+  expect(await page.evaluate(() => window.StudioModes.world._conflicts())).toBe(1);
+  await expect(page.locator('.dock-note', { hasText: 'mix two palettes' })).toBeVisible();
+});
+
 test('full-screen preview opens a modal with a canvas', async ({ page }) => {
   await page.locator('.btn', { hasText: 'Full-screen preview' }).click();
   const dlg = page.locator('.modal-backdrop.open');
