@@ -192,6 +192,86 @@
     penSec.appendChild(palRow);
     penSec.appendChild(el('div', { class: 'dock-note', text: 'Draw on the big canvas. Each 8×8 cell is a shared tile — editing it updates every character that uses it.' }));
     dock.appendChild(penSec);
+
+    renderAnimations(dock, ctx);
+  }
+
+  var animSel = null;
+  function ensureAnim(ctx) {
+    var s = ctx.getState();
+    if (!Array.isArray(s.animations)) s.animations = [];
+    if (!s.animation_assignments) s.animation_assignments = { walk: null, jump: null, attack: null };
+    if (typeof s.nextAnimationId !== 'number' || s.nextAnimationId < 1) s.nextAnimationId = 1;
+    return s;
+  }
+  function renderAnimations(dock, ctx) {
+    var s = ensureAnim(ctx);
+    var sec = UI.section('Animations', el('button', { class: 'btn', text: '+ New', onclick: function () {
+      ctx.pushUndo();
+      var noWalk = s.animation_assignments.walk == null;
+      var an = { id: s.nextAnimationId++, name: (noWalk ? 'walk' : 'anim ' + s.animations.length),
+        frames: [selIdx], fps: 8, role: 'player', style: noWalk ? 'walk' : 'custom' };
+      s.animations.push(an);
+      animSel = an.id;
+      // Auto-wire the first walk animation so the player animates + the
+      // "no walk animation" warning clears immediately.
+      if (noWalk) s.animation_assignments.walk = an.id;
+      ctx.markDirty(); ctx.renderDock(); ctx.refresh();
+    } }));
+
+    s.animations.forEach(function (an) {
+      var row = el('div', { class: 'entity-row anim-row' + (an.id === animSel ? ' sel' : '') }, [
+        el('span', { class: 'grow', text: (an.name || 'anim') + ' — ' + an.frames.length + 'f @' + an.fps }),
+        el('button', { class: 'icon-btn', title: 'Delete', text: '🗑', onclick: function (e) {
+          e.stopPropagation();
+          ctx.pushUndo();
+          var i = s.animations.indexOf(an); if (i >= 0) s.animations.splice(i, 1);
+          ['walk', 'jump', 'attack'].forEach(function (k) { if (s.animation_assignments[k] === an.id) s.animation_assignments[k] = null; });
+          if (animSel === an.id) animSel = null;
+          ctx.markDirty(); ctx.renderDock(); ctx.refresh();
+        } }),
+      ]);
+      row.addEventListener('click', function () { animSel = an.id; ctx.renderDock(); });
+      sec.appendChild(row);
+    });
+
+    var cur = s.animations.find(function (a) { return a.id === animSel; });
+    if (cur) {
+      var box = el('div', { style: 'border:2px solid var(--sel);padding:8px;margin-top:6px' });
+      var nameIn = el('input', { class: 'mini-input', type: 'text', value: cur.name });
+      nameIn.addEventListener('change', function () { cur.name = nameIn.value; ctx.markDirty(); ctx.renderDock(); });
+      box.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Name' }), nameIn]));
+      var fpsIn = el('input', { type: 'number', min: 1, max: 60 }); fpsIn.value = cur.fps;
+      fpsIn.addEventListener('change', function () { cur.fps = Math.max(1, Math.min(60, parseInt(fpsIn.value, 10) || 8)); ctx.markDirty(); ctx.renderDock(); });
+      box.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Speed (fps)' }), fpsIn]));
+      box.appendChild(el('div', { class: 'dock-note', text: 'Frames: ' + cur.frames.map(function (f) { var sp = (s.sprites[f]); return sp ? (sp.name || f) : f; }).join(', ') }));
+      box.appendChild(el('button', { class: 'btn', style: 'margin-top:4px', text: '+ Add this character as a frame', onclick: function () {
+        ctx.pushUndo(); cur.frames.push(selIdx); ctx.markDirty(); ctx.renderDock();
+      } }));
+      if (cur.frames.length > 1) {
+        box.appendChild(el('button', { class: 'btn', style: 'margin-top:4px', text: 'Remove last frame', onclick: function () {
+          ctx.pushUndo(); cur.frames.pop(); ctx.markDirty(); ctx.renderDock();
+        } }));
+      }
+      sec.appendChild(box);
+    }
+
+    // Walk / jump / attack assignments (the server-facing contract).
+    var asgn = el('div', { style: 'margin-top:8px' });
+    ['walk', 'jump', 'attack'].forEach(function (kind) {
+      var sel2 = el('select', { 'data-assign': kind });
+      sel2.appendChild(el('option', { value: '', text: '(none)' }));
+      s.animations.forEach(function (an) { sel2.appendChild(el('option', { value: String(an.id), text: an.name || ('anim ' + an.id) })); });
+      sel2.value = s.animation_assignments[kind] == null ? '' : String(s.animation_assignments[kind]);
+      sel2.addEventListener('change', function () {
+        ctx.pushUndo();
+        s.animation_assignments[kind] = sel2.value === '' ? null : parseInt(sel2.value, 10);
+        ctx.markDirty(); ctx.refresh();
+      });
+      asgn.appendChild(el('div', { class: 'field' }, [el('span', { text: kind[0].toUpperCase() + kind.slice(1) + ' animation' }), sel2]));
+    });
+    sec.appendChild(asgn);
+    dock.appendChild(sec);
   }
 
   function dimSelect(ctx, sp, dim) {

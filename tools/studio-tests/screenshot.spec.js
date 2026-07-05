@@ -26,4 +26,16 @@ test('capture CHARS + RULES screenshots', async ({ page }) => {
   await page.locator('.mode-btn[data-mode="pals"]').click();
   await page.waitForTimeout(150);
   await page.screenshot({ path: 'test-results/studio-pals.png' });
+
+  // WORLD with an entity placed + budget meters.
+  await page.locator('.mode-btn[data-mode="chars"]').click();
+  await page.locator('.dock-section .btn', { hasText: '+ New' }).click();
+  await page.locator('select[data-role]').selectOption('enemy');
+  await page.locator('.mode-btn[data-mode="world"]').click();
+  await page.locator('.stage-toolbar .more-tools-btn').click();
+  await page.locator('.stage-toolbar .tool[data-tool="place"]').click();
+  const box = await page.locator('#tv-canvas').boundingBox();
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.55);
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: 'test-results/studio-world.png' });
 });

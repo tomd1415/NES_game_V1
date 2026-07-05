@@ -205,6 +205,19 @@ exit criterion but not the "one consolidated emulator" intent of 0.3.
 
 ## Phase 1 — Core modes at parity
 
+**Status: largely landed (2026-07-05).** All seven modes are live as
+pluggable modules (`studio-world/chars/pals/rules/tiles/sound/code.js`)
+over a shared `ctx` (TV pointer dispatch, in-memory undo/redo, per-mode
+stage toolbar). A pupil can build (WORLD tile/colour/type painting +
+entity placement · CHARS roles + shared-tile drawing · PALS · RULES card
+tree), **play** and **publish** a platformer entirely in the Studio, with
+self-ticking quests, the ported `BuilderValidators` carrying *Fix in
+&lt;Mode&gt; →* jumps, and live CHR/OAM budget meters. Covered by the
+Playwright suite (`tools/studio-tests/`, ~49 checks). **Still open in
+Phase 1:** animations in CHARS (the "no walk animation" warning), the
+sprite-reactions matrix in RULES (1.4), and finer per-control expertise
+gating (1.7 — mode gating works; dock-control gating is coarse).
+
 **Goal:** WORLD, CHARS, PALS, RULES, SOUND, CODE work inside the Studio
 at parity with the pages they replace —
 [`feature-parity.md`](feature-parity.md) is the checklist — plus the
@@ -280,6 +293,17 @@ flips only when its parity checklist is covered.
 
 ## Phase 2 — The missing primitive: TILES mode
 
+**Status: core landed (2026-07-05).** `studio-tiles.js` ships the
+Maker-level 8×8 editor: BG/sprite bank toggle, the 256-tile grid
+(free/used/shared/orphan colour-coding), a zoomed paint canvas on the TV
+with a 4-value pen under a chosen palette, tile ops
+(clear/flip/rotate/duplicate), per-tile names, a live "used by" readout,
+and `[`/`]` + arrow stepping. Editing a tile propagates to every
+reference by construction. **Still open:** in-context "edit the tiles of
+this block/sprite" jump-ins (2.4), per-quadrant attribute as the sole
+source of truth (2.5 — WORLD already shows the 2×2 chunk grid and paints
+per-quadrant), and the dialogue reserved-slot overlay (2.6).
+
 **Goal:** the 8×8 tile editor exists as a first-class Maker-level mode —
 the primitive everything already references (handover §5). This is a
 **consolidation**: two nearly-complete tile editors exist today (one per
@@ -313,6 +337,12 @@ page); TILES merges them without losing either's operations.
 everywhere it's used; colouring visibly respects the 2×2 rule.
 
 ## Phase 3 — Correctness, budgets & honest round-trips
+
+**Status: started (2026-07-05).** 3.1 CHR/OAM budget meters are live in
+the right panel (used/256 per bank + characters/64, amber near the limit,
+red when full). Remaining: 8-per-scanline visualiser (3.2), 8×16 sprite
+mode (3.3), de-overloading the tile-type slots (3.4), round-trippable
+imports + tests (3.5), and the Advanced editing surface (3.6).
 
 **Goal:** the tool teaches the hardware truthfully and the outputs
 round-trip.
