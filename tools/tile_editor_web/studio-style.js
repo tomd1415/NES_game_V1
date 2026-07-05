@@ -90,7 +90,9 @@
     var p1 = p1Cfg(s), g = globalsNode(s).config;
     var phys = UI.section(isSmb ? 'SMB feel' : 'Movement & jump');
     if (isSmb) {
-      phys.appendChild(el('div', { class: 'dock-note', text: 'SMB run physics (accelerate to a run, skid, variable-height jump) are always on for this style. Tune the arc here.' }));
+      phys.appendChild(el('div', { class: 'dock-note', text: 'SMB run physics (accelerate to a run, skid, variable-height jump) are always on for this style. Tune the feel here. (The generic "walk speed" in Rules does NOT apply to the SMB style — use Speed below.)' }));
+      phys.appendChild(numField(ctx, 'Speed (1–4)', gameCfg(s), 'smbSpeed', 1, 4,
+        '1 slow … 4 fast. 2 is the SMB-authentic 1.5 walk / 2.5 run px/frame; hold B to run.'));
     }
     if (p1) phys.appendChild(numField(ctx, 'Jump height', p1, 'jumpHeight', 1, 60, 'Frames of rise — bigger = higher. ~14 clears about 5 tiles with the SMB fall.'));
     phys.appendChild(numField(ctx, 'Jump speed (px/frame)', g, 'jumpSpeedPx', 1, 6, 'Pixels risen per frame. 3 gives a snappy SMB arc.'));

@@ -58,6 +58,16 @@ function makeState(gameType) {
   if (DEF.test(smbV2)) { console.error('FAIL: engine v2 target #defined BW_SMB_JUMP'); process.exit(1); }
   globalThis.NES_TARGET_ENGINE = 3;
   console.log('✓ smb emits BW_SMB_JUMP; platformer + pre-v3 do not');
+
+  // The Speed control drives BW_SMB_RUN_MAX; default (preset 2) stays authentic
+  // (640), a faster preset raises it — so the control actually affects movement.
+  const s2 = makeState('smb'); s2.builder.modules.game.config.smbSpeed = 2;
+  const s4 = makeState('smb'); s4.builder.modules.game.config.smbSpeed = 4;
+  const a2 = window.BuilderAssembler.assemble(s2, tpl);
+  const a4 = window.BuilderAssembler.assemble(s4, tpl);
+  if (!/#define BW_SMB_RUN_MAX 640/.test(a2)) { console.error('FAIL: default smb run max not 640'); process.exit(1); }
+  if (!/#define BW_SMB_RUN_MAX 1024/.test(a4)) { console.error('FAIL: Speed 4 did not raise BW_SMB_RUN_MAX'); process.exit(1); }
+  console.log('✓ Speed control drives BW_SMB_RUN_MAX (default 640, Speed 4 = 1024)');
 }
 
 // cc65 compile of the SMB build.

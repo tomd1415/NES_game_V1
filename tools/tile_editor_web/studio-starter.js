@@ -480,7 +480,8 @@
       state.builder = global.BuilderDefaults();
       var m = state.builder.modules;
       // v3: the SMB game style (variable jump + fixed-point horizontal).
-      if (m.game) { m.game.config = m.game.config || {}; m.game.config.type = 'smb'; }
+      // Speed 3 (2 walk / 3.25 run px/f) — a livelier pace than the authentic 2.
+      if (m.game) { m.game.config = m.game.config || {}; m.game.config.type = 'smb'; m.game.config.smbSpeed = 3; }
       // SMB-tuned physics: a snappy rise (3 px/f) paired with the engine's
       // slightly-faster smb fall, and a jump-height budget that clears ~4-5
       // tiles standing / more with a running take-off — closer to the original.

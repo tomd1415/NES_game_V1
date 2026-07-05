@@ -173,6 +173,17 @@ unsigned char attr;
  * the declarations slot so BW_SMB_JUMP is already defined. */
 signed int    smb_vx = 0;
 unsigned char smb_px_sub = 0;
+/* SMB horizontal tuning (8.8 fixed-point; 256 = 1 px/frame).  The Builder's
+ * Speed control overrides these; defaults are the SMB-authentic values. */
+#ifndef BW_SMB_WALK_MAX
+#define BW_SMB_WALK_MAX 384      /* 1.5 px/frame */
+#endif
+#ifndef BW_SMB_RUN_MAX
+#define BW_SMB_RUN_MAX 640       /* 2.5 px/frame (hold B) */
+#endif
+#ifndef BW_SMB_ACCEL
+#define BW_SMB_ACCEL 24          /* 0x18; skid is 2x */
+#endif
 #endif
 
 #ifdef BW_SMB_POWERUPS
@@ -1130,16 +1141,19 @@ void main(void) {
         {
             signed int target, accel, acc;
             signed int np;
-            signed int maxs = (pad & 0x40) ? 640 : 384;   /* run 2.5 / walk 1.5 px/f */
+            /* Max walk/run speed + accel are #defines (8.8: 256 = 1 px/frame) so
+             * the Builder's Speed control can tune the SMB feel.  Defaults match
+             * the original: walk 1.5 / run 2.5 px/f, accel 0x18, skid 0x30. */
+            signed int maxs = (pad & 0x40) ? BW_SMB_RUN_MAX : BW_SMB_WALK_MAX;
             if (pad & 0x01) target = maxs;                 /* RIGHT */
             else if (pad & 0x02) target = -maxs;           /* LEFT  */
             else target = 0;
             /* Accelerate toward the target; skid (2x) when reversing. */
             if (smb_vx < target) {
-                accel = (smb_vx < 0) ? 48 : 24;            /* 0x30 skid / 0x18 accel */
+                accel = (smb_vx < 0) ? (BW_SMB_ACCEL * 2) : BW_SMB_ACCEL;
                 smb_vx += accel; if (smb_vx > target) smb_vx = target;
             } else if (smb_vx > target) {
-                accel = (smb_vx > 0) ? 48 : 24;
+                accel = (smb_vx > 0) ? (BW_SMB_ACCEL * 2) : BW_SMB_ACCEL;
                 smb_vx -= accel; if (smb_vx < target) smb_vx = target;
             }
             if (target > 0) plrdir = 0x00;
