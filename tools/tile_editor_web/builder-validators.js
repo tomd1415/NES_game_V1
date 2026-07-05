@@ -81,6 +81,19 @@
   function countSpritesByRole(state, role) {
     return sprites(state).filter(function (s) { return s && s.role === role; }).length;
   }
+  // The Builder "game type" (platformer / topdown / runner / racer / smb …).
+  function gameType(state) {
+    const g = moduleNode(state, 'game');
+    return (g && g.config && g.config.type) || 'platformer';
+  }
+  // Active background's width in tiles (screens across × 32).  Used by SMB
+  // placement checks — the flagpole/pipe columns are tile coords.
+  function levelTileWidth(state) {
+    const bgs = (state && state.backgrounds) || [];
+    const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0];
+    const sx = (bg && bg.dimensions && bg.dimensions.screens_x) | 0;
+    return (sx > 0 ? sx : 1) * 32;
+  }
 
   // --------------------------------------------------------------------
   // Validators — chunk 1 ships two.  More land as modules do.
@@ -406,6 +419,46 @@
         fix: 'Turn on the Power-ups module (Style tab) so the power-up ' +
           'can pop out, or set the ? block’s contents to Coin so it ' +
           'matches what will actually happen.',
+        jumpTo: null,
+      };
+    },
+
+    // V20 (SMB flagpole, engine v8): flagpole finish is on but the Win
+    // condition module is off.  The flag's win code is `#if BW_WIN_ENABLED`
+    // (builder-modules.js ~1487), so crossing the pole does nothing — the
+    // level can't be finished.  Error: the flag's whole purpose is broken.
+    function flagpoleNeedsWinCondition(state) {
+      if (gameType(state) !== 'smb') return null;
+      if (!moduleEnabled(state, 'flagpole')) return null;
+      if (moduleEnabled(state, 'win_condition')) return null;
+      return {
+        id: 'flagpole-needs-win',
+        severity: 'error',
+        message: 'Flagpole finish is on but the Win condition module is off — ' +
+          'crossing the flag will not finish the level.',
+        fix: 'Turn on the Win condition module (Rules tab) — the flagpole ' +
+          'needs it to run the level-complete celebration.',
+        jumpTo: null,
+      };
+    },
+
+    // V21 (SMB flagpole): the flagpole column sits past the end of the
+    // level, so the player can never reach it.  Warn (level-width across
+    // multi-screen backgrounds can be imperfect; don't hard-block Play).
+    function flagpoleBeyondLevel(state) {
+      if (gameType(state) !== 'smb') return null;
+      if (!moduleEnabled(state, 'flagpole')) return null;
+      const node = moduleNode(state, 'flagpole');
+      const x = (node && node.config && node.config.x) | 0;
+      const w = levelTileWidth(state);
+      if (x < w) return null;
+      return {
+        id: 'flagpole-beyond-level',
+        severity: 'warn',
+        message: 'The flagpole column (' + x + ') is past the end of your ' +
+          'level (' + w + ' tiles wide) — the player can never reach it.',
+        fix: 'Lower the Flagpole column in the Style tab, or make the level ' +
+          'wider on the Backgrounds page (add screens across).',
         jumpTo: null,
       };
     },
