@@ -26,6 +26,16 @@ for the full design (snapshots, fallback, upgrade advisor).
 - **SMB-tuned jump/fall** for the smb style: the fall is now a touch faster
   than the rise (3 vs the rise speed) so the arc lands snappily — closer to the
   original. Gated on `BW_SMB_JUMP`, so all other styles are unchanged.
+- **Performance — SMB enemy AI runs at full speed.** Two changes keep a wide,
+  enemy-packed scrolling level inside the per-frame vblank budget (cc65 code is
+  ~5× slower than asm, so the enemy AI was the dominant cost and a full screen
+  of Goombas dropped the ROM below 30 fps): (1) Goomba/Koopa now turn at walls
+  with a **single mid-line `behaviour_at` probe** (`bw_smb_wall`) instead of the
+  5-arg, body-row-looping `bw_sprite_blocked` — measured **8 on-screen Goombas
+  from ~25 fps to a full 60 fps**; (2) an **on-screen dormancy gate**
+  (`BW_SMB_ONSCREEN`) skips AI for off-screen actors, exactly like the original.
+  Both touch only the Goomba/Koopa path (the `walker`/`chaser` AIs and the
+  golden ROM are unchanged).
 
 ### Changed / migration
 - No migration. All power-up code is gated on `BW_SMB_POWERUPS` (only emitted

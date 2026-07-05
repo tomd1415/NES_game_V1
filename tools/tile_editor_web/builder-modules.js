@@ -575,12 +575,12 @@
               ' Goomba: walks + off ledges, stomp to defeat, side-touch hurts');
           parts.push('        {');
           parts.push('            static signed char ' + g + ' = 1;');
-          parts.push('            if (ss_y[' + i + '] < 240) {');
+          parts.push('            if (ss_y[' + i + '] < 240 && BW_SMB_ONSCREEN(' + i + ')) {');
           parts.push('                if (' + g + ' > 0) {');
-          parts.push('                    if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ' + g + ' = -1;');
+          parts.push('                    if (bw_smb_wall(' + i + ', 1)) ' + g + ' = -1;');
           parts.push('                    else ss_x[' + i + '] += ' + speed + ';');
           parts.push('                } else {');
-          parts.push('                    if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ' + g + ' = 1;');
+          parts.push('                    if (bw_smb_wall(' + i + ', 0)) ' + g + ' = 1;');
           parts.push('                    else ss_x[' + i + '] -= ' + speed + ';');
           parts.push('                }');
           parts.push('                if (BW_SMB_TOUCH(' + i + ')) {');
@@ -603,21 +603,21 @@
           parts.push('            static unsigned char ' + st + ' = 0;   /* 0 walk, 1 shell, 2 kicked */');
           parts.push('            static signed char ' + kd + ' = 1;');
           parts.push('            unsigned char ' + kj + ';');
-          parts.push('            if (ss_y[' + i + '] < 240) {');
+          parts.push('            if (ss_y[' + i + '] < 240 && BW_SMB_ONSCREEN(' + i + ')) {');
           parts.push('                if (' + st + ' == 0) {');
           parts.push('                    if (' + kd + ' > 0) {');
-          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ' + kd + ' = -1;');
+          parts.push('                        if (bw_smb_wall(' + i + ', 1)) ' + kd + ' = -1;');
           parts.push('                        else ss_x[' + i + '] += ' + speed + ';');
           parts.push('                    } else {');
-          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ' + kd + ' = 1;');
+          parts.push('                        if (bw_smb_wall(' + i + ', 0)) ' + kd + ' = 1;');
           parts.push('                        else ss_x[' + i + '] -= ' + speed + ';');
           parts.push('                    }');
           parts.push('                } else if (' + st + ' == 2) {');
           parts.push('                    if (' + kd + ' > 0) {');
-          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ' + kd + ' = -1;');
+          parts.push('                        if (bw_smb_wall(' + i + ', 1)) ' + kd + ' = -1;');
           parts.push('                        else ss_x[' + i + '] += 3;');
           parts.push('                    } else {');
-          parts.push('                        if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 1)) ' + kd + ' = 1;');
+          parts.push('                        if (bw_smb_wall(' + i + ', 0)) ' + kd + ' = 1;');
           parts.push('                        else ss_x[' + i + '] -= 3;');
           parts.push('                    }');
           parts.push('                    for (' + kj + ' = 0; ' + kj + ' < NUM_STATIC_SPRITES; ' + kj + '++) {');
@@ -723,8 +723,34 @@
         '    return 0;',
         '}',
       ].join('\n');
-      const withHelper = A.appendToSlot(template, 'declarations', blockedHelper);
+      let withHelper = A.appendToSlot(template, 'declarations', blockedHelper);
       if (needSmb) {
+        // [builder] SMB enemies (engine v4) — cheap wall probe.  The Goomba /
+        // Koopa AIs turn at a wall using ONE behaviour_at at the leading edge's
+        // vertical mid-line, instead of the full-body bw_sprite_blocked (a
+        // 5-arg call that loops every body row).  cc65 code is ~5x slower than
+        // asm, so on a wide, enemy-packed scrolling level the per-enemy AI is
+        // the dominant per-frame cost; this + the on-screen dormancy gate keep
+        // the frame inside the vblank budget so the game runs at full speed.
+        const wallHelper = [
+          '/* [builder] SMB enemies — is the tile just past sprite n\'s leading',
+          ' * edge (right if `right`, else left), at its vertical mid-line, solid',
+          ' * (or the world edge)?  One lookup — enough to turn an enemy. */',
+          'static unsigned char bw_smb_wall(unsigned char n, unsigned char right) {',
+          '    unsigned int col;',
+          '    unsigned char b;',
+          '    if (right) {',
+          '        if ((unsigned int)ss_x[n] + (ss_w[n] << 3) >= WORLD_W_PX) return 1;',
+          '        col = (unsigned int)((ss_x[n] + (ss_w[n] << 3)) >> 3);',
+          '    } else {',
+          '        if (ss_x[n] == 0) return 1;',
+          '        col = (unsigned int)((ss_x[n] - 1) >> 3);',
+          '    }',
+          '    b = behaviour_at(col, (unsigned int)((ss_y[n] + (ss_h[n] << 2)) >> 3));',
+          '    return (b == BEHAVIOUR_SOLID_GROUND || b == BEHAVIOUR_WALL);',
+          '}',
+        ].join('\n');
+        withHelper = A.appendToSlot(withHelper, 'declarations', wallHelper);
         // [builder] SMB enemies (engine v4) — shared stomp/touch/hurt macros,
         // parameterised by the scene-sprite index so one definition serves
         // every goomba/koopa instance.  Emitted at the TOP of per_frame (not
@@ -752,6 +778,19 @@
           ' * the top half of sprite _n. */',
           '#define BW_SMB_STOMP(_n) (jumping && jmp_up == 0 && \\',
           '                          (py + (PLAYER_H << 3)) <= ss_y[_n] + (ss_h[_n] << 2))',
+          '/* On-screen test — is sprite _n within the visible camera window?  The',
+          ' * SMB actor AIs run their (relatively costly) walk + collision only for',
+          ' * on-screen enemies, exactly like the original: off-screen actors lie',
+          ' * dormant.  This keeps a wide, enemy-packed scrolling level inside the',
+          ' * per-frame CPU budget (a full-screen of cc65 AI overruns vblank).',
+          ' * cam_x only exists in a scrolling (multi-screen) build; a one-screen',
+          ' * game has every sprite on-screen, so the test is a constant 1. */',
+          '#ifdef SCROLL_BUILD',
+          '#define BW_SMB_ONSCREEN(_n) ((unsigned int)(ss_x[_n] + (ss_w[_n] << 3)) > cam_x && \\',
+          '                            (unsigned int)ss_x[_n] < cam_x + 256U)',
+          '#else',
+          '#define BW_SMB_ONSCREEN(_n) 1',
+          '#endif',
           '#if PLAYER_HP_ENABLED',
           '#ifdef BW_SMB_POWERUPS',
           '/* Power-ups (v5): a Starman ignores the hit; a super/fire player is',
