@@ -40,6 +40,7 @@
   --rail-w:74px;
   --dock-w:310px;
   --quest-w:290px;
+  --tutorial-w:0px;   /* collapsed until a guided tutorial is active */
   --mono:ui-monospace,'Menlo','Consolas','Courier New',monospace;
 }
 *{box-sizing:border-box}
@@ -95,13 +96,41 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   padding:5px 6px;font-family:inherit;font-size:12px;text-transform:uppercase;
 }
 
-/* --- Main four-region layout -------------------------------------- */
+/* --- Main region layout (rail · dock · TV · quests · [tutorial]) --- */
 .studio-main{
   flex:1 1 auto;display:grid;min-height:0;
-  grid-template-columns:var(--rail-w) var(--dock-w) 1fr var(--quest-w);
+  grid-template-columns:var(--rail-w) var(--dock-w) 1fr var(--quest-w) var(--tutorial-w);
 }
+.studio-main.tutorial-on{--tutorial-w:320px}
 .region{min-height:0;min-width:0;overflow:auto;border-right:2px solid var(--line)}
 .region:last-child{border-right:none}
+
+/* --- Guided tutorial panel (right-most column) --------------------- */
+.tutorial-region{background:var(--panel);border-left:2px solid var(--line)}
+.tutorial-inner{padding:14px}
+.tut-kicker{font-weight:700;font-size:14px;margin-bottom:8px}
+.tut-progress{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.tut-progress-fill{height:100%;background:var(--nes-green);transition:width .25s ease}
+:root[data-theme="dark"] .tut-progress-fill,
+@media (prefers-color-scheme:dark){.tut-progress-fill{background:var(--nes-green)}}
+.tut-progress-text{font-size:12px;opacity:.75;margin:4px 0 12px}
+.tut-card{background:var(--bg);border:2px solid var(--line);border-radius:8px;padding:12px}
+.tut-chapter{font-size:11px;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
+.tut-title{margin:4px 0 8px;font-size:17px}
+.tut-instruction{margin:0 0 8px;font-size:15px;line-height:1.4}
+.tut-why{margin:0 0 8px;font-size:13px;opacity:.8}
+.tut-enough{margin:0 0 10px;font-size:12px;opacity:.7;font-style:italic}
+.tut-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tut-btn{font:inherit;font-size:13px;padding:7px 10px;border:2px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;cursor:pointer}
+.tut-btn.primary{background:var(--nes-green);border-color:var(--nes-green);color:#000;font-weight:700}
+.tut-btn:hover{filter:brightness(1.08)}
+.tut-feedback{margin-top:10px;font-size:13px;min-height:1.2em;line-height:1.35}
+.tut-feedback.ok{color:var(--good)}
+.tut-feedback.wait,.tut-feedback.info{color:var(--info)}
+.tut-complete{border-color:var(--nes-green)}
+.tutorial-region.tut-celebrate{animation:tutPulse .7s ease}
+@keyframes tutPulse{0%{background:var(--panel)}30%{background:var(--nes-green)}100%{background:var(--panel)}}
+.reduced-motion .tut-progress-fill,.reduced-motion .tutorial-region.tut-celebrate{transition:none;animation:none}
 
 /* Mode rail */
 .mode-rail{display:flex;flex-direction:column;gap:2px;padding:8px 6px;
@@ -320,6 +349,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 
 @media (max-width:1100px){
   :root{--dock-w:190px;--quest-w:230px}
+  .studio-main.tutorial-on{--tutorial-w:250px}
   #tv-canvas{width:384px;height:360px}
 }
 /* STYLE mode — game-type picker grid (responsive; never overflows the column). */
@@ -360,6 +390,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   <div class="chrome-group">
     <label class="visually-hidden" for="project-name">Project name</label>
     <input id="project-name" type="text" aria-label="Project name" spellcheck="false">
+    <button id="btn-tutorial" class="btn" type="button" title="Start the guided tutorial — a ready-made game walks you through the editor one step at a time">🎓 Tutorial</button>
     <button id="btn-new-game" class="btn" type="button" title="Start a fresh starter platformer to learn with (keeps your other projects)">🎮 New game</button>
     <button id="btn-open-file" class="btn" type="button" title="Open a project file (.json) you saved to your computer">📂 Open</button>
     <!-- AccountMenu anchors #account-control immediately after this. -->
@@ -432,6 +463,9 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
       <h2 class="attn">Needs attention</h2>
       <div id="attn-list"></div>
     </div>
+  </aside>
+  <aside class="region tutorial-region" id="tutorial-region" aria-label="Guided tutorial" hidden>
+    <div class="tutorial-inner" id="tutorial-inner"></div>
   </aside>
 </main>
 
@@ -517,6 +551,9 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 <script src="codemirror-clike.min.js"></script>
 <script src="codemirror-active-line.min.js"></script>
 <script src="studio-code.js"></script>
+<!-- Guided tutorial: content manifest + runtime, registered before the shell boots. -->
+<script src="tutorial-first-game.js"></script>
+<script src="studio-tutorial.js"></script>
 <script src="studio.js"></script>
 </body>
 </html>

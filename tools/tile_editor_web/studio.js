@@ -529,6 +529,24 @@
     // A new project may target a newer engine than the last one — refresh the
     // engine button / advisor affordance.
     if (typeof refreshEngineButton === 'function') { try { refreshEngineButton(); } catch (e) {} }
+    maybeStartTutorial();
+  }
+
+  // Open the guided-tutorial panel when the loaded project carries an active
+  // tutorial marker (set by the 'tutorial' starter, persisted per project so it
+  // resumes after a reload).  No-op otherwise, so normal projects are untouched.
+  function maybeStartTutorial() {
+    try {
+      if (state && state.tutorial && state.tutorial.active &&
+          window.StudioTutorial && typeof window.StudioTutorial.start === 'function') {
+        window.StudioTutorial.start(ctx);
+      } else {
+        var main = document.querySelector('.studio-main');
+        if (main) main.classList.remove('tutorial-on');
+        var region = document.getElementById('tutorial-region');
+        if (region) region.hidden = true;
+      }
+    } catch (e) {}
   }
 
   function onNewGame() {
@@ -1248,6 +1266,7 @@
     });
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
+    $('btn-tutorial').addEventListener('click', function () { makeStarter('tutorial'); });
     // Let the shared account menu offer "Load a starter game" too (bug: the
     // starter/projects aren't loading) — available even when signed out.
     window.onLoadStarterGame = onNewGame;
@@ -1378,6 +1397,8 @@
       importNamBytes: importNamBytes,
       _play: onPlay,
     };
+    // Resume a guided tutorial if the loaded project is mid-tutorial.
+    maybeStartTutorial();
     document.body.dataset.studioReady = '1';
   }
 

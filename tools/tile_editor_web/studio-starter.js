@@ -560,11 +560,28 @@
     return state;
   }
 
+  // Guided tutorial starter: the `basics` project (a complete, working game
+  // with a ready-made tileset) plus a `tutorial` marker that tells the Studio
+  // to open the step-by-step tutorial panel (studio-tutorial.js). The pupil
+  // does one light edit per section, then plays it — nothing is drawn from
+  // scratch.
+  function createTutorial(opts) {
+    opts = opts || {};
+    var state = create({ name: opts.name || 'My First Game', now: opts.now });
+    state.tutorial = { active: true, id: 'first-game', step: 0 };
+    return state;
+  }
+
   // Registry of selectable starters, so the Studio can offer a picker.
   // `create(opts)` builds a fresh project; `min` is the engine the starter
   // needs to shine (advisory — starters degrade gracefully on older engines).
   function list() {
     return [
+      {
+        id: 'tutorial', emoji: '🎓', label: 'Guided tutorial',
+        desc: 'The best place to start. A ready-made game walks you through the editor one small step at a time — name your hero, change a colour, build the world, tweak the rules, and play it.',
+        create: createTutorial,
+      },
       {
         id: 'basics', emoji: '🎮', label: 'Platformer basics',
         desc: 'A gentle single-screen platformer: hero, an enemy, an NPC to talk to, a ladder and a door. Best place to learn the editor.',
@@ -578,5 +595,5 @@
     ];
   }
 
-  global.StudioStarter = { create: create, createSmb: createSmb, list: list, tileFrom: tileFrom };
+  global.StudioStarter = { create: create, createSmb: createSmb, createTutorial: createTutorial, list: list, tileFrom: tileFrom };
 })(typeof window !== 'undefined' ? window : globalThis);
