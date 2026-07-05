@@ -177,8 +177,10 @@ off here and update the status note in
 - [ ] Consolidate the three emulator variants into one component (union of
       pause/reset/fullscreen/mute/2-player legend) — today PLAY reuses the
       shipped `emulator.js` modal as-is.
-- [ ] 0.1 Data-model audit written up as tracked tickets (gaps already
-      enumerated in [`target-data-model.md`](../../design/target-data-model.md)).
+- [x] 0.1 Data-model audit written up as tracked tickets (DM-1..DM-5) in
+      [`design/decisions/2026-07-05-data-model-audit.md`](../../design/decisions/2026-07-05-data-model-audit.md).
+      DM-2/DM-4 closed; DM-5 partly (CHR); DM-1/DM-3 need coordinated
+      schema/engine work.
 - [ ] Flip the default to Studio at Phase 1 exit; keep old pages one
       release as a fallback; retire a page only when *all* its parity lines
       are covered.
