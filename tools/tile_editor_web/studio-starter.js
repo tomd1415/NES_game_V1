@@ -104,8 +104,86 @@
     '....22..',
   ]);
 
+  // Ladder (climbable) — two rails + rungs.
+  var LADDER = tileFrom('ladder', [
+    '.2....2.',
+    '.2....2.',
+    '.222222.',
+    '.2....2.',
+    '.2....2.',
+    '.222222.',
+    '.2....2.',
+    '.2....2.',
+  ]);
+  // Door — a framed doorway with a knob (3).
+  var DOOR = tileFrom('door', [
+    '.222222.',
+    '.211112.',
+    '.211112.',
+    '.211112.',
+    '.211132.',
+    '.211112.',
+    '.211112.',
+    '.221122.',
+  ]);
+
+  // --- Enemy metasprite art (a rounded slime, 2x2) ------------------------
+  var EN_TL = tileFrom('slime_tl', [
+    '........',
+    '........',
+    '...1111.',
+    '..111111',
+    '..111111',
+    '..113311',
+    '..111111',
+    '..111111',
+  ]);
+  var EN_TR = tileFrom('slime_tr', [
+    '........',
+    '........',
+    '.1111...',
+    '111111..',
+    '111111..',
+    '113311..',
+    '111111..',
+    '111111..',
+  ]);
+  var EN_BL = tileFrom('slime_bl', [
+    '..111111',
+    '..111111',
+    '..111111',
+    '...11111',
+    '....1111',
+    '.....111',
+    '........',
+    '........',
+  ]);
+  var EN_BR = tileFrom('slime_br', [
+    '111111..',
+    '111111..',
+    '111111..',
+    '11111...',
+    '1111....',
+    '111.....',
+    '........',
+    '........',
+  ]);
+
   function cell(tile, palette) {
     return { tile: tile, palette: palette, flipH: false, flipV: false, priority: false, empty: false };
+  }
+  function enemySprite() {
+    return {
+      name: 'Slime', role: 'enemy', flying: false, width: 2, height: 2,
+      cells: [[cell(5, 2), cell(6, 2)], [cell(7, 2), cell(8, 2)]], // sprite palette 2
+    };
+  }
+  function npcSprite() {
+    // Reuses the hero tiles under sprite palette 1 so it reads as a villager.
+    return {
+      name: 'Villager', role: 'npc', flying: false, width: 2, height: 2,
+      cells: [[cell(1, 1), cell(2, 1)], [cell(3, 1), cell(4, 1)]],
+    };
   }
 
   function playerSprite() {
@@ -150,47 +228,75 @@
       now: opts.now,
     });
 
-    // Shared background tiles: slot 1 = ground, slot 2 = brick.
-    state.bg_tiles[1] = GROUND;
-    state.bg_tiles[2] = BRICK;
+    // Shared background tiles + their default behaviour, so re-painting any
+    // of them in WORLD auto-applies the right type (tile default-behaviour).
+    state.bg_tiles[1] = GROUND;  state.bg_tiles[1].defaultBehaviour = 1; // solid
+    state.bg_tiles[2] = BRICK;   state.bg_tiles[2].defaultBehaviour = 3; // platform
+    state.bg_tiles[3] = LADDER;  state.bg_tiles[3].defaultBehaviour = 6; // ladder
+    state.bg_tiles[4] = DOOR;    state.bg_tiles[4].defaultBehaviour = 4; // door
 
-    // Shared sprite tiles: slots 1..4 = the 2x2 hero.
+    // Shared sprite tiles: 1..4 = hero (also reused by the NPC), 5..8 = slime.
     state.sprite_tiles[1] = HEAD_L;
     state.sprite_tiles[2] = HEAD_R;
     state.sprite_tiles[3] = BODY_L;
     state.sprite_tiles[4] = BODY_R;
+    state.sprite_tiles[5] = EN_TL;
+    state.sprite_tiles[6] = EN_TR;
+    state.sprite_tiles[7] = EN_BL;
+    state.sprite_tiles[8] = EN_BR;
 
-    // Paint a floor + a floating platform on the active background.
     var bg = state.backgrounds[0];
     var SCREEN_W = 32, SCREEN_H = 30;
-    // Behaviour grid alongside the nametable (solid ground under foot).
     bg.behaviour = [];
     for (var r = 0; r < SCREEN_H; r++) {
       var brow = [];
       for (var c = 0; c < SCREEN_W; c++) brow.push(0);
       bg.behaviour.push(brow);
     }
+    function put(x, y, tile, beh) { bg.nametable[y][x] = { tile: tile, palette: 0 }; bg.behaviour[y][x] = beh; }
     // Two-row ground floor along the bottom.
     for (var gy = SCREEN_H - 2; gy < SCREEN_H; gy++) {
-      for (var gx = 0; gx < SCREEN_W; gx++) {
-        bg.nametable[gy][gx] = { tile: 1, palette: 0 };
-        bg.behaviour[gy][gx] = 1; // solid_ground
-      }
+      for (var gx = 0; gx < SCREEN_W; gx++) put(gx, gy, 1, 1);
     }
-    // A little floating brick platform to hint at level building.
-    for (var px = 12; px <= 17; px++) {
-      bg.nametable[20][px] = { tile: 2, palette: 0 };
-      bg.behaviour[20][px] = 3; // platform
-    }
+    // Two floating brick platforms.
+    for (var p1 = 4; p1 <= 8; p1++) put(p1, 22, 2, 3);
+    for (var p2 = 14; p2 <= 19; p2++) put(p2, 18, 2, 3);
+    // A ladder from the lower platform down to the floor (col 6).
+    for (var ly = 23; ly <= 27; ly++) put(6, ly, 3, 6);
+    // A door standing on the floor near the right edge.
+    put(28, 27, 4, 4);
 
     state.behaviour_types = defaultBehaviourTypes();
-    state.sprites = [playerSprite()];
+    state.sprites = [playerSprite(), enemySprite(), npcSprite()];
 
-    // Seed the builder module tree so RULES/validators and PLAY have a
-    // real platformer to work with (additive; fortifyState would inject
-    // defaults anyway, but seeding here keeps LIVE state and PLAY in sync).
+    // Seed the builder module tree, then turn on a starter feature set:
+    // hearts (HP), an enemy that damages, an NPC with dialogue, and a door.
     if (typeof global.BuilderDefaults === 'function') {
       state.builder = global.BuilderDefaults();
+      var m = state.builder.modules;
+      // Hearts / HP: 3 HP + the damage-on-touch system.
+      if (m.players && m.players.submodules && m.players.submodules.player1) {
+        m.players.submodules.player1.config.maxHp = 3;
+        m.players.submodules.player1.config.startX = 24;
+        m.players.submodules.player1.config.startY = 176;
+      }
+      if (m.damage) { m.damage.enabled = true; m.damage.config = m.damage.config || {}; m.damage.config.amount = 1; }
+      // NPC dialogue.
+      if (m.dialogue) { m.dialogue.enabled = true; m.dialogue.config = m.dialogue.config || {}; m.dialogue.config.text = 'HI THERE'; }
+      // Scene: place the slime and the villager on the floor.
+      if (m.scene) {
+        m.scene.config = m.scene.config || {};
+        m.scene.config.instances = [
+          { id: 1, spriteIdx: 1, x: 200, y: 200, ai: 'walker', speed: 1 },
+          { id: 2, spriteIdx: 2, x: 64, y: 200, ai: 'static', speed: 1 },
+        ];
+      }
+      // Per-door destination (engine v2): the door loops back to the start.
+      if (m.doors) {
+        m.doors.enabled = true;
+        m.doors.config = m.doors.config || {};
+        m.doors.config.doorList = [{ bg: 0, tx: 28, ty: 27, spawnX: 24, spawnY: 176, targetBgIdx: -1 }];
+      }
     }
 
     // Stamp the engine this project is authored for (versioning/fallback).
