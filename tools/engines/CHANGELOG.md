@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v3 — 2026-07-05
+
+### Added
+- **SMB game style** (`🍄 SMB platformer`): the platformer engine plus the
+  signature **variable-height jump** — A jumps (as well as Up), a tap is a
+  short hop and a hold is a full jump (releasing A+Up mid-rise cuts the
+  ascent to a small minimum), and a running take-off (B held) jumps higher.
+  Emitted as `#define BW_SMB_JUMP 1` on top of `BW_GAME_STYLE 0`, so it reuses
+  the proven platformer path. First step of the SMB‑1‑1 roadmap
+  (`docs/plans/current/2026-07-05-smb-engine-roadmap.md`).
+
+### Changed / migration
+- No migration. `BW_SMB_JUMP` is emitted only for the new `smb` game type on
+  engine‑v3+ pages, so every existing game (and the v1/v2 game types) builds
+  byte-identically — golden‑ROM hashes unchanged.
+
+### Breaking
+- (none.)
+
 ## v2 — 2026-07-05
 
 ### Added

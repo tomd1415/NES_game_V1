@@ -58,6 +58,7 @@
         type: 'enum',
         options: [
           { value: 'platformer', label: '🏃 Platformer (side-on, gravity + jump)' },
+          { value: 'smb',        label: '🍄 SMB platformer (variable-height jump)' },
           { value: 'topdown',    label: '🧭 Top-down (four-way, no gravity)' },
           { value: 'runner',     label: '🏃‍➡️ Auto-runner (auto-scroll, tap to jump)' },
           { value: 'racer',      label: '🏎 Racer (steer + accelerate, top-down)' },
@@ -138,9 +139,20 @@
           '#define RACER_CP_COUNT ' + cps,
         ].join('\n'));
       }
-      // Platformer: emit nothing (BW_GAME_STYLE defaults to 0 in the
-      // template's `#ifndef`).  Keeps the no-modules-ticked path
-      // byte-for-byte identical to today.
+      // SMB style (engine v3+): the proven platformer engine (BW_GAME_STYLE 0)
+      // plus BW_SMB_JUMP — the signature SMB variable-height jump (A jumps,
+      // tap = short hop / hold = full jump, run take-off jumps higher). Gated
+      // on the target engine so pre-v3 pages never emit it (byte-identical).
+      const targetEngineGame = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      if (c.type === 'smb' && targetEngineGame >= 3) {
+        return A.appendToSlot(template, 'declarations', [
+          '/* Builder game module — SMB style (engine v3): platformer + variable jump. */',
+          '#define BW_SMB_JUMP 1',
+        ].join('\n'));
+      }
+      // Platformer (and any style below its engine version): emit nothing
+      // (BW_GAME_STYLE defaults to 0 in the template's `#ifndef`).  Keeps the
+      // no-modules-ticked path byte-for-byte identical to today.
       return template;
     },
   };

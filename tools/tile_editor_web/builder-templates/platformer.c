@@ -1062,13 +1062,28 @@ void main(void) {
 #if BW_GAME_STYLE == 2
                  || ((pad & 0x80) && !(prev_pad & 0x80))
 #endif
+#ifdef BW_SMB_JUMP
+                 /* SMB style: A also jumps (the classic Mario button). */
+                 || ((pad & 0x80) && !(prev_pad & 0x80))
+#endif
                 ) && !jumping) {
                 jumping = 1;
 //>> jump_height: How high the player jumps. Bigger number = higher jump (try 10 to 40).
                 jmp_up = 20;
 //<<
+#ifdef BW_SMB_JUMP
+                /* SMB style: a running take-off (B held) jumps higher and
+                 * farther — mirrors SMB's take-off-speed-indexed jump. */
+                if (pad & 0x40) jmp_up += 8;
+#endif
             }
         }
+#ifdef BW_SMB_JUMP
+        /* SMB variable-height jump: releasing A *and* UP during the rise cuts
+         * the ascent short (keeping a small minimum), so a tap is a short hop
+         * and a hold is a full jump. Only trims an in-progress rise. */
+        if (jumping && jmp_up > 4 && !(pad & 0x88)) jmp_up = 4;
+#endif
         prev_pad = pad;
 
         // Jump ascent: while jmp_up ticks remain, rise 2 px/frame. Once
