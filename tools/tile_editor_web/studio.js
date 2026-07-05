@@ -392,12 +392,12 @@
     var off = { cx: 0, cy: 0 };
     try { off = ctx.viewOffset(); } catch (e) {}
     var html = '';
-    [0, 4, 8, 12, 16, 20, 24, 28, 31].forEach(function (c) {
+    [0, 8, 16, 24, 31].forEach(function (c) {
       var pct = c / SCREEN_W * 100;
       html += '<span class="rt col" style="left:' + pct + '%"></span>' +
               '<span class="rk col" style="left:' + pct + '%">' + (c + off.cx) + '</span>';
     });
-    [0, 4, 8, 12, 16, 20, 24, 29].forEach(function (r) {
+    [0, 8, 16, 24, 29].forEach(function (r) {
       var pct = r / SCREEN_H * 100;
       html += '<span class="rt row" style="top:' + pct + '%"></span>' +
               '<span class="rk row" style="top:' + pct + '%">' + (r + off.cy) + '</span>';

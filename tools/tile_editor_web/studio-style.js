@@ -45,16 +45,20 @@
     return m[id];
   }
 
-  // A number field bound to obj[key] (clamped), undoable.
+  // A number field bound to obj[key] (clamped), undoable.  Structure: a label +
+  // input on one row, with any help text on its own line below (a .sfield —
+  // separated from the next field with a divider so options don't blend).
   function numField(ctx, label, obj, key, min, max, help) {
-    var inp = el('input', { type: 'number', min: min, max: max, style: 'width:64px' });
+    var inp = el('input', { type: 'number', min: min, max: max });
     inp.value = (obj[key] == null) ? '' : obj[key];
     inp.addEventListener('change', function () {
       var v = parseInt(inp.value, 10); if (isNaN(v)) return;
       ctx.pushUndo(); obj[key] = Math.max(min, Math.min(max, v)); ctx.markDirty();
     });
-    var f = el('div', { class: 'field inline' }, [el('span', { text: label }), inp]);
-    if (help) f.appendChild(el('div', { class: 'dock-note', text: help }));
+    var f = el('div', { class: 'sfield' }, [
+      el('div', { class: 'srow' }, [el('span', { class: 'slabel', text: label }), inp]),
+    ]);
+    if (help) f.appendChild(el('div', { class: 'shelp', text: help }));
     return f;
   }
   function boolField(ctx, label, node, help, onToggle) {
@@ -64,8 +68,8 @@
       ctx.pushUndo(); node.enabled = cb.checked; if (onToggle) onToggle(); ctx.markDirty(); ctx.renderDock();
     });
     w.appendChild(cb); w.appendChild(el('span', { text: label }));
-    var f = el('div', { class: 'field' }, [w]);
-    if (help) f.appendChild(el('div', { class: 'dock-note', text: help }));
+    var f = el('div', { class: 'sfield' }, [w]);
+    if (help) f.appendChild(el('div', { class: 'shelp', text: help }));
     return f;
   }
 
@@ -103,7 +107,7 @@
     var bobCb = el('input', { type: 'checkbox' }); bobCb.checked = !!g.bobWhenWalking;
     bobCb.addEventListener('change', function () { ctx.pushUndo(); g.bobWhenWalking = bobCb.checked; ctx.markDirty(); });
     bobW.appendChild(bobCb); bobW.appendChild(el('span', { text: 'Bob up/down when walking' }));
-    phys.appendChild(el('div', { class: 'field' }, [bobW]));
+    phys.appendChild(el('div', { class: 'sfield' }, [bobW]));
     dock.appendChild(phys);
 
     if (isSmb) {

@@ -188,9 +188,9 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 /* Edge rulers — faint tile-coordinate guides overlaid on the screen edges.
    Positioned to match the canvas (the .crt has 16px padding around it). */
 .tv-rulers{position:absolute;inset:16px;pointer-events:none;overflow:hidden;
-  font-family:Menlo,Consolas,monospace;font-size:9px}
-.tv-rulers .rk{position:absolute;color:var(--accent);opacity:.75;
-  text-shadow:0 0 2px #000,0 0 2px #000;line-height:1}
+  font-family:Menlo,Consolas,monospace;font-size:13px}
+.tv-rulers .rk{position:absolute;color:var(--accent);opacity:.9;font-weight:700;
+  text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000;line-height:1}
 .tv-rulers .rk.col{top:1px}
 .tv-rulers .rk.row{left:1px}
 .tv-rulers .rt{position:absolute;background:var(--accent);opacity:.4}
@@ -322,9 +322,27 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   :root{--dock-w:190px;--quest-w:230px}
   #tv-canvas{width:384px;height:360px}
 }
-/* STYLE mode — game-type picker grid. */
-.style-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
-.style-card{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:8px;height:auto;line-height:1.2}
+/* STYLE mode — game-type picker grid (responsive; never overflows the column). */
+.style-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+  gap:6px;margin-top:6px}
+.style-card{display:flex;flex-direction:column;align-items:flex-start;text-align:left;
+  gap:3px;padding:9px;height:auto;line-height:1.25;box-sizing:border-box;min-width:0;
+  white-space:normal;overflow-wrap:anywhere}
+.style-card .dock-note{margin:0}
+
+/* STYLE mode — tidy, well-separated option fields. */
+.sfield{margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.sfield:last-child{border-bottom:none;margin-bottom:2px}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.slabel{color:var(--text);font-size:12px;flex:1 1 auto;min-width:0}
+.sfield input[type=number],.sfield input[type=text],.sfield select{
+  flex:0 0 auto;background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:6px 8px;font-family:inherit;font-size:13px;min-width:96px;width:96px;
+  box-sizing:border-box}
+.sfield select{width:auto;max-width:170px}
+.sfield input:focus,.sfield select:focus{outline:none;border-color:var(--sel)}
+.sfield .shelp{color:var(--muted);font-size:10px;margin-top:6px;line-height:1.5}
+.sfield .switch{font-size:12px}
 </style>
 <link rel="stylesheet" href="codemirror.min.css">
 <link rel="stylesheet" href="codemirror-theme-dracula.min.css">
