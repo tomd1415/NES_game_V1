@@ -145,9 +145,22 @@
       // on the target engine so pre-v3 pages never emit it (byte-identical).
       const targetEngineGame = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
       if (c.type === 'smb' && targetEngineGame >= 3) {
+        // Speed preset (1 slow … 4 fast) → SMB horizontal max walk/run + accel
+        // in 8.8 fixed-point (256 = 1 px/frame).  Preset 2 is the SMB-authentic
+        // default (walk 1.5 / run 2.5), so a default game stays byte-identical.
+        const SPEED = {
+          1: [256, 448, 20],   // ~1.0 / 1.75 px/f
+          2: [384, 640, 24],   // 1.5 / 2.5 px/f  (default, SMB-authentic)
+          3: [512, 832, 32],   // 2.0 / 3.25 px/f
+          4: [640, 1024, 40],  // 2.5 / 4.0 px/f
+        };
+        const sp = SPEED[A.clampInt(c.smbSpeed, 1, 4, 2)] || SPEED[2];
         return A.appendToSlot(template, 'declarations', [
           '/* Builder game module — SMB style (engine v3): platformer + variable jump. */',
           '#define BW_SMB_JUMP 1',
+          '#define BW_SMB_WALK_MAX ' + sp[0],
+          '#define BW_SMB_RUN_MAX ' + sp[1],
+          '#define BW_SMB_ACCEL ' + sp[2],
         ].join('\n'));
       }
       // Platformer (and any style below its engine version): emit nothing
