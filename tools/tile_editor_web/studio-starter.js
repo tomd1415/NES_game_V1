@@ -406,6 +406,18 @@
       '..1.....',
     ]);
     state.bg_tiles[5].defaultBehaviour = 5;
+    // A ? block (bg tile 6) — painted solid so you stand on it + bonk from below.
+    state.bg_tiles[6] = tileFrom('qblock', [
+      '11111111',
+      '13113131',
+      '13131131',
+      '11131131',
+      '11113131',
+      '11111311',
+      '11113111',
+      '11111111',
+    ]);
+    state.bg_tiles[6].defaultBehaviour = 1;
     // Power-up + fireball sprite tiles (9..12).  The engine draws the fireball
     // from tile 9 (BW_FIREBALL_TILE below); the item sprites use 10..12.
     state.sprite_tiles[9] = FIREBALL;
@@ -441,6 +453,10 @@
     platform(24, 27, 22);
     platform(40, 43, 21);
     platform(54, 57, 18);
+    // Interactive blocks (v6): a ? block (gives a mushroom) and a brick, floating
+    // at jump height so you bump them from below.
+    put(6, 22, 6, 1);    // ? block
+    put(24, 20, 2, 1);   // brick
     // The goal flag on the far-right ground — scroll the whole level to win.
     put(61, 27, 5, 5);
     // A warp door back to the start, on the first screen's right ledge.
@@ -510,6 +526,31 @@
         m.doors.config = m.doors.config || {};
         m.doors.config.doorList = [{ bg: 0, tx: 45, ty: 27, spawnX: 16, spawnY: 200, targetBgIdx: -1 }];
       }
+      // v6: interactive blocks — a ? block (mushroom) + a brick (break when super).
+      if (m.blocks) {
+        m.blocks.enabled = true;
+        m.blocks.config = m.blocks.config || { blockList: [] };
+        m.blocks.config.blockList = [
+          { x: 6, y: 22, kind: 'question', contents: 'mushroom', usedTile: 2 },
+          { x: 24, y: 20, kind: 'brick', usedTile: 0 },
+        ];
+        m.blocks.config.dispTiles = { mushroom: 10, fireflower: 11, star: 12, oneup: 10 };
+      }
+      // v7: HUD (coins / time / score / lives).
+      if (m.smbhud) {
+        m.smbhud.enabled = true;
+        m.smbhud.config = m.smbhud.config || {};
+        m.smbhud.config.startTime = 400;
+        m.smbhud.config.startLives = 3;
+      }
+      // v8: flagpole finish at the goal column (win_condition provides the win).
+      if (m.flagpole) {
+        m.flagpole.enabled = true;
+        m.flagpole.config = m.flagpole.config || {};
+        m.flagpole.config.x = 61;
+      }
+      // v9: OAM flicker so a crowded row flickers instead of dropping sprites.
+      if (m.smbrender) m.smbrender.enabled = true;
     }
 
     if (typeof global.NES_ENGINE_VERSION === 'number') {
@@ -530,7 +571,7 @@
       },
       {
         id: 'smb', emoji: '🍄', label: 'SMB showcase', min: 5,
-        desc: 'A two-screen scrolling level with every new engine feature: SMB run physics + variable jump (v3), Goomba stomps and a kickable Koopa shell (v4), and Super Mushroom / Fire Flower / Starman power-ups with B-button fireballs (v5) — plus hearts, dialogue, a ladder, a warp door and a goal flag.',
+        desc: 'A two-screen scrolling level with the whole SMB toolbox: run physics + variable jump (v3), Goomba stomps and a kickable Koopa shell (v4), Mushroom / Fire Flower / Starman power-ups with B-button fireballs (v5), ? blocks + bricks (v6), a coins/time/score/lives HUD (v7), a flagpole finish (v8) and sprite flicker (v9) — plus hearts, dialogue, a ladder and a warp door.',
         create: createSmb,
       },
     ];

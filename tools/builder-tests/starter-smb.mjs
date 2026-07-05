@@ -12,8 +12,8 @@ const WEB = path.join(ROOT, 'tools', 'tile_editor_web');
 const PORT = 18785;
 
 globalThis.window = globalThis;
-globalThis.NES_TARGET_ENGINE = 5;
-globalThis.NES_ENGINE_VERSION = 5;
+globalThis.NES_TARGET_ENGINE = 9;
+globalThis.NES_ENGINE_VERSION = 9;
 for (const f of ['sprite-render.js', 'builder-assembler.js', 'builder-modules.js',
     'builder-validators.js', 'default-state.js', 'studio-starter.js']) {
   new Function(fs.readFileSync(path.join(WEB, f), 'utf8'))();
@@ -37,12 +37,16 @@ const s = window.StudioStarter.createSmb({ name: 'SMB Showcase' });
   if (s.builder.modules.game.config.type !== 'smb') { console.error('FAIL: not smb game type'); process.exit(1); }
   const ais = s.builder.modules.scene.config.instances.map(i => i.ai);
   if (!ais.includes('goomba') || !ais.includes('koopa') || !ais.includes('item')) { console.error('FAIL: missing goomba/koopa/item', ais); process.exit(1); }
-  if (!s.builder.modules.powerups.enabled) { console.error('FAIL: power-ups module not enabled'); process.exit(1); }
-  if (s.engineVersion !== 5) { console.error('FAIL: engineVersion not stamped 5:', s.engineVersion); process.exit(1); }
+  const mm = s.builder.modules;
+  for (const mod of ['powerups', 'blocks', 'smbhud', 'flagpole', 'smbrender']) {
+    if (!mm[mod] || !mm[mod].enabled) { console.error('FAIL: showcase module not enabled: ' + mod); process.exit(1); }
+  }
+  if (!(mm.blocks.config.blockList || []).some(b => b.kind === 'question')) { console.error('FAIL: no ? block'); process.exit(1); }
+  if (s.engineVersion !== 9) { console.error('FAIL: engineVersion not stamped 9:', s.engineVersion); process.exit(1); }
   // Two scrolling screens wide.
   const bg = s.backgrounds[0];
   if (bg.dimensions.screens_x < 2 || bg.nametable[0].length < 64) { console.error('FAIL: not a 2-screen level:', JSON.stringify(bg.dimensions)); process.exit(1); }
-  console.log('✓ SMB showcase: smb + Goomba/Koopa/items + power-ups, 2 scrolling screens, engineVersion 5');
+  console.log('✓ SMB showcase: full v3-v9 toolbox (enemies/items/power-ups/blocks/HUD/flagpole/flicker), 2 scrolling screens, engineVersion 9');
 }
 
 // It validates cleanly (no error-severity problems) — a winnable sample.
@@ -55,7 +59,8 @@ const s = window.StudioStarter.createSmb({ name: 'SMB Showcase' });
 
 // And it compiles via cc65 with the v3+v4+v5 features active.
 const out = window.BuilderAssembler.assemble(s, tpl);
-for (const re of [/#define BW_SMB_JUMP 1/, /#define BW_SMB_TOUCH/, /#define BW_SMB_POWERUPS 1/]) {
+for (const re of [/#define BW_SMB_JUMP 1/, /#define BW_SMB_TOUCH/, /#define BW_SMB_POWERUPS 1/,
+  /#define BW_SMB_BLOCKS 1/, /#define BW_SMB_HUD 1/, /#define BW_SMB_FLAG 1/, /#define BW_OAM_FLICKER 1/]) {
   if (!re.test(out)) { console.error('FAIL: assembled starter missing', re); process.exit(1); }
 }
 const srv = spawn('python3', [path.join(ROOT, 'tools', 'playground_server.py')],
@@ -65,7 +70,7 @@ try {
   const r = await (await fetch(`http://127.0.0.1:${PORT}/play`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ state: s, playerSpriteIdx: 0, playerStart: { x: 16, y: 200 },
-      sceneSprites: [], mode: 'browser', customMainC: out, targetEngine: 5 }),
+      sceneSprites: [], mode: 'browser', customMainC: out, targetEngine: 9 }),
   })).json();
   if (!r.ok) { console.error('FAIL compile: SMB showcase rejected:', r.stage); console.error((r.log || '').slice(-2500)); process.exit(2); }
   console.log('✓ SMB showcase starter compiles via cc65 (' + r.size + ' bytes, engine v' + r.engineVersion + ')');
