@@ -72,15 +72,27 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 - Tests: codegen emits the tables; cc65 compiles; headless: hold‑vs‑tap jump
   reaches different heights.
 
-### v4 — Actor/object system + enemy behaviours
-- Structure‑of‑arrays actor pool (`MAX_ENEMIES`), per‑slot tiny state machine.
-- **Goomba:** walk ~0.5 px/f (`$f8`), reverse on wall/enemy, **no ledge
-  sensing**; **stomp** (downward motion) → squash + score; side‑touch damages.
-- **Koopa Troopa:** walk → **stomp to shell** → **kick** = ±3 px/f
-  (`KickedShellXSpdData` `$30/$d0`) moving shell that chains kills / hurts on
-  return.
-- Stomp‑chain scoring (100→…→1‑Up).
-- Tests: compile; headless stomp defeats a Goomba; kicked shell moves + kills.
+### v4 — Actor/object system + enemy behaviours  *(✅ LANDED 2026-07-05)*
+
+> **Landed (engine v4):** two per-instance enemy AIs on the Scene page, built on
+> the existing structure-of-arrays scene-sprite pool (`ss_x/ss_y/ss_role/…`) so
+> they reuse the proven movement + `bw_sprite_blocked` collision:
+> - **Goomba** (`ai:'goomba'`): walks + reverses at walls, **walks off ledges**
+>   (no ledge sensing), **stomp** from above defeats + bounces, side-touch hurts.
+> - **Koopa** (`ai:'koopa'`): walk → **stomp to a still shell** → **touch to
+>   kick** (shell slides 3 px/f away from the player, **chains kills** on
+>   enemies it overtakes, hurts on contact); stomping a sliding shell stops it.
+>
+> Shared `BW_SMB_TOUCH/STOMP/BOUNCE/HURT/GUARD` macros; HURT/GUARD respect the
+> Damage module's iframes so a stomp never double-counts as a side-hit (either
+> apply order). Gated on engine v4+ (pre-v4 degrades to `walker`) → golden ROM
+> byte-identical. Starter + Studio Scene AI dropdown wired. `smb-enemies.mjs`
+> covers codegen + engine-pin fallback + cc65 compile.
+>
+> **Deferred to later passes:** stomp-*chain scoring* (100→…→1-Up) lands with the
+> score/HUD system in **v7**; a distinct shell tile/art (the shell currently
+> reuses the koopa sprite); and a dedicated `MAX_ENEMIES` fixed actor pool
+> (today's scene-sprite array already serves as the pool).
 
 ### v5 — Projectiles + power‑up state machine
 - **Fireballs:** 2‑slot pool gated on `state==inactive`; spawn X±4, ±4 px/f,
