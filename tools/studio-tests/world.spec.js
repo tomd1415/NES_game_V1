@@ -156,6 +156,37 @@ test('attribute conflict in a 2×2 chunk is detected and warned (2.5)', async ({
   await expect(page.locator('.dock-note', { hasText: 'mix two palettes' })).toBeVisible();
 });
 
+test('promote → stamp → revert with the 16×16 block library (#9)', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  // Promote the starter into 16×16 blocks.
+  await page.locator('.btn', { hasText: 'Promote to 16' }).click();
+  expect(await page.evaluate(() =>
+    window.Studio.getState().backgrounds[0].tileMode)).toBe('16x16');
+  await expect(page.locator('.dock-section .title', { hasText: 'Block library' })).toBeVisible();
+
+  // Make a new block (auto-selected) and stamp it at metatile cell (mc2,mr1).
+  await page.locator('.btn', { hasText: '+ New block' }).click();
+  const newId = await page.evaluate(() =>
+    window.Studio.getState().backgrounds[0].metatiles.length - 1);
+  await page.locator('.stage-toolbar .tool[data-tool="stamp"]').click();
+  await clickCell(page, 5, 3); // cx5,cy3 → mtmap[1][2]
+  expect(await page.evaluate(() =>
+    window.Studio.getState().backgrounds[0].mtmap[1][2])).toBe(newId);
+
+  // Editing a block quadrant re-renders LIVE without error.
+  await page.evaluate(() => {
+    const bg = window.Studio.getState().backgrounds[0];
+    bg.metatiles[0].tiles[0] = 2;
+  });
+  await page.locator('.mode-btn[data-mode="world"]').click();
+
+  // Revert back to 8×8 (accept the confirm).
+  page.once('dialog', (d) => d.accept());
+  await page.locator('.btn', { hasText: 'Revert to 8' }).click();
+  expect(await page.evaluate(() =>
+    window.Studio.getState().backgrounds[0].tileMode)).toBe('8x8');
+});
+
 test('full-screen preview opens a modal with a canvas', async ({ page }) => {
   await page.locator('.btn', { hasText: 'Full-screen preview' }).click();
   const dlg = page.locator('.modal-backdrop.open');

@@ -24,6 +24,7 @@
   var placeChar = -1;    // sprite index the Place tool drops (-1 = auto)
   var selInst = null;    // selected scene-instance id
   var dragInst = false;
+  var selBlock = 0;      // selected 16×16 metatile block id to stamp
 
   // Scene instances live on the builder tree (state.builder.modules.scene).
   function sceneInstances(ctx) {
@@ -185,9 +186,18 @@
     ctx.pushUndo();
     strokeOpen = true;
     var tool = ctx.getActiveTool();
+    if (isMetatileBg(activeBg(ctx))) { metatileStamp(ctx, cell, tool); ctx.renderLive(); return; }
     if (tool === 'fill') floodFill(ctx, cell.cx, cell.cy);
     else paintCell(ctx, cell.cx, cell.cy);
     ctx.renderLive();
+  }
+  // In 16×16 mode the TV stamps whole blocks: stamp tool → selected block,
+  // erase → block 0.
+  function metatileStamp(ctx, cell, tool) {
+    var prev = selBlock;
+    if (tool === 'erase') selBlock = 0;
+    stampBlock(ctx, cell.cx, cell.cy);
+    selBlock = prev;
   }
 
   // ---- Entity placement --------------------------------------------------
@@ -314,6 +324,140 @@
     return m;
   }
 
+  // ---- 16×16 metatile block library (WORLD parity, #9) ------------------
+  function ensureMtmap(bg) {
+    // Metatile map is 16 wide × 15 tall (half a 32×30 screen). Fill missing.
+    if (!Array.isArray(bg.mtmap)) bg.mtmap = [];
+    for (var r = 0; r < 15; r++) {
+      if (!Array.isArray(bg.mtmap[r])) bg.mtmap[r] = [];
+      for (var c = 0; c < 16; c++) if (typeof bg.mtmap[r][c] !== 'number') bg.mtmap[r][c] = 0;
+    }
+    return bg.mtmap;
+  }
+  function promoteBg(ctx) {
+    var bg = activeBg(ctx);
+    if (isMetatileBg(bg) || !global.MetatileLib) return;
+    ctx.pushUndo();
+    global.MetatileLib.promote(bg);
+    ensureMtmap(bg);
+    selBlock = 0;
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+  }
+  function revertBg(ctx) {
+    var bg = activeBg(ctx);
+    if (!isMetatileBg(bg) || !global.MetatileLib) return;
+    if (!confirm('Turn this background back into loose 8×8 tiles? Your current block layout is baked into the tiles first, so nothing on screen changes.')) return;
+    ctx.pushUndo();
+    var ex = global.MetatileLib.expand(bg);
+    bg.nametable = ex.nametable;
+    bg.behaviour = ex.behaviour;
+    bg.tileMode = '8x8';
+    delete bg.metatiles; delete bg.mtmap;
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+  }
+  function stampBlock(ctx, cx, cy) {
+    var bg = activeBg(ctx);
+    if (!isMetatileBg(bg)) return;
+    var map = ensureMtmap(bg);
+    var mr = cy >> 1, mc = cx >> 1;
+    if (mr < 0 || mr >= map.length || mc < 0 || mc >= map[mr].length) return;
+    if (map[mr][mc] === selBlock) return;
+    map[mr][mc] = selBlock;
+  }
+  // Draw a block (its 4 tiles under its palette) into a small canvas.
+  function blockCanvas(state, mt, sizePx) {
+    var c = el('canvas', { width: sizePx, height: sizePx, style: 'image-rendering:pixelated;display:block' });
+    var g = c.getContext('2d');
+    var pal = global.NesRender.bgPaletteFor(state, (mt.palette | 0) & 3);
+    g.fillStyle = global.NesRender.nesRgb(pal.slot0); g.fillRect(0, 0, sizePx, sizePx);
+    var half = sizePx / 2, scale = half / 8;
+    var tiles = mt.tiles || [];
+    var quads = [[0, 0], [half, 0], [0, half], [half, half]];
+    for (var k = 0; k < 4; k++) {
+      UI.drawTilePixels(g, state.bg_tiles[(tiles[k] | 0)], pal, quads[k][0], quads[k][1], scale);
+    }
+    return c;
+  }
+
+  function renderMetatileDock(dock, ctx) {
+    var s = ctx.getState();
+    var bg = activeBg(ctx);
+    var mts = bg.metatiles || [];
+    ensureMtmap(bg);
+
+    var head = UI.section('16×16 blocks', el('span', { class: 'chip', text: mts.length + ' block' + (mts.length === 1 ? '' : 's') }));
+    head.appendChild(el('div', { class: 'dock-note', text: 'Paint whole 16×16 blocks in one click — build big levels fast. Editing a block updates it everywhere it appears.' }));
+    head.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
+      el('button', { class: 'btn', text: '+ New block', onclick: function () {
+        ctx.pushUndo();
+        bg.metatiles.push({ tiles: [0, 0, 0, 0], palette: paintPalette, behaviour: 0 });
+        selBlock = bg.metatiles.length - 1;
+        ctx.markDirty(); ctx.renderDock();
+      } }),
+      el('button', { class: 'btn', text: '↩ Revert to 8×8', onclick: function () { revertBg(ctx); } }),
+    ]));
+    dock.appendChild(head);
+
+    // Block library strip.
+    var libSec = UI.section('Block library', el('span', { class: 'chip', text: 'stamp' }));
+    var strip = el('div', { class: 'tile-grid', style: 'grid-template-columns:repeat(6,1fr)' });
+    mts.forEach(function (mt, id) {
+      var cell = el('button', { class: 'tile-cell' + (id === selBlock ? ' sel' : ''), title: 'Block ' + id,
+        onclick: function () { selBlock = id; ctx.renderDock(); } });
+      cell.appendChild(blockCanvas(s, mt, 28));
+      strip.appendChild(cell);
+    });
+    libSec.appendChild(strip);
+    dock.appendChild(libSec);
+
+    // Selected-block mini editor: 4 tile quadrants + palette + behaviour.
+    var mt = mts[selBlock];
+    if (mt) {
+      var edSec = UI.section('Edit block ' + selBlock);
+      var quadNames = ['Top-left', 'Top-right', 'Bottom-left', 'Bottom-right'];
+      for (var q = 0; q < 4; q++) (function (qi) {
+        var row = el('div', { class: 'field inline' }, [el('span', { text: quadNames[qi] })]);
+        var num = el('input', { type: 'number', min: 0, max: 255, style: 'width:64px' });
+        num.value = (mt.tiles[qi] | 0);
+        num.addEventListener('change', function () {
+          var v = Math.max(0, Math.min(255, parseInt(num.value, 10) || 0));
+          ctx.pushUndo(); mt.tiles[qi] = v; ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+        });
+        row.appendChild(num);
+        edSec.appendChild(row);
+      })(q);
+      // Palette.
+      var palRow = el('div', { class: 'row' });
+      for (var pp = 0; pp < 4; pp++) (function (pi) {
+        palRow.appendChild(el('button', { class: 'btn' + (pi === (mt.palette | 0) ? ' primary' : ''), text: 'BG ' + pi,
+          onclick: function () { ctx.pushUndo(); mt.palette = pi; ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); } }));
+      })(pp);
+      edSec.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Palette' }), palRow]));
+      // Behaviour type.
+      var behSel = el('select');
+      var labels = behLabels(ctx);
+      Object.keys(labels).forEach(function (id) { behSel.appendChild(el('option', { value: id, text: labels[id] })); });
+      behSel.value = String(mt.behaviour | 0);
+      behSel.addEventListener('change', function () { ctx.pushUndo(); mt.behaviour = parseInt(behSel.value, 10) || 0; ctx.markDirty(); ctx.renderLive(); });
+      edSec.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Whole-block type' }), behSel]));
+      // Delete block.
+      if (mts.length > 1) {
+        edSec.appendChild(el('button', { class: 'btn', style: 'margin-top:6px', text: '🗑 Delete block ' + selBlock, onclick: function () {
+          ctx.pushUndo();
+          if (global.MetatileLib.deleteBlock(bg, selBlock)) { selBlock = 0; ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); }
+        } }));
+      }
+      edSec.appendChild(el('div', { class: 'dock-note', text: 'Tip: draw the actual 8×8 art in TILES; here you choose which four tiles make the block.' }));
+      dock.appendChild(edSec);
+    }
+
+    // Full-screen preview works for metatile bgs too (renderBgInto expands? no —
+    // expand first). Keep it available.
+    dock.appendChild(el('div', { class: 'dock-section' }, [
+      el('button', { class: 'btn', text: '⛶ Full-screen preview', onclick: function () { openPreview(ctx); } }),
+    ]));
+  }
+
   function renderDock(dock, ctx) {
     var s = ctx.getState();
 
@@ -363,11 +507,7 @@
     dock.appendChild(bgSec);
 
     var bg = activeBg(ctx);
-    if (isMetatileBg(bg)) {
-      dock.appendChild(el('div', { class: 'placeholder', style: 'margin-top:12px',
-        text: 'This background uses 16×16 blocks. Block editing arrives in a later pass — 8×8 backgrounds paint fully here.' }));
-      return;
-    }
+    if (isMetatileBg(bg)) { renderMetatileDock(dock, ctx); return; }
 
     // --- Paint palette ---
     var palSec = UI.section('Paint colour');
@@ -517,6 +657,15 @@
     ]);
     dock.appendChild(prevSec);
 
+    // --- Promote to 16×16 blocks (Maker+) ---
+    if (ctx.levelAtLeast('maker') && global.MetatileLib) {
+      dock.appendChild(el('div', { class: 'dock-section' }, [
+        el('button', { class: 'btn', text: '🧱 Promote to 16×16 blocks', title: 'Turn this background into reusable 16×16 blocks for building big levels fast.',
+          onclick: function () { promoteBg(ctx); } }),
+        el('div', { class: 'dock-note', text: 'Groups your art into reusable 16×16 blocks so you can paint big levels quickly. You can revert anytime.' }),
+      ]));
+    }
+
     // --- Grid toggle ---
     var gridSec = el('div', { class: 'dock-section' }, [
       el('label', { class: 'switch' }, [
@@ -534,9 +683,10 @@
     g.imageSmoothingEnabled = false;
     var backdrop = global.NesRender.nesRgb(state.universal_bg);
     g.fillStyle = backdrop; g.fillRect(0, 0, cv.width, cv.height);
-    if (isMetatileBg(bg)) return;
-    var nt = bg.nametable;
+    var nt = (isMetatileBg(bg) && global.MetatileLib) ? global.MetatileLib.expand(bg).nametable : bg.nametable;
+    if (!Array.isArray(nt)) return;
     for (var cy = 0; cy < SCREEN_H; cy++) for (var cx = 0; cx < SCREEN_W; cx++) {
+      if (!nt[cy] || !nt[cy][cx]) continue;
       var c = (nt[cy] && nt[cy][cx]) || { tile: 0, palette: 0 };
       var tile = state.bg_tiles[c.tile | 0];
       var pal = global.NesRender.bgPaletteFor(state, c.palette | 0);
@@ -624,6 +774,7 @@
         selRect.x1 = cell.cx; selRect.y1 = cell.cy; ctx.renderLive(); return;
       }
       if (!strokeOpen || !cell.inBounds) return;
+      if (isMetatileBg(activeBg(ctx))) { metatileStamp(ctx, cell, tool); ctx.renderLive(); return; }
       if (tool === 'fill') return; // fill is a single action
       paintCell(ctx, cell.cx, cell.cy);
       ctx.renderLive();

@@ -107,11 +107,12 @@ off here and update the status note in
       + attention live.
 - [~] **WORLD parity gaps vs `index.html`:** ✅ region select/copy/paste
       (▦ Select tool + clipboard); ✅ full-screen preview modal (clean NES
-      render, no grid/entities). **Still open:** metatile (16×16) block
-      library (promote/revert, block mini-editor, drag-stamp) — a dedicated
-      build, data model already supports `tileMode:'16x16'`; pop-out tileset
-      window; in-TV zoom. (Palette-rectangle is covered by drag-painting the
-      🎨 Colour tool.)
+      render, expands metatile bgs); ✅ **16×16 metatile block library**
+      (🧱 promote / ↩ revert, block library strip, per-block quadrant + palette
+      + whole-block-type mini-editor, drag-stamp onto the mtmap, delete-block
+      via `MetatileLib.deleteBlock`; LIVE render already expanded the map).
+      **Still open (minor):** pop-out tileset window; in-TV zoom.
+      (Palette-rectangle is covered by drag-painting the 🎨 Colour tool.)
 - [~] **CHARS parity gaps vs `sprites.html`:** ✅ shared-tile "also used
       by… / Duplicate first" conflict dialog on edit; ✅ animation preview
       player; ✅ whole-character Flip H/V (non-destructive) + flip-aware
