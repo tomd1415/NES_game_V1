@@ -6,6 +6,31 @@ were weighed. Newest first. Companion to the roadmap
 ([`../../plans/current/2026-07-05-smb-engine-roadmap.md`](../../plans/current/2026-07-05-smb-engine-roadmap.md))
 and the engine changelog ([`../../../tools/engines/CHANGELOG.md`](../../../tools/engines/CHANGELOG.md)).
 
+## D-13 · OAM flicker by **rotating the scene-sprite OAM region**, not the draw order
+- **Chosen (v9):** capture the scene sprites' OAM byte range and rotate it one
+  slot per frame *after* the draw, all behind `#ifdef BW_OAM_FLICKER`.
+- **Alternative:** rotate the *index* inside the scene draw loops (`ss_[i]` →
+  `ss_[(i+f)%n]`). **Rejected** — it would perturb the loop's generated code and
+  risk the golden ROM even when off; the post-draw region-rotate is fully gated
+  and leaves player + HUD (drawn earlier) at fixed priority.
+
+## D-12 · Pipes are **same-room** warps; cross-room bonus areas use a door
+- **Chosen (v8):** a pipe warps to a spawn spot in the same level (the
+  underground of a tall 1×2 level, or any teleport). No `current_bg` /
+  `load_background_n` dependency.
+- **Alternative:** cross-room pipe warps. **Deferred** — those symbols only
+  exist under the doors module's multi-bg path, and the per-door warp already
+  covers cross-room; coupling pipes to it wasn't worth it.
+
+## D-11 · HUD is **OAM digit sprites**, not a sprite-0 background split
+- **Chosen (v7):** draw coins/time/score/lives as OAM digit sprites at fixed
+  screen positions (the server seeds 0-9 into the sprite pool). Scroll-fixed
+  without any mid-frame timing.
+- **Alternative:** SMB's actual approach — HUD in the nametable + a sprite-0 hit
+  that splits the scroll mid-frame. **Deferred to v9-polish** — it's intricate
+  and timing-sensitive; the OAM HUD is simple, works today, and costs only a few
+  sprites (spread over two rows to respect the 8-per-scanline limit).
+
 ## D-10 · Game-style options live in a dedicated **"Style" mode tab**
 - **Chosen:** a new top-level screen in the mode rail that shows *only* the
   selected game type's options (SMB: physics/jump, power-ups, blocks, HUD;

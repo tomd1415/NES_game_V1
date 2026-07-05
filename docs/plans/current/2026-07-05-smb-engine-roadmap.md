@@ -1,6 +1,18 @@
 # Engine roadmap — build a Super Mario Bros. 1‑1‑complete game
 
-**Status:** planning · **Branch:** `feature/nes-engine` · **Started:** 2026-07-05
+**Status:** ✅ **v3–v9 landed** (SMB feature set complete) · **Branch:**
+`feature/smb-engine` · **Started/landed:** 2026-07-05
+
+> **Done (engine v3–v9):** SMB run physics + variable jump (v3); Goomba/Koopa
+> actors (v4); power-ups + fireballs (v5); ? / brick / coin blocks with item
+> pop-out (v6); coins/time/score/lives HUD (v7); pipes + flagpole finish (v8);
+> OAM flicker (v9). All gated → golden ROM byte-identical; each snapshotted;
+> every feature reachable in the Studio (Style tab + World editors); the SMB
+> showcase wires the lot and runs at 60 fps. Remaining items are the documented
+> "deferred/polish" notes per version (sprite-0 split, 8×16 sprites, cross-room
+> pipes, hidden/multi-coin blocks, stomp scoring) and the low-priority full-ASM
+> engine backlog. Decisions + alternatives:
+> [`../../design/decisions/2026-07-05-smb-engine-decisions.md`](../../design/decisions/2026-07-05-smb-engine-decisions.md).
 
 > Goal: the Studio can build a game containing **every feature and behaviour
 > in Super Mario Bros. World 1‑1** — SMB‑feel physics, variable jumps,
