@@ -22,7 +22,9 @@
   // hides the player's movement fields — one home for those numbers, per type.
   var CARD_ORDER = ['game', 'players', 'scene', 'pickups', 'spawn',
     'damage', 'powerups', 'hud', 'doors', 'dialogue', 'behaviour_walls', 'win_condition'];
-  var MOVED_TO_STYLE = { 'players.player1': ['walkSpeed', 'jumpHeight'], 'players.player2': ['walkSpeed', 'jumpHeight'] };
+  // Only player 1's movement is surfaced in the Style tab, so only hide player
+  // 1's fields here — player 2's speed/jump stay editable in its RULES card.
+  var MOVED_TO_STYLE = { 'players.player1': ['walkSpeed', 'jumpHeight'] };
   // Modules that are structural — no on/off toggle.
   var REQUIRED = { game: 1, players: 1, scene: 1 };
 
