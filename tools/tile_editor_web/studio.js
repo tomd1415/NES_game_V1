@@ -1234,6 +1234,12 @@
     });
     $('btn-help').addEventListener('click', openHelp);
     $('btn-engine').addEventListener('click', openEngineAdvisor);
+    // Open a project file from the computer (reuses the Time Machine importer).
+    $('btn-open-file').addEventListener('click', function () { $('tm-import-file').click(); });
+    // Browse the class gallery of published games.
+    $('btn-gallery').addEventListener('click', function () {
+      window.open('gallery.html', '_blank', 'noopener');
+    });
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
     // Let the shared account menu offer "Load a starter game" too (bug: the
