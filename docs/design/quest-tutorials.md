@@ -743,10 +743,67 @@ words first, but pupils still need repeated exposure.
   per-kit tile legend, a quest checklist with tick boxes, and a "Look, Check,
   Show me, Ask" debugging card.
 
-**Needs your decision (not adopted unilaterally):** pair-work roles
-(Driver / Navigator / Artist / Tester). Pair programming can help, but *imposed*
-pairing can raise anxiety for some ASD/ADHD pupils — this depends on how you run
-the room, so it is flagged rather than baked in.
+**Pair programming — optional, with a whole pair variant (resolved 2026-07-05).**
+Some pupils love pair work; others cannot cope with it at all. So pairing is
+**never forced** and is offered at two levels:
+
+- *Optional pair overlay* on the normal solo tutorial. When pair mode is on, a
+  quest may show a `pairRoles` prompt (Driver uses the mouse/keyboard; Navigator
+  reads the quest and watches the TV; optional Artist / Tester) plus a hand-off
+  cue between steps ("Swap: Navigator becomes Driver"). Mechanics and checks are
+  unchanged; with pair mode off the pupil just sees the plain solo quest.
+- *Whole pair variant* of a tutorial. A manifest can carry a `pair` variant that
+  reuses the same chapters and checks but reframes each instruction for two
+  people and adds explicit turn-taking. Same game, same finish line, two-person
+  wording — for classes (or pairs) that thrive on it.
+
+The **teacher sets a class default** (Solo / Pair / Let the pupil choose) and an
+individual pupil or pair can override it — so a pupil who finds pairing stressful
+always has a clean solo path, and a pair who enjoy it get the collaboration
+framing. (See *Teacher toggles* next.)
+
+## Teacher toggles
+
+The teacher configures the tutorial for their class without editing content. A
+small **teacher-settings layer** (a JSON config, gated behind teacher mode) sets
+class defaults the Studio layers over the tutorial's own defaults; pupils keep
+their personal comfort controls within the allowed range. Toggles:
+
+- Pairing default (Solo / Pair / Let the pupil choose) + which pair roles.
+- Celebration: visual-only / visual + sound / off.
+- Auto-help: on/off + the failed-check threshold (default 2).
+- Pacing: Independent / Teacher-pace / Recovery.
+- Narration default (off / speech / recorded) + default text size / contrast /
+  reduced motion.
+- Hint and "Show me" availability (some teachers want pupils to try longer).
+- Review/recall questions on or off.
+
+Defaults ship sensible for the audience (calm, silent celebration, solo,
+auto-help after 2). The config is per class. It may cap *down* reward/assist
+features (celebration, auto-help) but must **never** cap a pupil's accessibility
+needs — comfort settings can always be turned further up.
+
+## Editing tutorials (authoring)
+
+Tutorials must be easy to add to, reorder, and trim — by a teacher, not only a
+developer. This falls out of keeping **all content in the manifest** and **all
+checks declarative**:
+
+- Steps are a flat, ordered array of quests with **stable ids**. Add, remove, or
+  reorder by editing the array; nothing else references step position.
+- Pupil progress is keyed by **step id**, so reordering or inserting a step never
+  corrupts a saved game, and removing a step a pupil already passed is safe.
+- Checks come from the declarative list (`hasBehaviourTile`, `hasSpriteRole`, …)
+  with parameters — no JavaScript needed to add a step.
+- A **tutorial validator** (mirroring the pupil-facing ones) turns authoring
+  mistakes into friendly messages: missing/duplicate ids, unknown check type, a
+  `finishedEnough` with no matching check, a broken illustration/audio ref, a
+  step naming a mode or module that does not exist.
+- Minimum bar: editing the manifest file (with schema + validator) suffices.
+  Stretch: a small in-Studio **Tutorial editor** (teacher mode) to add / reorder
+  / remove steps and pick a check from a dropdown, writing the same manifest.
+- Each tutorial carries a `version` / `status`; publish a new version rather than
+  mutating one a class is mid-way through.
 
 ## Open questions
 
@@ -761,8 +818,9 @@ the room, so it is flagged rather than baked in.
   threshold, and should it be teacher-toggleable?)
 - ~~Should each tutorial have a "teacher pace" mode?~~ **Resolved: yes** — see
   the pacing modes in *Refinements from the teaching review*.
-- Adopt fixed pair-work roles (Driver / Navigator / Artist / Tester), or leave
-  pairing to the teacher per session? (See *Needs your decision* above.)
+- ~~Adopt fixed pair-work roles, or leave pairing to the teacher?~~ **Resolved:**
+  pairing is optional with a whole `pair` variant, teacher-defaulted, pupil-
+  overridable — see *Pair programming* + *Teacher toggles*.
 - What is the minimum feature set for the SMB tutorial to avoid promising
   mechanics that are still unstable?
 
