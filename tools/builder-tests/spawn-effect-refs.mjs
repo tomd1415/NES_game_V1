@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const ROOT = '/home/duguid/projects/nesgame/attempt1';
+const ROOT = new URL('../..', import.meta.url).pathname;
 const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
 
 function fail(msg) { console.error('FAIL:', msg); process.exit(1); }

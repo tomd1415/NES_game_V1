@@ -106,6 +106,17 @@ scrolling worlds) are already shipped and become parity work in Phase 1.
 
 ## Phase 0 — Foundation audit & the Studio shell
 
+**Status: in progress (started 2026-07-05).** The Studio shell is up at
+`tools/tile_editor_web/studio.html` (a new page, so it is naturally
+opt-in — the seven pages remain the default). It boots game-first into a
+starter platformer, renders it LIVE in the CRT-framed TV, and plays it
+(real cc65 `/play` → jsnes) — 0.2 / 0.3 / 0.4 / 0.5 landed. Covered by a
+new Playwright suite (`tools/studio-tests/`) plus the node
+`builder-tests` staying green. Still open in Phase 0: **0.1** the
+data-model audit → tickets, and folding the three emulator variants into
+one consolidated component (today PLAY reuses the shipped `emulator.js`
+modal as-is). See "Phase 0 — landed so far" below.
+
 **Goal:** a single-page Studio shell exists (mode rail · dock · TV ·
 quest log · chrome) running the *existing* engine, on the *existing*
 data model, behind a flag — with the data model's remaining gaps
@@ -153,6 +164,44 @@ documented as tracked tickets.
 **Exit:** the starter game renders LIVE and plays (PLAY) inside the
 Studio TV; mode rail switches empty docks; nothing is lost on switch;
 old pages untouched.
+
+### Phase 0 — landed so far (2026-07-05)
+
+Files added under `tools/tile_editor_web/`:
+
+- **`studio.html`** — the shell: four regions (mode rail · contextual
+  dock · CRT TV · quest log + needs-attention) and the persistent chrome,
+  drawn entirely from the 64-colour NES palette. Loads the *existing*
+  shared modules unchanged.
+- **`studio.js`** — the shell logic: shared `Storage` + additive
+  migration (0.2); the seven-mode rail with **level-gated progressive
+  disclosure** (Beginner/Maker/Advanced, persisted in prefs); the TV's
+  **LIVE** renderer (nametable + metatile-expand + hero preview) and
+  **PLAY** (`before_play` snapshot → `PlayPipeline.play` → `NesEmulator`)
+  (0.3); autosave + 30 s snapshots + 5 min backups + flush-on-unload; the
+  **Time Machine** dialog (restore-snapshots-first, "keeps 8" copy fixed)
+  (0.4); self-ticking quests + the ported `BuilderValidators` in
+  needs-attention; and the chrome mounts — a11y, account menu, feedback,
+  storage notice (0.5).
+- **`studio-starter.js`** — the game-first starter (a small platformer
+  written to the real tile-first schema: shared bg/sprite tiles, a floor
+  on the nametable with solid-ground behaviour, and a 2×2 hero
+  metasprite).
+
+Tests: `tools/studio-tests/` (Playwright, 13 checks incl. the real
+compile+emulator PLAY path); `playwright.config.js`; `package.json`. The
+node `builder-tests` were also repaired — 31 suites hardcoded a stale
+absolute repo path from a prior checkout location and now derive it from
+`import.meta.url`; `run-all.mjs` additionally syntax-checks the two new
+Studio modules. Whole suite green.
+
+**Still open in Phase 0:** *0.1* — write the data-model audit up as
+tracked tickets (the gaps are already enumerated in
+[`target-data-model.md`](target-data-model.md); this is the paperwork).
+And consolidate the three emulator variants into one component with the
+union of controls (pause/reset/fullscreen/mute/2-player legend) — today
+PLAY reuses the shipped `emulator.js` modal as-is, which satisfies the
+exit criterion but not the "one consolidated emulator" intent of 0.3.
 
 ## Phase 1 — Core modes at parity
 

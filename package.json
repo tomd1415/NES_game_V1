@@ -1,0 +1,14 @@
+{
+  "name": "nes-studio-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end (Playwright) tests for the NES Studio UI/UX redesign. The app itself is served by tools/playground_server.py; this package only holds the browser test harness.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:builder": "node tools/builder-tests/run-all.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

@@ -39,3 +39,9 @@ accounts.db-*
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Node / Playwright (Studio redesign end-to-end tests)
+node_modules/
+test-results/
+playwright-report/
+.playwright/

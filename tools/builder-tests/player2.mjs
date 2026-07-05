@@ -15,7 +15,7 @@ import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const ROOT = '/home/duguid/projects/nesgame/attempt1';
+const ROOT = new URL('../..', import.meta.url).pathname;
 const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
 const STEP = path.join(ROOT, 'steps', 'Step_Playground');
 const PORT = 18768;

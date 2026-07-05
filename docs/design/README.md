@@ -56,7 +56,10 @@ shippable plan for the redesign. It links the three docs that give it its
 ## Status
 
 Redesign work happens on the **`redesign/ui-ux`** branch. The design
-direction is captured and the phased plan is drafted (2026-07-05);
-implementation has not yet started. See
-[`phased-plan.md`](phased-plan.md) for the sequence and its open
-questions for the team.
+direction is captured and the phased plan is drafted (2026-07-05).
+**Implementation has begun: Phase 0 (the Studio shell) is largely
+landed** — `tools/tile_editor_web/studio.html` boots game-first, renders
+LIVE, plays via the real cc65 pipeline, and is covered by a Playwright
+suite (`tools/studio-tests/`). See the "Phase 0 — landed so far" section
+in [`phased-plan.md`](phased-plan.md) for what is done and what remains,
+plus the sequence and open questions for the team.
