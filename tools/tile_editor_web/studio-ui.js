@@ -36,12 +36,14 @@
 
   // Draw an 8×8 tile (values 0-3) into a 2d context using a bg/sprite
   // palette resolver. `pal` is a {slot0,slot1,slot2,slot3} from NesRender.
-  function drawTilePixels(g, tile, pal, ox, oy, scale) {
+  function drawTilePixels(g, tile, pal, ox, oy, scale, flipH, flipV) {
     var R = global.NesRender;
     for (var y = 0; y < 8; y++) {
-      var prow = (tile && tile.pixels && tile.pixels[y]) || null;
+      var sy = flipV ? 7 - y : y;
+      var prow = (tile && tile.pixels && tile.pixels[sy]) || null;
       for (var x = 0; x < 8; x++) {
-        var v = prow ? (prow[x] | 0) : 0;
+        var sx = flipH ? 7 - x : x;
+        var v = prow ? (prow[sx] | 0) : 0;
         var rgb = R.pixelRgb(v, pal);
         if (!rgb) continue; // transparent (sprite colour 0)
         g.fillStyle = rgb;
@@ -127,9 +129,39 @@
     return true;
   }
 
+  // A one-off modal built on the shared .modal-backdrop/.modal chrome.
+  // opts: { title, sub?, bodyNodes?: Node[], actions: [{label, kind?, value}] }
+  // Returns a Promise resolving to the chosen action's `value` (or null if
+  // dismissed by backdrop click / Escape). `kind:'primary'` styles a button.
+  function modal(opts) {
+    return new Promise(function (resolve) {
+      var bd = el('div', { class: 'modal-backdrop open' });
+      var box = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' });
+      if (opts.title) box.appendChild(el('h2', { text: opts.title }));
+      if (opts.sub) box.appendChild(el('div', { class: 'modal-sub', text: opts.sub }));
+      (opts.bodyNodes || []).forEach(function (n) { if (n) box.appendChild(n); });
+      var acts = el('div', { class: 'modal-actions' });
+      function done(v) { if (bd.parentNode) bd.parentNode.removeChild(bd); resolve(v); }
+      (opts.actions || []).forEach(function (a) {
+        acts.appendChild(el('button', {
+          class: 'btn' + (a.kind === 'primary' ? ' primary' : ''), type: 'button',
+          text: a.label, onclick: function () { done(a.value); },
+        }));
+      });
+      box.appendChild(acts);
+      bd.appendChild(box);
+      bd.addEventListener('click', function (e) { if (e.target === bd) done(null); });
+      document.addEventListener('keydown', function esc(e) {
+        if (e.key === 'Escape') { document.removeEventListener('keydown', esc); done(null); }
+      });
+      document.body.appendChild(bd);
+    });
+  }
+
   global.StudioUI = {
     el: el,
     section: section,
+    modal: modal,
     drawTilePixels: drawTilePixels,
     bgTileCanvas: bgTileCanvas,
     spriteTileCanvas: spriteTileCanvas,

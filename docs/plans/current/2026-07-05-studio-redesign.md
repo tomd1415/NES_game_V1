@@ -106,10 +106,12 @@ off here and update the status note in
       (promote/revert, block mini-editor, drag-stamp), region
       select/copy/paste, palette rectangle, pop-out tileset window,
       full-screen preview, zoom.
-- [ ] **CHARS parity gaps vs `sprites.html`:** marquee ops (rotate/flip/
-      scale/copy-paste), the shared-tile "also used by… / Duplicate first"
-      conflict dialog on edit, animation preview player, tile-swap
-      (drag) that rewrites every reference.
+- [~] **CHARS parity gaps vs `sprites.html`:** ✅ shared-tile "also used
+      by… / Duplicate first" conflict dialog on edit; ✅ animation preview
+      player; ✅ whole-character Flip H/V (non-destructive) + flip-aware
+      editor canvas. **Still open:** marquee *region* select with
+      rotate/scale/copy-paste; tile-swap (drag) that rewrites every
+      reference (lands with TILES 2.3, both banks).
 
 ### Phase 2 — deepen TILES
 - [ ] 2.3 Drag-to-swap that rewrites *every* reference across both banks +

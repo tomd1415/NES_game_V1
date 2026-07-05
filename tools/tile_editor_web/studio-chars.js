@@ -66,7 +66,7 @@
       if (!cell || cell.empty) continue;
       var tile = state.sprite_tiles[cell.tile];
       var pal = global.NesRender.spritePaletteFor(state, cell.palette);
-      UI.drawTilePixels(g, tile, pal, ox + cc * 8 * scale, oy + cr * 8 * scale, scale);
+      UI.drawTilePixels(g, tile, pal, ox + cc * 8 * scale, oy + cr * 8 * scale, scale, cell.flipH, cell.flipV);
     }
   }
   function onRenderOverlay(g, ctx) {
@@ -101,7 +101,83 @@
     }
     var tile = state.sprite_tiles[cell.tile];
     if (!tile || !tile.pixels) return;
-    tile.pixels[p.ty][p.tx] = pen;
+    // Map the clicked (screen) pixel back through the cell's flip so a
+    // flipped cell paints where the user aimed, not its mirror.
+    var sx = cell.flipH ? 7 - p.tx : p.tx;
+    var sy = cell.flipV ? 7 - p.ty : p.ty;
+    tile.pixels[sy][sx] = pen;
+  }
+
+  // ---- Shared-tile "Duplicate first" safeguard ---------------------------
+  // Tiles painted here are shared CHR — editing one changes every character
+  // (and cell) that references it. Before the first stroke on a shared tile
+  // we warn, offering: duplicate a private copy, change everywhere, cancel.
+  var ackTiles = {};   // tileIdx -> true once the user has chosen for it
+
+  // List other cells (this or another character) that reference tileIdx,
+  // excluding the cell being edited. Human-readable for the dialog.
+  function otherUsesOfTile(state, tileIdx, sp, cr, cc) {
+    var uses = [];
+    (state.sprites || []).forEach(function (osp) {
+      (osp.cells || []).forEach(function (row, r) {
+        (row || []).forEach(function (cell, c) {
+          if (!cell || cell.empty || (cell.tile | 0) !== tileIdx) return;
+          if (osp === sp && r === cr && c === cc) return; // the cell we're editing
+          uses.push({ text: (osp.name || 'character') + ' — cell (' + (r + 1) + ',' + (c + 1) + ')' });
+        });
+      });
+    });
+    return uses;
+  }
+
+  function clonePixels(px) { return px.map(function (r) { return r.slice(); }); }
+
+  // Decide how to handle a paint on a (possibly shared) tile. `proceed()`
+  // does the actual pixel write + renders (NO pushUndo — this function owns
+  // undo so a "duplicate then paint" gesture is a single undo unit).
+  function guardSharedThen(ctx, p, proceed) {
+    var state = ctx.getState();
+    var sp = current(ctx);
+    var cell = sp.cells[p.cr][p.cc];
+    // Empty cell → paint allocates a fresh tile; nothing shared to protect.
+    if (cell.empty) { ctx.pushUndo(); proceed(); return; }
+    var idx = cell.tile | 0;
+    if (idx === 0 || ackTiles[idx]) { ctx.pushUndo(); proceed(); return; }
+    var uses = otherUsesOfTile(state, idx, sp, p.cr, p.cc);
+    if (!uses.length) { ackTiles[idx] = true; ctx.pushUndo(); proceed(); return; }
+
+    var list = el('ul', { class: 'shared-list', style: 'margin:6px 0;padding-left:18px;font-size:11px;color:var(--muted);max-height:140px;overflow:auto' });
+    uses.slice(0, 20).forEach(function (u) { list.appendChild(el('li', { text: u.text })); });
+    if (uses.length > 20) list.appendChild(el('li', { text: '…and ' + (uses.length - 20) + ' more' }));
+
+    UI.modal({
+      title: 'This tile is shared',
+      sub: 'Tile 0x' + idx.toString(16).toUpperCase() + ' is used in ' + uses.length + ' other place'
+        + (uses.length === 1 ? '' : 's') + '. Editing it changes them all.',
+      bodyNodes: [list],
+      actions: [
+        { label: 'Cancel', value: 'cancel' },
+        { label: 'Change everywhere', value: 'everywhere' },
+        { label: 'Duplicate first & edit copy', value: 'duplicate', kind: 'primary' },
+      ],
+    }).then(function (choice) {
+      if (choice === 'cancel' || choice == null) return;
+      if (choice === 'everywhere') { ackTiles[idx] = true; ctx.pushUndo(); proceed(); return; }
+      // duplicate: copy the tile into a free slot and point THIS cell at it,
+      // all under one undo with the paint that follows.
+      var dst = freeSpriteTile(state);
+      if (dst < 0) {
+        UI.modal({ title: 'No free tiles', sub: 'All 256 sprite tiles are in use — free one in TILES, then try again.',
+          actions: [{ label: 'OK', value: 'ok', kind: 'primary' }] });
+        return;
+      }
+      ctx.pushUndo();
+      var src = state.sprite_tiles[idx];
+      state.sprite_tiles[dst] = { pixels: clonePixels(src.pixels), name: src.name ? src.name + '_copy' : '' };
+      cell.tile = dst; cell.empty = false;
+      ackTiles[dst] = true;
+      proceed(); ctx.renderDock();
+    });
   }
 
   // ---- Dock --------------------------------------------------------------
@@ -125,7 +201,7 @@
       row.appendChild(thumb);
       row.appendChild(el('span', { class: 'grow', text: sp.name || ('character ' + idx) }));
       row.appendChild(el('span', { class: 'chip', text: sp.role || 'other' }));
-      row.addEventListener('click', function () { selIdx = idx; ctx.renderLive(); ctx.renderDock(); });
+      row.addEventListener('click', function () { selIdx = idx; ackTiles = {}; ctx.renderLive(); ctx.renderDock(); });
       listSec.appendChild(row);
     });
     dock.appendChild(listSec);
@@ -187,6 +263,17 @@
         ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); ctx.refresh();
       } }),
     ]));
+    // Non-destructive whole-character transforms: rearrange cells + toggle
+    // per-cell flip flags. Shared tile pixels are never touched, so other
+    // characters using the same tiles are unaffected.
+    propSec.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
+      el('button', { class: 'btn', text: '⇋ Flip H', title: 'Mirror left/right', onclick: function () {
+        ctx.pushUndo(); flipChar(sp, 'h'); ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+      } }),
+      el('button', { class: 'btn', text: '⇵ Flip V', title: 'Mirror up/down', onclick: function () {
+        ctx.pushUndo(); flipChar(sp, 'v'); ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+      } }),
+    ]));
     dock.appendChild(propSec);
 
     // --- Pen ---
@@ -209,6 +296,25 @@
   }
 
   var animSel = null;
+  var previewTimer = null;   // animation preview interval id
+  var previewFrame = 0;
+  function stopPreview() { if (previewTimer) { clearInterval(previewTimer); previewTimer = null; } }
+  function startPreview(ctx, an, cv) {
+    stopPreview();
+    var state = ctx.getState();
+    var g = cv.getContext('2d');
+    previewFrame = 0;
+    var draw = function () {
+      var idx = an.frames[previewFrame % an.frames.length];
+      var sp = state.sprites[idx];
+      g.clearRect(0, 0, cv.width, cv.height);
+      g.fillStyle = '#101010'; g.fillRect(0, 0, cv.width, cv.height);
+      if (sp) global.NesRender.drawSpriteIntoCtx(g, sp, state, cv.width, cv.height);
+      previewFrame++;
+    };
+    draw();
+    previewTimer = setInterval(draw, Math.max(30, Math.round(1000 / (an.fps || 8))));
+  }
   function ensureAnim(ctx) {
     var s = ctx.getState();
     if (!Array.isArray(s.animations)) s.animations = [];
@@ -217,6 +323,7 @@
     return s;
   }
   function renderAnimations(dock, ctx) {
+    stopPreview();   // any dock rebuild invalidates the previous preview canvas
     var s = ensureAnim(ctx);
     var sec = UI.section('Animations', el('button', { class: 'btn', text: '+ New', onclick: function () {
       ctx.pushUndo();
@@ -257,6 +364,15 @@
       fpsIn.addEventListener('change', function () { cur.fps = Math.max(1, Math.min(60, parseInt(fpsIn.value, 10) || 8)); ctx.markDirty(); ctx.renderDock(); });
       box.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Speed (fps)' }), fpsIn]));
       box.appendChild(el('div', { class: 'dock-note', text: 'Frames: ' + cur.frames.map(function (f) { var sp = (s.sprites[f]); return sp ? (sp.name || f) : f; }).join(', ') }));
+
+      // Animation preview player.
+      var pv = el('canvas', { width: 48, height: 48, style: 'image-rendering:pixelated;border:1px solid var(--line);background:#101010' });
+      var playBtn = el('button', { class: 'btn', text: '▶ Preview' });
+      playBtn.addEventListener('click', function () {
+        if (previewTimer) { stopPreview(); playBtn.textContent = '▶ Preview'; }
+        else if (cur.frames.length) { startPreview(ctx, cur, pv); playBtn.textContent = '⏸ Stop'; }
+      });
+      box.appendChild(el('div', { class: 'row', style: 'margin-top:6px;align-items:center;gap:8px' }, [pv, playBtn]));
       box.appendChild(el('button', { class: 'btn', style: 'margin-top:4px', text: '+ Add this character as a frame', onclick: function () {
         ctx.pushUndo(); cur.frames.push(selIdx); ctx.markDirty(); ctx.renderDock();
       } }));
@@ -284,6 +400,26 @@
     });
     sec.appendChild(asgn);
     dock.appendChild(sec);
+  }
+
+  // Mirror a whole metasprite: reverse cell order along the axis and toggle
+  // the matching per-cell flip flag. Non-destructive to the shared tiles.
+  function flipChar(sp, axis) {
+    if (axis === 'h') {
+      sp.cells = sp.cells.map(function (row) {
+        return row.slice().reverse().map(function (cell) {
+          if (!cell.empty) cell.flipH = !cell.flipH;
+          return cell;
+        });
+      });
+    } else {
+      sp.cells = sp.cells.slice().reverse().map(function (row) {
+        return row.map(function (cell) {
+          if (!cell.empty) cell.flipV = !cell.flipV;
+          return cell;
+        });
+      });
+    }
   }
 
   function dimSelect(ctx, sp, dim) {
@@ -323,14 +459,18 @@
     renderTV: renderTV,
     onRenderOverlay: onRenderOverlay,
     renderDock: renderDock,
-    onEnter: function (ctx) { if (selIdx >= sprites(ctx).length) selIdx = 0; },
+    onEnter: function (ctx) { if (selIdx >= sprites(ctx).length) selIdx = 0; ackTiles = {}; },
+    onExit: function () { stopPreview(); },
     onToolChange: function (id) { if (id === 'erase') pen = 0; else if (pen === 0) pen = 1; },
     onTvDown: function (cell, ctx) {
       var p = pixelFromCell(cell); if (!p) return;
-      ctx.pushUndo(); strokeOpen = true;
       var tool = ctx.getActiveTool();
-      if (tool === 'fill') fillTile(ctx, p); else paintPixel(ctx, p);
-      ctx.renderLive();
+      // The shared-tile guard owns pushUndo; proceed() only paints + renders.
+      guardSharedThen(ctx, p, function () {
+        strokeOpen = true;
+        if (tool === 'fill') fillTile(ctx, p); else paintPixel(ctx, p);
+        ctx.markDirty(); ctx.renderLive();
+      });
     },
     onTvMove: function (cell, ctx) {
       if (!strokeOpen || ctx.getActiveTool() === 'fill') return;
@@ -349,9 +489,11 @@
     var cell = sp.cells[p.cr][p.cc];
     if (cell.empty) { var t = freeSpriteTile(state); if (t < 0) return; cell.tile = t; cell.empty = false; }
     var tile = state.sprite_tiles[cell.tile];
-    var from = tile.pixels[p.ty][p.tx];
+    var sx0 = cell.flipH ? 7 - p.tx : p.tx;
+    var sy0 = cell.flipV ? 7 - p.ty : p.ty;
+    var from = tile.pixels[sy0][sx0];
     if (from === pen) return;
-    var stack = [[p.tx, p.ty]];
+    var stack = [[sx0, sy0]];
     while (stack.length) {
       var q = stack.pop(), x = q[0], y = q[1];
       if (x < 0 || y < 0 || x > 7 || y > 7) continue;

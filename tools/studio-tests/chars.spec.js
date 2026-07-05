@@ -58,3 +58,65 @@ test('drawing on the TV edits a shared sprite tile', async ({ page }) => {
   });
   expect(after).not.toEqual(before);
 });
+
+test('flip H mirrors the character non-destructively (involution)', async ({ page }) => {
+  const before = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().sprites[0].cells));
+  const tilesBefore = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().sprite_tiles));
+  const flipBtn = page.locator('.btn', { hasText: 'Flip H' });
+  await flipBtn.click();
+  const afterOne = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().sprites[0].cells));
+  expect(afterOne).not.toEqual(before);
+  // Shared tile pixels must be untouched — flip only rearranges cells/flags.
+  const tilesAfter = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().sprite_tiles));
+  expect(tilesAfter).toEqual(tilesBefore);
+  // Flipping twice returns to the original.
+  await flipBtn.click();
+  const afterTwo = await page.evaluate(() =>
+    JSON.stringify(window.Studio.getState().sprites[0].cells));
+  expect(afterTwo).toEqual(before);
+});
+
+test('painting a shared tile offers Duplicate-first, which forks the tile', async ({ page }) => {
+  // Duplicate the hero so both characters share tiles 1–4.
+  await page.locator('.btn', { hasText: 'Duplicate' }).click();
+  await expect(page.locator('.char-row')).toHaveCount(2);
+  // The copy is now selected; its top-left cell points at shared tile 1.
+  const cellTileBefore = await page.evaluate(() =>
+    window.Studio.getState().sprites[1].cells[0][0].tile);
+  expect(cellTileBefore).toBe(1);
+
+  await page.locator('.swatch-row .swatch').nth(3).click();
+  await page.locator('.stage-toolbar .tool[data-tool="pencil"]').click();
+  const box = await page.locator('#tv-canvas').boundingBox();
+  // Click into the top-left cell (just up-left of centre).
+  await page.mouse.click(box.x + box.width / 2 - 6, box.y + box.height / 2 - 6);
+
+  // The shared-tile dialog appears.
+  const dlg = page.locator('.modal-backdrop.open', { hasText: 'This tile is shared' });
+  await expect(dlg).toBeVisible();
+  await dlg.locator('.btn', { hasText: 'Duplicate first' }).click();
+
+  // The copy's cell now points at a fresh tile, not the shared one.
+  const cellTileAfter = await page.evaluate(() =>
+    window.Studio.getState().sprites[1].cells[0][0].tile);
+  expect(cellTileAfter).not.toBe(1);
+  // The hero's cell still points at the original shared tile.
+  const heroCell = await page.evaluate(() =>
+    window.Studio.getState().sprites[0].cells[0][0].tile);
+  expect(heroCell).toBe(1);
+});
+
+test('animation preview toggles play/stop', async ({ page }) => {
+  // Create an animation (auto-wires walk with the current frame).
+  const animSection = page.locator('.dock-section')
+    .filter({ has: page.locator('.title', { hasText: 'Animations' }) });
+  await animSection.locator('.btn', { hasText: '+ New' }).click();
+  const play = page.locator('.btn', { hasText: 'Preview' });
+  await expect(play).toBeVisible();
+  await play.click();
+  await expect(page.locator('.btn', { hasText: 'Stop' })).toBeVisible();
+});
