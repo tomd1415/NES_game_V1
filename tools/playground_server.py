@@ -570,6 +570,24 @@ ACCOUNTS = accounts.AccountStore(
     or accounts.SESSION_TTL_SECONDS,
 )
 COOKIE_FORCE_SECURE = os.environ.get("PLAYGROUND_FORCE_SECURE_COOKIES", "") == "1"
+
+# --- CSRF (Origin check) ---------------------------------------------------
+# The session cookie is SameSite=Lax, which already stops it riding along on a
+# cross-site POST — the primary CSRF vector.  As defence-in-depth we ALSO check
+# the Origin/Referer on the routes that perform a state change using the
+# ambient session cookie (publish, remove, /me/projects).  The hot /play path
+# and admin-secret routes are exempt (see _csrf_origin_ok).  Robust behind the
+# classroom's HTTPS reverse proxy: the expected host is drawn from Host AND
+# X-Forwarded-Host, plus an optional explicit allowlist; a kill-switch exists.
+CSRF_ALLOWED_ORIGINS = {
+    o.strip().lower()
+    for o in (os.environ.get("PLAYGROUND_ALLOWED_ORIGINS", "") or "").replace(",", " ").split()
+    if o.strip()
+}
+CSRF_ORIGIN_CHECK = os.environ.get("PLAYGROUND_DISABLE_CSRF_ORIGIN_CHECK", "") != "1"
+# State-changing routes authenticated by the session COOKIE (so a browser would
+# attach it automatically) — these want the Origin check.
+CSRF_PROTECTED_PATHS = {"/gallery/publish", "/gallery/remove", "/me/projects"}
 AUTH_MAX_BODY = 16 * 1024  # signup/login/reset bodies are tiny
 # Per-IP rate limit on auth attempts (signup + login + reset): 12 / minute by
 # default; both bounds overridable so tests can exercise the limiter cheaply.

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NES Studio Tutorial Mockup</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <span>NES Studio quest mockup</span>
+    </div>
+    <div class="comfort-controls" id="comfort-controls" aria-label="Comfort controls">
+      <label>
+        Text
+        <select id="text-size">
+          <option value="normal">100%</option>
+          <option value="large">150%</option>
+          <option value="huge">175%</option>
+        </select>
+      </label>
+      <label class="check-label">
+        <input id="contrast" type="checkbox">
+        High contrast
+      </label>
+      <label class="check-label">
+        <input id="reduced-motion" type="checkbox">
+        Reduced motion
+      </label>
+      <button class="small-button" id="comfort-ok">This feels OK</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="studio" aria-label="Studio mockup">
+      <nav class="rail" aria-label="Modes">
+        <button id="mode-world" class="mode active" data-mode="world">WORLD</button>
+        <button id="mode-chars" class="mode" data-mode="chars">CHARS</button>
+        <button id="mode-rules" class="mode" data-mode="rules">RULES</button>
+        <button id="mode-play" class="mode" data-mode="play">PLAY</button>
+      </nav>
+
+      <aside class="dock" aria-label="Mode tools">
+        <h1 id="dock-title">WORLD</h1>
+        <p id="dock-help">Paint the world and choose what tiles do.</p>
+        <div id="dock-body"></div>
+      </aside>
+
+      <section class="tv-area" aria-label="Game TV">
+        <div class="stage-toolbar">
+          <span id="tool-label">Tool: Stamp ground</span>
+          <span id="save-label">Saved a moment ago</span>
+        </div>
+        <div class="crt">
+          <div id="game-grid" class="game-grid" aria-label="Editable game grid"></div>
+          <div id="hero" class="hero" aria-label="Hero"></div>
+        </div>
+        <div class="tv-footer">
+          <span id="tv-status">Click cells to paint ground.</span>
+        </div>
+      </section>
+    </section>
+
+    <aside class="tutorial" aria-label="Tutorial">
+      <section class="progress-card">
+        <div class="eyebrow">Platformer tutorial mockup</div>
+        <h2>Crystal Jump</h2>
+        <div class="progress-line" aria-hidden="true">
+          <span id="progress-fill"></span>
+        </div>
+        <p id="progress-text">Step 1 of 6</p>
+      </section>
+
+      <section class="quest-card" id="quest-card">
+        <div class="quest-meta" id="quest-meta">Chapter 0</div>
+        <h2 id="quest-title">Make the screen comfortable</h2>
+        <img id="quest-image" src="assets/ground-quest.svg" alt="Tutorial illustration">
+        <p class="instruction" id="quest-instruction"></p>
+        <p class="why" id="quest-why"></p>
+        <div class="quest-actions">
+          <button id="show-me">Show me</button>
+          <button id="check-work" class="primary">Check my work</button>
+          <button id="read-step">Read aloud</button>
+          <button id="hint-step">Hint</button>
+        </div>
+        <p class="feedback" id="quest-feedback" role="status" aria-live="polite"></p>
+        <button id="auto-help" class="auto-help" hidden>Place an example for me</button>
+      </section>
+
+      <section class="attention-card">
+        <h2>Needs attention</h2>
+        <div id="attention-list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="tutorial-data.js"></script>
+  <script src="tutorial.js"></script>
+</body>
+</html>
+
