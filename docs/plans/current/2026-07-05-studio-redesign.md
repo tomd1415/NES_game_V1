@@ -120,14 +120,21 @@ off here and update the status note in
       reference (lands with TILES 2.3, both banks).
 
 ### Phase 2 — deepen TILES
-- [ ] 2.3 Drag-to-swap that rewrites *every* reference across both banks +
-      the "used by… / Duplicate first" dialog.
-- [ ] 2.4 In-context jump-ins: "edit the tiles of this block/sprite" from
-      WORLD and CHARS.
-- [ ] 2.5 Attribute teaching: make per-2×2-quadrant palette the *sole*
-      source of truth (retire per-8×8-cell palette as a compile-time lie).
-- [ ] 2.6 Dialogue reserved-slot overlay (reserved letter tiles, conflict
-      banner, claim-slot flow) moved into TILES.
+- [x] 2.3 Drag-to-swap in the TILES bank grid that rewrites *every*
+      reference (nametables+metatiles / metasprite cells) so the picture is
+      unchanged. (The paint-time "Duplicate first" dialog lives in CHARS,
+      where editing a shared tile is unexpected; TILES is the mode where
+      global edits are the whole point.)
+- [x] 2.4 In-context jump-ins: "✎ Edit these tiles" from CHARS and
+      "✎ Edit tile #N" from WORLD hop into TILES focused on that tile/bank.
+- [~] 2.5 Attribute teaching: ✅ 2×2 attribute-conflict overlay + count/fix
+      hint (colouring visibly respects the 2×2 rule). **Still open:** making
+      per-quadrant palette the *sole* stored source of truth (retiring
+      per-8×8-cell palette) — a shared-schema + cc65-emitter change across
+      the old pages; tracked to protect the golden-ROM contract.
+- [x] 2.6 Dialogue reserved-slot overlay: when the dialogue module is on,
+      TILES marks the BG glyph slots (space, 0-9, A-Z, a-z) as reserved so
+      the CHR budget a pupil sees matches the build.
 
 ### Phase 3 — correctness, budgets & honest round-trips
 - [ ] 3.2 8-sprites-per-scanline visualiser + flicker/drop-out warning,

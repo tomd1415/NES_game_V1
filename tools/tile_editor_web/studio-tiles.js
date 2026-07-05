@@ -25,6 +25,19 @@
   var dragFrom = null; // bank-grid drag source index (for reference-rewriting swap)
 
   function pool(state) { return bank === 'bg' ? state.bg_tiles : state.sprite_tiles; }
+
+  // Dialogue glyph reservation (2.6). The dialogue engine maps each text
+  // character to the BG tile at its ASCII code (space 0x20, digits 0x30-39,
+  // A-Z 0x41-5A, a-z 0x61-7A), so those slots are spoken for when dialogue
+  // is on — the pupil's CHR budget must show that honestly.
+  function dialogueOn(state) {
+    var b = state.builder && state.builder.modules && state.builder.modules.dialogue;
+    return !!(b && b.enabled);
+  }
+  function isReservedGlyphSlot(idx) {
+    return idx === 0x20 || (idx >= 0x30 && idx <= 0x39) ||
+           (idx >= 0x41 && idx <= 0x5A) || (idx >= 0x61 && idx <= 0x7A);
+  }
   function usage(state, idx) {
     return bank === 'bg' ? UI.bgTileUsage(state, idx) : UI.spriteTileUsage(state, idx);
   }
@@ -174,19 +187,23 @@
 
     // Bank grid.
     var gridSec = UI.section(bank === 'bg' ? 'BG tiles (256)' : 'Sprite tiles (256)');
+    var reservedActive = bank === 'bg' && dialogueOn(state);
     var grid = el('div', { class: 'tile-grid' });
     grid.style.gridTemplateColumns = 'repeat(16,1fr)';
     for (var idx = 0; idx < 256; idx++) (function (ti) {
       var tl = pool(state)[ti];
       var blank = UI.isTileBlank(tl);
       var u = usage(state, ti);
+      var reserved = reservedActive && isReservedGlyphSlot(ti);
       var cls = 'tile-cell';
       if (ti === selIdx) cls += ' sel';
       else if (!blank && u === 0) cls += ' orphan';
       else if (u > 1) cls += ' shared';
       else if (u > 0) cls += ' used';
+      if (reserved) cls += ' reserved';
       var cell = el('button', { class: cls, draggable: 'true',
-        title: 'Tile ' + ti + (u ? ' — used ' + u + '×' : (blank ? ' — free' : ' — orphan')) + ' · drag onto another to swap',
+        title: 'Tile ' + ti + (u ? ' — used ' + u + '×' : (blank ? ' — free' : ' — orphan'))
+          + (reserved ? ' · reserved for dialogue glyph "' + String.fromCharCode(ti) + '"' : '') + ' · drag onto another to swap',
         onclick: function () { selIdx = ti; ctx.renderLive(); ctx.renderDock(); },
         ondragstart: function (e) { dragFrom = ti; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(ti)); } },
         ondragover: function (e) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; },
@@ -202,6 +219,10 @@
     })(idx);
     gridSec.appendChild(grid);
     gridSec.appendChild(el('div', { class: 'dock-note', text: 'Orange = shared · green = used · red = orphan (drawn but unused) · dim = free. Drag a tile onto another to swap slots — every reference follows, so nothing changes on screen.' }));
+    if (reservedActive) {
+      gridSec.appendChild(el('div', { class: 'dock-note', style: 'color:var(--nes-lav)',
+        text: 'Ⓣ Dialogue is on: the slots marked T (space, 0-9, A-Z, a-z) are reserved for text glyphs. Paint letters there to make dialogue readable; use other slots for scenery so you don’t clash.' }));
+    }
     dock.appendChild(gridSec);
   }
   function tabBtn(ctx, id, label) {

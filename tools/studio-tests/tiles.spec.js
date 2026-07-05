@@ -89,6 +89,23 @@ test('CHARS "Edit tiles" jumps into TILES focused on the sprite tile (2.4)', asy
   expect(g.selIdx).toBe(1); // the starter hero's first tile
 });
 
+test('dialogue reserves the glyph tile slots in TILES (2.6)', async ({ page }) => {
+  // BG bank, dialogue off → nothing reserved.
+  await expect(page.locator('.tile-cell.reserved')).toHaveCount(0);
+  // Turn dialogue on and re-render.
+  await page.evaluate(() => {
+    const s = window.Studio.getState();
+    s.builder.modules.dialogue.enabled = true;
+  });
+  await page.locator('.mode-btn[data-mode="tiles"]').click();
+  // space + 0-9 + A-Z + a-z = 1 + 10 + 26 + 26 = 63 reserved slots.
+  await expect(page.locator('.tile-cell.reserved')).toHaveCount(63);
+  await expect(page.locator('.dock-note', { hasText: 'reserved for text glyphs' })).toBeVisible();
+  // Sprite bank is unaffected (glyphs live in the BG pattern table).
+  await page.locator('.btn', { hasText: 'Sprite' }).click();
+  await expect(page.locator('.tile-cell.reserved')).toHaveCount(0);
+});
+
 test('[ and ] step the selected tile', async ({ page }) => {
   await page.locator('.tile-grid .tile-cell').nth(5).click();
   await page.locator('#tv-canvas').hover();

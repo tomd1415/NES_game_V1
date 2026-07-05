@@ -244,6 +244,9 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .tile-cell.used{border-color:#2a5a2a}
 .tile-cell.shared{border-color:var(--accent)}
 .tile-cell.orphan{border-color:var(--warn)}
+.tile-cell.reserved{box-shadow:inset 0 0 0 2px var(--nes-lav)}
+.tile-cell.reserved::after{content:'T';position:absolute;top:0;right:1px;font-size:8px;
+  line-height:1;color:var(--nes-lav);font-family:var(--mono);pointer-events:none}
 
 /* Palette swatches */
 .swatch-row{display:flex;gap:3px;flex-wrap:wrap;align-items:center;margin:4px 0}
