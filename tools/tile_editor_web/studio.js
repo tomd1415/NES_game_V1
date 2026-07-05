@@ -471,11 +471,16 @@
   // Creates a fresh starter platformer as a NEW project (current work is
   // saved separately), so Beginner always has something playable to start
   // from — the fix for "there is no starting game".
-  function onNewGame() {
-    if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
-    Storage.flushPending();
+  // Build a fresh project from the starter with the given id (from
+  // StudioStarter.list()), register it, and switch to it.  Falls back to the
+  // default starter when the id is unknown or the registry is unavailable.
+  function makeStarter(id) {
+    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
+    var chosen = null;
+    for (var i = 0; i < starters.length; i++) { if (starters[i].id === id) chosen = starters[i]; }
     var n = (Storage.listProjects() || []).length + 1;
-    var fresh = window.StudioStarter.create({ name: 'My Game ' + n });
+    var fresh = chosen ? chosen.create({ name: chosen.label + ' ' + n })
+                       : window.StudioStarter.create({ name: 'My Game ' + n });
     Storage.createProject(fresh.name, fresh); // registers + sets active
     state = Storage.loadCurrent() || fresh;
     undoStack.length = 0; redoStack.length = 0;
@@ -484,6 +489,38 @@
     renderLive(); renderDock(); refreshQuestsAndAttention();
     setSaveState('saved');
     if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+    // A new project may target a newer engine than the last one — refresh the
+    // engine button / advisor affordance.
+    if (typeof refreshEngineButton === 'function') { try { refreshEngineButton(); } catch (e) {} }
+  }
+
+  function onNewGame() {
+    Storage.flushPending();
+    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
+    // One starter (or no modal helper) → keep the simple confirm flow.
+    if (starters.length <= 1 || !(window.StudioUI && window.StudioUI.modal)) {
+      if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
+      makeStarter(starters[0] && starters[0].id);
+      return;
+    }
+    // Multiple starters → a picker so the pupil can choose which sample to load.
+    var el = window.StudioUI.el;
+    var body = starters.map(function (s) {
+      return el('div', { class: 'dock-note', style: 'margin:6px 0;line-height:1.35' }, [
+        el('strong', { text: s.emoji + '  ' + s.label }),
+        el('div', { text: s.desc }),
+      ]);
+    });
+    var actions = starters.map(function (s, i) {
+      return { label: s.emoji + ' ' + s.label, value: s.id, kind: i === 0 ? 'primary' : null };
+    });
+    actions.push({ label: 'Cancel', value: null });
+    window.StudioUI.modal({
+      title: 'Load a starter game',
+      sub: 'Your current project stays saved — switch back anytime from the projects menu.',
+      bodyNodes: body,
+      actions: actions,
+    }).then(function (id) { if (id) makeStarter(id); });
   }
 
   // ---- Quests + Needs attention -----------------------------------------

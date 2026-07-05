@@ -310,5 +310,155 @@
     return state;
   }
 
-  global.StudioStarter = { create: create, tileFrom: tileFrom };
+  // Seed the four shared background tiles (+ their default behaviour so
+  // re-painting in WORLD auto-applies the right type) and the 1..8 sprite
+  // tiles.  Shared by every starter so they all read consistently.
+  function seedSharedTiles(state) {
+    state.bg_tiles[1] = GROUND;  state.bg_tiles[1].defaultBehaviour = 1; // solid
+    state.bg_tiles[2] = BRICK;   state.bg_tiles[2].defaultBehaviour = 3; // platform
+    state.bg_tiles[3] = LADDER;  state.bg_tiles[3].defaultBehaviour = 6; // ladder
+    state.bg_tiles[4] = DOOR;    state.bg_tiles[4].defaultBehaviour = 4; // door
+    state.sprite_tiles[1] = HEAD_L;
+    state.sprite_tiles[2] = HEAD_R;
+    state.sprite_tiles[3] = BODY_L;
+    state.sprite_tiles[4] = BODY_R;
+    state.sprite_tiles[5] = EN_TL;
+    state.sprite_tiles[6] = EN_TR;
+    state.sprite_tiles[7] = EN_BL;
+    state.sprite_tiles[8] = EN_BR;
+  }
+
+  // ---------------------------------------------------------------------
+  // Starter 2 — "SMB showcase": every engine v3 + v4 feature in one game.
+  //   v3  the `smb` game style — variable-height jump (tap = short hop /
+  //       hold = full jump, run take-off jumps higher) + fixed-point
+  //       horizontal physics (accelerate to a run, friction, skid).
+  //   v4  Goomba (walk off ledges, stomp to defeat + bounce, side-touch
+  //       hurts) and Koopa (stomp -> shell -> kick a sliding shell that
+  //       chains kills).  Plus hearts/HP + damage, an NPC with dialogue,
+  //       a climbable ladder and a per-door warp — so a pupil can see the
+  //       whole toolbox wired up and working.
+  // ---------------------------------------------------------------------
+  function createSmb(opts) {
+    opts = opts || {};
+    if (!global.DefaultState || typeof global.DefaultState.create !== 'function') {
+      throw new Error('StudioStarter.createSmb: DefaultState is not loaded');
+    }
+    var state = global.DefaultState.create({
+      name: opts.name || 'SMB Showcase',
+      template: 'platformer',   // the smb style reuses the platformer engine
+      now: opts.now,
+    });
+    seedSharedTiles(state);
+    // A goal flag (bg tile 5) — reaching it wins.  defaultBehaviour 5 = trigger,
+    // which the "reach a trigger tile" win condition looks for.
+    state.bg_tiles[5] = tileFrom('goal', [
+      '..1111..',
+      '..1111..',
+      '..11....',
+      '..1.....',
+      '..1.....',
+      '..1.....',
+      '..1.....',
+      '..1.....',
+    ]);
+    state.bg_tiles[5].defaultBehaviour = 5;
+
+    var bg = state.backgrounds[0];
+    var SCREEN_W = 32, SCREEN_H = 30;
+    bg.behaviour = [];
+    for (var r = 0; r < SCREEN_H; r++) {
+      var brow = [];
+      for (var c = 0; c < SCREEN_W; c++) brow.push(0);
+      bg.behaviour.push(brow);
+    }
+    function put(x, y, tile, beh) { bg.nametable[y][x] = { tile: tile, palette: 0 }; bg.behaviour[y][x] = beh; }
+
+    // Two-row ground floor with a single gap (cols 15-16) — a jump to clear,
+    // and a ledge for the Goombas to walk off (they have no ledge sensing).
+    for (var gy = SCREEN_H - 2; gy < SCREEN_H; gy++) {
+      for (var gx = 0; gx < SCREEN_W; gx++) {
+        if (gx === 15 || gx === 16) continue; // the pit
+        put(gx, gy, 1, 1);
+      }
+    }
+    // A staircase of brick platforms at rising heights — showing off how a
+    // running take-off clears the higher, farther jumps.
+    for (var s1 = 4; s1 <= 7; s1++) put(s1, 24, 2, 3);
+    for (var s2 = 10; s2 <= 13; s2++) put(s2, 20, 2, 3);
+    for (var s3 = 24; s3 <= 27; s3++) put(s3, 22, 2, 3);
+    // A ladder from the floor up to the first platform (col 3).
+    for (var ly = 25; ly <= 27; ly++) put(3, ly, 3, 6);
+    // The goal flag on top of the highest right-hand platform — climb the
+    // staircase (or run-jump the gap) to win.
+    put(26, 21, 5, 5);
+    // A door on the floor near the right edge (per-door warp back to start).
+    put(30, 27, 4, 4);
+
+    state.behaviour_types = defaultBehaviourTypes();
+    // Sprites: hero, a Goomba + a Koopa (both drawn with the slime art but
+    // separate definitions so the AI reads clearly), and an NPC villager.
+    var goomba = enemySprite(); goomba.name = 'Goomba';
+    var koopa = enemySprite(); koopa.name = 'Koopa';
+    state.sprites = [playerSprite(), goomba, koopa, npcSprite()];
+
+    if (typeof global.BuilderDefaults === 'function') {
+      state.builder = global.BuilderDefaults();
+      var m = state.builder.modules;
+      // v3: the SMB game style (variable jump + fixed-point horizontal).
+      if (m.game) { m.game.config = m.game.config || {}; m.game.config.type = 'smb'; }
+      // Hearts / HP: 3 HP + damage-on-touch, so the enemies are a real threat
+      // and the stomp/hurt interplay is visible.
+      if (m.players && m.players.submodules && m.players.submodules.player1) {
+        m.players.submodules.player1.config.maxHp = 3;
+        m.players.submodules.player1.config.startX = 16;
+        m.players.submodules.player1.config.startY = 200;
+      }
+      if (m.damage) { m.damage.enabled = true; m.damage.config = m.damage.config || {}; m.damage.config.amount = 1; }
+      // NPC dialogue near the start.
+      if (m.dialogue) { m.dialogue.enabled = true; m.dialogue.config = m.dialogue.config || {}; m.dialogue.config.text = 'STOMP THE GOOMBAS!'; }
+      // Scene: two Goombas to stomp (one on the ground, one on the high
+      // platform) and a Koopa to turn into a kickable shell, plus the NPC.
+      if (m.scene) {
+        m.scene.config = m.scene.config || {};
+        m.scene.config.instances = [
+          { id: 1, spriteIdx: 3, x: 40, y: 200, ai: 'static', speed: 1 },  // NPC villager
+          { id: 2, spriteIdx: 1, x: 96, y: 200, ai: 'goomba', speed: 1 },  // ground Goomba
+          { id: 3, spriteIdx: 1, x: 88, y: 152, ai: 'goomba', speed: 1 },  // Goomba on the s2 platform
+          { id: 4, spriteIdx: 2, x: 200, y: 200, ai: 'koopa', speed: 1 },  // Koopa on the right ground
+        ];
+      }
+      // Per-door warp (engine v2): the door loops back to the spawn point.
+      if (m.doors) {
+        m.doors.enabled = true;
+        m.doors.config = m.doors.config || {};
+        m.doors.config.doorList = [{ bg: 0, tx: 30, ty: 27, spawnX: 16, spawnY: 200, targetBgIdx: -1 }];
+      }
+    }
+
+    if (typeof global.NES_ENGINE_VERSION === 'number') {
+      state.engineVersion = global.NES_ENGINE_VERSION;
+    }
+    return state;
+  }
+
+  // Registry of selectable starters, so the Studio can offer a picker.
+  // `create(opts)` builds a fresh project; `min` is the engine the starter
+  // needs to shine (advisory — starters degrade gracefully on older engines).
+  function list() {
+    return [
+      {
+        id: 'basics', emoji: '🎮', label: 'Platformer basics',
+        desc: 'A gentle single-screen platformer: hero, an enemy, an NPC to talk to, a ladder and a door. Best place to learn the editor.',
+        create: create,
+      },
+      {
+        id: 'smb', emoji: '🍄', label: 'SMB showcase', min: 4,
+        desc: 'Every new engine feature wired up: SMB variable-height jump + run physics (v3), Goomba stomps and a kickable Koopa shell (v4), hearts, dialogue, a ladder and a warp door.',
+        create: createSmb,
+      },
+    ];
+  }
+
+  global.StudioStarter = { create: create, createSmb: createSmb, list: list, tileFrom: tileFrom };
 })(typeof window !== 'undefined' ? window : globalThis);
