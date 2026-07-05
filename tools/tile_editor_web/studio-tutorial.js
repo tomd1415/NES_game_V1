@@ -89,6 +89,38 @@
     if (region) region.hidden = !on;
   }
 
+  // Flash the REAL button/icon the pupil should use (the "Show me" pointer).
+  var _flashTimer = null;
+  function flashTarget(sel) {
+    if (!sel) return;
+    var target = document.querySelector(sel);
+    if (!target) return;
+    target.classList.add('tut-flash');
+    try { target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+    if (_flashTimer) clearTimeout(_flashTimer);
+    _flashTimer = setTimeout(function () { target.classList.remove('tut-flash'); }, 2800);
+  }
+
+  // Unlock the areas the tutorial visits: raise the Studio level to the
+  // tutorial's minLevel (Tiles/Pals are Maker-level) so no step is locked.
+  var LEVEL_ORDER = { beginner: 0, maker: 1, advanced: 2 };
+  function ensureLevel() {
+    var need = tut && tut.minLevel;
+    if (!need) return;
+    var s = studio();
+    var cur = (s && typeof s.getLevel === 'function') ? s.getLevel() : 'beginner';
+    if ((LEVEL_ORDER[cur] || 0) >= (LEVEL_ORDER[need] || 0)) return;
+    var sel = document.getElementById('level-select');
+    if (sel) { sel.value = need; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  }
+
+  // The quests / needs-attention column is not needed during a guided tutorial —
+  // collapse it (it flashes if a real warning appears, handled in studio.js).
+  function collapseQuests(on) {
+    var main = document.querySelector('.studio-main');
+    if (main) main.classList.toggle('quests-collapsed', !!on);
+  }
+
   var feedbackEl = null;
   function setFeedback(msg, kind) {
     if (!feedbackEl) return;
@@ -124,7 +156,10 @@
     var step = currentStep();
     var card = el('div', 'tut-card');
     card.appendChild(el('div', 'tut-chapter', step.chapter));
-    card.appendChild(el('h3', 'tut-title', step.title));
+    var titleRow = el('div', 'tut-titlerow');
+    if (step.icon) { var ic = el('span', 'tut-icon', step.icon); ic.setAttribute('aria-hidden', 'true'); titleRow.appendChild(ic); }
+    titleRow.appendChild(el('h3', 'tut-title', step.title));
+    card.appendChild(titleRow);
     card.appendChild(el('p', 'tut-instruction', step.instruction));
     if (step.why) card.appendChild(el('p', 'tut-why', step.why));
     if (step.finishedEnough) card.appendChild(el('p', 'tut-enough', 'Finished enough: ' + step.finishedEnough));
@@ -134,13 +169,17 @@
     check.type = 'button'; check.dataset.act = 'check';
     check.addEventListener('click', doCheck);
     actions.appendChild(check);
-    if (step.mode) {
+    // Show me: jump to the mode AND flash the real button/icon the pupil needs.
+    if (step.mode || step.flashSelector) {
       var show = el('button', 'tut-btn', '👀 Show me');
       show.type = 'button'; show.dataset.act = 'showme';
       show.addEventListener('click', function () {
         var s = studio();
-        if (s && typeof s.selectMode === 'function') s.selectMode(step.mode);
-        setFeedback('I opened ' + step.mode.toUpperCase() + ' for you.', 'info');
+        if (step.mode && s && typeof s.selectMode === 'function') s.selectMode(step.mode);
+        var sel = step.flashSelector || (step.mode ? '.mode-btn[data-mode="' + step.mode + '"]' : null);
+        flashTarget(sel);
+        setFeedback(step.mode ? ('I opened ' + step.mode.toUpperCase() + ' and pointed at the button to press.')
+                              : 'I pointed at the button to press.', 'info');
       });
       actions.appendChild(show);
     }
@@ -221,8 +260,10 @@
     tut = (global.STUDIO_TUTORIALS || {})[id] || (global.STUDIO_TUTORIALS || {})['first-game'];
     if (!tut) return;
     if (!s.tutorial.base) { s.tutorial.base = snapshot(s); markDirty(); }
+    ensureLevel();       // unlock Tiles/Pals etc. before any step points at them
     hookPlay();
     showPanel(true);
+    collapseQuests(true);
     render();
   }
 

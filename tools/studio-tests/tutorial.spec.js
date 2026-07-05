@@ -52,6 +52,27 @@ test('the guided tutorial walks the pupil to a played game', async ({ page }) =>
   const total = await page.evaluate(() => window.StudioTutorial.stepCount());
   expect(total).toBe(6);
 
+  // Starting the tutorial UNLOCKS the areas it uses — Tiles + Pals (Maker-level)
+  // must not be locked, so no step points the pupil at a locked mode.
+  const gating = await page.evaluate(() => ({
+    level: window.Studio.getLevel(),
+    tilesLocked: document.querySelector('.mode-btn[data-mode="tiles"]').classList.contains('locked'),
+    palsLocked: document.querySelector('.mode-btn[data-mode="pals"]').classList.contains('locked'),
+  }));
+  expect(gating.tilesLocked).toBe(false);
+  expect(gating.palsLocked).toBe(false);
+
+  // The quests / needs-attention column is minimised during the tutorial.
+  await expect(page.locator('.studio-main')).toHaveClass(/quests-collapsed/);
+  await expect(page.locator('#quest-expand')).toBeVisible();
+
+  // "Show me" flashes the REAL button the pupil should press.
+  await page.locator('.tut-card [data-act="showme"]').click();
+  await expect(page.locator('.mode-btn[data-mode="chars"]')).toHaveClass(/tut-flash/);
+
+  // The step card shows its icon.
+  await expect(page.locator('.tut-icon').first()).toBeVisible();
+
   // Steps 0..4: make the light edit, press Check my work, expect an advance.
   for (let i = 0; i < 5; i++) {
     await applyEdit(page, i);

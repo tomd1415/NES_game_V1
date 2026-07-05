@@ -568,6 +568,14 @@
   function createTutorial(opts) {
     opts = opts || {};
     var state = create({ name: opts.name || 'My First Game', now: opts.now });
+    // The basics starter turns on a reach-a-trigger win condition, but its
+    // level loops via a door and paints no trigger tile — which trips the
+    // "no trigger tiles" validator.  A first tutorial is about learning the
+    // editor, not winning, so switch it off to keep "Needs attention" clean.
+    try {
+      var wc = state.builder && state.builder.modules && state.builder.modules.win_condition;
+      if (wc) wc.enabled = false;
+    } catch (e) {}
     state.tutorial = { active: true, id: 'first-game', step: 0 };
     return state;
   }

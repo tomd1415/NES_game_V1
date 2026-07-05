@@ -487,6 +487,9 @@
     var prefs = Storage.readPrefs() || {};
     currentLevel = LEVELS[prefs.studioLevel] !== undefined ? prefs.studioLevel : 'beginner';
     $('level-select').value = currentLevel;
+    // Restore the minimised state of the quests column.
+    var main = document.querySelector('.studio-main');
+    if (main && prefs.questsCollapsed) main.classList.add('quests-collapsed');
   }
   function onLevelChange() {
     currentLevel = $('level-select').value;
@@ -666,6 +669,27 @@
     };
   }
 
+  // Minimise / restore the quests + needs-attention column.  Persisted so it
+  // stays how the pupil/teacher left it.  When minimised it flashes only if a
+  // warning appears (see updateQuestFlash).
+  function setQuestsCollapsed(on) {
+    var main = document.querySelector('.studio-main');
+    if (main) main.classList.toggle('quests-collapsed', !!on);
+    try { var prefs = Storage.readPrefs() || {}; prefs.questsCollapsed = !!on; Storage.writePrefs(prefs); } catch (e) {}
+    if (!on) updateQuestFlash(false);   // clear any alert once it's shown again
+  }
+  function questsCollapsed() {
+    var main = document.querySelector('.studio-main');
+    return !!(main && main.classList.contains('quests-collapsed'));
+  }
+  // Flash the collapsed column when there is something in Needs attention, so a
+  // warning is never silently hidden.  No-op while the column is expanded.
+  function updateQuestFlash(hasProblems) {
+    var region = document.getElementById('quest-region');
+    if (!region) return;
+    region.classList.toggle('attn-flash', !!hasProblems && questsCollapsed());
+  }
+
   function refreshQuestsAndAttention() {
     refreshBudgets();
     refreshEngineButton();
@@ -698,8 +722,10 @@
       ok.className = 'attn-empty';
       ok.textContent = '✓ Nothing needs attention — your game builds cleanly.';
       al.appendChild(ok);
+      updateQuestFlash(false);
       return;
     }
+    updateQuestFlash(true);
     problems.forEach(function (p) {
       var item = document.createElement('div');
       item.className = 'attn-item ' + (p.severity === 'error' ? 'error' : 'warn');
@@ -1267,6 +1293,8 @@
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
     $('btn-tutorial').addEventListener('click', function () { makeStarter('tutorial'); });
+    $('quest-collapse').addEventListener('click', function () { setQuestsCollapsed(true); });
+    $('quest-expand').addEventListener('click', function () { setQuestsCollapsed(false); });
     // Let the shared account menu offer "Load a starter game" too (bug: the
     // starter/projects aren't loading) — available even when signed out.
     window.onLoadStarterGame = onNewGame;
