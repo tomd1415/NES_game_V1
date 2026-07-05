@@ -131,6 +131,18 @@ the main CSRF vector for these routes. A full per-session CSRF token
   updated, sprite/bg counts, builds?) for future dashboards without reading
   every blob (ADVICE #9).
 - **Gallery thumbnail** — capture an interesting frame, not the first blank one.
+  *(2026-07-05: empirically the capture already runs 60 frames and renders real
+  content for painted projects — the "blank first frame" of bug #25 was the
+  pre-60-frame behaviour. De-duplicated the two byte-identical
+  `captureRomPreview` copies into a shared, headlessly-tested
+  `NesEmulator.capturePreview`/`stepPreviewFrames`; Studio delegates to it,
+  Builder (legacy) keeps its inline copy. New `preview-capture.mjs` builds a ROM
+  and asserts the preview is non-blank + deterministic, guarding against a
+  regression to a frame-0 grab. Idle-only stepping kept deliberately — a
+  "walk-in" frame is livelier but risks a death frame and can't be visually
+  verified unattended; noted as a possible future enhancement. Genuinely
+  empty-background projects still look sparse: a content issue, not a capture
+  one.)*
 
 ### Sprint 4 — Validators & pupil-facing safety  *(ADVICE validators)*
 Expand `builder-validators.js` (turn compiler failures into pupil guidance):

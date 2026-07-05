@@ -357,8 +357,54 @@
     });
   }
 
+  // --------------------------------------------------------------------
+  // Gallery preview capture.  Shared by the Studio + Builder publish flows
+  // (they used to each carry a byte-identical copy of this).  Runs the ROM
+  // headless for a fixed warm-up and grabs the frame as a PNG.
+  //
+  // Idle warm-up ONLY — no simulated input.  A deterministic frame can never
+  // wander into a death / hazard / game-over state, and empirically the level
+  // start already renders the scene (background + player) well before this
+  // many frames.  A project with an unpainted background will still look
+  // sparse — that is a content issue, not a capture one.
+  // --------------------------------------------------------------------
+  var PREVIEW_FRAMES = 60;
+
+  // Pure: step an already-loaded jsnes `nes` forward `frames` frames.  No DOM,
+  // so it is unit-testable headlessly (see builder-tests/preview-capture.mjs).
+  function stepPreviewFrames(nes, frames) {
+    var n = (frames | 0) > 0 ? (frames | 0) : PREVIEW_FRAMES;
+    for (var i = 0; i < n; i++) nes.frame();
+  }
+
+  // Build a PNG data-URL preview of `rom` (a Uint8Array).  Browser-only
+  // (needs a canvas); returns a Promise<string>.
+  async function capturePreview(rom, opts) {
+    opts = opts || {};
+    await ensureJsnes();
+    if (!window.jsnes) throw new Error('jsnes did not load');
+    var canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 240;
+    var g = canvas.getContext('2d');
+    var img = g.createImageData(256, 240);
+    var fb = new Uint32Array(img.data.buffer);
+    var nes = new window.jsnes.NES({
+      onFrame: function (buf) { for (var i = 0; i < buf.length; i++) fb[i] = 0xff000000 | buf[i]; },
+      onAudioSample: function () {},
+    });
+    var romStr = '';
+    for (var j = 0; j < rom.length; j++) romStr += String.fromCharCode(rom[j]);
+    nes.loadROM(romStr);
+    stepPreviewFrames(nes, opts.frames || PREVIEW_FRAMES);
+    g.putImageData(img, 0, 0);
+    return canvas.toDataURL('image/png');
+  }
+
   window.NesEmulator = {
     open: open,
     ensureJsnes: ensureJsnes,
+    capturePreview: capturePreview,
+    stepPreviewFrames: stepPreviewFrames,
+    PREVIEW_FRAMES: PREVIEW_FRAMES,
   };
 })();

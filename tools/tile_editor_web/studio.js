@@ -981,6 +981,12 @@
     return btoa(out);
   }
   async function captureRomPreview(rom, frames) {
+    // Delegate to the shared NesEmulator helper (single source of truth,
+    // headlessly tested).  Fall back to an inline capture only if an older
+    // cached emulator.js lacks it.
+    if (window.NesEmulator && typeof window.NesEmulator.capturePreview === 'function') {
+      return window.NesEmulator.capturePreview(rom, { frames: frames });
+    }
     if (window.NesEmulator && window.NesEmulator.ensureJsnes) await window.NesEmulator.ensureJsnes();
     if (!window.jsnes) throw new Error('jsnes did not load');
     var canvas = document.createElement('canvas');
