@@ -193,6 +193,11 @@
       state.builder = global.BuilderDefaults();
     }
 
+    // Stamp the engine this project is authored for (versioning/fallback).
+    if (typeof global.NES_ENGINE_VERSION === 'number') {
+      state.engineVersion = global.NES_ENGINE_VERSION;
+    }
+
     return state;
   }
 

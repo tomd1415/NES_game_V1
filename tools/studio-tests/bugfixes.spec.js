@@ -49,10 +49,12 @@ test('New game button creates a fresh playable starter', async ({ page }) => {
   await page.locator('#btn-new-game').click();
   const s = await page.evaluate(() => {
     const st = window.Studio.getState();
-    return { bgs: st.backgrounds.length, sprites: st.sprites.length };
+    return { bgs: st.backgrounds.length, sprites: st.sprites.length, engine: st.engineVersion };
   });
   expect(s.bgs).toBeGreaterThan(0);
   expect(s.sprites).toBeGreaterThan(0);
+  // New projects are stamped with the engine they were authored for.
+  expect(s.engine).toBe(1);
 });
 
 // Bug 4 — beginner mode is signposted (level hint + locked modes visible).
