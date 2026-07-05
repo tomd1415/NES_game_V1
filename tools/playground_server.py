@@ -2460,22 +2460,6 @@ def _build_rom(body):
     # nametable/behaviour grids before anything reads them.  No-op for 8x8.
     _expand_metatiles(state)
 
-    # NES-engine versioning: which engine this build targets. The original
-    # multi-page site defaults to v1 (stable/pinned); the Studio targets the
-    # latest.  Recorded for build provenance + as the hook where a future
-    # engine whose *static* cc65 sources diverge would build the target's
-    # snapshot (tools/engines/v<target>/).  For v1..v2 the static sources are
-    # identical, so this is provenance-only today.
-    try:
-        current_engine = int((ROOT / "tools" / "engines" / "ENGINE_VERSION").read_text().strip())
-    except Exception:
-        current_engine = 1
-    try:
-        target_engine = int(body.get("targetEngine", 1))
-    except (TypeError, ValueError):
-        target_engine = 1
-    target_engine = max(1, min(current_engine, target_engine))
-
     custom_main_c = body.get("customMainC")
     if custom_main_c is not None and not isinstance(custom_main_c, str):
         raise ValueError("'customMainC' must be a string if provided")
@@ -2912,12 +2896,31 @@ def _find_snippet(snippet_id):
     return None
 
 
+def _resolve_engine_versions(body):
+    """(target_engine, current_engine) for build provenance / versioning.
+
+    The original multi-page site defaults to v1 (stable/pinned); the Studio
+    targets the latest.  For v1..v2 the static cc65 sources are identical, so
+    this is provenance-only today — it is the hook where a future engine whose
+    static sources diverge would build the target's snapshot."""
+    try:
+        current_engine = int((ROOT / "tools" / "engines" / "ENGINE_VERSION").read_text().strip())
+    except Exception:
+        current_engine = 1
+    try:
+        target_engine = int(body.get("targetEngine", 1))
+    except (TypeError, ValueError):
+        target_engine = 1
+    return max(1, min(current_engine, target_engine)), current_engine
+
+
 def run_play(body):
     # mode: "browser" (default) returns ROM bytes for jsnes to run in the
     # tab; "native" launches fceux on the server's desktop (only useful for
     # the offline single-user workflow).  "native" auto-falls-back to
     # browser behaviour with a warning if fceux isn't on PATH.
     mode = (body.get("mode") or "browser").lower()
+    target_engine, current_engine = _resolve_engine_versions(body)
 
     started = time.time()
     try:

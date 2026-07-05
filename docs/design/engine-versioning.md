@@ -57,10 +57,29 @@ is created by a `scripts/snapshot-engine.mjs` that copies the live engine
 files into `v<N>/` and writes the manifest. Snapshots are immutable once
 released.
 
-## Build-time selection & fallback
+## Which engine a page targets (`NES_TARGET_ENGINE`) — implemented
+
+Codegen (`builder-modules.js` / the template) gates every version-specific
+feature on `window.NES_TARGET_ENGINE`:
+
+- **The Studio** loads `engine-version.js`, which sets `NES_TARGET_ENGINE` to
+  the **latest** — so it gets the newest engine.
+- **The original seven pages** do **not** load `engine-version.js`; codegen
+  treats an unset target as **v1**, so the stable multi-page site never emits
+  newer-engine features and stays byte-identical to v1. (E.g. per-door is
+  gated on `NES_TARGET_ENGINE >= 2`.)
+
+`play-pipeline` sends `targetEngine` in the `/play` body; the server clamps it
+to `[1, current]` and returns `engineVersion` / `engineLatest` for provenance.
+Because v1↔v2 differ **only in client codegen** (per-door), this gate fully
+pins the multi-page site to v1 today. The server-side snapshot build below is
+the additional enforcement needed **once a future version changes the static
+cc65 sources** (not just client codegen).
+
+## Build-time selection & fallback (server snapshot build — TODO for divergent versions)
 
 On `/play` (and publish):
-1. Determine `target = state.engineVersion || 1`.
+1. Determine `target = targetEngine (body) or state.engineVersion || 1`.
 2. Try the **latest** engine. If it builds and passes a smoke check → use it,
    and if `target < latest` surface the upgrade advisor (below).
 3. If the latest engine **fails** to build the project → retry with the
