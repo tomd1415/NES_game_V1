@@ -22,6 +22,7 @@
   var palIdx = 0;
   var layout = null; // {ox, oy, scale}
   var strokeOpen = false;
+  var dragFrom = null; // bank-grid drag source index (for reference-rewriting swap)
 
   function pool(state) { return bank === 'bg' ? state.bg_tiles : state.sprite_tiles; }
   function usage(state, idx) {
@@ -90,6 +91,35 @@
     selIdx = free;
   }
 
+  // ---- Reference-rewriting swap (2.3) -----------------------------------
+  // Exchange two slots' tile data AND rewrite every reference to them, so the
+  // artwork stays visually put — a pure reorganisation of the pattern table.
+  // Rewrites nametables + metatiles (BG bank) or metasprite cells (sprite
+  // bank); the drag-swap is confined to the active bank (the two banks are
+  // separate pattern tables in this data model).
+  function swapTiles(state, a, b) {
+    if (a === b) return;
+    var arr = pool(state);
+    var tmp = arr[a]; arr[a] = arr[b]; arr[b] = tmp;
+    var remap = function (t) { t = t | 0; return t === a ? b : (t === b ? a : t); };
+    if (bank === 'bg') {
+      (state.backgrounds || []).forEach(function (bg) {
+        (bg.nametable || []).forEach(function (row) {
+          (row || []).forEach(function (c) { if (c) c.tile = remap(c.tile); });
+        });
+        (bg.metatiles || []).forEach(function (mt) {
+          if (Array.isArray(mt.tiles)) mt.tiles = mt.tiles.map(remap);
+        });
+      });
+    } else {
+      (state.sprites || []).forEach(function (sp) {
+        (sp.cells || []).forEach(function (row) {
+          (row || []).forEach(function (c) { if (c && !c.empty) c.tile = remap(c.tile); });
+        });
+      });
+    }
+  }
+
   // ---- Dock --------------------------------------------------------------
   function renderDock(dock, ctx) {
     var state = ctx.getState();
@@ -155,14 +185,23 @@
       else if (!blank && u === 0) cls += ' orphan';
       else if (u > 1) cls += ' shared';
       else if (u > 0) cls += ' used';
-      var cell = el('button', { class: cls, title: 'Tile ' + ti + (u ? ' — used ' + u + '×' : (blank ? ' — free' : ' — orphan')),
-        onclick: function () { selIdx = ti; ctx.renderLive(); ctx.renderDock(); } });
+      var cell = el('button', { class: cls, draggable: 'true',
+        title: 'Tile ' + ti + (u ? ' — used ' + u + '×' : (blank ? ' — free' : ' — orphan')) + ' · drag onto another to swap',
+        onclick: function () { selIdx = ti; ctx.renderLive(); ctx.renderDock(); },
+        ondragstart: function (e) { dragFrom = ti; if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(ti)); } },
+        ondragover: function (e) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; },
+        ondrop: function (e) {
+          e.preventDefault();
+          if (dragFrom == null || dragFrom === ti) { dragFrom = null; return; }
+          ctx.pushUndo(); swapTiles(state, dragFrom, ti); selIdx = ti; dragFrom = null;
+          ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); ctx.refresh();
+        } });
       var cvs = bank === 'bg' ? UI.bgTileCanvas(state, tl, palIdx, 16) : UI.spriteTileCanvas(state, tl, palIdx, 16);
       cell.appendChild(cvs);
       grid.appendChild(cell);
     })(idx);
     gridSec.appendChild(grid);
-    gridSec.appendChild(el('div', { class: 'dock-note', text: 'Orange = shared · green = used · red = orphan (drawn but unused) · dim = free.' }));
+    gridSec.appendChild(el('div', { class: 'dock-note', text: 'Orange = shared · green = used · red = orphan (drawn but unused) · dim = free. Drag a tile onto another to swap slots — every reference follows, so nothing changes on screen.' }));
     dock.appendChild(gridSec);
   }
   function tabBtn(ctx, id, label) {
@@ -207,6 +246,10 @@
     },
     _get: function () { return { bank: bank, selIdx: selIdx, pen: pen }; },
     _set: function (o) { if (o.bank) bank = o.bank; if (o.selIdx != null) selIdx = o.selIdx; },
+    // Test/inspection hook for the reference-rewriting swap (2.3).
+    _swap: function (a, b) { swapTiles(global.Studio.getState(), a, b); },
+    // In-context focus target (2.4): jump here from CHARS/WORLD.
+    focus: function (ctx, b, idx) { if (b) bank = b; if (idx != null) selIdx = Math.max(0, Math.min(255, idx | 0)); ctx.selectMode('tiles'); },
   };
 
   function fill(ctx, p) {

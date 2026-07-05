@@ -55,6 +55,40 @@ test('bank toggle switches to the sprite pattern table', async ({ page }) => {
   await expect(page.locator('.dock-section .title', { hasText: 'Sprite tiles' })).toBeVisible();
 });
 
+test('reference-rewriting swap moves a tile without changing the picture', async ({ page }) => {
+  // The starter floor uses BG tile 1. Swap it into empty slot 50.
+  const res = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    const groundPixels = JSON.stringify(s.bg_tiles[1].pixels);
+    // A known ground cell references tile 1 before the swap.
+    const nt = s.backgrounds[0].nametable;
+    const beforeCell = nt[28][0].tile;
+    window.StudioModes.tiles._set({ bank: 'bg' });
+    window.StudioModes.tiles._swap(1, 50);
+    const s2 = window.Studio.getState();
+    return {
+      beforeCell,
+      afterCell: s2.backgrounds[0].nametable[28][0].tile,
+      slot50: JSON.stringify(s2.bg_tiles[50].pixels),
+      groundPixels,
+    };
+  });
+  expect(res.beforeCell).toBe(1);
+  // The reference followed the data into slot 50 → picture unchanged.
+  expect(res.afterCell).toBe(50);
+  expect(res.slot50).toEqual(res.groundPixels);
+});
+
+test('CHARS "Edit tiles" jumps into TILES focused on the sprite tile (2.4)', async ({ page }) => {
+  await page.locator('.mode-btn[data-mode="chars"]').click();
+  await page.locator('.btn', { hasText: 'Edit these tiles' }).click();
+  const mode = await page.evaluate(() => window.Studio.getMode());
+  expect(mode).toBe('tiles');
+  const g = await page.evaluate(() => window.StudioModes.tiles._get());
+  expect(g.bank).toBe('sprite');
+  expect(g.selIdx).toBe(1); // the starter hero's first tile
+});
+
 test('[ and ] step the selected tile', async ({ page }) => {
   await page.locator('.tile-grid .tile-cell').nth(5).click();
   await page.locator('#tv-canvas').hover();

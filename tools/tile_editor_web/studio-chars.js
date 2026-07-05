@@ -292,6 +292,13 @@
     })(v);
     penSec.appendChild(palRow);
     penSec.appendChild(el('div', { class: 'dock-note', text: 'Draw on the big canvas. Each 8×8 cell is a shared tile — editing it updates every character that uses it.' }));
+    // In-context jump-in to TILES (2.4), focused on this character's first
+    // tile — Maker+, since TILES itself is a Maker mode.
+    if (ctx.levelAtLeast('maker') && global.StudioModes.tiles && global.StudioModes.tiles.focus) {
+      penSec.appendChild(el('button', { class: 'btn', style: 'margin-top:6px', text: '✎ Edit these tiles in TILES', onclick: function () {
+        global.StudioModes.tiles.focus(ctx, 'sprite', firstTileOf(sp));
+      } }));
+    }
     dock.appendChild(penSec);
 
     // Animations are a Maker-level concept (a still character is fine for a
@@ -424,6 +431,16 @@
         });
       });
     }
+  }
+
+  // The first tile a character actually draws with (for the TILES jump-in).
+  function firstTileOf(sp) {
+    var rows = sp && sp.cells || [];
+    for (var r = 0; r < rows.length; r++) for (var c = 0; c < rows[r].length; c++) {
+      var cell = rows[r][c];
+      if (cell && !cell.empty) return cell.tile | 0;
+    }
+    return 1;
   }
 
   function dimSelect(ctx, sp, dim) {

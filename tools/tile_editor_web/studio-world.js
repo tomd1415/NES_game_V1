@@ -362,6 +362,12 @@
     })(i);
     tileSec.appendChild(grid);
     tileSec.appendChild(el('div', { class: 'dock-note', text: 'Pick a tile, then paint it onto the screen. Right-click a screen cell to pick up its tile.' }));
+    // In-context jump-in to TILES (2.4) for the selected stamp tile — Maker+.
+    if (ctx.levelAtLeast('maker') && global.StudioModes.tiles && global.StudioModes.tiles.focus) {
+      tileSec.appendChild(el('button', { class: 'btn', style: 'margin-top:6px', text: '✎ Edit tile #' + stampTile + ' in TILES', onclick: function () {
+        global.StudioModes.tiles.focus(ctx, 'bg', stampTile);
+      } }));
+    }
     dock.appendChild(tileSec);
 
     // --- Tile type (behaviour) --- (Maker+: what a tile *does* is a
