@@ -29,6 +29,8 @@
       sub: 'The 8×8 tiles in the two pattern tables. Everything references what is made here.' },
     { id: 'pals', name: 'Pals', ico: '🎨', minLevel: 1,
       sub: 'Backdrop + 4 background + 4 sprite palettes of 3, from the 64-colour NES set.' },
+    { id: 'style', name: 'Style', ico: '🎮', minLevel: 0,
+      sub: 'Your game style and all of its style-specific options in one place.' },
     { id: 'rules', name: 'Rules', ico: '⚙', minLevel: 0,
       sub: 'How the game behaves — movement, damage, win condition, reactions.' },
     { id: 'sound', name: 'Sound', ico: '🎵', minLevel: 1,
