@@ -21,6 +21,42 @@ deferred.
 
 ---
 
+## Full SMB engine (v3–v9) + trust & hardening — 2026-07-05
+
+On `feature/smb-engine`: the versioned engine grew a complete Super-Mario-style
+toolkit (engine **v3–v9**), and a follow-on **trust & hardening** pass locked
+down authorization, documented the project-state contract, and expanded the
+pupil-facing validators + tests. Every engine feature is gated off-by-default so
+the golden ROMs stay byte-identical. Plans:
+[`docs/plans/current/2026-07-05-smb-engine-roadmap.md`](../plans/current/2026-07-05-smb-engine-roadmap.md),
+[`docs/plans/current/2026-07-05-trust-and-hardening.md`](../plans/current/2026-07-05-trust-and-hardening.md).
+
+- **SMB engine v3–v9** — fixed-point run + variable-height jump (a tunable
+  Speed 1–5 preset), Goomba stomp + kickable Koopa shell, Mushroom / Fire
+  Flower / Star power-ups with B-button fireballs, ? / brick / coin 16×16
+  blocks (pick what each ? dispenses), a coins/time/score/lives HUD via a
+  sprite-0 split, pipes/warps + a flagpole finish + bonus room, and NROM
+  8×16 / OAM-flicker rendering polish. All surfaced in the Studio **🎮 Style**
+  tab (per-game-type options) with an SMB showcase starter. Decisions:
+  [`docs/design/decisions/2026-07-05-smb-engine-decisions.md`](../design/decisions/2026-07-05-smb-engine-decisions.md).
+- **Authorization (deny-by-default)** on the gallery + feedback routes: publish
+  stamps the owner from the session; remove needs the owning account **or** the
+  teacher admin secret (anonymous entries teacher-only); `/feedback/handled`
+  needs the teacher secret. The gallery lists an `owned` flag (never the raw
+  owner id) and shows 🗑 Remove only on owned entries, with a 🔑 Teacher-mode
+  toggle. **CSRF** defence-in-depth via an Origin/Referer check (zero client
+  changes, proxy-safe, kill-switch). SQLite gained `synchronous=NORMAL` +
+  `busy_timeout`.
+- **Docs truth** — [`docs/reference/project-state-schema.md`](../reference/project-state-schema.md)
+  (the state contract + the three-version-counters gotcha), a "Current editor
+  status" note (Studio primary / seven pages legacy), and a "when to bump +
+  snapshot" rule.
+- **Validators & tests** — new pupil warnings (? block gives a power-up with the
+  module off; flagpole needs Win condition / sits past the level; 8-sprites-per-
+  scanline) and new behavioural coverage (route-level gallery auth, CSRF Origin,
+  gallery preview is non-blank, **top-down four-way movement + wall collision**).
+  The gallery preview capture is now one shared, headlessly-tested helper.
+
 ## NES Studio redesign, engine versioning, per-door destinations — 2026-07-05
 
 The `redesign/ui-ux` work merged to `main` (the unified **Studio** at
