@@ -323,6 +323,14 @@ class AccountStore:
             self._db.commit()
         return new_code
 
+    def verify_admin(self, secret: str | None) -> bool:
+        """Constant-time check of the teacher/admin secret.  False when no admin
+        secret is configured (moderation disabled) or the secret is wrong.
+        Used to gate teacher-only actions (gallery moderation, feedback)."""
+        if not self.admin_secret:
+            return False
+        return hmac.compare_digest(secret or "", self.admin_secret)
+
     def admin_reset(self, username: str, new_password: str, admin_secret: str):
         """Teacher reset (decision D6).  Requires the server admin secret — NOT
         a pupil credential.  Logs the account out everywhere."""

@@ -98,11 +98,12 @@ FEEDBACK_HANDLED_PATH = ROOT / "feedback-handled.json"
 
 # Phase 4.2 — published-project gallery.  Lives outside WEB_DIR so a
 # pupil running the editor can't accidentally clobber another pupil's
-# entry from a project's import/export.  No auth on /gallery/remove
-# today (single-machine classroom assumption); the plan is to gate it
-# on the teacher role once accounts ship — see
-# docs/plans/archive/2026-04-26-next-steps.md §4.6.
-GALLERY_DIR = ROOT / "tools" / "gallery"
+# entry from a project's import/export.  Removal is authorized (S1.2,
+# 2026-07-05): a signed-in pupil may delete only their own entries, and a
+# teacher (admin secret) may delete any — see
+# docs/plans/current/2026-07-05-trust-and-hardening.md.
+# PLAYGROUND_GALLERY_DIR overrides the location (used by tests to isolate).
+GALLERY_DIR = pathlib.Path(os.environ.get("PLAYGROUND_GALLERY_DIR") or (ROOT / "tools" / "gallery"))
 
 # Phase 4.3 — starter audio assets shipped under tools/audio/starter/.
 # Each .s is built from a .fmstxt project via the FamiStudio CLI
@@ -386,6 +387,13 @@ _FEEDBACK_VIEWER_JS = """
   applyFilter();
   toggle.addEventListener('change', applyFilter);
 
+  // Marking feedback handled is a teacher action — ask for the teacher secret
+  // once (kept only in this tab's sessionStorage) and send it with each change.
+  function teacherSecret() {
+    let s = sessionStorage.getItem('feedbackAdminSecret') || '';
+    if (!s) { s = prompt('Teacher secret (to change feedback state):') || ''; if (s) sessionStorage.setItem('feedbackAdminSecret', s); }
+    return s;
+  }
   document.querySelectorAll('.handled-toggle input').forEach(cb => {
     cb.addEventListener('change', async () => {
       const idx = parseInt(cb.dataset.index, 10);
@@ -396,13 +404,14 @@ _FEEDBACK_VIEWER_JS = """
         const r = await fetch('/feedback/handled', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ index: idx, handled }),
+          body: JSON.stringify({ index: idx, handled, admin_secret: teacherSecret() }),
         });
+        if (r.status === 403) { sessionStorage.removeItem('feedbackAdminSecret'); throw new Error('wrong teacher secret'); }
         if (!r.ok) throw new Error('HTTP ' + r.status);
       } catch (e) {
         cb.checked = !handled;
         card.classList.toggle('handled', !handled);
-        alert("Couldn't save — check the server: " + e.message);
+        alert("Couldn't save — " + e.message);
       }
       updateCounts();
       applyFilter();
@@ -3092,10 +3101,11 @@ def _gallery_decode_b64(s, max_bytes):
     return raw
 
 
-def _gallery_publish(body):
+def _gallery_publish(body, owner_id=None, owner_name=None):
     """Validate, slugify, and write a gallery entry to disk.  Caller
     holds GALLERY_LOCK so two near-simultaneous publishes don't collide
-    on the same slug."""
+    on the same slug.  `owner_id`/`owner_name` come from the publisher's
+    session (None for anonymous) and gate later removal (S1.2)."""
     title = (body.get("title") or "").strip()[:GALLERY_MAX_TITLE]
     if not title:
         raise ValueError("title required")
@@ -3133,10 +3143,11 @@ def _gallery_publish(body):
         "title": title,
         "description": description,
         "pupil_handle": handle,
-        # `owner` is reserved for the future-account feature
-        # (docs/plans/archive/2026-04-26-next-steps.md §4.6) — gallery removes will be gated on
-        # the owning account when this isn't None.
-        "owner": None,
+        # `owner` is the publisher's account id (None for anonymous posts);
+        # gallery removal is gated on it (S1.2 — a pupil can delete only their
+        # own; a teacher/admin can delete any; anonymous posts are teacher-only).
+        "owner": owner_id,
+        "owner_name": owner_name,
         "source_page": source,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "rom_size": len(rom),
@@ -3152,8 +3163,8 @@ def _gallery_publish(body):
 
 def _gallery_remove(slug):
     """Best-effort folder removal.  Returns True if the folder existed
-    and is gone afterwards.  No auth — see header comment on
-    GALLERY_DIR for the future-accounts plan."""
+    and is gone afterwards.  Authorization is the caller's job
+    (_gallery_remove_response gates on owner / teacher secret)."""
     target = GALLERY_DIR / slug
     if not target.exists():
         return False
@@ -3167,6 +3178,18 @@ def _gallery_remove(slug):
         return False
     shutil.rmtree(target, ignore_errors=True)
     return not target.exists()
+
+
+def _gallery_entry_owner(slug):
+    """Return the account id that owns gallery entry `slug` (int), or None for
+    an anonymous / missing entry.  Used to gate removal (S1.2)."""
+    meta_path = GALLERY_DIR / slug / "metadata.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    owner = meta.get("owner")
+    return owner if isinstance(owner, int) else None
 
 
 # ---------------------------------------------------------------------------
@@ -3567,6 +3590,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body, err = self._read_json_body(4096)
         if err:
             return self._json(400, {"ok": False, "error": err})
+        # Teacher-only: marking feedback handled is moderation (S1.3, ADVICE #3).
+        if not ACCOUNTS.verify_admin(body.get("admin_secret")):
+            return self._json(403, {"ok": False, "code": "not_teacher",
+                                    "error": "The teacher secret is required to change feedback state."})
         try:
             idx = int(body.get("index"))
         except Exception:
@@ -3591,7 +3618,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             sys.stderr.write(f"[playground] gallery list failed: {e}\n")
             return self._json(500, {"ok": False, "error": "could not read gallery"})
-        return self._json(200, {"ok": True, "entries": entries})
+        # Never leak the raw numeric owner id to the client; instead compute an
+        # `owned` flag against the requesting session so the UI can show Remove
+        # only on entries the viewer owns.  `owner_name` stays for attribution.
+        user = ACCOUNTS.user_for_session(self._session_token())
+        uid = user["id"] if user else None
+        public = []
+        for meta in entries:
+            m = dict(meta)
+            owner = m.pop("owner", None)
+            m["owned"] = uid is not None and owner is not None and owner == uid
+            public.append(m)
+        return self._json(200, {"ok": True, "entries": public, "signed_in": user is not None})
 
     def _gallery_static(self, path):
         # path is /gallery/<slug>/<file>.  Anything else returns None
@@ -3633,9 +3671,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body, err = self._read_json_body(GALLERY_MAX_BODY)
         if err:
             return self._json(400, {"ok": False, "error": err})
+        # Record the publisher so removal can be gated on ownership (S1.1/S1.2).
+        user = ACCOUNTS.user_for_session(self._session_token())
+        owner_id = user["id"] if user else None
+        owner_name = user["username"] if user else None
         try:
             with GALLERY_LOCK:
-                meta = _gallery_publish(body)
+                meta = _gallery_publish(body, owner_id, owner_name)
         except ValueError as e:
             return self._json(400, {"ok": False, "error": str(e)})
         except Exception as e:
@@ -3650,6 +3692,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         slug = _gallery_safe_slug(body.get("slug"))
         if slug is None:
             return self._json(400, {"ok": False, "error": "bad slug"})
+        # Deny by default (ADVICE #1).  A delete is allowed only for a valid
+        # teacher/admin secret (moderates anyone, incl. anonymous posts) OR the
+        # signed-in account that owns the entry.
+        owner = _gallery_entry_owner(slug)          # int owner id, or None (anon / missing)
+        is_admin = ACCOUNTS.verify_admin(body.get("admin_secret"))
+        if not is_admin:
+            user = ACCOUNTS.user_for_session(self._session_token())
+            if user is None:
+                return self._json(401, {"ok": False, "code": "not_logged_in",
+                                        "error": "Sign in (or use the teacher secret) to remove gallery entries."})
+            if owner is None or user["id"] != owner:
+                return self._json(403, {"ok": False, "code": "not_owner",
+                                        "error": "You can only remove your own gallery entries. A teacher can remove any."})
         with GALLERY_LOCK:
             removed = _gallery_remove(slug)
         if not removed:
