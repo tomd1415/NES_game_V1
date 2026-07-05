@@ -301,10 +301,14 @@ Maker-level 8×8 editor: BG/sprite bank toggle, the 256-tile grid
 with a 4-value pen under a chosen palette, tile ops
 (clear/flip/rotate/duplicate), per-tile names, a live "used by" readout,
 and `[`/`]` + arrow stepping. Editing a tile propagates to every
-reference by construction. **Still open:** in-context "edit the tiles of
-this block/sprite" jump-ins (2.4), per-quadrant attribute as the sole
-source of truth (2.5 — WORLD already shows the 2×2 chunk grid and paints
-per-quadrant), and the dialogue reserved-slot overlay (2.6).
+reference by construction. **Now also landed:** reference-rewriting
+drag-swap across both banks (2.3), in-context "edit the tiles of this
+block/sprite" jump-ins from CHARS & WORLD (2.4), the 2×2
+attribute-conflict overlay so colouring visibly respects the chunk rule
+(2.5, teaching half), and the dialogue reserved glyph-slot overlay (2.6).
+**Still open:** retiring per-8×8-cell palette as the *sole* stored source
+of truth (2.5 full — a shared-schema + cc65-emitter change; see
+[`decisions/2026-07-05-data-model-audit.md`](decisions/2026-07-05-data-model-audit.md) DM-1).
 
 **Goal:** the 8×8 tile editor exists as a first-class Maker-level mode —
 the primitive everything already references (handover §5). This is a
@@ -340,11 +344,14 @@ everywhere it's used; colouring visibly respects the 2×2 rule.
 
 ## Phase 3 — Correctness, budgets & honest round-trips
 
-**Status: started (2026-07-05).** 3.1 CHR/OAM budget meters are live in
-the right panel (used/256 per bank + characters/64, amber near the limit,
-red when full). Remaining: 8-per-scanline visualiser (3.2), 8×16 sprite
-mode (3.3), de-overloading the tile-type slots (3.4), round-trippable
-imports + tests (3.5), and the Advanced editing surface (3.6).
+**Status: largely landed (2026-07-05).** 3.1 CHR/OAM budget meters, 3.2
+8-per-scanline overflow warning (`Studio.scanlineLoad()`), 3.4 game-type-
+aware tile-type slot labels, 3.5 `.chr` export **and** import round-trip
+(+ whole-project JSON), and 3.6-core (Advanced eject-to-hand-coded-C with
+a real return path) are all live. **Blocked / needs a decision:** 3.3
+8×16 sprite mode (no cc65 8×16 OAM path yet). **Deferred polish:** the
+remaining format imports (`.nam`/`.pal`/…) and the CODE-port guided-
+editing layer (CodeMirror, lessons, snippets, symbols).
 
 **Goal:** the tool teaches the hardware truthfully and the outputs
 round-trip.

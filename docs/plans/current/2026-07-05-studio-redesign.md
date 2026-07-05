@@ -177,12 +177,16 @@ off here and update the status note in
       [`2026-06-22-wasm-emulator-spike.md`](2026-06-22-wasm-emulator-spike.md).
 
 ### Cross-cutting, before the switch-over
-- [ ] Walk every line of [`feature-parity.md`](../../design/feature-parity.md)
+- [~] Walk every line of [`feature-parity.md`](../../design/feature-parity.md)
       against the Studio; record any *deliberate* drops in
-      `docs/design/decisions/`.
-- [ ] Consolidate the three emulator variants into one component (union of
-      pause/reset/fullscreen/mute/2-player legend) — today PLAY reuses the
-      shipped `emulator.js` modal as-is.
+      `docs/design/decisions/`. Started: deliberate drops recorded in
+      [`2026-07-05-deliberate-parity-drops.md`](../../design/decisions/2026-07-05-deliberate-parity-drops.md).
+      A full line-by-line walk remains a review pass before switch-over.
+- [x] Consolidate the emulator variants → the Studio already runs on the
+      **single shared `emulator.js` (`NesEmulator`)** for PLAY; the three
+      per-page variants were the *old pages'* inline emulators, which retire
+      with those pages. No separate Studio emulator to fold in. *(If the old
+      pages are kept as a fallback, their variants live on there only.)*
 - [x] 0.1 Data-model audit written up as tracked tickets (DM-1..DM-5) in
       [`design/decisions/2026-07-05-data-model-audit.md`](../../design/decisions/2026-07-05-data-model-audit.md).
       DM-2/DM-4 closed; DM-5 partly (CHR); DM-1/DM-3 need coordinated
