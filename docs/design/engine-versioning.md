@@ -120,8 +120,13 @@ concrete checklist.
 - **E-V2 — Selection & fallback.**
   - `snapshot-engine.mjs` script; server builds from `v<target>/`.
   - Latest-then-fallback build flow + the "built with original engine" notice.
-- **E-V3 — Advisor.**
-  - `changelog.json` + the in-Studio "what changed since your engine" panel.
+- **E-V3 — Advisor. ✅ implemented.**
+  - The Studio's ⚙ Engine chrome button shows the project's engine version and
+    highlights when it's behind the latest. It opens an advisor modal that
+    fetches `/engine/CHANGELOG.md` (a server route serving `tools/engines/`),
+    lists the entries newer than the project's version ("what changed since
+    your engine"), and offers **Update this game to v<latest>** (bumps
+    `state.engineVersion`). Covered by `tools/studio-tests/engine.spec.js`.
 
 **The first engine feature (per-door) becomes engine v2:** snapshot v1
 first, ship per-door as v2 with a CHANGELOG entry, so every existing v1 game

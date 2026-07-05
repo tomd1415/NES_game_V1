@@ -576,6 +576,7 @@
 
   function refreshQuestsAndAttention() {
     refreshBudgets();
+    refreshEngineButton();
     var ql = $('quest-list');
     ql.innerHTML = '';
     computeQuests().forEach(function (q) {
@@ -963,6 +964,66 @@
     }
   }
 
+  // ---- Engine version advisor (E-V3) ------------------------------------
+  function projectEngine() { return (state && state.engineVersion) | 0 || 1; }
+  function latestEngine() { return window.NES_ENGINE_VERSION || 1; }
+  function refreshEngineButton() {
+    var b = $('btn-engine'); if (!b) return;
+    var outdated = projectEngine() < latestEngine();
+    b.textContent = '⚙ Engine v' + projectEngine();
+    b.classList.toggle('primary', outdated);
+    b.title = outdated
+      ? 'This game was made with engine v' + projectEngine() + '. Latest is v' + latestEngine() + ' — see what changed.'
+      : 'Engine v' + projectEngine() + ' (latest).';
+  }
+  // Parse tools/engines/CHANGELOG.md into { version, body } entries.
+  function parseChangelog(md) {
+    var entries = [], cur = null;
+    md.split('\n').forEach(function (line) {
+      var m = line.match(/^##\s+v(\d+)\b(.*)$/);
+      if (m) { cur = { version: parseInt(m[1], 10), heading: 'v' + m[1] + (m[2] || ''), lines: [] }; entries.push(cur); }
+      else if (cur) cur.lines.push(line);
+    });
+    return entries;
+  }
+  function openEngineAdvisor() {
+    var bd = document.createElement('div');
+    bd.className = 'modal-backdrop open';
+    var proj = projectEngine(), latest = latestEngine();
+    bd.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+      '<h2>⚙ NES engine</h2>' +
+      '<div class="modal-sub">This game targets engine <b>v' + proj + '</b>. Latest is <b>v' + latest + '</b>.</div>' +
+      '<div id="engine-advisor-body" style="font-size:12px;line-height:1.6;color:var(--muted);max-height:50vh;overflow:auto">Loading changelog…</div>' +
+      '<div class="modal-actions">' +
+        (proj < latest ? '<button class="btn primary" id="engine-update" type="button">Update this game to v' + latest + '</button>' : '') +
+        '<button class="btn" id="engine-close" type="button">Close</button>' +
+      '</div></div>';
+    document.body.appendChild(bd);
+    function close() { if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+    bd.querySelector('#engine-close').addEventListener('click', close);
+    var upd = bd.querySelector('#engine-update');
+    if (upd) upd.addEventListener('click', function () {
+      pushUndo();
+      state.engineVersion = latest;
+      markDirty(); refreshEngineButton();
+      close();
+    });
+    fetch('engine/CHANGELOG.md', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (md) {
+      var body = document.getElementById('engine-advisor-body'); if (!body) return;
+      var entries = parseChangelog(md).filter(function (e) { return e.version > proj; });
+      if (!entries.length) { body.textContent = proj >= latest ? 'You are on the latest engine — nothing to update.' : 'No changelog entries found.'; return; }
+      body.innerHTML = '<p><strong style="color:var(--text)">What changed since your engine (v' + proj + '):</strong></p>' +
+        entries.map(function (e) {
+          return '<div style="margin-top:8px"><strong style="color:var(--accent)">' + escapeHtml(e.heading) + '</strong><br>' +
+            escapeHtml(e.lines.join('\n').trim()).replace(/\n/g, '<br>') + '</div>';
+        }).join('');
+    }).catch(function () {
+      var body = document.getElementById('engine-advisor-body');
+      if (body) body.textContent = 'Could not load the changelog.';
+    });
+  }
+
   // ---- Help + feedback modal --------------------------------------------
   function openHelp() {
     var bd = $('help-backdrop');
@@ -1098,6 +1159,7 @@
       if (e.target === $('tm-backdrop')) $('tm-backdrop').classList.remove('open');
     });
     $('btn-help').addEventListener('click', openHelp);
+    $('btn-engine').addEventListener('click', openEngineAdvisor);
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
     // Let the shared account menu offer "Load a starter game" too (bug: the

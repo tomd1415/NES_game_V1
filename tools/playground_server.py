@@ -3275,6 +3275,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             served = self._gallery_static(parsed.path)
             if served is not None:
                 return served
+        if parsed.path.startswith("/engine/"):
+            # Serve the engine version registry (CHANGELOG.md, ENGINE_VERSION)
+            # so the Studio's upgrade advisor can show "what changed".
+            served = self._engine_static(parsed.path)
+            if served is not None:
+                return served
         if parsed.path.startswith("/docs/"):
             # 2026-04-27 — Editor-page links to pupil-facing docs
             # (e.g. audio.html -> ../../docs/guides/AUDIO_GUIDE.md)
@@ -3288,6 +3294,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if served is not None:
                 return served
         return super().do_GET()
+
+    def _engine_static(self, url_path):
+        """Serve files under `tools/engines/` (CHANGELOG.md, ENGINE_VERSION)."""
+        rel = unquote(url_path[len("/engine/"):])
+        base = (ROOT / "tools" / "engines").resolve()
+        target = (base / rel).resolve()
+        try:
+            target.relative_to(base)
+        except ValueError:
+            self.send_error(404)
+            return True
+        if not target.is_file():
+            return None
+        data = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+        return True
 
     def _docs_static(self, url_path):
         """Serve files under the project-root `docs/` directory."""
