@@ -1382,6 +1382,108 @@
   };
 
   // --------------------------------------------------------------------
+  // Pipes (engine v8) — hold Down while standing on a pipe cell to warp to a
+  // spawn spot (optionally in another room / the underground of a tall level).
+  // A position→destination table like the per-door table, Down-triggered.
+  // Gated on the SMB game type + engine v8 → byte-identical otherwise.
+  // --------------------------------------------------------------------
+  modules['pipes'] = {
+    label: 'Pipes (enter with Down)',
+    description: 'Green-pipe warps: stand on a pipe and hold Down to travel to ' +
+      'another spot — the underground of a tall level, or another room. Needs ' +
+      'the 🍄 SMB game type. Place pipes on the World page.',
+    detailedHelp: [
+      'A pipe is a warp with a trigger tile (its top) + a destination spawn.',
+      'Make a tall (1×2) level and warp Down into the lower half for a classic ' +
+      'underground bonus area, or point a pipe at another background (room).',
+      'A v8 engine feature — only builds on engine v8+ with the SMB game type.',
+    ],
+    defaultConfig: { pipeList: [] },   // [{ x, y, spawnX, spawnY }] — same-room warp
+    customRender: true,
+    applyToTemplate(template, node, state) {
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      const gt = state && state.builder && state.builder.modules && state.builder.modules.game &&
+                 state.builder.modules.game.config && state.builder.modules.game.config.type;
+      const list = (node && node.config && node.config.pipeList) || [];
+      if (targetEngine < 8 || gt !== 'smb' || list.length === 0) return template;   // gated → byte-identical
+      // Same-room warps (Down → spawn spot): covers the underground bonus of a
+      // tall level and general teleports.  Cross-room bonus areas use a door.
+      const rows = list.map(function (p) {
+        p = p || {};
+        return [A.clampInt(p.x, 0, 63, 0), A.clampInt(p.y, 0, 29, 0),
+                A.clampInt(p.spawnX, 0, 248, 24), A.clampInt(p.spawnY, 16, 224, 120)];
+      });
+      template = A.appendToSlot(template, 'declarations', [
+        '/* [builder] pipes (engine v8) — Down-to-enter same-room warps. */',
+        '#define BW_SMB_PIPES 1',
+        '#define BW_PIPE_COUNT ' + rows.length,
+        'const unsigned char bw_pipe_tbl[] = {   /* x, y (tiles), spawnX, spawnY (px) */',
+        '    ' + rows.map(function (r) { return r.join(', '); }).join(',\n    '),
+        '};',
+      ].join('\n'));
+      const body = [
+        '        // [builder] pipes (engine v8) — hold Down on a pipe cell to warp.',
+        '        if (pad & 0x04) {',
+        '            unsigned char bw_pcx = (unsigned char)((px + ((PLAYER_W << 3) >> 1)) >> 3);',
+        '            unsigned char bw_pcy = (unsigned char)((py + (PLAYER_H << 3) - 1) >> 3);',
+        '            unsigned char bw_pi, bw_pb;',
+        '            for (bw_pi = 0; bw_pi < BW_PIPE_COUNT; bw_pi++) {',
+        '                bw_pb = bw_pi * 4;',
+        '                if (bw_pipe_tbl[bw_pb] == bw_pcx && bw_pipe_tbl[bw_pb + 1] == bw_pcy) {',
+        '                    px = bw_pipe_tbl[bw_pb + 2]; py = bw_pipe_tbl[bw_pb + 3]; jumping = 0; jmp_up = 0;',
+        '                    break;',
+        '                }',
+        '            }',
+        '        }',
+      ];
+      return A.appendToSlot(template, 'per_frame', body.join('\n'));
+    },
+  };
+
+  // --------------------------------------------------------------------
+  // Flagpole finish (engine v8) — reaching a column wins the level with a
+  // score bonus (SMB's end-of-level pole).  Reuses the Win condition's bw_won
+  // (so needs that module on) + the HUD score.  Gated on SMB + engine v8.
+  // --------------------------------------------------------------------
+  modules['flagpole'] = {
+    label: 'Flagpole finish',
+    description: 'Reach the flagpole column to finish the level with a score ' +
+      'bonus — SMB\'s end-of-level pole. Needs the 🍄 SMB game type and the Win ' +
+      'condition module (in Rules) turned on.',
+    detailedHelp: [
+      'Paint a flagpole at the right of your level and set its column here; ' +
+      'crossing it wins (the Win condition owns the celebration + freeze).',
+      'A v8 engine feature — only builds on engine v8+ with the SMB game type.',
+    ],
+    defaultConfig: { x: 60 },
+    schema: [
+      { key: 'x', label: 'Flagpole column (tile 0–63)', type: 'int', min: 0, max: 63,
+        help: 'The tile column the flagpole stands in. Crossing it finishes the level.' },
+    ],
+    applyToTemplate(template, node, state) {
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      const gt = state && state.builder && state.builder.modules && state.builder.modules.game &&
+                 state.builder.modules.game.config && state.builder.modules.game.config.type;
+      if (targetEngine < 8 || gt !== 'smb') return template;   // gated → byte-identical
+      const x = A.clampInt(node && node.config && node.config.x, 0, 63, 60);
+      template = A.appendToSlot(template, 'declarations',
+        '/* [builder] flagpole (engine v8). */\n#define BW_SMB_FLAG 1\n#define BW_FLAG_PX ' + (x * 8));
+      const body = [
+        '        // [builder] flagpole (engine v8) — reach the flag to win + score.',
+        '#if BW_WIN_ENABLED',
+        '        if (!bw_won && (unsigned int)px + (PLAYER_W << 3) >= BW_FLAG_PX) {',
+        '            bw_won = 1;',
+        '#ifdef BW_SMB_HUD',
+        '            bw_score += 5000;',
+        '#endif',
+        '        }',
+        '#endif',
+      ];
+      return A.appendToSlot(template, 'per_frame', body.join('\n'));
+    },
+  };
+
+  // --------------------------------------------------------------------
   // Spawn (R-3) — pop a short-lived effect sprite when the player steps
   // onto a TRIGGER tile (painted on the Behaviour page).  Uses the shared
   // engine spawn pool (platformer.c, #if BW_SPAWN_ENABLED — byte-identical
@@ -2400,6 +2502,14 @@
         smbhud: {
           enabled: false,
           config: Object.assign({}, modules['smbhud'].defaultConfig),
+        },
+        pipes: {
+          enabled: false,
+          config: { pipeList: [] },
+        },
+        flagpole: {
+          enabled: false,
+          config: Object.assign({}, modules['flagpole'].defaultConfig),
         },
         hud: {
           enabled: false,

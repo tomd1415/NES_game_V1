@@ -220,6 +220,39 @@
     dock.appendChild(sec);
   }
 
+  // ---- Pipes editor (engine v8) — Down-to-enter warps. -------------------
+  function renderPipesSection(dock, ctx, s, bg) {
+    if (!ctx.levelAtLeast('maker')) return;
+    var gt = (s.builder && s.builder.modules && s.builder.modules.game &&
+              s.builder.modules.game.config && s.builder.modules.game.config.type) || 'platformer';
+    var stEng = (s.engineVersion | 0) || (typeof window !== 'undefined' && window.NES_ENGINE_VERSION) || 1;
+    var node = s.builder && s.builder.modules && s.builder.modules.pipes;
+    if (!node || gt !== 'smb' || stEng < 8) return;
+    if (!node.config) node.config = { pipeList: [] };
+    if (!Array.isArray(node.config.pipeList)) node.config.pipeList = [];
+    var list = node.config.pipeList;
+    var sec = UI.section('Pipes', el('span', { class: 'chip', text: 'Down to enter' }));
+    sec.appendChild(el('div', { class: 'dock-note', text: 'Stand on a pipe cell and hold Down to warp. X/Y are the pipe cell (tiles); Spawn is where you appear (pixels) — e.g. warp Down into the lower half of a tall level.' }));
+    list.forEach(function (p, idx) {
+      var card = el('div', { style: 'border:2px solid var(--line);padding:6px;margin-top:6px' });
+      function num(label, key, max) {
+        var inp = el('input', { type: 'number', min: 0, max: max, style: 'width:56px' }); inp.value = p[key] | 0;
+        inp.addEventListener('change', function () { var v = parseInt(inp.value, 10); if (isNaN(v)) return; ctx.pushUndo(); p[key] = Math.max(0, Math.min(max, v)); ctx.markDirty(); });
+        return el('div', { class: 'field inline' }, [el('span', { text: label }), inp]);
+      }
+      card.appendChild(num('Pipe X (tile)', 'x', 63));
+      card.appendChild(num('Pipe Y (tile)', 'y', 29));
+      card.appendChild(num('Spawn X (px)', 'spawnX', 248));
+      card.appendChild(num('Spawn Y (px)', 'spawnY', 224));
+      card.appendChild(el('button', { class: 'btn', text: 'Remove', onclick: function () { ctx.pushUndo(); list.splice(idx, 1); ctx.markDirty(); ctx.renderDock(); } }));
+      sec.appendChild(card);
+    });
+    sec.appendChild(el('button', { class: 'btn primary', style: 'margin-top:6px', text: '+ Add pipe', onclick: function () {
+      ctx.pushUndo(); node.enabled = true; list.push({ x: 8, y: 26, spawnX: 24, spawnY: 40 }); ctx.markDirty(); ctx.renderDock();
+    } }));
+    dock.appendChild(sec);
+  }
+
   // Resize a background to sx×sy screens (bug #7), preserving existing art.
   function resizeBackground(ctx, sx, sy) {
     var bg = activeBg(ctx);
@@ -809,6 +842,8 @@
     renderDoorsSection(dock, ctx, s, bg);
     // --- Blocks: ? / brick / coin (engine v6, Maker+, SMB only) ---
     renderBlocksSection(dock, ctx, s, bg);
+    // --- Pipes: Down-to-enter warps (engine v8, Maker+, SMB only) ---
+    renderPipesSection(dock, ctx, s, bg);
     }
 
     // --- Entities (scene instances) ---

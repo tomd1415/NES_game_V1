@@ -129,6 +129,21 @@
         hudSec.appendChild(numField(ctx, 'Lives', hud.config, 'startLives', 1, 9));
       }
       dock.appendChild(hudSec);
+
+      // Flagpole finish (engine v8).
+      var flag = moduleNode(s, 'flagpole', { x: 60 });
+      var flagSec = UI.section('Flagpole finish', el('span', { class: 'chip', text: flag.enabled ? 'on' : 'off' }));
+      flagSec.appendChild(boolField(ctx, 'End the level at a flagpole', flag,
+        'Crossing the flagpole column wins the level (needs the Win condition on in Rules) with a score bonus.'));
+      if (flag.enabled) flagSec.appendChild(numField(ctx, 'Flagpole column (tile)', flag.config, 'x', 0, 63, 'Paint a flagpole here; crossing it finishes the level.'));
+      dock.appendChild(flagSec);
+
+      // Pipes pointer (placed in World).
+      var pipes = moduleNode(s, 'pipes', { pipeList: [] });
+      var pipeSec = UI.section('Pipes', el('span', { class: 'chip', text: (pipes.config.pipeList || []).length + ' placed' }));
+      pipeSec.appendChild(el('div', { class: 'dock-note', text: 'Down-to-enter warps (underground bonus sections) are placed on the World page.' }));
+      pipeSec.appendChild(el('button', { class: 'btn', text: 'Edit pipes in World →', onclick: function () { ctx.selectMode('world'); } }));
+      dock.appendChild(pipeSec);
     }
   }
 

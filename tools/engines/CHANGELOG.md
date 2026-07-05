@@ -9,6 +9,32 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v8 — 2026-07-05
+
+### Added
+- **Pipes** (`BW_SMB_PIPES`, SMB + engine v8) — hold **Down** while standing on
+  a pipe cell to **warp** to a spawn spot: the classic underground bonus section
+  of a tall (1×2) level, or any teleport. A position→spawn table
+  (`bw_pipe_tbl`), placed in a **Pipes editor** on the World page.
+- **Flagpole finish** (`BW_SMB_FLAG`, SMB + engine v8) — crossing a configured
+  column **wins the level** (via the Win condition's `bw_won`) with a **+5000
+  score bonus**. Toggle + column in the Style tab.
+
+### Changed / migration
+- No migration. Both are gated on their SMB flags (only emitted for the SMB game
+  type on engine v8+), so every existing game (and pre-v8 targets) builds
+  byte-identically — golden‑ROM hashes unchanged. The flagpole needs the Win
+  condition module on; pipes warp **same-room** only (cross-room bonus areas use
+  a per-door warp, which already exists).
+
+### Not yet
+- Cross-**room** pipe warps (use a door), a scripted flagpole slide animation,
+  and the automatic **staircase** builder — a staircase is just painted solid
+  tiles today, so it needs no engine feature.
+
+### Breaking
+- (none.)
+
 ## v7 — 2026-07-05
 
 ### Added

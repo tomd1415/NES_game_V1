@@ -158,11 +158,18 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 > nametable, splits scroll mid-frame) → folded into the **v9** rendering pass;
 > plus a 6-digit score, enemy-stomp scoring, and lives↔checkpoint-respawn.
 
-### v8 — Level structure: pipes/warps, flagpole finish, staircase, bonus room
-- Enterable **pipes** (down‑press warp to a target like per‑door), the
-  **flagpole** end sequence (+ score by height) and castle, the **staircase**,
-  and the underground **bonus room** as a linked area.
-- Tests: compile; headless flagpole ends the level; pipe warps.
+### v8 — Level structure: pipes/warps, flagpole finish  *(✅ core LANDED 2026-07-05)*
+
+> **Landed (engine v8):** **pipes** — hold Down on a pipe cell to warp to a spawn
+> spot (underground bonus of a tall level; a Pipes editor in World); and a
+> **flagpole finish** — crossing a column wins (via the Win condition's `bw_won`)
+> with a +5000 bonus (toggle + column in the Style tab). `smb-level.mjs` covers
+> codegen + gating + cc65 compile; golden ROM byte-identical.
+>
+> **Deferred / achievable-today:** cross-**room** pipes (use a per-door warp);
+> the flagpole slide animation + castle; the **staircase** (just painted solid
+> tiles — no engine feature) and the **bonus room** (a door/pipe to another
+> area).
 
 ### v9 — Rendering / hardware scaling
 - **8×16 sprite mode** (DM‑3), OAM **priority cycling** (flicker over
