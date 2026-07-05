@@ -132,11 +132,14 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 > WORLD (Maker+). `smb-blocks.mjs` covers codegen + gating + cc65 compile; golden
 > ROM byte-identical.
 >
-> **Still open in v6:** runtime **tile-graphics swap** for used/broken blocks
-> (needs a queued vblank nametable poke — a used ? / broken brick currently goes
-> inert but keeps its art); the **? → item that visibly jumps out** (vs. the
-> current direct power-up grant); invisible/hidden blocks; multi-coin bricks;
-> and coin **score** (lands with the v7 HUD).
+> **Also landed:** runtime **tile-graphics swap** — a consumed block queues a
+> vblank nametable poke (`bw_poke_*`) so a collected coin / broken brick vanishes
+> and a used ? block shows a configurable "used tile"; jsnes-verified. (Reverts
+> if a block scrolls off and back, since the world map is `const` — fine forward.)
+>
+> **Still open in v6:** the **? → item that visibly jumps out** (vs. the current
+> direct power-up grant); invisible/hidden blocks; multi-coin bricks; and coin
+> **score** (lands with the v7 HUD).
 >
 > Implementation note: chose a **block-list table** (consistent with doors /
 > scene instances) over a per-metatile property table — same gameplay, far

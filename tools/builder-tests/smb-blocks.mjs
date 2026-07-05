@@ -55,10 +55,11 @@ function makeState() {
 // Codegen: v6 emits the block table + all three kinds; pre-v6 / non-smb emit nothing.
 {
   const out = window.BuilderAssembler.assemble(makeState(), tpl);
-  for (const re of [/#define BW_SMB_BLOCKS 1/, /#define BW_BLOCK_COUNT 3/, /bw_block_tbl\[\]/, /bw_coins\+\+/]) {
+  for (const re of [/#define BW_SMB_BLOCKS 1/, /#define BW_BLOCK_COUNT 3/, /bw_block_tbl\[\]/, /bw_coins\+\+/,
+    /bw_poke_n/, /PPU_ADDR = bw_poke_hi/, /bw_poke_tile\[bw_poke_n\] = bw_block_tbl\[bw_bb \+ 3\]/]) {
     if (!re.test(out)) { console.error('FAIL: v6 blocks codegen missing', re); process.exit(1); }
   }
-  console.log('✓ engine v6 emits the block table + coin/question/brick handling');
+  console.log('✓ engine v6 emits the block table + coin/?/brick handling + tile-swap pokes');
 
   globalThis.NES_TARGET_ENGINE = 5;
   if (/#define BW_SMB_BLOCKS/.test(window.BuilderAssembler.assemble(makeState(), tpl))) {
@@ -86,6 +87,39 @@ try {
   })).json();
   if (!r.ok) { console.error('FAIL compile: smb-blocks build rejected:', r.stage); console.error((r.log || '').slice(-2500)); process.exit(2); }
   console.log('✓ blocks build compiles via cc65 (' + r.size + ' bytes, engine v' + r.engineVersion + ')');
+
+  // --- Behavioural: the tile-swap actually pokes the nametable in jsnes. ---
+  // Paint tile 7 at a coin cell in the player's walk path; walk into it; the
+  // nametable VRAM byte must flip to the coin's usedTile (0).
+  const mm = { exports: {} };
+  new Function('module', 'exports', fs.readFileSync(path.join(WEB, 'jsnes.min.js'), 'utf8'))(mm, mm.exports);
+  const jsnes = mm.exports.NES ? mm.exports : window.jsnes;
+  const COL = 8, ROW = 26;               // player starts x=8,y=200 → settles rows 26-27
+  const bs = makeState();
+  bs.backgrounds[0].nametable[ROW][COL] = { tile: 7, palette: 0 };
+  bs.builder.modules.players.submodules.player1.config.startX = 8;
+  bs.builder.modules.players.submodules.player1.config.startY = 200;
+  bs.builder.modules.blocks.config.blockList = [{ x: COL, y: ROW, kind: 'coin', usedTile: 0 }];
+  const bout = window.BuilderAssembler.assemble(bs, tpl);
+  const br = await (await fetch(`http://127.0.0.1:${PORT}/play`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: bs, playerSpriteIdx: 0, playerStart: { x: 8, y: 200 }, sceneSprites: [], mode: 'browser', customMainC: bout, targetEngine: 6 }),
+  })).json();
+  if (!br.ok) { console.error('FAIL: coin-walk build rejected:', br.stage); process.exit(2); }
+  let romStr = ''; const bb = Buffer.from(br.rom_b64, 'base64');
+  for (let i = 0; i < bb.length; i++) romStr += String.fromCharCode(bb[i]);
+  const nes = new jsnes.NES({ onFrame: () => {}, onAudioSample: () => {} });
+  nes.loadROM(romStr);
+  const addr = 0x2000 + ROW * 32 + COL;
+  for (let i = 0; i < 40; i++) nes.frame();
+  const before = nes.ppu.vramMem[addr];
+  nes.buttonDown(1, jsnes.Controller.BUTTON_RIGHT);
+  for (let i = 0; i < 80; i++) nes.frame();
+  const after = nes.ppu.vramMem[addr];
+  if (!(before === 7 && after === 0)) {
+    console.error(`FAIL: coin tile-swap did not fire (VRAM before=${before}, after=${after}; expected 7→0)`); process.exit(3);
+  }
+  console.log('✓ collecting a coin pokes its nametable tile (7 → 0) — visual swap confirmed in jsnes');
 } finally {
   srv.kill('SIGTERM');
   await sleep(300);

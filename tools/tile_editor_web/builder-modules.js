@@ -1220,34 +1220,47 @@
         const x = A.clampInt(b.x, 0, 63, 0);
         const y = A.clampInt(b.y, 0, 29, 0);
         const k = KIND[b.kind] != null ? KIND[b.kind] : 1;
-        rows.push([x, y, k]);
+        const usedTile = A.clampInt(b.usedTile, 0, 255, 0);  // tile shown once consumed (0 = empty)
+        rows.push([x, y, k, usedTile]);
       }
       const decl = [
         '/* [builder] blocks (engine v6) — interactive ?/brick/coin blocks. */',
         '#define BW_SMB_BLOCKS 1',
         '#define BW_BLOCK_COUNT ' + rows.length,
-        'const unsigned char bw_block_tbl[] = {   /* x, y (tiles), kind 0=coin 1=? 2=brick */',
+        'const unsigned char bw_block_tbl[] = {   /* x, y (tiles), kind 0=coin 1=? 2=brick, usedTile */',
         '    ' + rows.map(r => r.join(', ')).join(',\n    '),
         '};',
         'unsigned char bw_block_used[BW_BLOCK_COUNT];',
         'unsigned int  bw_coins;',
+        '/* Pending nametable pokes — a consumed block queues its "used" tile here,',
+        ' * flushed to VRAM in the vblank window (rendering off) so the block',
+        ' * visibly changes / vanishes.  (A block that scrolls off-screen and back',
+        ' * is re-streamed from the const world map, so its art reverts even though',
+        ' * bw_block_used keeps it inert — fine for a forward-scrolling level.) */',
+        '#define BW_POKE_MAX 4',
+        'unsigned char bw_poke_hi[BW_POKE_MAX];',
+        'unsigned char bw_poke_lo[BW_POKE_MAX];',
+        'unsigned char bw_poke_tile[BW_POKE_MAX];',
+        'unsigned char bw_poke_n;',
       ];
       template = A.appendToSlot(template, 'declarations', decl.join('\n'));
       template = A.appendToSlot(template, 'init', [
         '    /* [builder] blocks — reset used flags + coin count on (re)start. */',
         '    bw_coins = 0;',
+        '    bw_poke_n = 0;',
         '    { unsigned char bw_bi; for (bw_bi = 0; bw_bi < BW_BLOCK_COUNT; bw_bi++) bw_block_used[bw_bi] = 0; }',
       ].join('\n'));
       const body = [
         '        // [builder] blocks (engine v6) — collect coins on touch; bump',
-        '        // ? / brick blocks from below (while rising).',
+        '        // ? / brick blocks from below (while rising).  A consumed block',
+        '        // queues a nametable poke so its tile changes / vanishes.',
         '        {',
         '            unsigned char bw_bi, bw_bb, bw_bcol, bw_brow, bw_bkind;',
         '            unsigned char bw_hcol = (unsigned char)((px + ((PLAYER_W << 3) >> 1)) >> 3);',
         '            unsigned char bw_hrow = (py >= 1) ? (unsigned char)((py - 1) >> 3) : 0;',
         '            for (bw_bi = 0; bw_bi < BW_BLOCK_COUNT; bw_bi++) {',
         '                if (bw_block_used[bw_bi]) continue;',
-        '                bw_bb = bw_bi * 3;',
+        '                bw_bb = bw_bi * 4;',
         '                bw_bcol = bw_block_tbl[bw_bb];',
         '                bw_brow = bw_block_tbl[bw_bb + 1];',
         '                bw_bkind = bw_block_tbl[bw_bb + 2];',
@@ -1276,10 +1289,33 @@
         '                        jmp_up = 0;   /* bonk regardless */',
         '                    }',
         '                }',
+        '                /* Just consumed?  Queue a nametable poke of its used tile. */',
+        '                if (bw_block_used[bw_bi] && bw_poke_n < BW_POKE_MAX) {',
+        '                    unsigned int bw_paddr = ((bw_bcol < 32) ? 0x2000U : 0x2400U) +',
+        '                                            (unsigned int)bw_brow * 32 + (bw_bcol & 0x1F);',
+        '                    bw_poke_hi[bw_poke_n] = (unsigned char)(bw_paddr >> 8);',
+        '                    bw_poke_lo[bw_poke_n] = (unsigned char)(bw_paddr & 0xFF);',
+        '                    bw_poke_tile[bw_poke_n] = bw_block_tbl[bw_bb + 3];',
+        '                    bw_poke_n++;',
+        '                }',
         '            }',
         '        }',
       ];
-      return A.appendToSlot(template, 'per_frame', body.join('\n'));
+      template = A.appendToSlot(template, 'per_frame', body.join('\n'));
+      const vb = [
+        '        /* [builder] blocks — flush queued "used tile" pokes to the',
+        '         * nametable (rendering is off in this vblank window). */',
+        '        {',
+        '            unsigned char bw_pk;',
+        '            for (bw_pk = 0; bw_pk < bw_poke_n; bw_pk++) {',
+        '                PPU_ADDR = bw_poke_hi[bw_pk];',
+        '                PPU_ADDR = bw_poke_lo[bw_pk];',
+        '                PPU_DATA = bw_poke_tile[bw_pk];',
+        '            }',
+        '            bw_poke_n = 0;',
+        '        }',
+      ];
+      return A.appendToSlot(template, 'vblank_writes', vb.join('\n'));
     },
   };
 

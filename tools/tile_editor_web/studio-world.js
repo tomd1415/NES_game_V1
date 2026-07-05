@@ -195,6 +195,8 @@
       }
       card.appendChild(num('X (tile)', 'x', 63));
       card.appendChild(num('Y (tile)', 'y', 29));
+      card.appendChild(num('Used tile', 'usedTile', 255));
+      card.appendChild(el('div', { class: 'dock-note', text: 'Used tile: the background tile drawn once this block is consumed (0 = empty). For a ? block, point it at your "used block" tile.' }));
       card.appendChild(el('button', { class: 'btn', text: 'Remove', onclick: function () {
         ctx.pushUndo(); list.splice(idx, 1); ctx.markDirty(); ctx.renderDock();
       } }));

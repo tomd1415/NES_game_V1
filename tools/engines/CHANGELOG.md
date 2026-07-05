@@ -21,8 +21,15 @@ for the full design (snapshots, fallback, upgrade advisor).
     (small→super→fire, when Power-ups are on) or +1 coin otherwise; then inert.
   - **brick** — bump from below; **breaks (vanishes) only while super**, else
     just bonks the head.
+- **Runtime tile-graphics swap** — a consumed block queues a nametable poke
+  (`bw_poke_*`, flushed in the vblank window) so its tile visibly changes: a
+  collected coin / broken brick vanishes, and a used ? block shows a
+  configurable **used tile**. Verified in jsnes (collecting a coin flips its
+  nametable byte). *Limitation:* a block that scrolls off-screen and back is
+  re-streamed from the `const` world map, so its art reverts even though it
+  stays logically inert — fine for a forward-scrolling level.
 - Studio: a **Blocks editor** in the WORLD dock (Maker+, SMB, engine v6) to
-  place blocks and pick each one's kind + tile position.
+  place blocks and pick each one's kind, tile position, and used tile.
 
 ### Changed / migration
 - No migration. All block code is gated on `BW_SMB_BLOCKS` (only emitted for the
@@ -31,10 +38,9 @@ for the full design (snapshots, fallback, upgrade advisor).
   unchanged.
 
 ### Not yet
-- Runtime **tile-graphics swap** for used/broken blocks (a used ? block and a
-  broken brick currently stop reacting but keep their painted art) — needs a
-  queued vblank nametable poke; next increment. Coin→score/HUD and the
-  `? → dispensed item that jumps out` animation land with the v7 HUD.
+- The `? → dispensed item that visibly jumps out` animation (vs. the current
+  direct power-up grant), invisible/hidden blocks, multi-coin bricks, and
+  coin→score — the last lands with the v7 HUD.
 
 ### Breaking
 - (none.)
