@@ -29,7 +29,7 @@ test('capture CHARS + RULES screenshots', async ({ page }) => {
 
   // WORLD with an entity placed + budget meters.
   await page.locator('.mode-btn[data-mode="chars"]').click();
-  await page.locator('.dock-section .btn', { hasText: '+ New' }).click();
+  await page.locator('#chars-new').click();
   await page.locator('select[data-role]').selectOption('enemy');
   await page.locator('.mode-btn[data-mode="world"]').click();
   await page.locator('.stage-toolbar .more-tools-btn').click();

@@ -110,7 +110,7 @@
     var arr = sprites(ctx);
 
     // --- Character list ---
-    var listSec = UI.section('Characters', el('button', { class: 'btn', text: '+ New', onclick: function () {
+    var listSec = UI.section('Characters', el('button', { class: 'btn', id: 'chars-new', text: '+ New', onclick: function () {
       ctx.pushUndo();
       arr.push(makeSprite('character ' + (arr.length + 1)));
       selIdx = arr.length - 1;

@@ -20,7 +20,7 @@ test('role assignment updates the sprite (the notes.md question)', async ({ page
 });
 
 test('new / duplicate / delete characters', async ({ page }) => {
-  await page.locator('.dock-section .btn', { hasText: '+ New' }).click();
+  await page.locator('#chars-new').click();
   await expect(page.locator('.char-row')).toHaveCount(2);
   const n = await page.evaluate(() => window.Studio.getState().sprites.length);
   expect(n).toBe(2);
