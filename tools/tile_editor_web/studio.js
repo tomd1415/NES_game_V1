@@ -47,6 +47,7 @@
   var activeTool = null;
   var undoStack = [];
   var redoStack = [];
+  var viewScreen = { x: 0, y: 0 };   // which screen the TV shows (bug #7, multi-screen bgs)
   var UNDO_LIMIT = 40;
 
   // ---- Undo / redo (in-memory, distinct from snapshots) -----------------
@@ -95,6 +96,12 @@
     tvCanvas: function () { return $('tv-canvas'); },
     NesRender: function () { return window.NesRender; },
     selectMode: function (id) { selectMode(id); },
+    // Multi-screen viewport (bug #7): which screen the TV shows, and the
+    // background's screen dimensions. Offsets are in TILE units.
+    viewScreen: function () { clampViewScreen(); return { x: viewScreen.x, y: viewScreen.y }; },
+    setViewScreen: function (x, y) { viewScreen.x = x | 0; viewScreen.y = y | 0; clampViewScreen(); },
+    viewOffset: function () { clampViewScreen(); return { cx: viewScreen.x * SCREEN_W, cy: viewScreen.y * SCREEN_H }; },
+    bgScreens: function () { return bgScreens(activeBackground()); },
   };
 
   // ---- State migration / validation for the storage layer ---------------
@@ -156,6 +163,17 @@
     }
     return (bg && bg.nametable) || [];
   }
+  function bgScreens(bg) {
+    var d = (bg && bg.dimensions) || {};
+    return { x: Math.max(1, d.screens_x | 0 || 1), y: Math.max(1, d.screens_y | 0 || 1) };
+  }
+  function clampViewScreen() {
+    var s = bgScreens(activeBackground());
+    if (viewScreen.x > s.x - 1) viewScreen.x = s.x - 1;
+    if (viewScreen.y > s.y - 1) viewScreen.y = s.y - 1;
+    if (viewScreen.x < 0) viewScreen.x = 0;
+    if (viewScreen.y < 0) viewScreen.y = 0;
+  }
   function packRgb(idx) {
     var c = window.NesRender.NES_PALETTE_RGB[idx & 0x3F];
     return (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0]; // ABGR little-endian
@@ -174,10 +192,12 @@
     var buf = new Uint32Array(img.data.buffer);
     var nt = activeNametable();
     var tiles = state.bg_tiles || [];
+    clampViewScreen();
+    var offX = viewScreen.x * SCREEN_W, offY = viewScreen.y * SCREEN_H;
     for (var cy = 0; cy < SCREEN_H; cy++) {
-      var row = nt[cy] || [];
+      var row = nt[cy + offY] || [];
       for (var cx = 0; cx < SCREEN_W; cx++) {
-        var cell = row[cx] || { tile: 0, palette: 0 };
+        var cell = row[cx + offX] || { tile: 0, palette: 0 };
         var pal = window.NesRender.bgPaletteFor(state, cell.palette || 0);
         var slots = [pal.slot0, pal.slot1, pal.slot2, pal.slot3];
         var packed = [packRgb(slots[0]), packRgb(slots[1]), packRgb(slots[2]), packRgb(slots[3])];
@@ -271,19 +291,46 @@
       b.type = 'button';
       b.dataset.mode = m.id;
       b.innerHTML = '<span class="ico" aria-hidden="true">' + m.ico + '</span>' +
-        '<span>' + m.name + '</span>';
-      b.addEventListener('click', function () { selectMode(m.id); });
+        '<span>' + m.name + '</span><span class="lock" hidden>🔒</span>';
+      b.addEventListener('click', function () {
+        if (b.classList.contains('locked')) {
+          // Bug #4: locked modes are visible so pupils see more exists —
+          // clicking one nudges them to raise the level instead of hiding it.
+          var need = (m.minLevel >= LEVELS.advanced) ? 'Advanced' : 'Maker';
+          flashLevelHint('🔒 ' + m.name + ' unlocks at ' + need + ' level — change “Level” (top-right).');
+          return;
+        }
+        selectMode(m.id);
+      });
       rail.appendChild(b);
     });
     applyLevelGating();
     highlightMode();
   }
+  var _hintTimer = null;
+  function flashLevelHint(msg) {
+    var h = $('level-hint'); if (!h) return;
+    h.textContent = msg; h.classList.add('flash');
+    if (_hintTimer) clearTimeout(_hintTimer);
+    _hintTimer = setTimeout(function () { h.classList.remove('flash'); updateLevelHint(); }, 4000);
+  }
+  function updateLevelHint() {
+    var h = $('level-hint'); if (!h) return;
+    if (h.classList.contains('flash')) return;
+    h.textContent = currentLevel === 'beginner'
+      ? '🔒 Beginner — pick Maker/Advanced to unlock more'
+      : (currentLevel === 'maker' ? 'Maker — most tools unlocked' : 'Advanced — everything unlocked');
+  }
   function applyLevelGating() {
     var lvl = LEVELS[currentLevel] || 0;
     Array.prototype.forEach.call(document.querySelectorAll('.mode-btn'), function (b) {
       var m = MODES.find(function (mm) { return mm.id === b.dataset.mode; });
-      b.hidden = !!(m && m.minLevel > lvl);
+      var locked = !!(m && m.minLevel > lvl);
+      b.classList.toggle('locked', locked);
+      var lk = b.querySelector('.lock'); if (lk) lk.hidden = !locked;
+      b.hidden = false; // show locked modes rather than hiding them (bug #4)
     });
+    updateLevelHint();
     // If the active mode just became hidden, fall back to World.
     var activeM = MODES.find(function (mm) { return mm.id === currentMode; });
     if (activeM && activeM.minLevel > lvl) selectMode('world');
@@ -418,6 +465,25 @@
     renderStageToolbar(mod && mod.renderDock ? mod : null);
     renderDock();
     refreshQuestsAndAttention();
+  }
+
+  // ---- New starter game (bug #3/#5) -------------------------------------
+  // Creates a fresh starter platformer as a NEW project (current work is
+  // saved separately), so Beginner always has something playable to start
+  // from — the fix for "there is no starting game".
+  function onNewGame() {
+    if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
+    Storage.flushPending();
+    var n = (Storage.listProjects() || []).length + 1;
+    var fresh = window.StudioStarter.create({ name: 'My Game ' + n });
+    Storage.createProject(fresh.name, fresh); // registers + sets active
+    state = Storage.loadCurrent() || fresh;
+    undoStack.length = 0; redoStack.length = 0;
+    $('project-name').value = state.name || '';
+    if (window.StudioModes && window.StudioModes.world) selectMode('world');
+    renderLive(); renderDock(); refreshQuestsAndAttention();
+    setSaveState('saved');
+    if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
   }
 
   // ---- Quests + Needs attention -----------------------------------------
@@ -936,8 +1002,27 @@
     Storage = window.createTileEditorStorage({ migrateState: migrateState, validateState: validateState });
     window.Storage = Storage; // shared account-menu.js reads this
 
-    state = Storage.bootstrapCurrent(function () { return window.StudioStarter.create(); });
-    state = migrateState(state);
+    // Load the active project, but never boot into a broken/empty state:
+    // if the stored project is missing, invalid, or throws while migrating,
+    // fall back to a fresh starter game so the Studio is always usable.
+    try {
+      state = Storage.bootstrapCurrent(function () { return window.StudioStarter.create(); });
+      state = migrateState(state);
+      if (validateState(state)) throw new Error('invalid project: ' + validateState(state));
+    } catch (e) {
+      console.warn('[studio] could not load the saved project — starting a fresh game.', e);
+      state = window.StudioStarter.create();
+      try { Storage.createProject(state.name || 'My Game', state); } catch (e2) {}
+    }
+    // Guard against a technically-valid but contentless project (no
+    // backgrounds / no sprites) that would look like "nothing loaded".
+    if (!Array.isArray(state.backgrounds) || !state.backgrounds.length
+        || !Array.isArray(state.sprites) || !state.sprites.length) {
+      var seeded = window.StudioStarter.create();
+      // Keep any name the pupil had chosen.
+      if (state && state.name) seeded.name = state.name;
+      state = seeded;
+    }
     Storage.saveCurrent(state);
 
     // Register the flush hook so debounced edits persist before reload/switch.
@@ -1014,6 +1099,13 @@
     });
     $('btn-help').addEventListener('click', openHelp);
     $('level-select').addEventListener('change', onLevelChange);
+    $('btn-new-game').addEventListener('click', onNewGame);
+    // Let the shared account menu offer "Load a starter game" too (bug: the
+    // starter/projects aren't loading) — available even when signed out.
+    window.onLoadStarterGame = onNewGame;
+    if (window.AccountMenu && typeof window.AccountMenu.refresh === 'function') {
+      try { window.AccountMenu.refresh(); } catch (e) {}
+    }
 
     // TV pointer interaction — delegated to the active mode module.
     // A mode implements onTvDown/onTvMove/onTvUp(cell, ctx, evt).

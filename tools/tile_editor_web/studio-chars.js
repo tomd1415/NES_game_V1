@@ -23,6 +23,8 @@
   var pen = 1;       // 0=erase/transparent, 1-3 = palette colours
   var layout = null; // {originX, originY, scale, w, h} for pointer mapping
   var strokeOpen = false;
+  var shapeStart = null; // line/rect start (sprite-space {sx,sy})
+  var shapeEnd = null;   // line/rect current end
 
   function sprites(ctx) { return ctx.getState().sprites || (ctx.getState().sprites = []); }
   function current(ctx) {
@@ -81,6 +83,17 @@
     for (var cx = 0; cx <= sp.width; cx++) { g.beginPath(); g.moveTo(layout.originX + cx * 8 * s + 0.5, layout.originY); g.lineTo(layout.originX + cx * 8 * s + 0.5, layout.originY + layout.h * s); g.stroke(); }
     for (var cy = 0; cy <= sp.height; cy++) { g.beginPath(); g.moveTo(layout.originX, layout.originY + cy * 8 * s + 0.5); g.lineTo(layout.originX + layout.w * s, layout.originY + cy * 8 * s + 0.5); g.stroke(); }
     g.globalAlpha = 1;
+    // Live line/rect preview.
+    if (strokeOpen && shapeStart && shapeEnd) {
+      var tool = ctx.getActiveTool();
+      if (tool === 'line' || tool === 'rect') {
+        g.fillStyle = 'rgba(250,158,0,0.55)';
+        shapePixels(shapeStart, shapeEnd, tool).forEach(function (pt) {
+          if (pt.sx < 0 || pt.sy < 0 || pt.sx >= layout.w || pt.sy >= layout.h) return;
+          g.fillRect(layout.originX + pt.sx * s, layout.originY + pt.sy * s, s, s);
+        });
+      }
+    }
   }
 
   function pixelFromCell(cell) {
@@ -280,6 +293,29 @@
 
     // --- Pen ---
     var penSec = UI.section('Pen', el('span', { class: 'chip', text: 'draw' }));
+
+    // Palette picker (bug #1): choose which of the 4 sprite palettes this
+    // character draws with. Applies to all its cells so the Pen colours,
+    // the canvas and the LIVE render all agree.
+    var curPal = (sp.cells[0][0] && sp.cells[0][0].palette) || 0;
+    var palPick = el('div', { class: 'row', 'data-char-pal': '1' });
+    for (var ppi = 0; ppi < 4; ppi++) (function (p) {
+      var sPal = global.NesRender.spritePaletteFor(state, p);
+      var btn = el('button', { class: 'btn' + (p === curPal ? ' primary' : ''), title: 'Sprite palette ' + p, 'data-pal': String(p),
+        onclick: function () {
+          ctx.pushUndo();
+          sp.cells.forEach(function (row) { row.forEach(function (cell) { cell.palette = p; }); });
+          ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+        } });
+      // Tiny 3-colour swatch strip so pupils see each palette.
+      [sPal.slot1, sPal.slot2, sPal.slot3].forEach(function (c) {
+        btn.appendChild(el('span', { style: 'display:inline-block;width:7px;height:7px;margin-left:2px;vertical-align:middle;border:1px solid #000;background:' + global.NesRender.nesRgb(c) }));
+      });
+      btn.insertBefore(document.createTextNode('SP ' + p), btn.firstChild);
+      palPick.appendChild(btn);
+    })(ppi);
+    penSec.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Palette' }), palPick]));
+
     var palRow = el('div', { class: 'swatch-row' });
     var spPal = global.NesRender.spritePaletteFor(state, (sp.cells[0][0] && sp.cells[0][0].palette) || 0);
     var colors = [null, spPal.slot1, spPal.slot2, spPal.slot3];
@@ -476,6 +512,8 @@
     ],
     moreTools: [
       { id: 'fill', label: '🪣 Fill' },
+      { id: 'line', label: '📏 Line' },
+      { id: 'rect', label: '▭ Rect' },
     ],
     renderTV: renderTV,
     onRenderOverlay: onRenderOverlay,
@@ -486,6 +524,11 @@
     onTvDown: function (cell, ctx) {
       var p = pixelFromCell(cell); if (!p) return;
       var tool = ctx.getActiveTool();
+      if (tool === 'line' || tool === 'rect') {
+        ctx.pushUndo(); strokeOpen = true;
+        shapeStart = { sx: p.sx, sy: p.sy }; shapeEnd = { sx: p.sx, sy: p.sy };
+        ctx.renderLive(); return;
+      }
       // The shared-tile guard owns pushUndo; proceed() only paints + renders.
       guardSharedThen(ctx, p, function () {
         strokeOpen = true;
@@ -494,14 +537,60 @@
       });
     },
     onTvMove: function (cell, ctx) {
-      if (!strokeOpen || ctx.getActiveTool() === 'fill') return;
+      if (!strokeOpen) return;
+      var tool = ctx.getActiveTool();
       var p = pixelFromCell(cell); if (!p) return;
+      if (tool === 'line' || tool === 'rect') { shapeEnd = { sx: p.sx, sy: p.sy }; ctx.renderLive(); return; }
+      if (tool === 'fill') return;
       paintPixel(ctx, p); ctx.renderLive();
     },
-    onTvUp: function (cell, ctx) { if (strokeOpen) { strokeOpen = false; ctx.markDirty(); ctx.renderDock(); ctx.refresh(); } },
+    onTvUp: function (cell, ctx) {
+      if (!strokeOpen) return;
+      var tool = ctx.getActiveTool();
+      if ((tool === 'line' || tool === 'rect') && shapeStart) {
+        commitShape(ctx, tool);
+        shapeStart = null; shapeEnd = null;
+      }
+      strokeOpen = false; ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); ctx.refresh();
+    },
     _get: function () { return { selIdx: selIdx, pen: pen }; },
     _select: function (i) { selIdx = i; },
   };
+
+  // Line + rectangle over the whole metasprite (bug #2). Pixels are in
+  // sprite-space (sx,sy) spanning width*8 × height*8; each maps to its cell +
+  // tile and paints via paintPixel (which handles allocation + flip).
+  function shapePixels(a, b, tool) {
+    var pts = [];
+    if (tool === 'line') {
+      var x0 = a.sx, y0 = a.sy, x1 = b.sx, y1 = b.sy;
+      var dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+      var sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+      while (true) {
+        pts.push({ sx: x0, sy: y0 });
+        if (x0 === x1 && y0 === y1) break;
+        var e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+      }
+    } else {
+      var lx = Math.min(a.sx, b.sx), rx = Math.max(a.sx, b.sx);
+      var ty = Math.min(a.sy, b.sy), by = Math.max(a.sy, b.sy);
+      for (var x = lx; x <= rx; x++) { pts.push({ sx: x, sy: ty }); pts.push({ sx: x, sy: by }); }
+      for (var y = ty; y <= by; y++) { pts.push({ sx: lx, sy: y }); pts.push({ sx: rx, sy: y }); }
+    }
+    return pts;
+  }
+  function paintSpritePixel(ctx, sx, sy) {
+    var sp = current(ctx);
+    if (!sp || sx < 0 || sy < 0 || sx >= sp.width * 8 || sy >= sp.height * 8) return;
+    paintPixel(ctx, { cr: sy >> 3, cc: sx >> 3, tx: sx & 7, ty: sy & 7 });
+  }
+  function commitShape(ctx, tool) {
+    shapePixels(shapeStart, shapeEnd || shapeStart, tool).forEach(function (pt) {
+      paintSpritePixel(ctx, pt.sx, pt.sy);
+    });
+  }
 
   // Flood fill within a single tile-cell.
   function fillTile(ctx, p) {

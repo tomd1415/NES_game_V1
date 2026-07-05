@@ -133,23 +133,52 @@
     return ctrl;
   }
 
+  // A host page (the Studio) can offer "Load a starter game" from this menu by
+  // defining window.onLoadStarterGame. Hidden on pages that don't (old pages).
+  function starterItem() {
+    if (typeof global.onLoadStarterGame !== 'function') return null;
+    return el('button', {
+      type: 'button', text: '🎮 Load a starter game',
+      title: 'Start a fresh starter game to learn with (no account needed)',
+      onclick: function () {
+        var m = document.getElementById('account-menu'); if (m) m.open = false;
+        try { global.onLoadStarterGame(); } catch (e) {}
+      },
+    });
+  }
+
   function renderControl() {
     var ctrl = document.getElementById('account-control');
     if (!ctrl) return;
     ctrl.replaceChildren();
+    var starter = starterItem();
     if (me && me.username) {
       var summary = el('summary', { title: 'Your account' }, [
         document.createTextNode('👤 '),
         el('span', { class: 'acct-user', text: me.username }),
         document.createTextNode(' ▾'),
       ]);
-      var body = el('div', { class: 'menu-body' }, [
+      var items = [
         el('button', { type: 'button', text: '☁ Save to my account', onclick: saveToAccount }),
         el('button', { type: 'button', text: '☁ Open from my account…', onclick: openLoadDialog }),
-        el('hr', { class: 'tb-inline-divider' }),
-        el('button', { type: 'button', text: '🚪 Sign out', onclick: signOut }),
-      ]);
+      ];
+      if (starter) { items.push(el('hr', { class: 'tb-inline-divider' })); items.push(starter); }
+      items.push(el('hr', { class: 'tb-inline-divider' }));
+      items.push(el('button', { type: 'button', text: '🚪 Sign out', onclick: signOut }));
+      var body = el('div', { class: 'menu-body' }, items);
       ctrl.appendChild(el('details', { class: 'account-menu', id: 'account-menu' }, [summary, body]));
+    } else if (starter) {
+      // Signed-out but a starter is on offer → a small dropdown so pupils can
+      // load a starter game even without an account (the user's request).
+      var summaryOut = el('summary', { title: 'Account & starter' }, [document.createTextNode('👤 ▾')]);
+      var bodyOut = el('div', { class: 'menu-body' }, [
+        starter,
+        el('hr', { class: 'tb-inline-divider' }),
+        el('button', { type: 'button', text: '👤 Sign in', onclick: function () {
+          var m = document.getElementById('account-menu'); if (m) m.open = false; openAuthDialog();
+        } }),
+      ]);
+      ctrl.appendChild(el('details', { class: 'account-menu', id: 'account-menu' }, [summaryOut, bodyOut]));
     } else {
       ctrl.appendChild(el('button', {
         type: 'button', class: 'account-signin', id: 'account-signin',
@@ -390,6 +419,12 @@
     }
   }
 
-  global.AccountMenu = { mount: mount, _refreshMe: refreshMe, _api: api };
+  // refresh() re-renders the control (e.g. after a host page defines
+  // window.onLoadStarterGame post-mount) so the starter item can appear.
+  global.AccountMenu = {
+    mount: mount,
+    refresh: function () { if (mounted) { try { renderControl(); } catch (e) {} } },
+    _refreshMe: refreshMe, _api: api,
+  };
   init();
 })(typeof window !== 'undefined' ? window : globalThis);

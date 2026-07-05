@@ -23,6 +23,8 @@
   var layout = null; // {ox, oy, scale}
   var strokeOpen = false;
   var dragFrom = null; // bank-grid drag source index (for reference-rewriting swap)
+  var shapeStart = null; // line/rect start pixel
+  var shapeSnap = null;  // tile snapshot for live shape preview
 
   function pool(state) { return bank === 'bg' ? state.bg_tiles : state.sprite_tiles; }
 
@@ -241,22 +243,34 @@
       { id: 'pencil', label: '✏ Pencil' },
       { id: 'erase', label: '🩹 Erase' },
     ],
-    moreTools: [{ id: 'fill', label: '🪣 Fill' }],
+    moreTools: [{ id: 'fill', label: '🪣 Fill' }, { id: 'line', label: '📏 Line' }, { id: 'rect', label: '▭ Rect' }],
     renderTV: renderTV,
     onRenderOverlay: onRenderOverlay,
     renderDock: renderDock,
     onToolChange: function (id) { if (id === 'erase') pen = 0; else if (pen === 0) pen = 1; },
     onTvDown: function (cell, ctx) {
       var p = pixelFromCell(cell); if (!p) return;
+      var tool = ctx.getActiveTool();
       ctx.pushUndo(); strokeOpen = true;
-      if (ctx.getActiveTool() === 'fill') fill(ctx, p); else paint(ctx, p);
+      if (tool === 'line' || tool === 'rect') {
+        shapeStart = { x: p.x, y: p.y };
+        shapeSnap = tile(ctx).pixels.map(function (r) { return r.slice(); });
+        applyShape(ctx, shapeStart, p, tool);
+      } else if (tool === 'fill') { fill(ctx, p); } else { paint(ctx, p); }
       ctx.renderLive();
     },
     onTvMove: function (cell, ctx) {
-      if (!strokeOpen || ctx.getActiveTool() === 'fill') return;
-      var p = pixelFromCell(cell); if (!p) return; paint(ctx, p); ctx.renderLive();
+      if (!strokeOpen) return;
+      var tool = ctx.getActiveTool();
+      var p = pixelFromCell(cell); if (!p) return;
+      if (tool === 'line' || tool === 'rect') {
+        if (!shapeStart) return;
+        restoreSnap(ctx); applyShape(ctx, shapeStart, p, tool); ctx.renderLive(); return;
+      }
+      if (tool === 'fill') return;
+      paint(ctx, p); ctx.renderLive();
     },
-    onTvUp: function (cell, ctx) { if (strokeOpen) { strokeOpen = false; ctx.markDirty(); ctx.renderDock(); ctx.refresh(); } },
+    onTvUp: function (cell, ctx) { if (strokeOpen) { strokeOpen = false; shapeStart = null; shapeSnap = null; ctx.markDirty(); ctx.renderDock(); ctx.refresh(); } },
     onKey: function (evt, ctx) {
       if (evt.key === '[') { selIdx = Math.max(0, selIdx - 1); ctx.renderLive(); ctx.renderDock(); }
       else if (evt.key === ']') { selIdx = Math.min(255, selIdx + 1); ctx.renderLive(); ctx.renderDock(); }
@@ -272,6 +286,34 @@
     // In-context focus target (2.4): jump here from CHARS/WORLD.
     focus: function (ctx, b, idx) { if (b) bank = b; if (idx != null) selIdx = Math.max(0, Math.min(255, idx | 0)); ctx.selectMode('tiles'); },
   };
+
+  // Line + rectangle drawing with a live drag preview (bug #2).
+  function restoreSnap(ctx) {
+    if (!shapeSnap) return;
+    var t = tile(ctx);
+    for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) t.pixels[y][x] = shapeSnap[y][x];
+  }
+  function applyShape(ctx, a, b, tool) {
+    var t = tile(ctx);
+    function set(x, y) { if (x >= 0 && y >= 0 && x < 8 && y < 8) t.pixels[y][x] = pen; }
+    if (tool === 'line') {
+      var x0 = a.x, y0 = a.y, x1 = b.x, y1 = b.y;
+      var dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+      var sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+      while (true) {
+        set(x0, y0);
+        if (x0 === x1 && y0 === y1) break;
+        var e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+      }
+    } else { // rect outline
+      var lx = Math.min(a.x, b.x), rx = Math.max(a.x, b.x);
+      var ty = Math.min(a.y, b.y), by = Math.max(a.y, b.y);
+      for (var x = lx; x <= rx; x++) { set(x, ty); set(x, by); }
+      for (var y = ty; y <= by; y++) { set(lx, y); set(rx, y); }
+    }
+  }
 
   function fill(ctx, p) {
     var t = tile(ctx);

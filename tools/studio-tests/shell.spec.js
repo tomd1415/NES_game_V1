@@ -73,19 +73,24 @@ test('mode rail switches the dock and stage name', async ({ page }) => {
 });
 
 test('level switch gates advanced modes (progressive disclosure)', async ({ page }) => {
-  // Beginner: Tiles / Pals / Sound / Code hidden; World / Chars / Rules shown.
-  await expect(page.locator('.mode-btn[data-mode="tiles"]')).toBeHidden();
-  await expect(page.locator('.mode-btn[data-mode="code"]')).toBeHidden();
-  await expect(page.locator('.mode-btn[data-mode="world"]')).toBeVisible();
+  // Bug #4: gated modes stay VISIBLE but LOCKED so pupils see more exists.
+  // Beginner: Tiles / Code locked; World unlocked.
+  await expect(page.locator('.mode-btn[data-mode="tiles"]')).toHaveClass(/locked/);
+  await expect(page.locator('.mode-btn[data-mode="code"]')).toHaveClass(/locked/);
+  await expect(page.locator('.mode-btn[data-mode="world"]')).not.toHaveClass(/locked/);
+  // Clicking a locked mode nudges to raise the level (doesn't switch).
+  await page.locator('.mode-btn[data-mode="tiles"]').click();
+  expect(await page.evaluate(() => window.Studio.getMode())).not.toBe('tiles');
+  await expect(page.locator('#level-hint')).toContainText('unlocks');
 
-  // Maker reveals Tiles/Pals/Sound but not Code.
+  // Maker unlocks Tiles but not Code.
   await page.locator('#level-select').selectOption('maker');
-  await expect(page.locator('.mode-btn[data-mode="tiles"]')).toBeVisible();
-  await expect(page.locator('.mode-btn[data-mode="code"]')).toBeHidden();
+  await expect(page.locator('.mode-btn[data-mode="tiles"]')).not.toHaveClass(/locked/);
+  await expect(page.locator('.mode-btn[data-mode="code"]')).toHaveClass(/locked/);
 
-  // Advanced reveals everything.
+  // Advanced unlocks everything.
   await page.locator('#level-select').selectOption('advanced');
-  await expect(page.locator('.mode-btn[data-mode="code"]')).toBeVisible();
+  await expect(page.locator('.mode-btn[data-mode="code"]')).not.toHaveClass(/locked/);
 });
 
 test('the World dock adds a background and the TV follows', async ({ page }) => {

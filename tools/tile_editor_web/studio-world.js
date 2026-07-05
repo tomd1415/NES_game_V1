@@ -62,69 +62,104 @@
   }
   function isMetatileBg(bg) { return bg && bg.tileMode === '16x16'; }
 
+  // World size in tiles (multi-screen, bug #7).
+  function worldCols(bg) { return SCREEN_W * Math.max(1, (bg && bg.dimensions && bg.dimensions.screens_x | 0) || 1); }
+  function worldRows(bg) { return SCREEN_H * Math.max(1, (bg && bg.dimensions && bg.dimensions.screens_y | 0) || 1); }
+  // TILE offset of the screen the TV is currently showing.
+  function off(ctx) { return ctx.viewOffset ? ctx.viewOffset() : { cx: 0, cy: 0 }; }
+
   function ensureBehaviour(bg) {
-    if (!Array.isArray(bg.behaviour) || bg.behaviour.length !== SCREEN_H) {
+    var cols = worldCols(bg), rows = worldRows(bg);
+    if (!Array.isArray(bg.behaviour) || bg.behaviour.length !== rows
+        || !Array.isArray(bg.behaviour[0]) || bg.behaviour[0].length !== cols) {
+      var prev = Array.isArray(bg.behaviour) ? bg.behaviour : [];
       bg.behaviour = [];
-      for (var r = 0; r < SCREEN_H; r++) {
+      for (var r = 0; r < rows; r++) {
         var row = [];
-        for (var c = 0; c < SCREEN_W; c++) row.push(0);
+        for (var c = 0; c < cols; c++) row.push((prev[r] && prev[r][c] != null) ? prev[r][c] : 0);
         bg.behaviour.push(row);
       }
     }
     return bg.behaviour;
   }
 
-  // ---- Painting ----------------------------------------------------------
+  // Resize a background to sx×sy screens (bug #7), preserving existing art.
+  function resizeBackground(ctx, sx, sy) {
+    var bg = activeBg(ctx);
+    if (isMetatileBg(bg)) { alert('This background uses 16×16 blocks — revert to 8×8 first to resize.'); return; }
+    ctx.pushUndo();
+    bg.dimensions = { screens_x: sx, screens_y: sy };
+    var cols = SCREEN_W * sx, rows = SCREEN_H * sy;
+    var oldNt = bg.nametable || [];
+    var nt = [];
+    for (var r = 0; r < rows; r++) {
+      var row = [];
+      for (var c = 0; c < cols; c++) {
+        var old = oldNt[r] && oldNt[r][c];
+        row.push(old ? { tile: old.tile | 0, palette: old.palette | 0 } : { tile: 0, palette: 0 });
+      }
+      nt.push(row);
+    }
+    bg.nametable = nt;
+    ensureBehaviour(bg);
+    ctx.setViewScreen(0, 0);
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+  }
+
+  // ---- Painting (cx,cy are screen-local; +view offset → world) -----------
   function paintCell(ctx, cx, cy) {
     var s = ctx.getState();
     var bg = activeBg(ctx);
     if (isMetatileBg(bg)) return;
+    var o = off(ctx); var wx = cx + o.cx, wy = cy + o.cy;
     var nt = bg.nametable;
-    if (!nt[cy] || !nt[cy][cx]) return;
+    if (!nt[wy] || !nt[wy][wx]) return;
     var tool = ctx.getActiveTool();
     if (tool === 'stamp') {
-      nt[cy][cx] = { tile: stampTile, palette: paintPalette };
+      nt[wy][wx] = { tile: stampTile, palette: paintPalette };
     } else if (tool === 'erase') {
-      nt[cy][cx] = { tile: 0, palette: 0 };
+      nt[wy][wx] = { tile: 0, palette: 0 };
     } else if (tool === 'palette') {
       // Attribute granularity: a whole 2×2 quadrant shares one palette.
-      var qx = cx - (cx % 2), qy = cy - (cy % 2);
+      var qx = wx - (wx % 2), qy = wy - (wy % 2);
       for (var dy = 0; dy < 2; dy++) for (var dx = 0; dx < 2; dx++) {
         var yy = qy + dy, xx = qx + dx;
         if (nt[yy] && nt[yy][xx]) nt[yy][xx].palette = paintPalette;
       }
     } else if (tool === 'type') {
-      ensureBehaviour(bg)[cy][cx] = paintType;
+      ensureBehaviour(bg)[wy][wx] = paintType;
     }
   }
 
   function floodFill(ctx, cx, cy) {
     var bg = activeBg(ctx);
     if (isMetatileBg(bg)) return;
+    var o = off(ctx); var wx = cx + o.cx, wy = cy + o.cy;
+    var cols = worldCols(bg), rows = worldRows(bg);
     var nt = bg.nametable;
     var tool = ctx.getActiveTool();
     if (tool === 'type') {
       var beh = ensureBehaviour(bg);
-      var fromT = beh[cy][cx];
+      var fromT = beh[wy][wx];
       if (fromT === paintType) return;
-      floodGeneric(cx, cy, function (x, y) { return beh[y][x] === fromT; },
+      floodGeneric(wx, wy, cols, rows, function (x, y) { return beh[y][x] === fromT; },
         function (x, y) { beh[y][x] = paintType; });
       return;
     }
-    var target = nt[cy][cx];
+    var target = nt[wy][wx];
     var fromTile = target.tile, fromPal = target.palette;
     var toTile = tool === 'erase' ? 0 : stampTile;
     var toPal = tool === 'erase' ? 0 : paintPalette;
     if (fromTile === toTile && fromPal === toPal) return;
-    floodGeneric(cx, cy,
+    floodGeneric(wx, wy, cols, rows,
       function (x, y) { return nt[y][x].tile === fromTile && nt[y][x].palette === fromPal; },
       function (x, y) { nt[y][x] = { tile: toTile, palette: toPal }; });
   }
-  function floodGeneric(sx, sy, match, set) {
+  function floodGeneric(sx, sy, cols, rows, match, set) {
     var stack = [[sx, sy]], seen = {};
     while (stack.length) {
       var p = stack.pop(), x = p[0], y = p[1];
-      if (x < 0 || y < 0 || x >= SCREEN_W || y >= SCREEN_H) continue;
+      if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
       var k = x + ',' + y;
       if (seen[k]) continue;
       if (!match(x, y)) continue;
@@ -144,11 +179,11 @@
   function copyRegion(ctx) {
     if (!selRect) return;
     var bg = activeBg(ctx); if (isMetatileBg(bg)) return;
-    var r = normRect(selRect), nt = bg.nametable, rows = [];
+    var o = off(ctx), r = normRect(selRect), nt = bg.nametable, rows = [];
     for (var y = r.y0; y <= r.y1; y++) {
       var row = [];
       for (var x = r.x0; x <= r.x1; x++) {
-        var c = (nt[y] && nt[y][x]) || { tile: 0, palette: 0 };
+        var c = (nt[y + o.cy] && nt[y + o.cy][x + o.cx]) || { tile: 0, palette: 0 };
         row.push({ tile: c.tile | 0, palette: c.palette | 0 });
       }
       rows.push(row);
@@ -158,12 +193,13 @@
   function pasteRegion(ctx) {
     if (!clipboard || !selRect) return;
     var bg = activeBg(ctx); if (isMetatileBg(bg)) return;
-    var r = normRect(selRect), nt = bg.nametable;
+    var o = off(ctx), r = normRect(selRect), nt = bg.nametable;
+    var cols = worldCols(bg), rows = worldRows(bg);
     ctx.pushUndo();
     for (var dy = 0; dy < clipboard.length; dy++) {
       for (var dx = 0; dx < clipboard[dy].length; dx++) {
-        var yy = r.y0 + dy, xx = r.x0 + dx;
-        if (yy >= SCREEN_H || xx >= SCREEN_W) continue;
+        var yy = r.y0 + o.cy + dy, xx = r.x0 + o.cx + dx;
+        if (yy >= rows || xx >= cols) continue;
         if (nt[yy] && nt[yy][xx]) nt[yy][xx] = { tile: clipboard[dy][dx].tile, palette: clipboard[dy][dx].palette };
       }
     }
@@ -172,10 +208,11 @@
   function clearRegion(ctx) {
     if (!selRect) return;
     var bg = activeBg(ctx); if (isMetatileBg(bg)) return;
-    var r = normRect(selRect), nt = bg.nametable;
+    var o = off(ctx), r = normRect(selRect), nt = bg.nametable;
     ctx.pushUndo();
     for (var y = r.y0; y <= r.y1; y++) for (var x = r.x0; x <= r.x1; x++) {
-      if (nt[y] && nt[y][x]) nt[y][x] = { tile: 0, palette: 0 };
+      var yy = y + o.cy, xx = x + o.cx;
+      if (nt[yy] && nt[yy][xx]) nt[yy][xx] = { tile: 0, palette: 0 };
     }
     ctx.markDirty(); ctx.renderLive();
   }
@@ -277,12 +314,13 @@
     var cbg = _octx && activeBg(_octx);
     if (cbg && !isMetatileBg(cbg) && Array.isArray(cbg.nametable)) {
       var nt = cbg.nametable;
+      var co = off(_octx);
       g.lineWidth = 2; g.strokeStyle = '#C72E00';
       for (var qy = 0; qy < SCREEN_H; qy += 2) {
         for (var qx = 0; qx < SCREEN_W; qx += 2) {
           var seen = -1, clash = false;
           for (var dy = 0; dy < 2 && !clash; dy++) for (var dx = 0; dx < 2; dx++) {
-            var cc = nt[qy + dy] && nt[qy + dy][qx + dx];
+            var cc = nt[qy + dy + co.cy] && nt[qy + dy + co.cy][qx + dx + co.cx];
             var pv = cc ? (cc.palette | 0) : 0;
             if (seen < 0) seen = pv; else if (pv !== seen) { clash = true; break; }
           }
@@ -508,6 +546,38 @@
 
     var bg = activeBg(ctx);
     if (isMetatileBg(bg)) { renderMetatileDock(dock, ctx); return; }
+
+    // --- World size + screen navigator (bug #7, Maker+) ---
+    if (ctx.levelAtLeast('maker')) {
+      var scr = ctx.bgScreens ? ctx.bgScreens() : { x: 1, y: 1 };
+      var vs = ctx.viewScreen ? ctx.viewScreen() : { x: 0, y: 0 };
+      var sizeSec = UI.section('World size', el('span', { class: 'chip', text: scr.x + '×' + scr.y + ' screens' }));
+      var sizeRow = el('div', { class: 'row' });
+      [[1, 1], [2, 1], [1, 2], [2, 2]].forEach(function (d) {
+        sizeRow.appendChild(el('button', {
+          class: 'btn' + (scr.x === d[0] && scr.y === d[1] ? ' primary' : ''),
+          text: d[0] + '×' + d[1], title: d[0] + ' wide × ' + d[1] + ' tall screens',
+          onclick: function () { resizeBackground(ctx, d[0], d[1]); },
+        }));
+      });
+      sizeSec.appendChild(sizeRow);
+      if (scr.x > 1 || scr.y > 1) {
+        sizeSec.appendChild(el('div', { class: 'dock-note', text: 'Editing screen ' + (vs.x + 1) + ',' + (vs.y + 1) + ' of ' + scr.x + '×' + scr.y + '. Use the arrows to move around your world.' }));
+        var nav = el('div', { class: 'row', style: 'margin-top:4px' });
+        function navBtn(label, dx, dy, disabled) {
+          return el('button', { class: 'btn', text: label, disabled: disabled ? 'disabled' : null,
+            onclick: function () { ctx.setViewScreen(vs.x + dx, vs.y + dy); ctx.renderLive(); ctx.renderDock(); } });
+        }
+        nav.appendChild(navBtn('◀', -1, 0, vs.x <= 0));
+        nav.appendChild(navBtn('▶', 1, 0, vs.x >= scr.x - 1));
+        nav.appendChild(navBtn('▲', 0, -1, vs.y <= 0));
+        nav.appendChild(navBtn('▼', 0, 1, vs.y >= scr.y - 1));
+        sizeSec.appendChild(nav);
+      } else {
+        sizeSec.appendChild(el('div', { class: 'dock-note', text: 'Grow your level beyond one screen — the game scrolls to follow the player.' }));
+      }
+      dock.appendChild(sizeSec);
+    }
 
     // --- Paint palette ---
     var palSec = UI.section('Paint colour');
@@ -794,7 +864,8 @@
     onTvRightClick: function (cell, ctx) {
       var bg = activeBg(ctx);
       if (isMetatileBg(bg) || !cell.inBounds) return;
-      var c = bg.nametable[cell.cy] && bg.nametable[cell.cy][cell.cx];
+      var o = off(ctx), wy = cell.cy + o.cy, wx = cell.cx + o.cx;
+      var c = bg.nametable[wy] && bg.nametable[wy][wx];
       if (c) { stampTile = c.tile | 0; paintPalette = c.palette | 0; ctx.renderDock(); }
     },
     // Test/inspection hooks.
