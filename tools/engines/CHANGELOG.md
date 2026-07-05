@@ -14,11 +14,12 @@ for the full design (snapshots, fallback, upgrade advisor).
 ### Added
 - **Tunable SMB speed** — the SMB horizontal max walk/run + accel are now
   `#define`s (`BW_SMB_WALK_MAX` / `BW_SMB_RUN_MAX` / `BW_SMB_ACCEL`) driven by a
-  **Speed** preset (1 slow … 4 fast) in the Style tab. Fixes: the generic "walk
-  speed" never affected the SMB style (it uses fixed-point velocity, not
+  **Speed** preset (**1 slow … 5 fast**) in the Style tab. Fixes: the generic
+  "walk speed" never affected the SMB style (it uses fixed-point velocity, not
   `walk_speed`), so changing it did nothing — now there's a control that does.
-  Preset 2 is the authentic 1.5 / 2.5 px/f (byte-identical default); the SMB
-  showcase now ships at preset 3 for a livelier pace.
+  Preset 2 ≈ SMB's 1.5 / 2.5 px/f; preset 5 ≈ 3 / 5. **Acceleration is snappier
+  than SMB's authentic 0x18** at every preset (players found the original too
+  gradual). Non-SMB golden ROM unchanged; the showcase ships at preset 3.
 - **SMB OAM flicker** (`BW_OAM_FLICKER`, SMB + engine v9) — the engine rotates
   the scene-sprite OAM region one slot per frame, so a scanline with more than
   the NES's 8 sprites drops a **different** sprite each frame (a flicker) instead

@@ -91,13 +91,19 @@
     var phys = UI.section(isSmb ? 'SMB feel' : 'Movement & jump');
     if (isSmb) {
       phys.appendChild(el('div', { class: 'dock-note', text: 'SMB run physics (accelerate to a run, skid, variable-height jump) are always on for this style. Tune the feel here. (The generic "walk speed" in Rules does NOT apply to the SMB style — use Speed below.)' }));
-      phys.appendChild(numField(ctx, 'Speed (1–4)', gameCfg(s), 'smbSpeed', 1, 4,
-        '1 slow … 4 fast. 2 is the SMB-authentic 1.5 walk / 2.5 run px/frame; hold B to run.'));
+      phys.appendChild(numField(ctx, 'Speed (1–5)', gameCfg(s), 'smbSpeed', 1, 5,
+        '1 slow … 5 fast. 2 ≈ SMB (1.5 walk / 2.5 run px/frame); 5 ≈ 3 / 5. Hold B to run. Acceleration is snappy at every setting.'));
     }
     if (p1) phys.appendChild(numField(ctx, 'Jump height', p1, 'jumpHeight', 1, 60, 'Frames of rise — bigger = higher. ~14 clears about 5 tiles with the SMB fall.'));
     phys.appendChild(numField(ctx, 'Jump speed (px/frame)', g, 'jumpSpeedPx', 1, 6, 'Pixels risen per frame. 3 gives a snappy SMB arc.'));
     phys.appendChild(numField(ctx, 'Gravity (enemies)', g, 'gravityPx', 0, 4, 'How fast scene sprites fall.'));
     if (!isSmb && p1) phys.appendChild(numField(ctx, 'Walk speed', p1, 'walkSpeed', 1, 8, 'Pixels moved per frame.'));
+    // Bob (folded in from the old Globals menu).
+    var bobW = el('label', { class: 'switch' });
+    var bobCb = el('input', { type: 'checkbox' }); bobCb.checked = !!g.bobWhenWalking;
+    bobCb.addEventListener('change', function () { ctx.pushUndo(); g.bobWhenWalking = bobCb.checked; ctx.markDirty(); });
+    bobW.appendChild(bobCb); bobW.appendChild(el('span', { text: 'Bob up/down when walking' }));
+    phys.appendChild(el('div', { class: 'field' }, [bobW]));
     dock.appendChild(phys);
 
     if (isSmb) {

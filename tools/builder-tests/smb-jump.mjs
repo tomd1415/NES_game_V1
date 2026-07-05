@@ -62,12 +62,12 @@ function makeState(gameType) {
   // The Speed control drives BW_SMB_RUN_MAX; default (preset 2) stays authentic
   // (640), a faster preset raises it — so the control actually affects movement.
   const s2 = makeState('smb'); s2.builder.modules.game.config.smbSpeed = 2;
-  const s4 = makeState('smb'); s4.builder.modules.game.config.smbSpeed = 4;
+  const s5 = makeState('smb'); s5.builder.modules.game.config.smbSpeed = 5;
   const a2 = window.BuilderAssembler.assemble(s2, tpl);
-  const a4 = window.BuilderAssembler.assemble(s4, tpl);
+  const a5 = window.BuilderAssembler.assemble(s5, tpl);
   if (!/#define BW_SMB_RUN_MAX 640/.test(a2)) { console.error('FAIL: default smb run max not 640'); process.exit(1); }
-  if (!/#define BW_SMB_RUN_MAX 1024/.test(a4)) { console.error('FAIL: Speed 4 did not raise BW_SMB_RUN_MAX'); process.exit(1); }
-  console.log('✓ Speed control drives BW_SMB_RUN_MAX (default 640, Speed 4 = 1024)');
+  if (!/#define BW_SMB_RUN_MAX 1280/.test(a5)) { console.error('FAIL: Speed 5 did not raise BW_SMB_RUN_MAX to 1280'); process.exit(1); }
+  console.log('✓ Speed control drives BW_SMB_RUN_MAX (Speed 2 = 640, Speed 5 = 1280)');
 }
 
 // cc65 compile of the SMB build.

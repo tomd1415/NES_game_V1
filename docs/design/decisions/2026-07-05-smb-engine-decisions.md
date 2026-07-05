@@ -6,6 +6,19 @@ were weighed. Newest first. Companion to the roadmap
 ([`../../plans/current/2026-07-05-smb-engine-roadmap.md`](../../plans/current/2026-07-05-smb-engine-roadmap.md))
 and the engine changelog ([`../../../tools/engines/CHANGELOG.md`](../../../tools/engines/CHANGELOG.md)).
 
+## D-14 · Movement/physics numbers live **only** in the type-specific Style tab
+- **Chosen (user request):** fold the old **Globals** menu (gravity, jump speed,
+  bob) into the per-game-type **Style** panels, drop the globals card from RULES,
+  and hide the player's `walkSpeed` / `jumpHeight` in the RULES players card (a
+  note points to Style). One home for those numbers, per game type — no more
+  hunting between a global menu and a type menu.
+- **Alternative:** keep both a shared Globals menu and the Style panels.
+  **Rejected** — the duplication was the confusion (e.g. the SMB "walk speed" in
+  RULES did nothing). Module *schemas* are unchanged (the old multi-page Builder
+  still shows those fields), so only the Studio UI reorganised.
+- Also (user): the SMB **Speed** preset now goes to **5** (≈3/5 px/f) and
+  **acceleration is snappier** at every preset — the authentic 0x18 felt too slow.
+
 ## D-13 · OAM flicker by **rotating the scene-sprite OAM region**, not the draw order
 - **Chosen (v9):** capture the scene sprites' OAM byte range and rotate it one
   slot per frame *after* the draw, all behind `#ifdef BW_OAM_FLICKER`.
