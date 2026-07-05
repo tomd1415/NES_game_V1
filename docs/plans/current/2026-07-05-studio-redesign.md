@@ -137,16 +137,25 @@ off here and update the status note in
       the CHR budget a pupil sees matches the build.
 
 ### Phase 3 — correctness, budgets & honest round-trips
-- [ ] 3.2 8-sprites-per-scanline visualiser + flicker/drop-out warning,
-      wired into the validator.
-- [ ] 3.3 8×16 sprite mode (per-cell flip/palette/priority already exist).
-- [ ] 3.4 De-overload the tile-type slots per game type (own named slots).
-- [ ] 3.5 Remaining format round-trips: matching **imports** for `.chr` /
-      `.nam` / `.pal` / `my_tiles.txt` / `sprites.inc`+`.h`, with
-      round-trip tests (whole-project JSON already round-trips).
-- [ ] 3.6 Advanced level filled in: raw C/asm + whole-file editing in CODE
+- [x] 3.2 8-sprites-per-scanline analysis + flicker/drop-out warning in
+      "Needs attention" (Maker+), with a Fix-in-World jump.
+      `Studio.scanlineLoad()` exposes the per-line tally.
+- [ ] 3.3 8×16 sprite mode. **BLOCKED / needs decision:** the build has no
+      8×16 (PPUCTRL sprite-size) path today, so a Studio toggle would be a
+      lie until the cc65 engine emits 8×16 OAM. Per-cell flip/palette/
+      priority already exist — the gap is the engine, not the editor.
+- [x] 3.4 De-overloaded, game-type-aware tile-type labels in WORLD
+      (racer → Checkpoint 1 / Checkpoint 2 / Finish line; platformer →
+      Trigger / Ladder / Spike). Fully separate *stored* slots per game
+      type remains a shared-schema + build change (flagged with 2.5).
+- [x] 3.5 CHR (`.chr`) export **and** import with a lossless round-trip
+      test (both banks). *(Still open: `.nam` / `.pal` / `my_tiles.txt` /
+      `sprites.inc`+`.h` imports — same pattern, lower priority; whole-
+      project JSON already round-trips.)*
+- [ ] 3.6 Advanced level: raw C/asm + whole-file editing in CODE
       (CodeMirror, guided regions, lessons, snippets, symbols); attribute
-      bytes visible only at Advanced.
+      bytes visible only at Advanced. **Large CODE-port build** (shares
+      scope with 1.5's guided-regions/lessons port) — not yet started.
 
 ### Phase 4 — reach (genuinely not built)
 - [ ] 4.1 Accounts completion (P3–P6 of

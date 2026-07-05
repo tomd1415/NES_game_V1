@@ -294,10 +294,25 @@
   }
 
   // ---- Dock --------------------------------------------------------------
-  var BEH_LABELS = {
-    0: 'None', 1: 'Solid ground', 2: 'Wall', 3: 'Platform',
-    4: 'Door', 5: 'Trigger', 6: 'Ladder',
-  };
+  // De-overloaded, game-type-aware slot labels (3.4): the same slot ids mean
+  // different things per game type, so name them honestly instead of showing
+  // one generic label that lies about what the build does.
+  function behLabels(ctx) {
+    var s = ctx.getState();
+    var gt = (s.builder && s.builder.modules && s.builder.modules.game
+      && s.builder.modules.game.config && s.builder.modules.game.config.type) || 'platformer';
+    var m = { 0: 'None', 1: 'Solid ground', 2: 'Wall', 3: 'Platform', 4: 'Door' };
+    if (gt === 'racer') {
+      m[5] = 'Checkpoint 1'; m[6] = 'Checkpoint 2'; m[7] = 'Finish line';
+    } else if (gt === 'topdown') {
+      m[5] = 'Trigger'; m[6] = 'Ladder'; m[7] = 'Hazard';
+    } else if (gt === 'runner' || gt === 'autorunner') {
+      m[5] = 'Trigger'; m[6] = 'Ladder'; m[7] = 'Spike';
+    } else { // platformer + fallback
+      m[5] = 'Trigger'; m[6] = 'Ladder'; m[7] = 'Spike';
+    }
+    return m;
+  }
 
   function renderDock(dock, ctx) {
     var s = ctx.getState();
@@ -401,15 +416,16 @@
     // step beyond just drawing the picture.)
     if (ctx.levelAtLeast('maker')) {
     var typeSec = UI.section('Tile type', el('span', { class: 'chip', text: 'what it does' }));
-    Object.keys(BEH_LABELS).forEach(function (id) {
+    var labels = behLabels(ctx);
+    Object.keys(labels).forEach(function (id) {
       id = +id;
       var row = el('div', { class: 'entity-row' + (id === paintType ? ' sel' : ''),
         onclick: function () { paintType = id; ctx.renderDock(); } }, [
-        el('span', { class: 'grow', text: BEH_LABELS[id] }),
+        el('span', { class: 'grow', text: labels[id] }),
       ]);
       typeSec.appendChild(row);
     });
-    typeSec.appendChild(el('div', { class: 'dock-note', text: 'With the ⛰ Type tool, paint what each tile does — solid ground and platforms are what your hero stands on.' }));
+    typeSec.appendChild(el('div', { class: 'dock-note', text: 'With the ⛰ Type tool, paint what each tile does. These slots are named for your current game type — solid ground and platforms are what your hero stands on.' }));
     dock.appendChild(typeSec);
     }
 
