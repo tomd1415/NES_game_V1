@@ -1054,11 +1054,14 @@
       const bgs = (state && state.backgrounds) || [];
 
       // ---- Per-door destinations (engine v2) ----------------------------
-      // Active only when the pupil has configured a door list; an empty list
-      // falls through to the v1 single-global-door path below (byte-identical
-      // ROM, so the golden-ROM contract is preserved).
+      // Active only when (a) this page targets engine v2+ and (b) the pupil
+      // has configured a door list. The original multi-page site defaults to
+      // v1 (window.NES_TARGET_ENGINE unset → 1), so it never emits per-door
+      // and stays byte-identical to v1. An empty list also falls through to
+      // the v1 single-global-door path (golden-ROM contract preserved).
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
       const doorList = Array.isArray(c.doorList) ? c.doorList : [];
-      if (doorList.length > 0) {
+      if (targetEngine >= 2 && doorList.length > 0) {
         const maxBg = bgs.length ? bgs.length - 1 : 0;
         const entries = [];
         let anyCrossRoom = false;
