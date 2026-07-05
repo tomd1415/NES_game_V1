@@ -148,6 +148,36 @@ interactions, and the finish/HUD on top — behind the `smb` style.
   scanline IRQ (this also unlocks bigger worlds, DM‑ and Phase‑4 items).
 - Tests: compile under MMC3; golden ROM (NROM path) unchanged.
 
+## Backlog (someday / low priority)
+
+### Full hand-written **6502 assembly** engine — *educational goal, no deadline*
+> **Requested 2026-07-05.** The cc65-generated C is ~5× slower than hand asm, so
+> the per-frame vblank budget is tight and enemy-heavy scrolling scenes can still
+> feel slow even after the v5 AI optimisations (single-probe `bw_smb_wall` +
+> on-screen dormancy gate). The long-term aim is a **full ASM version of the
+> engine** — primarily the per-frame hot paths (enemy AI, collision, the OAM
+> build, scroll streaming) — hand-written in `ca65`, both for the **speed**
+> headroom (many more active actors at 60 fps) and as an **educational artefact**
+> (readable, commented 6502 that shows pupils how the machine really works).
+>
+> **This is explicitly low priority and can wait a long time** — the current C
+> engine is functional and, for modest enemy counts, runs at ~60 fps.
+>
+> Feasibility is already proven in-tree: `ca65` is the assembler in the build
+> pipeline (cc65 compiles C → `.s` → `ca65`), and `steps/Step_Playground/src/
+> graphics.s` is an existing hand-asm routine exported to C (`.export
+> _load_background`). Approach sketch (see the 2026-07-05 chat for detail):
+> - Add `src/enemy_ai.s` to the Makefile `ASM_SRC`; `.export _bw_enemy_step`,
+>   `.import` the `_ss_x/_ss_y/_ss_w/_ss_h` scene arrays + `_active_behaviour_map`.
+> - Do the tile lookup **in asm** (read the map pointer, `row*WORLD_COLS+col`)
+>   rather than `jsr _behaviour_at` — that C round-trip is the main cost.
+> - Refactor per-enemy AI **state** from generated per-instance `static`s into a
+>   shared `bw_dir[]` array indexed by sprite, so one routine serves all.
+> - Ship as a new **engine version** (own snapshot + golden-ROM gating on the
+>   SMB path) with a jsnes perf test asserting e.g. 16 active enemies hold 60 fps.
+> - Stretch: extend the hand-asm treatment to the OAM build + scroll streamer,
+>   and keep the asm heavily commented as the teaching surface.
+
 ## Cross‑cutting: the editor surfaces
 Each engine feature needs Studio UI (a power‑up block type, enemy‑behaviour
 picker, pipe/warp targets, HUD toggle, `smb` game‑type starter). These land in
