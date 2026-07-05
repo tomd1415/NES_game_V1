@@ -213,10 +213,12 @@ entity placement · CHARS roles + shared-tile drawing · PALS · RULES card
 tree), **play** and **publish** a platformer entirely in the Studio, with
 self-ticking quests, the ported `BuilderValidators` carrying *Fix in
 &lt;Mode&gt; →* jumps, and live CHR/OAM budget meters. Covered by the
-Playwright suite (`tools/studio-tests/`, ~49 checks). **Still open in
-Phase 1:** animations in CHARS (the "no walk animation" warning), the
-sprite-reactions matrix in RULES (1.4), and finer per-control expertise
-gating (1.7 — mode gating works; dock-control gating is coarse).
+Playwright suite (`tools/studio-tests/`). The **sprite-reactions matrix**
+(1.4) is now ported into RULES (Maker-gated; `behaviour_reactions` stays
+index-aligned as characters are added/duplicated/deleted in CHARS).
+**Still open in Phase 1:** finer per-control expertise gating (1.7 — mode
+gating works; dock-control gating is coarse) and the WORLD/CHARS parity
+gaps enumerated in the execution tracker.
 
 **Goal:** WORLD, CHARS, PALS, RULES, SOUND, CODE work inside the Studio
 at parity with the pages they replace —

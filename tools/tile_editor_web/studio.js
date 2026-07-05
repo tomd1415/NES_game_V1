@@ -402,6 +402,9 @@
     Storage.writePrefs(prefs);
     applyLevelGating();
     highlightMode();
+    // Re-render the dock so level-gated controls (e.g. the RULES reactions
+    // matrix) appear/disappear immediately, not only on the next mode switch.
+    renderDock();
   }
 
   // ---- Quests + Needs attention -----------------------------------------

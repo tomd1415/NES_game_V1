@@ -59,3 +59,56 @@ test('reset modules restores defaults', async ({ page }) => {
     window.Studio.getState().builder.modules.damage.enabled);
   expect(dmg).toBe(false);
 });
+
+// ---- Sprite-reactions matrix (Phase 1.4 parity) -----------------------
+
+test('reactions matrix is Maker-gated', async ({ page }) => {
+  // Beginner (default) hides it.
+  await expect(page.locator('.rule-card', { hasText: 'Sprite reactions' }))
+    .toHaveCount(0);
+  // Maker reveals it.
+  await page.locator('#level-select').selectOption('maker');
+  await expect(page.locator('.rule-card', { hasText: 'Sprite reactions' }))
+    .toBeVisible();
+});
+
+test('changing a reaction writes to state.behaviour_reactions', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  const card = page.locator('.rule-card', { hasText: 'Sprite reactions' });
+  // Solid ground = type id 1. Set the selected sprite to "bounce".
+  await card.locator('select[data-react-type="1"]').selectOption('bounce');
+  const verb = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    const i = 0; // picker defaults to the first character (the hero)
+    return s.behaviour_reactions[i]['1'];
+  });
+  expect(verb).toBe('bounce');
+
+  // Undo restores the prior verb.
+  await page.evaluate(() => window.Studio.undo());
+  const after = await page.evaluate(() =>
+    window.Studio.getState().behaviour_reactions[0]['1']);
+  expect(after).not.toBe('bounce');
+});
+
+test('adding a character in CHARS keeps reactions index-aligned', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  // Open the reactions matrix once so behaviour_reactions is materialised.
+  await expect(page.locator('.rule-card', { hasText: 'Sprite reactions' }))
+    .toBeVisible();
+  const before = await page.evaluate(() =>
+    window.Studio.getState().sprites.length);
+
+  // Add a character in CHARS.
+  await page.locator('.mode-btn[data-mode="chars"]').click();
+  await page.locator('#chars-new').click();
+
+  const aligned = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    return s.behaviour_reactions.length === s.sprites.length;
+  });
+  expect(aligned).toBe(true);
+  const after = await page.evaluate(() =>
+    window.Studio.getState().sprites.length);
+  expect(after).toBe(before + 1);
+});

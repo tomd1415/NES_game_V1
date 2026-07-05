@@ -113,6 +113,8 @@
     var listSec = UI.section('Characters', el('button', { class: 'btn', id: 'chars-new', text: '+ New', onclick: function () {
       ctx.pushUndo();
       arr.push(makeSprite('character ' + (arr.length + 1)));
+      // Give the new character a default reaction map so RULES stays aligned.
+      if (global.StudioRules) global.StudioRules.syncReactions(state);
       selIdx = arr.length - 1;
       ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
     } }));
@@ -165,13 +167,23 @@
       el('button', { class: 'btn', text: 'Duplicate', onclick: function () {
         ctx.pushUndo();
         var copy = JSON.parse(JSON.stringify(sp)); copy.name = (sp.name || 'character') + ' copy';
-        arr.splice(selIdx + 1, 0, copy); selIdx += 1;
+        arr.splice(selIdx + 1, 0, copy);
+        // Keep behaviour_reactions index-aligned with the sprite list.
+        if (Array.isArray(state.behaviour_reactions)) {
+          var srcR = state.behaviour_reactions[selIdx];
+          var dupR = srcR ? JSON.parse(JSON.stringify(srcR))
+            : (global.StudioRules ? global.StudioRules.defaultReactionMap(copy, selIdx + 1) : {});
+          state.behaviour_reactions.splice(selIdx + 1, 0, dupR);
+        }
+        selIdx += 1;
         ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
       } }),
       el('button', { class: 'btn', text: 'Delete', onclick: function () {
         if (arr.length <= 1) { alert('Keep at least one character.'); return; }
         if (!confirm('Delete "' + (sp.name || 'character') + '"?')) return;
-        ctx.pushUndo(); arr.splice(selIdx, 1); selIdx = Math.max(0, selIdx - 1);
+        ctx.pushUndo(); arr.splice(selIdx, 1);
+        if (Array.isArray(state.behaviour_reactions)) state.behaviour_reactions.splice(selIdx, 1);
+        selIdx = Math.max(0, selIdx - 1);
         ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); ctx.refresh();
       } }),
     ]));

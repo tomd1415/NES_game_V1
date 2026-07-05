@@ -22,6 +22,129 @@
   // Modules that are structural — no on/off toggle.
   var REQUIRED = { game: 1, players: 1, scene: 1 };
 
+  // ---- Sprite-reactions matrix (ported from behaviour.html) --------------
+  // Per sprite × tile-type → what happens when they touch. The verb VALUES
+  // are the contract the cc65 pipeline reads, so keep them identical to
+  // behaviour.html; only the shown label is friendlier for KS3.
+  var REACTION_VERBS = ['ignore', 'block', 'land', 'land_top', 'bounce', 'exit', 'call_handler'];
+  var VERB_LABELS = {
+    ignore: 'ignore — pass straight through',
+    block: 'block — can’t pass',
+    land: 'land — stand on it',
+    land_top: 'land on top only',
+    bounce: 'bounce off',
+    exit: 'exit — go through (door)',
+    call_handler: 'run my code',
+  };
+
+  // Same defaults behaviour.html/index.html/sprites.html seed, so a project
+  // opened in either place agrees on the starting reactions.
+  function defaultReactionMap(sprite, idx) {
+    // Match behaviour.html/index.html/sprites.html exactly so a project
+    // opened in any of them seeds identical defaults (state is shared).
+    var isHero = (sprite && sprite.role === 'hero') || idx === 0;
+    return isHero
+      ? { 1: 'land', 2: 'block',  3: 'land_top', 4: 'exit',   5: 'call_handler', 6: 'ignore', 7: 'ignore' }
+      : { 1: 'land', 2: 'bounce', 3: 'ignore',   4: 'ignore', 5: 'call_handler', 6: 'ignore', 7: 'ignore' };
+  }
+
+  // Keep behaviour_reactions aligned with the sprite list — backfill new
+  // sprites with defaults, trim removed ones. Idempotent.
+  function syncReactions(s) {
+    if (!Array.isArray(s.behaviour_reactions)) s.behaviour_reactions = [];
+    var sprites = Array.isArray(s.sprites) ? s.sprites : [];
+    while (s.behaviour_reactions.length < sprites.length) {
+      var idx = s.behaviour_reactions.length;
+      s.behaviour_reactions.push(defaultReactionMap(sprites[idx], idx));
+    }
+    if (s.behaviour_reactions.length > sprites.length) {
+      s.behaviour_reactions.length = sprites.length;
+    }
+    return s.behaviour_reactions;
+  }
+
+  // A tile-type is worth a column if it is a real, named type (id 0 = none
+  // never fires a reaction).
+  function usableTypes(s) {
+    return (s.behaviour_types || []).filter(function (t) {
+      return t && t.id !== 0 && !!((t.name && String(t.name).trim()) || (t.label && String(t.label).trim()));
+    });
+  }
+
+  var selectedReactSprite = 0;   // which sprite the reactions card is editing
+
+  function renderReactionsCard(container, ctx) {
+    var s = ctx.getState();
+    var card = el('div', { class: 'rule-card on expanded' });
+    var head = el('div', { class: 'head' });
+    head.appendChild(el('span', { class: 'card-title', text: 'Sprite reactions' }));
+    head.appendChild(el('span', { class: 'chip', text: 'maker' }));
+    card.appendChild(head);
+    var body = el('div', { class: 'body' });
+
+    body.appendChild(el('div', { class: 'dock-note',
+      text: 'Pick a character, then say what happens when it touches each kind of tile. “Run my code” hands the collision to the Code page.' }));
+
+    var sprites = Array.isArray(s.sprites) ? s.sprites : [];
+    if (!sprites.length) {
+      body.appendChild(el('div', { class: 'dock-note',
+        text: 'No characters yet — design one in CHARS, then come back to set its reactions.' }));
+      card.appendChild(body);
+      container.appendChild(card);
+      return;
+    }
+    var reactions = syncReactions(s);
+    if (selectedReactSprite >= sprites.length) selectedReactSprite = 0;
+
+    // Character picker.
+    var pickWrap = el('div', { class: 'field' });
+    pickWrap.appendChild(el('span', { text: 'Character' }));
+    var pick = el('select', { 'data-react-sprite': '1' });
+    sprites.forEach(function (sp, i) {
+      pick.appendChild(el('option', { value: String(i),
+        text: (sp.name || ('character ' + (i + 1))) + (sp.role ? ' (' + sp.role + ')' : '') }));
+    });
+    pick.value = String(selectedReactSprite);
+    pick.addEventListener('change', function () {
+      selectedReactSprite = parseInt(pick.value, 10) || 0;
+      ctx.renderDock();
+    });
+    pickWrap.appendChild(pick);
+    body.appendChild(pickWrap);
+
+    var types = usableTypes(s);
+    var rmap = reactions[selectedReactSprite] || (reactions[selectedReactSprite] = defaultReactionMap(sprites[selectedReactSprite], selectedReactSprite));
+
+    // One row per tile-type: swatch + name + verb dropdown.
+    types.forEach(function (t) {
+      var f = el('div', { class: 'field' });
+      var lab = el('span', {}, []);
+      var rgb = null;
+      try { if (t.color != null && global.NesRender) rgb = global.NesRender.nesRgb(t.color); } catch (e) { rgb = null; }
+      if (rgb) {
+        lab.appendChild(el('span', { style: 'display:inline-block;width:10px;height:10px;margin-right:5px;'
+          + 'vertical-align:middle;border:1px solid var(--line);background:' + rgb }));
+      }
+      lab.appendChild(document.createTextNode('Touches ' + (t.label || t.name)));
+      f.appendChild(lab);
+      var sel = el('select', { 'data-react-type': String(t.id) });
+      REACTION_VERBS.forEach(function (verb) {
+        sel.appendChild(el('option', { value: verb, text: VERB_LABELS[verb] || verb }));
+      });
+      sel.value = rmap[t.id] || 'ignore';
+      sel.addEventListener('change', function () {
+        ctx.pushUndo();
+        rmap[t.id] = sel.value;
+        ctx.markDirty();
+      });
+      f.appendChild(sel);
+      body.appendChild(f);
+    });
+
+    card.appendChild(body);
+    container.appendChild(card);
+  }
+
   function builderTree(ctx) {
     var s = ctx.getState();
     if (!s.builder || s.builder.version !== 1) {
@@ -157,6 +280,13 @@
     });
     dock.appendChild(sec);
 
+    // Sprite-reactions matrix — Maker-level and up (progressive disclosure).
+    if (ctx.levelAtLeast('maker')) {
+      var reactSec = UI.section('Reactions', el('span', { class: 'chip', text: 'what touching does' }));
+      renderReactionsCard(reactSec, ctx);
+      dock.appendChild(reactSec);
+    }
+
     dock.appendChild(el('div', { class: 'dock-section' }, [
       el('button', { class: 'btn', text: '↻ Reset modules to defaults', onclick: function () {
         if (!confirm('Reset all game rules to their defaults? (Undoable.)')) return;
@@ -166,6 +296,15 @@
       } }),
     ]));
   }
+
+  // Expose the reactions helpers so CHARS can keep behaviour_reactions
+  // aligned when sprites are added / duplicated / deleted (same contract
+  // sprites.html maintains), and so tests can assert the defaults.
+  global.StudioRules = {
+    defaultReactionMap: defaultReactionMap,
+    syncReactions: syncReactions,
+    REACTION_VERBS: REACTION_VERBS,
+  };
 
   global.StudioModes = global.StudioModes || {};
   global.StudioModes.rules = {

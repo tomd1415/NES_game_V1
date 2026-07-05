@@ -115,7 +115,7 @@
 
 - [ ] Tile-type painting per background: 7 builtins (none, solid_ground, wall, platform, door, trigger, ladder) + **1 custom slot** (own colour + name)
 - [ ] Tools: pencil, flood fill, rectangle, eraser; find-same highlight; show-tiles overlay; 16×16 snap; zoom 1×–6×
-- [ ] **Sprite-reactions matrix**: per sprite × per tile-type → ignore / block / land / land_top / bounce / exit / call_handler; hero vs non-hero defaults
+- [x] **Sprite-reactions matrix**: per sprite × per tile-type → ignore / block / land / land_top / bounce / exit / call_handler; hero vs non-hero defaults *(ported into Studio RULES, Maker-gated, 2026-07-05)*
 - [ ] Per-game-type slot overloading (trigger=checkpoint 1, ladder=checkpoint 2, slot 7=spike/finish) — a teaching hazard to fix, but the *capability* must survive
 
 ## Audio page (`audio.html`)

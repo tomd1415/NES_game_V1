@@ -67,6 +67,10 @@
 - [x] SOUND: FamiStudio `.s` song/sfx upload + symbol extraction,
       `/starter/audio` pack, default-song star, ROM-size audit.
 - [x] CODE: read-first generated C view.
+- [x] RULES: **sprite-reactions matrix** — per character × tile-type →
+      ignore/block/land/land_top/bounce/exit/call_handler, Maker-gated;
+      `behaviour_reactions` kept index-aligned when characters are added/
+      duplicated/deleted in CHARS.
 - [x] Quest log + "Needs attention" validators with **"Fix in ‹Mode› →"**
       jumps; self-ticking quests.
 - [x] Level-gated mode rail (Beginner/Maker/Advanced), persisted.
