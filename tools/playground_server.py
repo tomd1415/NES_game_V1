@@ -2460,6 +2460,22 @@ def _build_rom(body):
     # nametable/behaviour grids before anything reads them.  No-op for 8x8.
     _expand_metatiles(state)
 
+    # NES-engine versioning: which engine this build targets. The original
+    # multi-page site defaults to v1 (stable/pinned); the Studio targets the
+    # latest.  Recorded for build provenance + as the hook where a future
+    # engine whose *static* cc65 sources diverge would build the target's
+    # snapshot (tools/engines/v<target>/).  For v1..v2 the static sources are
+    # identical, so this is provenance-only today.
+    try:
+        current_engine = int((ROOT / "tools" / "engines" / "ENGINE_VERSION").read_text().strip())
+    except Exception:
+        current_engine = 1
+    try:
+        target_engine = int(body.get("targetEngine", 1))
+    except (TypeError, ValueError):
+        target_engine = 1
+    target_engine = max(1, min(current_engine, target_engine))
+
     custom_main_c = body.get("customMainC")
     if custom_main_c is not None and not isinstance(custom_main_c, str):
         raise ValueError("'customMainC' must be a string if provided")
@@ -2918,7 +2934,8 @@ def run_play(body):
     result = {"ok": True, "log": build_log, "size": len(rom_bytes),
               "built_epoch": built_epoch,
               "built_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(built_epoch)),
-              "build_time_ms": int((built_epoch - started) * 1000)}
+              "build_time_ms": int((built_epoch - started) * 1000),
+              "engineVersion": target_engine, "engineLatest": current_engine}
 
     if mode == "native":
         if not FCEUX_PATH:

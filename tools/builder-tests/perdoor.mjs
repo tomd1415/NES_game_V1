@@ -12,6 +12,7 @@ const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
 const PORT = 18781;
 
 globalThis.window = globalThis;
+globalThis.NES_TARGET_ENGINE = 2; // per-door requires targeting engine v2+
 for (const f of ['sprite-render.js', 'builder-assembler.js',
     'builder-modules.js', 'builder-validators.js']) {
   new Function(fs.readFileSync(path.join(WEB, f), 'utf8'))();
@@ -74,6 +75,19 @@ function makeState() {
     if (!re.test(out)) { console.error('FAIL codegen: missing ' + label + ' (' + re + ')'); process.exit(1); }
   }
   console.log('✓ per-door table + lookup + room-swap emitted');
+}
+
+// Pin check: targeting engine v1 must NOT emit per-door even with a doorList
+// (the original multi-page site stays on v1).
+{
+  globalThis.NES_TARGET_ENGINE = 1;
+  const out = window.BuilderAssembler.assemble(makeState(), tpl);
+  if (/BW_DOORS_PERDOOR_ENABLED/.test(out) || /bw_door_tbl/.test(out)) {
+    console.error('FAIL pin: engine v1 target emitted per-door code');
+    process.exit(1);
+  }
+  globalThis.NES_TARGET_ENGINE = 2; // restore for the compile test below
+  console.log('✓ engine v1 target does NOT emit per-door (multi-page site pinned)');
 }
 
 // cc65 compile end-to-end (the NEW C path must build).

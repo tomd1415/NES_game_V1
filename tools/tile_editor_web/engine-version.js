@@ -13,5 +13,14 @@
  */
 (function (global) {
   'use strict';
+  // The latest engine version.
   global.NES_ENGINE_VERSION = 2;
+  // The engine version THIS page targets. The Studio loads this file and so
+  // targets the latest; the original seven pages do NOT load it, so codegen
+  // (builder-modules.js) treats an unset target as v1 — pinning the stable
+  // multi-page site to engine v1 while the Studio moves forward. A page may
+  // also set window.NES_TARGET_ENGINE explicitly before builder-modules loads.
+  if (typeof global.NES_TARGET_ENGINE !== 'number') {
+    global.NES_TARGET_ENGINE = global.NES_ENGINE_VERSION;
+  }
 })(typeof window !== 'undefined' ? window : globalThis);
