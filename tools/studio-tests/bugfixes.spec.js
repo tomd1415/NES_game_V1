@@ -53,8 +53,9 @@ test('New game button creates a fresh playable starter', async ({ page }) => {
   });
   expect(s.bgs).toBeGreaterThan(0);
   expect(s.sprites).toBeGreaterThan(0);
-  // New projects are stamped with the engine they were authored for.
-  expect(s.engine).toBe(1);
+  // New projects are stamped with the engine they were authored for (current).
+  const cur = await page.evaluate(() => window.NES_ENGINE_VERSION);
+  expect(s.engine).toBe(cur);
 });
 
 // Bug 4 — beginner mode is signposted (level hint + locked modes visible).
@@ -103,4 +104,31 @@ test('account menu offers "Load a starter game" when signed out', async ({ page 
   await expect(summary).toBeVisible({ timeout: 15000 });
   await summary.click(); // open the <details> dropdown
   await expect(page.locator('#account-menu .menu-body', { hasText: 'Load a starter game' })).toBeVisible();
+});
+
+// Tile default-behaviour: placing an auto-typing tile sets its behaviour.
+test('placing a tile with a default type auto-sets the behaviour cell', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  await page.evaluate(() => { window.Studio.getState().bg_tiles[5].defaultBehaviour = 1; }); // solid
+  await page.locator('.mode-btn[data-mode="world"]').click();
+  await page.locator('.stage-toolbar .tool[data-tool="stamp"]').click();
+  await page.locator('.tile-grid .tile-cell').nth(5).click();
+  const box = await page.locator('#tv-canvas').boundingBox();
+  const px = (cx) => box.x + (cx + 0.5) * (box.width / 32);
+  const py = (cy) => box.y + (cy + 0.5) * (box.height / 30);
+  await page.mouse.click(px(7), py(4));
+  expect(await page.evaluate(() => window.Studio.getState().backgrounds[0].behaviour[4][7])).toBe(1);
+  // Erasing the tile clears the behaviour again.
+  await page.locator('.stage-toolbar .more-tools-btn').click();
+  await page.locator('.stage-toolbar .tool[data-tool="erase"]').click();
+  await page.mouse.click(px(7), py(4));
+  expect(await page.evaluate(() => window.Studio.getState().backgrounds[0].behaviour[4][7])).toBe(0);
+});
+
+test('tile-type overlay toggle exists in WORLD', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  const toggle = page.locator('input[data-toggle-types]');
+  await expect(toggle).toBeVisible();
+  await toggle.check();
+  expect(await page.evaluate(() => window.StudioModes.world._get().showTypes)).toBe(true);
 });

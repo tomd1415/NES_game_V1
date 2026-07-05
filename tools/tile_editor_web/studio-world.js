@@ -20,6 +20,8 @@
   var paintPalette = 0;  // selected bg palette (0-3)
   var paintType = 1;     // selected behaviour type id (solid_ground)
   var showGrid = true;
+  var showTypes = false; // tile-type (behaviour) overlay toggle
+  var BEH_COLORS = { 1: '#8d6e4b', 2: '#555555', 3: '#6aa3ff', 4: '#ffd866', 5: '#ff78a2', 6: '#c08a3c', 7: '#33dddd' };
   var hover = null;      // {cx,cy}
   var placeChar = -1;    // sprite index the Place tool drops (-1 = auto)
   var selInst = null;    // selected scene-instance id
@@ -193,8 +195,14 @@
     var tool = ctx.getActiveTool();
     if (tool === 'stamp') {
       nt[wy][wx] = { tile: stampTile, palette: paintPalette };
+      // Tile default-behaviour: placing a tile that has a default type also
+      // sets this cell's behaviour to that type (e.g. a ground tile becomes
+      // solid automatically). Override later with the ⛰ Type tool.
+      var def = s.bg_tiles[stampTile] && s.bg_tiles[stampTile].defaultBehaviour;
+      if (def != null) ensureBehaviour(bg)[wy][wx] = def | 0;
     } else if (tool === 'erase') {
       nt[wy][wx] = { tile: 0, palette: 0 };
+      ensureBehaviour(bg)[wy][wx] = 0; // removing the tile clears its type
     } else if (tool === 'palette') {
       // Attribute granularity: a whole 2×2 quadrant shares one palette.
       var qx = wx - (wx % 2), qy = wy - (wy % 2);
@@ -227,9 +235,12 @@
     var toTile = tool === 'erase' ? 0 : stampTile;
     var toPal = tool === 'erase' ? 0 : paintPalette;
     if (fromTile === toTile && fromPal === toPal) return;
+    var s2 = ctx.getState();
+    var def2 = tool === 'erase' ? 0 : (s2.bg_tiles[stampTile] && s2.bg_tiles[stampTile].defaultBehaviour);
+    var beh2 = (tool === 'erase' || def2 != null) ? ensureBehaviour(bg) : null;
     floodGeneric(wx, wy, cols, rows,
       function (x, y) { return nt[y][x].tile === fromTile && nt[y][x].palette === fromPal; },
-      function (x, y) { nt[y][x] = { tile: toTile, palette: toPal }; });
+      function (x, y) { nt[y][x] = { tile: toTile, palette: toPal }; if (beh2) beh2[y][x] = def2 | 0; });
   }
   function floodGeneric(sx, sy, cols, rows, match, set) {
     var stack = [[sx, sy]], seen = {};
@@ -379,6 +390,27 @@
       for (var ax = 0; ax <= SCREEN_W; ax += 2) { g.beginPath(); g.moveTo(ax * 8 + 0.5, 0); g.lineTo(ax * 8 + 0.5, 240); g.stroke(); }
       for (var ay = 0; ay <= SCREEN_H; ay += 2) { g.beginPath(); g.moveTo(0, ay * 8 + 0.5); g.lineTo(256, ay * 8 + 0.5); g.stroke(); }
       g.globalAlpha = 1;
+    }
+    // Tile-type (behaviour) overlay: translucent colour per cell so a pupil
+    // sees what each tile *does* at a glance.
+    if (showTypes) {
+      var tbg = _octx && activeBg(_octx);
+      if (tbg && !isMetatileBg(tbg)) {
+        var tbeh = tbg.behaviour || [];
+        var to = off(_octx);
+        g.globalAlpha = 0.45;
+        for (var ty = 0; ty < SCREEN_H; ty++) {
+          var trow = tbeh[ty + to.cy] || [];
+          for (var tx = 0; tx < SCREEN_W; tx++) {
+            var bid = trow[tx + to.cx] | 0;
+            var col = BEH_COLORS[bid];
+            if (!col) continue;
+            g.fillStyle = col;
+            g.fillRect(tx * 8, ty * 8, 8, 8);
+          }
+        }
+        g.globalAlpha = 1;
+      }
     }
     if (hover) {
       g.strokeStyle = '#FA9E00'; g.lineWidth = 2;
@@ -815,12 +847,17 @@
       ]));
     }
 
-    // --- Grid toggle ---
+    // --- Grid + tile-type overlay toggles ---
     var gridSec = el('div', { class: 'dock-section' }, [
       el('label', { class: 'switch' }, [
         (function () { var c = el('input', { type: 'checkbox' }); c.checked = showGrid;
           c.addEventListener('change', function () { showGrid = c.checked; ctx.renderLive(); }); return c; })(),
         el('span', { text: 'Show grid' }),
+      ]),
+      el('label', { class: 'switch', style: 'margin-top:6px' }, [
+        (function () { var c = el('input', { type: 'checkbox', 'data-toggle-types': '1' }); c.checked = showTypes;
+          c.addEventListener('change', function () { showTypes = c.checked; ctx.renderLive(); }); return c; })(),
+        el('span', { text: 'Show tile types' }),
       ]),
     ]);
     dock.appendChild(gridSec);
@@ -948,7 +985,7 @@
       if (c) { stampTile = c.tile | 0; paintPalette = c.palette | 0; ctx.renderDock(); }
     },
     // Test/inspection hooks.
-    _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, selRect: selRect, clipboard: clipboard }; },
+    _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, showTypes: showTypes, selRect: selRect, clipboard: clipboard }; },
     _conflicts: function () { var s = global.Studio.getState(); return countAttrConflicts(s.backgrounds[s.selectedBgIdx] || s.backgrounds[0]); },
     _set: function (o) { if (o.stampTile != null) stampTile = o.stampTile; if (o.paintPalette != null) paintPalette = o.paintPalette; if (o.paintType != null) paintType = o.paintType; },
   };
