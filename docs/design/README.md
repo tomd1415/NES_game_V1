@@ -9,11 +9,31 @@ we execute and when*; this folder holds the *design intent* behind that
 work — the vision, principles, wireframes, component specs, and
 decisions the implementation is measured against.
 
-## What lives here
+## Start here
+
+**[`phased-plan.md`](phased-plan.md)** is the roadmap — the sequenced,
+shippable plan for the redesign. It links the three docs that give it its
+"why" and "what":
+
+| Doc | What it holds |
+| --- | ------------- |
+| [`phased-plan.md`](phased-plan.md) | **The roadmap.** Phase 0–4, mapped to the handover's P0/P1/P2, grounded in the current `tools/tile_editor_web/` code. Read this to know *what happens in what order*. |
+| [`design-principles.md`](design-principles.md) | The approved direction & the NES constraints the tool must always enforce — the tie-breaker when a decision is unclear. |
+| [`ui-architecture.md`](ui-architecture.md) | The unified-workspace IA: mode rail, contextual dock, the central "TV", quest log; how the old seven pages map to the new modes. |
+| [`target-data-model.md`](target-data-model.md) | The tile-first data model + an honest gap analysis: what the current build already stores correctly vs. the five real gaps. |
+
+### Source material (incoming design documents)
+
+| File | What it is |
+| ---- | ---------- |
+| `NES Studio - Design Handover.dc.html` | The **direction document**. Its §3–§5 define what "correct" means. Authoritative on intent. |
+| `SpriteMaker Studio.dc.html` | The interactive **prototype**. Approved for *look & UX only*; its data model and several mechanics are deliberately simplified/wrong — do not extend it. |
+| `notes.md` | The reviewer's questions about the prototype; each is answered in [`phased-plan.md`](phased-plan.md). |
+
+### Supporting folders
 
 | File / area | What it's for |
 | ----------- | ------------- |
-| Incoming design documents | Drop the new redesign docs here as they arrive. |
 | `decisions/` | One file per notable design decision (ADR-style), if/when we need to record trade-offs. |
 | `assets/` | Static design assets referenced by the docs (mockup exports, diagrams). Keep source-of-truth files small and self-contained where possible. |
 
@@ -34,5 +54,8 @@ decisions the implementation is measured against.
 
 ## Status
 
-Redesign work happens on the **`redesign/ui-ux`** branch. This folder
-was created empty and ready to receive the incoming design documents.
+Redesign work happens on the **`redesign/ui-ux`** branch. The design
+direction is captured and the phased plan is drafted (2026-07-05);
+implementation has not yet started. See
+[`phased-plan.md`](phased-plan.md) for the sequence and its open
+questions for the team.
