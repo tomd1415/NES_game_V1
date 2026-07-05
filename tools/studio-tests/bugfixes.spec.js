@@ -78,6 +78,25 @@ test('New game picker can load the SMB showcase starter', async ({ page }) => {
   expect(info.ais).toContain('koopa');
 });
 
+// Engine v6 — the Blocks editor (? / brick / coin) is reachable from the UI:
+// load the SMB showcase (smb + engine v6), go to WORLD at Maker, and the Blocks
+// section lets the user add a block that lands in state.
+test('WORLD exposes the v6 Blocks editor for an SMB project', async ({ page }) => {
+  await page.locator('#btn-new-game').click();
+  const picker = page.locator('.modal-backdrop.open', { hasText: 'Load a starter game' });
+  await expect(picker).toBeVisible();
+  await picker.locator('.btn', { hasText: 'SMB showcase' }).click();
+  await page.locator('#level-select').selectOption('maker');
+  // The Blocks editor renders in the WORLD dock — its "+ Add block" button is
+  // unique, so target it directly and confirm it adds a block to state.
+  const addBlock = page.locator('.btn', { hasText: '+ Add block' });
+  await expect(addBlock).toBeVisible();
+  await addBlock.click();
+  const n = await page.evaluate(() =>
+    window.Studio.getState().builder.modules.blocks.config.blockList.length);
+  expect(n).toBe(1);
+});
+
 // Bug 4 — beginner mode is signposted (level hint + locked modes visible).
 test('beginner mode is signposted', async ({ page }) => {
   await expect(page.locator('#level-hint')).toContainText('Beginner');
