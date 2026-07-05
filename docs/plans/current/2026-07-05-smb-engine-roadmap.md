@@ -121,12 +121,26 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 > with the block interactions in **v6**); the mushroom is static rather than
 > walking; fireballs cap at 2 (as SMB does).
 
-### v6 — 16×16 block interactions
-- Per‑metatile **property table**; the tile‑hit path folds in: **? block**
-  (dispense item/coins by player state; becomes used/empty), **brick**
-  (bump; **break only when Super**), **coin** (collect, +200, coin count,
-  100→1‑Up), invisible/hidden blocks, multi‑coin brick (bump‑window timer).
-- Tests: compile; headless bumping a ? block spawns an item/coin and marks used.
+### v6 — Block interactions  *(🚧 IN PROGRESS — core landed 2026-07-05)*
+
+> **Landed (engine v6):** interactive blocks via a **Blocks** module — a
+> position→kind table (`bw_block_tbl`, like the per-door table) + `bw_block_used[]`
+> state, gated on the SMB style + engine v6 (byte-identical otherwise):
+> **coin** (collect on touch, `bw_coins++`), **? block** (bump from below → step
+> the power state up small→super→fire when Power-ups are on, else +coin; then
+> inert), **brick** (bump; break only while super). Studio **Blocks editor** in
+> WORLD (Maker+). `smb-blocks.mjs` covers codegen + gating + cc65 compile; golden
+> ROM byte-identical.
+>
+> **Still open in v6:** runtime **tile-graphics swap** for used/broken blocks
+> (needs a queued vblank nametable poke — a used ? / broken brick currently goes
+> inert but keeps its art); the **? → item that visibly jumps out** (vs. the
+> current direct power-up grant); invisible/hidden blocks; multi-coin bricks;
+> and coin **score** (lands with the v7 HUD).
+>
+> Implementation note: chose a **block-list table** (consistent with doors /
+> scene instances) over a per-metatile property table — same gameplay, far
+> lower risk, and no dependency on the 16×16 metatile path.
 
 ### v7 — HUD + score/timer/lives + sprite‑0 split
 - Fixed HUD (score, coins, world, time, lives) as **background** with a

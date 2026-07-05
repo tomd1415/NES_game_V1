@@ -9,6 +9,36 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v6 — 2026-07-05
+
+### Added
+- **Interactive blocks** (`? / brick / coin`) — a new **Blocks** module on the
+  SMB path (`#define BW_SMB_BLOCKS`, SMB game type + engine v6). A position→kind
+  table (`bw_block_tbl`, mirroring the per-door table) + a `bw_block_used[]`
+  state array drive three block behaviours in the per-frame path:
+  - **coin** — collected on touch; `bw_coins++`.
+  - **? block** — bump from below (while rising) to step the power state up
+    (small→super→fire, when Power-ups are on) or +1 coin otherwise; then inert.
+  - **brick** — bump from below; **breaks (vanishes) only while super**, else
+    just bonks the head.
+- Studio: a **Blocks editor** in the WORLD dock (Maker+, SMB, engine v6) to
+  place blocks and pick each one's kind + tile position.
+
+### Changed / migration
+- No migration. All block code is gated on `BW_SMB_BLOCKS` (only emitted for the
+  SMB game type on engine v6+, with a non-empty block list), so every existing
+  game (and pre-v6 targets) builds byte-identically — golden‑ROM hashes
+  unchanged.
+
+### Not yet
+- Runtime **tile-graphics swap** for used/broken blocks (a used ? block and a
+  broken brick currently stop reacting but keep their painted art) — needs a
+  queued vblank nametable poke; next increment. Coin→score/HUD and the
+  `? → dispensed item that jumps out` animation land with the v7 HUD.
+
+### Breaking
+- (none.)
+
 ## v5 — 2026-07-05
 
 ### Added

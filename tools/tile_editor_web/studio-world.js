@@ -161,6 +161,52 @@
     dock.appendChild(sec);
   }
 
+  // ---- Blocks editor (engine v6) — place ? / brick / coin blocks. --------
+  function renderBlocksSection(dock, ctx, s, bg) {
+    if (!ctx.levelAtLeast('maker')) return;
+    var gt = (s.builder && s.builder.modules && s.builder.modules.game &&
+              s.builder.modules.game.config && s.builder.modules.game.config.type) || 'platformer';
+    var stEng = (s.engineVersion | 0) || (typeof window !== 'undefined' && window.NES_ENGINE_VERSION) || 1;
+    var node = s.builder && s.builder.modules && s.builder.modules.blocks;
+    if (!node) return;
+    // Blocks are an SMB engine-v6 feature — only surface them where they build.
+    if (gt !== 'smb' || stEng < 6) return;
+    if (!node.config) node.config = { blockList: [] };
+    if (!Array.isArray(node.config.blockList)) node.config.blockList = [];
+    var list = node.config.blockList;
+    var sec = UI.section('Blocks', el('span', { class: 'chip', text: '? / brick / coin' }));
+    sec.appendChild(el('div', { class: 'dock-note', text: 'Coins collect on touch; ? blocks power you up when bumped from below; bricks break only while you\'re super. Position is in tiles (X 0–63, Y 0–29).' }));
+    list.forEach(function (b, idx) {
+      var card = el('div', { style: 'border:2px solid var(--line);padding:6px;margin-top:6px' });
+      var kindSel = el('select');
+      [['coin', '🪙 Coin (touch)'], ['question', '❓ ? block (bump)'], ['brick', '🧱 Brick (bump / break)']]
+        .forEach(function (k) { kindSel.appendChild(el('option', { value: k[0], text: k[1] })); });
+      kindSel.value = b.kind || 'question';
+      kindSel.addEventListener('change', function () { ctx.pushUndo(); b.kind = kindSel.value; ctx.markDirty(); });
+      card.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Kind' }), kindSel]));
+      function num(label, key, max) {
+        var inp = el('input', { type: 'number', min: 0, max: max, style: 'width:56px' });
+        inp.value = b[key] | 0;
+        inp.addEventListener('change', function () {
+          var v = parseInt(inp.value, 10); if (isNaN(v)) return;
+          ctx.pushUndo(); b[key] = Math.max(0, Math.min(max, v)); ctx.markDirty();
+        });
+        return el('div', { class: 'field inline' }, [el('span', { text: label }), inp]);
+      }
+      card.appendChild(num('X (tile)', 'x', 63));
+      card.appendChild(num('Y (tile)', 'y', 29));
+      card.appendChild(el('button', { class: 'btn', text: 'Remove', onclick: function () {
+        ctx.pushUndo(); list.splice(idx, 1); ctx.markDirty(); ctx.renderDock();
+      } }));
+      sec.appendChild(card);
+    });
+    sec.appendChild(el('button', { class: 'btn primary', style: 'margin-top:6px', text: '+ Add block', onclick: function () {
+      ctx.pushUndo(); node.enabled = true; list.push({ x: 8, y: 18, kind: 'question' });
+      ctx.markDirty(); ctx.renderDock();
+    } }));
+    dock.appendChild(sec);
+  }
+
   // Resize a background to sx×sy screens (bug #7), preserving existing art.
   function resizeBackground(ctx, sx, sy) {
     var bg = activeBg(ctx);
@@ -748,6 +794,8 @@
 
     // --- Doors: per-door destinations (engine v2, Maker+) ---
     renderDoorsSection(dock, ctx, s, bg);
+    // --- Blocks: ? / brick / coin (engine v6, Maker+, SMB only) ---
+    renderBlocksSection(dock, ctx, s, bg);
     }
 
     // --- Entities (scene instances) ---

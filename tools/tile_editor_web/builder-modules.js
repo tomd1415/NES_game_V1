@@ -1182,6 +1182,108 @@
   };
 
   // --------------------------------------------------------------------
+  // Blocks (engine v6) — interactive SMB blocks placed at tile positions.
+  //   coin     — collected on touch (+1 coin; 100 → a spare life via the HUD).
+  //   question — bump from below to step the power state up (small→super→fire,
+  //              when Power-ups are on) or +1 coin otherwise, then it goes inert.
+  //   brick    — bump from below; breaks (vanishes) only while super, else bonks.
+  // A small position→kind table (`bw_block_tbl`) + a `bw_block_used[]` state
+  // array, mirroring the per-door table.  Gated on the SMB game type + engine
+  // v6, so every other game (and pre-v6 targets) is byte-identical.
+  // --------------------------------------------------------------------
+  modules['blocks'] = {
+    label: 'Blocks (? / brick / coin)',
+    description: 'Classic SMB blocks you place on the level: coins to collect, ' +
+      '? blocks you bump from below for a power-up, and bricks that break when ' +
+      'you\'re super. Add them on the World page. Needs the 🍄 SMB game type.',
+    detailedHelp: [
+      'A ? block bumped from below powers you up (small → super → fire) if the ' +
+      'Power-ups module is on, then turns inert — the iconic SMB move.',
+      'A brick bumped from below breaks and vanishes only while you are super; ' +
+      'otherwise it just bonks your head.',
+      'A coin is collected the moment you touch it and adds to a coin counter.',
+      'This is a v6 engine feature: it only builds on engine v6+ with the SMB ' +
+      'game type.',
+    ],
+    defaultConfig: { blockList: [] },   // [{ x, y, kind }]  kind: coin|question|brick
+    customRender: true,
+    applyToTemplate(template, node, state) {
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      const gt = state && state.builder && state.builder.modules && state.builder.modules.game &&
+                 state.builder.modules.game.config && state.builder.modules.game.config.type;
+      const list = (node && node.config && node.config.blockList) || [];
+      if (targetEngine < 6 || gt !== 'smb' || list.length === 0) return template;  // gated → byte-identical
+      const KIND = { coin: 0, question: 1, brick: 2 };
+      const rows = [];
+      for (let i = 0; i < list.length; i++) {
+        const b = list[i] || {};
+        const x = A.clampInt(b.x, 0, 63, 0);
+        const y = A.clampInt(b.y, 0, 29, 0);
+        const k = KIND[b.kind] != null ? KIND[b.kind] : 1;
+        rows.push([x, y, k]);
+      }
+      const decl = [
+        '/* [builder] blocks (engine v6) — interactive ?/brick/coin blocks. */',
+        '#define BW_SMB_BLOCKS 1',
+        '#define BW_BLOCK_COUNT ' + rows.length,
+        'const unsigned char bw_block_tbl[] = {   /* x, y (tiles), kind 0=coin 1=? 2=brick */',
+        '    ' + rows.map(r => r.join(', ')).join(',\n    '),
+        '};',
+        'unsigned char bw_block_used[BW_BLOCK_COUNT];',
+        'unsigned int  bw_coins;',
+      ];
+      template = A.appendToSlot(template, 'declarations', decl.join('\n'));
+      template = A.appendToSlot(template, 'init', [
+        '    /* [builder] blocks — reset used flags + coin count on (re)start. */',
+        '    bw_coins = 0;',
+        '    { unsigned char bw_bi; for (bw_bi = 0; bw_bi < BW_BLOCK_COUNT; bw_bi++) bw_block_used[bw_bi] = 0; }',
+      ].join('\n'));
+      const body = [
+        '        // [builder] blocks (engine v6) — collect coins on touch; bump',
+        '        // ? / brick blocks from below (while rising).',
+        '        {',
+        '            unsigned char bw_bi, bw_bb, bw_bcol, bw_brow, bw_bkind;',
+        '            unsigned char bw_hcol = (unsigned char)((px + ((PLAYER_W << 3) >> 1)) >> 3);',
+        '            unsigned char bw_hrow = (py >= 1) ? (unsigned char)((py - 1) >> 3) : 0;',
+        '            for (bw_bi = 0; bw_bi < BW_BLOCK_COUNT; bw_bi++) {',
+        '                if (bw_block_used[bw_bi]) continue;',
+        '                bw_bb = bw_bi * 3;',
+        '                bw_bcol = bw_block_tbl[bw_bb];',
+        '                bw_brow = bw_block_tbl[bw_bb + 1];',
+        '                bw_bkind = bw_block_tbl[bw_bb + 2];',
+        '                if (bw_bkind == 0) {',
+        '                    /* coin — collect on box/cell overlap. */',
+        '                    if (px < (((unsigned int)bw_bcol + 1) << 3) &&',
+        '                        (unsigned int)px + (PLAYER_W << 3) > ((unsigned int)bw_bcol << 3) &&',
+        '                        py < (((unsigned int)bw_brow + 1) << 3) &&',
+        '                        (unsigned int)py + (PLAYER_H << 3) > ((unsigned int)bw_brow << 3)) {',
+        '                        bw_block_used[bw_bi] = 1; bw_coins++;',
+        '                    }',
+        '                } else if (jumping && jmp_up > 0 && bw_hrow == bw_brow && bw_hcol == bw_bcol) {',
+        '                    /* ? or brick — bumped from below while rising. */',
+        '                    if (bw_bkind == 1) {',
+        '#ifdef BW_SMB_POWERUPS',
+        '                        if (smb_pstate < 1) smb_pstate = 1; else smb_pstate = 2;',
+        '#else',
+        '                        bw_coins++;',
+        '#endif',
+        '                        bw_block_used[bw_bi] = 1;',
+        '                        jmp_up = 0;   /* bonk */',
+        '                    } else {',
+        '#ifdef BW_SMB_POWERUPS',
+        '                        if (smb_pstate > 0) bw_block_used[bw_bi] = 1;   /* super breaks it */',
+        '#endif',
+        '                        jmp_up = 0;   /* bonk regardless */',
+        '                    }',
+        '                }',
+        '            }',
+        '        }',
+      ];
+      return A.appendToSlot(template, 'per_frame', body.join('\n'));
+    },
+  };
+
+  // --------------------------------------------------------------------
   // Spawn (R-3) — pop a short-lived effect sprite when the player steps
   // onto a TRIGGER tile (painted on the Behaviour page).  Uses the shared
   // engine spawn pool (platformer.c, #if BW_SPAWN_ENABLED — byte-identical
@@ -2192,6 +2294,10 @@
         powerups: {
           enabled: false,
           config: Object.assign({}, modules['powerups'].defaultConfig),
+        },
+        blocks: {
+          enabled: false,
+          config: { blockList: [] },
         },
         hud: {
           enabled: false,
