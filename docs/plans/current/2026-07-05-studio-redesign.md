@@ -170,17 +170,29 @@ off here and update the status note in
       attribute-bytes-at-Advanced.
 
 ### Phase 4 — reach (genuinely not built)
+
+> **All Phase 4 items edit the shipped cc65 ROM pipeline, backend, or need
+> product scoping — they need a decision before autonomous work.** Feasibility
+> + risk assessed in
+> [`decisions/2026-07-05-engine-items-feasibility.md`](../../design/decisions/2026-07-05-engine-items-feasibility.md).
+> **Recommended next engine sprint (lowest risk):** per-door *same-room*
+> spawns (4.5), module-gated so the golden-ROM `everything-on` hash is
+> preserved. The rest (8×16, CHR banks, bigger worlds) are HIGH-risk /
+> LARGE and belong in reviewed engine sprints.
+
 - [ ] 4.1 Accounts completion (P3–P6 of
-      [`2026-06-21-pupil-accounts.md`](2026-06-21-pupil-accounts.md)).
+      [`2026-06-21-pupil-accounts.md`](2026-06-21-pupil-accounts.md)). *(backend/product)*
 - [ ] 4.2 Teacher tools: class progress, real moderation queue, showcase
-      pinning (gallery Remove is currently unauthenticated).
-- [ ] 4.3 New game types beyond the shipped four (shoot-'em-up, puzzle…).
+      pinning (gallery Remove is currently unauthenticated). *(backend/auth)*
+- [ ] 4.3 New game types beyond the shipped four (shoot-'em-up, puzzle…). *(engine: new BW_GAME_STYLE + starters)*
 - [ ] 4.4 Bigger scrolling worlds (>2×2 screens; needs NES-side compact
-      metatile storage).
-- [ ] 4.5 Per-door destinations + in-runner dialogue.
-- [ ] 4.6 CHR bank switching; audio growth.
+      metatile storage). *(engine — MEDIUM-HIGH risk, rewrites `scroll.c`)*
+- [ ] 4.5 Per-door destinations + in-runner dialogue. *(engine — **recommended
+      same-room variant is the lowest-risk item**; cross-room + in-runner
+      dialogue are blocked on the NMI frame-model rework)*
+- [ ] 4.6 CHR bank switching; audio growth. *(engine — HIGH risk, mapper + header post-patch)*
 - [ ] 4.7 In-browser cc65 → `.nes` compile (server-optional); groundwork in
-      [`2026-06-22-wasm-emulator-spike.md`](2026-06-22-wasm-emulator-spike.md).
+      [`2026-06-22-wasm-emulator-spike.md`](2026-06-22-wasm-emulator-spike.md). *(large spike)*
 
 ### Cross-cutting, before the switch-over
 - [~] Walk every line of [`feature-parity.md`](../../design/feature-parity.md)
