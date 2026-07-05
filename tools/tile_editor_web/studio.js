@@ -547,6 +547,37 @@
     d.textContent = txt;
     return d;
   }
+  // Whole-project JSON round-trip (Phase 3.5). Export the canonical state;
+  // import parses + migrates + snapshots-current-first, so it is lossless
+  // and undoable.
+  function exportProject() {
+    Storage.flushPending();
+    var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (state.name || 'game').replace(/[^a-zA-Z0-9_-]+/g, '_') + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  function importProjectText(text) {
+    var parsed;
+    try { parsed = JSON.parse(text); }
+    catch (e) { alert('That is not a valid project file.'); return false; }
+    var migrated = migrateState(parsed);
+    var err = validateState(migrated);
+    if (err) { alert('That project file is not valid: ' + err); return false; }
+    Storage.saveSnapshot(state, 'before_import');
+    state = migrated;
+    if (state.selectedBgIdx == null) state.selectedBgIdx = 0;
+    state.selectedBgIdx = Math.min(state.selectedBgIdx, state.backgrounds.length - 1);
+    Storage.renameCurrent(state, state.name || 'imported project');
+    Storage.saveCurrent(state);
+    $('project-name').value = state.name || '';
+    renderLive(); renderDock(); refreshQuestsAndAttention();
+    setSaveState('saved');
+    return true;
+  }
   function snapRow(entry, isBackup) {
     var row = document.createElement('div');
     row.className = 'snap-row';
@@ -719,6 +750,17 @@
     });
     $('btn-time-machine').addEventListener('click', openTimeMachine);
     $('tm-close').addEventListener('click', function () { $('tm-backdrop').classList.remove('open'); });
+    $('tm-export').addEventListener('click', exportProject);
+    $('tm-import').addEventListener('click', function () { $('tm-import-file').click(); });
+    $('tm-import-file').addEventListener('change', function () {
+      var f = this.files[0]; if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        if (importProjectText(String(reader.result || ''))) $('tm-backdrop').classList.remove('open');
+      };
+      reader.readAsText(f);
+      this.value = '';
+    });
     $('tm-backdrop').addEventListener('click', function (e) {
       if (e.target === $('tm-backdrop')) $('tm-backdrop').classList.remove('open');
     });
@@ -804,6 +846,8 @@
       undo: undo,
       redo: redo,
       ctx: ctx,
+      exportJson: function () { return JSON.stringify(state); },
+      importText: importProjectText,
       _play: onPlay,
     };
     document.body.dataset.studioReady = '1';
