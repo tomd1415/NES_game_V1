@@ -44,7 +44,18 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 
 ## Phased plan (each = one engine version)
 
-### v3 — SMB‑feel physics + variable jump  *(foundation)*
+### v3 — SMB‑feel physics + variable jump  *(foundation — PARTIALLY LANDED)*
+
+> **Landed (engine v3, 2026-07-05):** the **variable‑height jump** — the
+> signature SMB feel — as the `smb` game style: A jumps, tap = short hop /
+> hold = full jump (releasing A+Up mid‑rise cuts the ascent), running take‑off
+> (B held) jumps higher. Reuses the platformer engine (`BW_GAME_STYLE 0` +
+> `BW_SMB_JUMP`); gated + golden‑ROM‑safe; `smb-jump.mjs` covers it.
+> **Still open in v3:** the full signed **4.4 fixed‑point horizontal** movement
+> (run/walk max speeds, accel/`FrictionData`, 2× skid) and take‑off‑speed‑
+> indexed jump *tables* — a larger rewrite of the horizontal block; the current
+> integer walk + the jump additions above already give a recognisable hop.
+
 - Signed **4.4 fixed‑point** horizontal movement with a `MoveForce`
   fractional accumulator. SMB constants (verbatim from research):
   max run/walk = `$28/$18` (2.5 / 1.5 px/f); accel `FrictionData`
