@@ -66,6 +66,14 @@
       '  border: 1px solid var(--border, #3a3560);',
       '  border-radius: 50%; width: 28px; height: 28px; cursor: pointer;',
       '}',
+      // The download button carries a text label, so it is a pill (auto width)
+      // rather than a round fab; it keeps the margin-left:auto so it anchors the
+      // button group to the right of the header.
+      '.shared-emu-dialog #emu-download {',
+      '  border-radius: 14px; width: auto; height: 28px; padding: 0 12px;',
+      '  font-size: 0.85em; white-space: nowrap;',
+      '}',
+      '.shared-emu-dialog #emu-mute, .shared-emu-dialog #emu-close { margin-left: 0; }',
       '.shared-emu-dialog #emu-canvas {',
       '  display: block; margin: 0 auto;',
       '  image-rendering: pixelated; background: #000;',
@@ -93,6 +101,7 @@
     dlg.innerHTML =
       '<div class="emu-header">' +
       '  <h2>▶ Your game</h2>' +
+      '  <button type="button" class="close-fab" id="emu-download" title="Download this ROM as a .nes file you can run in any emulator">⬇ .nes</button>' +
       '  <button type="button" class="close-fab" id="emu-mute" title="Mute / unmute audio" aria-pressed="false">🔊</button>' +
       '  <button type="button" class="close-fab" id="emu-close" title="Close">×</button>' +
       '</div>' +
@@ -265,6 +274,23 @@
     }
     if (muteBtn) muteBtn.onclick = onMute;
 
+    // Download the running ROM as a .nes the pupil can keep + run in any
+    // emulator (Mesen, FCEUX, an actual cart flasher…).  The bytes are exactly
+    // what Play just built, so no rebuild is needed.
+    const dlBtn = document.getElementById('emu-download');
+    function onDownload() {
+      try {
+        const safe = String(opts.title || 'game').replace(/[^a-zA-Z0-9_-]+/g, '_') || 'game';
+        const blob = new Blob([rom], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = safe + '.nes';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      } catch (_) {}
+    }
+    if (dlBtn) dlBtn.onclick = onDownload;
+
     const kd = (e) => { const m = mapCode(e.code); if (m) nes.buttonDown(m.pad, m.button); };
     const ku = (e) => { const m = mapCode(e.code); if (m) nes.buttonUp(m.pad,   m.button); };
     window.addEventListener('keydown', kd);
@@ -319,6 +345,7 @@
           try { ac.suspend(); } catch (_) {}
         }
         if (muteBtn) muteBtn.onclick = null;
+        if (dlBtn) dlBtn.onclick = null;
         try { dlg.close(); } catch (_) {}
         if (typeof opts.onClose === 'function') {
           try { opts.onClose(); } catch (_) {}
