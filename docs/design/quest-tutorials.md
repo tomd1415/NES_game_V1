@@ -685,6 +685,69 @@ A tutorial is successful when:
 - Large text and audio modes work without changing the lesson content.
 - The finished game can be saved, reopened, and continued.
 
+## Refinements from the teaching review (2026-07-05)
+
+`tutorial_mockup/TEACHING_REVIEW.md` (written against this doc) proposed 12
+teaching additions. The mockup in `tutorial_mockup/` already prototypes the
+side-by-side layout, graduated checks ("Nearly. Paint 3 more…" vs "Not yet."),
+comfort-first Chapter 0, the "Needs attention" panel, read-aloud, auto-help
+after repeated fails, and — importantly — a live **misconception check** (a
+floor *picture* is not solid until its Type says Solid). So several of these are
+already proven, not just aspirational. Adopted below, each tied to a concrete
+data-model field or Studio setting. (Note: the mockup hardcodes its checks in
+JS; the real build should keep them **declarative** per the data model above so
+teachers can author content without editing code.)
+
+**New per-quest fields** (extend the Tutorial data model):
+
+- `finishedEnough` — one plain sentence defining "done" ("at least 8 solid
+  ground blocks under the player; they do not need to look perfect"). Pupils who
+  perfect art or fear incorrectness need an explicit stop line.
+- `misconceptions[]` — `{belief, response}` pairs the check surfaces when a known
+  wrong mental model is detected: floor-picture-vs-Solid; a sprite picture is not
+  automatically an enemy; a door drawing does not move the player; the art need
+  not match the example; "Build failed" ≠ "game ruined".
+- `review` (optional) — one low-pressure, **skippable** recall question at each
+  chapter end ("What made the floor solid — the picture or the Type?").
+  Retrieval practice, never a test.
+- `theme` prompt at tutorial start — pupil picks Castle / Space / Forest /
+  Underwater / Silly to frame optional art choices while the mechanics stay
+  fixed. (Starter kits already carry themes; this makes the choice the pupil's.)
+
+**Regulation & sensory** (add to Accessibility):
+
+- Pause prompts after a failed Play or surprising behaviour — calm and
+  non-patronising ("That happens in game making. One breath, then press Show
+  me.").
+- Celebration is **silent-visual by default**; optional short success sound; no
+  confetti burst; teacher can disable celebration per class. Sensory load
+  matters as much as the reward for this audience.
+- Input alternatives are a **requirement**: a full keyboard path (focus order +
+  key equivalents for Paint / Check / Show me), touch targets ≥ ~44px, and never
+  a drag-only action without a click/tap alternative. The mockup's button-grid +
+  descriptive `aria-label`s is the right base.
+
+**Vocabulary** (add to Design principles): a small set of picture + one-sentence
+cards reused verbatim across quests — Tile, Sprite, Role, Solid, Play. Plain
+words first, but pupils still need repeated exposure.
+
+**Teacher support** (extend that section):
+
+- Pacing modes — Independent (pupil advances) / Teacher pace (teacher unlocks
+  each chapter for whole-class projection) / Recovery (teacher marks a quest done
+  or resets it). Resolves the "teacher pace" open question below as **yes**.
+- Observation notes per tutorial — "what to watch for": avoids pressing Play out
+  of fear; keeps redrawing art instead of moving on; grasps roles but not tile
+  Types; follows one-step but not two-step instructions.
+- Printable supports (Phase T0): a one-page "Where things are" Studio map, a
+  per-kit tile legend, a quest checklist with tick boxes, and a "Look, Check,
+  Show me, Ask" debugging card.
+
+**Needs your decision (not adopted unilaterally):** pair-work roles
+(Driver / Navigator / Artist / Tester). Pair programming can help, but *imposed*
+pairing can raise anxiety for some ASD/ADHD pupils — this depends on how you run
+the room, so it is flagged rather than baked in.
+
 ## Open questions
 
 - Should tutorials live in the right quest panel only, or should there be a
@@ -693,8 +756,13 @@ A tutorial is successful when:
   packs?
 - Should audio narration be recorded files, browser speech synthesis, or both?
 - How much auto-fix should the Studio offer before it stops feeling like the
-  pupil made the game?
-- Should each tutorial have a "teacher pace" mode for whole-class projection?
+  pupil made the game? (Data point: the mockup offers auto-help only after **2**
+  failed checks and always says "you can change it now" — is 2 the right
+  threshold, and should it be teacher-toggleable?)
+- ~~Should each tutorial have a "teacher pace" mode?~~ **Resolved: yes** — see
+  the pacing modes in *Refinements from the teaching review*.
+- Adopt fixed pair-work roles (Driver / Navigator / Artist / Tester), or leave
+  pairing to the teacher per session? (See *Needs your decision* above.)
 - What is the minimum feature set for the SMB tutorial to avoid promising
   mechanics that are still unstable?
 
