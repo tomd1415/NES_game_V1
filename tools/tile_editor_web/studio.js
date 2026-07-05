@@ -452,13 +452,36 @@
       return;
     }
     problems.forEach(function (p) {
-      var el = document.createElement('div');
-      el.className = 'attn-item ' + (p.severity === 'error' ? 'error' : 'warn');
-      el.innerHTML = '<div class="sev">' + (p.severity === 'error' ? '✗ Error' : '⚠ Warning') + '</div>' +
+      var item = document.createElement('div');
+      item.className = 'attn-item ' + (p.severity === 'error' ? 'error' : 'warn');
+      item.innerHTML = '<div class="sev">' + (p.severity === 'error' ? '✗ Error' : '⚠ Warning') + '</div>' +
         '<div>' + escapeHtml(p.message || '') + '</div>' +
         (p.fix ? '<div class="fix">' + escapeHtml(p.fix) + '</div>' : '');
-      al.appendChild(el);
+      var dest = jumpDestination(p.jumpTo);
+      if (dest) {
+        var btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.style.marginTop = '6px';
+        btn.textContent = 'Fix in ' + dest.label + ' →';
+        btn.addEventListener('click', function () { selectMode(dest.mode); });
+        item.appendChild(btn);
+      }
+      al.appendChild(item);
     });
+  }
+  // Map the validators' old-page jumpTo targets onto Studio modes so
+  // "Needs attention" is actionable inside the Studio (Phase 1.6).
+  function jumpDestination(jumpTo) {
+    if (!jumpTo) return null;
+    var t = String(jumpTo).toLowerCase();
+    if (t.indexOf('sprite') >= 0) return { mode: 'chars', label: 'Chars' };
+    if (t.indexOf('behaviour') >= 0) return { mode: 'world', label: 'World' };
+    if (t.indexOf('index') >= 0 || t.indexOf('background') >= 0) return { mode: 'world', label: 'World' };
+    if (t.indexOf('builder') >= 0) return { mode: 'rules', label: 'Rules' };
+    if (t.indexOf('audio') >= 0) return { mode: 'sound', label: 'Sound' };
+    if (t.indexOf('code') >= 0) return { mode: 'code', label: 'Code' };
+    if (t.indexOf('palette') >= 0 || t.indexOf('pal') >= 0) return { mode: 'pals', label: 'Pals' };
+    return null;
   }
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (ch) {
