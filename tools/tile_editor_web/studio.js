@@ -550,6 +550,77 @@
     $('tm-backdrop').classList.remove('open');
   }
 
+  // ---- Publish to gallery ------------------------------------------------
+  function openPublish() {
+    $('pub-title-input').value = state.name || '';
+    $('pub-status').textContent = '';
+    $('pub-backdrop').classList.add('open');
+  }
+  function bytesToBase64(bytes) {
+    var CHUNK = 0x8000, out = '';
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(out);
+  }
+  async function captureRomPreview(rom, frames) {
+    if (window.NesEmulator && window.NesEmulator.ensureJsnes) await window.NesEmulator.ensureJsnes();
+    if (!window.jsnes) throw new Error('jsnes did not load');
+    var canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 240;
+    var g = canvas.getContext('2d');
+    var img = g.createImageData(256, 240);
+    var fb = new Uint32Array(img.data.buffer);
+    var nes = new window.jsnes.NES({
+      onFrame: function (buf) { for (var i = 0; i < buf.length; i++) fb[i] = 0xff000000 | buf[i]; },
+      onAudioSample: function () {},
+    });
+    var romStr = '';
+    for (var j = 0; j < rom.length; j++) romStr += String.fromCharCode(rom[j]);
+    nes.loadROM(romStr);
+    for (var f = 0; f < frames; f++) nes.frame();
+    g.putImageData(img, 0, 0);
+    return canvas.toDataURL('image/png');
+  }
+  async function doPublish() {
+    var status = $('pub-status'), submit = $('pub-submit');
+    var title = ($('pub-title-input').value || '').trim();
+    if (!title) { status.textContent = 'A title is required.'; return; }
+    submit.disabled = true;
+    status.textContent = 'Building ROM…';
+    try {
+      var rom = null;
+      var result = await window.PlayPipeline.play(state, {
+        mode: 'browser', download: false,
+        onStatus: function (_c, msg) { status.textContent = msg; },
+        onRom: function (bytes) { rom = bytes; },
+      });
+      if (!rom || !result || !result.ok) { status.textContent = '✗ Build failed — check Needs attention.'; submit.disabled = false; return; }
+      status.textContent = 'Capturing preview…';
+      var dataUrl = await captureRomPreview(rom, 60);
+      status.textContent = 'Uploading…';
+      var res = await fetch('/gallery/publish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title,
+          description: ($('pub-desc-input').value || '').trim(),
+          pupil_handle: ($('pub-handle-input').value || '').trim(),
+          project: state,
+          rom_b64: bytesToBase64(rom),
+          preview_b64: dataUrl.split(',')[1],
+          source_page: 'builder',
+        }),
+      });
+      var data = await res.json();
+      if (!data.ok) { status.textContent = '✗ ' + (data.error || 'Publish failed'); submit.disabled = false; return; }
+      status.innerHTML = '✓ Published! <a href="gallery.html" target="_blank" style="color:var(--sel)">Open the gallery</a>.';
+      submit.disabled = false;
+    } catch (e) {
+      status.textContent = '✗ ' + (e && e.message ? e.message : 'Publish failed');
+      submit.disabled = false;
+    }
+  }
+
   // ---- Help + feedback modal --------------------------------------------
   function openHelp() {
     var bd = $('help-backdrop');
@@ -609,6 +680,12 @@
 
     // Chrome buttons.
     $('btn-play').addEventListener('click', onPlay);
+    $('btn-publish').addEventListener('click', openPublish);
+    $('pub-cancel').addEventListener('click', function () { $('pub-backdrop').classList.remove('open'); });
+    $('pub-submit').addEventListener('click', doPublish);
+    $('pub-backdrop').addEventListener('click', function (e) {
+      if (e.target === $('pub-backdrop')) $('pub-backdrop').classList.remove('open');
+    });
     $('btn-time-machine').addEventListener('click', openTimeMachine);
     $('tm-close').addEventListener('click', function () { $('tm-backdrop').classList.remove('open'); });
     $('tm-backdrop').addEventListener('click', function (e) {

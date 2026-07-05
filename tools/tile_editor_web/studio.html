@@ -306,6 +306,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 
   <div class="chrome-group">
     <button id="btn-play" class="btn primary" type="button">▶ Play</button>
+    <button id="btn-publish" class="btn" type="button" title="Build your game and share it to the class gallery">📤 Publish</button>
     <div class="save-status"><span id="save-dot" title="Save status"></span>
       <span id="save-text">Saved</span></div>
     <button id="btn-time-machine" class="btn" type="button">⟲ Time Machine</button>
@@ -369,6 +370,22 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
     <div id="tm-body"></div>
     <div class="modal-actions">
       <button class="btn" id="tm-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PUBLISH ===================== -->
+<div class="modal-backdrop" id="pub-backdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pub-title">
+    <h2 id="pub-title">📤 Publish to the gallery</h2>
+    <div class="modal-sub">Build your game and share it so the rest of the class can play it.</div>
+    <div class="field"><span>Title</span><input id="pub-title-input" type="text" maxlength="60"></div>
+    <div class="field"><span>Description (optional)</span><input id="pub-desc-input" type="text" maxlength="200"></div>
+    <div class="field"><span>Your handle (optional, no real names)</span><input id="pub-handle-input" type="text" maxlength="24"></div>
+    <div id="pub-status" class="dock-note"></div>
+    <div class="modal-actions">
+      <button class="btn" id="pub-cancel" type="button">Cancel</button>
+      <button class="btn primary" id="pub-submit" type="button">Publish</button>
     </div>
   </div>
 </div>
