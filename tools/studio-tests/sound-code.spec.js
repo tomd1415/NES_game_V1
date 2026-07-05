@@ -50,3 +50,28 @@ test('Needs-attention findings carry a Studio jump button', async ({ page }) => 
   const mode = await page.evaluate(() => window.Studio.getMode());
   expect(['chars', 'world', 'rules', 'pals', 'sound', 'code']).toContain(mode);
 });
+
+test('CODE: eject to hand-coded C at Advanced, banner in RULES, return (3.6)', async ({ page }) => {
+  await page.locator('#level-select').selectOption('advanced');
+  await page.locator('.mode-btn[data-mode="code"]').click();
+  // Wait for the template to load into the read-only view.
+  await expect(page.locator('#code-view')).not.toContainText('Loading main.c');
+  // Eject.
+  page.once('dialog', (d) => d.accept());
+  await page.locator('.btn', { hasText: 'Edit as hand-coded C' }).click();
+  expect(await page.evaluate(() => window.Studio.getState().ejected)).toBe(true);
+  const code = await page.evaluate(() => window.Studio.getState().customMainC);
+  expect(typeof code).toBe('string');
+  expect(code.length).toBeGreaterThan(100);
+  await expect(page.locator('#code-edit')).toBeVisible();
+
+  // RULES shows the hand-coded banner.
+  await page.locator('.mode-btn[data-mode="rules"]').click();
+  await expect(page.locator('.rule-card', { hasText: 'hand-coded' })).toBeVisible();
+
+  // Return to the visual editor.
+  await page.locator('.mode-btn[data-mode="code"]').click();
+  page.once('dialog', (d) => d.accept());
+  await page.locator('.btn', { hasText: 'Return to visual editor' }).click();
+  expect(await page.evaluate(() => window.Studio.getState().ejected)).toBe(false);
+});

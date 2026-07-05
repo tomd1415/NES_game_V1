@@ -268,6 +268,17 @@
 
   function renderDock(dock, ctx) {
     var tree = builderTree(ctx);
+    var s = ctx.getState();
+    // Ejected (hand-coded) banner: these modules no longer drive the build.
+    if (s.ejected) {
+      var banner = el('div', { class: 'rule-card on expanded', style: 'border-color:var(--warn)' });
+      banner.appendChild(el('div', { class: 'head' }, [el('span', { class: 'card-title', style: 'color:var(--warn)', text: '✎ This game is hand-coded' })]));
+      banner.appendChild(el('div', { class: 'body' }, [
+        el('div', { class: 'dock-note', text: 'The rules below no longer affect the build — the game compiles from your own C. Open CODE and press “Return to visual editor” to make these modules live again.' }),
+        el('button', { class: 'btn', text: 'Go to CODE →', onclick: function () { ctx.selectMode('code'); } }),
+      ]));
+      dock.appendChild(banner);
+    }
     var gt = (tree.modules.game && tree.modules.game.config && tree.modules.game.config.type) || 'platformer';
     dock.appendChild(el('div', { class: 'dock-note',
       text: 'How your game behaves. Changes apply the next time you press ▶ Play. Current game type: ' + gt + '.' }));

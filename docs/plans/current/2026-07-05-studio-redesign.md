@@ -153,10 +153,15 @@ off here and update the status note in
       test (both banks). *(Still open: `.nam` / `.pal` / `my_tiles.txt` /
       `sprites.inc`+`.h` imports — same pattern, lower priority; whole-
       project JSON already round-trips.)*
-- [ ] 3.6 Advanced level: raw C/asm + whole-file editing in CODE
-      (CodeMirror, guided regions, lessons, snippets, symbols); attribute
-      bytes visible only at Advanced. **Large CODE-port build** (shares
-      scope with 1.5's guided-regions/lessons port) — not yet started.
+- [~] 3.6 Advanced level: ✅ **raw whole-file C editing via a real ejected
+      state** — "✂ Edit as hand-coded C" (Advanced) assembles the current
+      C into `state.customMainC`, sets `state.ejected`, and PLAY compiles
+      *that* (play-pipeline `customMainC` path); RULES shows a hand-coded
+      banner with a "Go to CODE" jump; "↩ Return to visual editor" flips
+      back. This replaces the old silently-inert-Builder eject trap (1.5).
+      **Still open (CODE-port polish):** CodeMirror + guided editable
+      regions, the lessons/snippets libraries, the symbol reference, the
+      C/asm toggle, and attribute-bytes-at-Advanced.
 
 ### Phase 4 — reach (genuinely not built)
 - [ ] 4.1 Accounts completion (P3–P6 of

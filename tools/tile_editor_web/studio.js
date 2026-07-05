@@ -236,7 +236,7 @@
     playedThisSession = true;
     setTvState(false);
     setSaveState('dirty');
-    window.PlayPipeline.play(state, {
+    var playOpts = {
       mode: 'browser',
       onStatus: function (kind, msg) {
         $('tv-hint').textContent = msg;
@@ -245,7 +245,12 @@
         window.NesEmulator.open(rom, { title: state.name || 'game' })
           .then(function () { setTvState(true); renderLive(); });
       },
-    }).then(function (res) {
+    };
+    // Ejected (hand-coded) projects compile the pupil's own C, not the blocks.
+    if (state.ejected && typeof state.customMainC === 'string' && state.customMainC.length) {
+      playOpts.customMainC = state.customMainC;
+    }
+    window.PlayPipeline.play(state, playOpts).then(function (res) {
       setSaveState('saved');
       refreshQuestsAndAttention();
       if (!res || res.ok === false || !res.rom_b64) { setTvState(true); }
