@@ -33,6 +33,16 @@ of how we got here.
   in [`design/`](design/). For **what is done and what is left** as a
   checklist, see the execution tracker
   [`plans/current/2026-07-05-studio-redesign.md`](plans/current/2026-07-05-studio-redesign.md).
+- **Changing the NES engine?** (the C templates, `builder-assembler.js`,
+  or the cc65 project under `steps/Step_Playground/` that turn a project
+  into a ROM) — **this is a versioned engine.** Read
+  [`design/engine-versioning.md`](design/engine-versioning.md), then follow
+  [`tools/engines/README.md`](../tools/engines/README.md): bump
+  `tools/engines/ENGINE_VERSION` **and**
+  `tools/tile_editor_web/engine-version.js`, add a
+  [`tools/engines/CHANGELOG.md`](../tools/engines/CHANGELOG.md) entry, and run
+  `node scripts/snapshot-engine.mjs` to freeze the new version. `builder-tests`
+  fails if the version constants disagree or the snapshot drifts from HEAD.
 - **Looking for context on a past decision?**  Walk
   [`plans/archive/`](plans/archive/) — the chronological filenames
   let you scan quickly, and most of the recent entries

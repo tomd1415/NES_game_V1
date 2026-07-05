@@ -8,9 +8,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('lists the starter hero with its role', async ({ page }) => {
-  await expect(page.locator('.char-row')).toHaveCount(1);
-  await expect(page.locator('.char-row .chip', { hasText: 'player' })).toBeVisible();
+  // The starter's first character is the player (hero); other sample
+  // characters may follow, so assert the hero rather than an exact count.
+  await expect(page.locator('.char-row').first().locator('.chip', { hasText: 'player' })).toBeVisible();
   await expect(page.locator('select[data-role]')).toHaveValue('player');
+  expect(await page.evaluate(() => window.Studio.getState().sprites[0].role)).toBe('player');
 });
 
 test('role assignment updates the sprite (the notes.md question)', async ({ page }) => {
@@ -20,10 +22,11 @@ test('role assignment updates the sprite (the notes.md question)', async ({ page
 });
 
 test('new / duplicate / delete characters', async ({ page }) => {
+  const before = await page.evaluate(() => window.Studio.getState().sprites.length);
   await page.locator('#chars-new').click();
-  await expect(page.locator('.char-row')).toHaveCount(2);
+  await expect(page.locator('.char-row')).toHaveCount(before + 1);
   const n = await page.evaluate(() => window.Studio.getState().sprites.length);
-  expect(n).toBe(2);
+  expect(n).toBe(before + 1);
 });
 
 test('resizing changes the metasprite dimensions and cell grid', async ({ page }) => {
@@ -45,13 +48,14 @@ test('drawing on the TV edits a shared sprite tile', async ({ page }) => {
   // Pick the white pen (colour 3) so it differs from the body colour.
   await page.locator('.swatch-row .swatch').nth(3).click();
   await page.locator('.stage-toolbar .tool[data-tool="pencil"]').click();
-  // Drag a short stroke across the middle of the sprite.
+  // Click a pixel in the sprite. The hero's tiles are shared with the sample
+  // NPC, so the "Duplicate first" safeguard fires — choose Change everywhere,
+  // and its proceed() paints that pixel into the shared tile.
   const box = await page.locator('#tv-canvas').boundingBox();
-  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
-  await page.mouse.move(cx - 10, cy);
-  await page.mouse.down();
-  await page.mouse.move(cx + 10, cy, { steps: 6 });
-  await page.mouse.up();
+  await page.mouse.click(box.x + box.width / 2 - 8, box.y + box.height / 2 - 8);
+  const dlg = page.locator('.modal-backdrop.open', { hasText: 'This tile is shared' });
+  await expect(dlg).toBeVisible();
+  await dlg.locator('.btn', { hasText: 'Change everywhere' }).click();
   const after = await page.evaluate(() => {
     const s = window.Studio.getState();
     return JSON.stringify([1, 2, 3, 4].map((i) => s.sprite_tiles[i].pixels));
@@ -82,10 +86,11 @@ test('flip H mirrors the character non-destructively (involution)', async ({ pag
 });
 
 test('painting a shared tile offers Duplicate-first, which forks the tile', async ({ page }) => {
-  // Duplicate the hero so both characters share tiles 1–4.
+  // Duplicate the hero (selected first) so its tiles are shared with the copy.
+  const before = await page.evaluate(() => window.Studio.getState().sprites.length);
   await page.locator('.btn', { hasText: 'Duplicate' }).click();
-  await expect(page.locator('.char-row')).toHaveCount(2);
-  // The copy is now selected; its top-left cell points at shared tile 1.
+  await expect(page.locator('.char-row')).toHaveCount(before + 1);
+  // The copy sits right after the hero; its top-left cell points at shared tile 1.
   const cellTileBefore = await page.evaluate(() =>
     window.Studio.getState().sprites[1].cells[0][0].tile);
   expect(cellTileBefore).toBe(1);

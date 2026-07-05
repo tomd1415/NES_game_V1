@@ -16,16 +16,23 @@ async function clickTv(page, fx, fy) {
   await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
 }
 
+const sceneCount = (page) => page.evaluate(() =>
+  window.Studio.getState().builder.modules.scene.config.instances.length);
+const lastInstance = (page) => page.evaluate(() => {
+  const i = window.Studio.getState().builder.modules.scene.config.instances;
+  return i[i.length - 1];
+});
+
 test('Place tool drops a scene instance on the TV', async ({ page }) => {
+  const before = await sceneCount(page);
   await page.locator('.stage-toolbar .more-tools-btn').click();
   await page.locator('.stage-toolbar .tool[data-tool="place"]').click();
   await clickTv(page, 0.5, 0.4);
-  const instances = await page.evaluate(() =>
-    window.Studio.getState().builder.modules.scene.config.instances);
-  expect(instances.length).toBe(1);
-  expect(instances[0]).toHaveProperty('spriteIdx');
-  expect(instances[0]).toHaveProperty('x');
-  expect(instances[0].ai).toBe('static');
+  expect(await sceneCount(page)).toBe(before + 1);
+  const placed = await lastInstance(page);
+  expect(placed).toHaveProperty('spriteIdx');
+  expect(placed).toHaveProperty('x');
+  expect(placed.ai).toBe('static');
 });
 
 test('per-instance AI + speed config writes to the instance', async ({ page }) => {
@@ -34,19 +41,17 @@ test('per-instance AI + speed config writes to the instance', async ({ page }) =
   await clickTv(page, 0.5, 0.4);
   // The placed instance is auto-selected → its config panel shows.
   await page.locator('select[data-ent-ai]').selectOption('walker');
-  const ai = await page.evaluate(() =>
-    window.Studio.getState().builder.modules.scene.config.instances[0].ai);
-  expect(ai).toBe('walker');
+  // The placed instance is auto-selected, so its AI is the one that changed.
+  expect((await lastInstance(page)).ai).toBe('walker');
 });
 
 test('deleting an entity removes it from the scene', async ({ page }) => {
+  const before = await sceneCount(page);
   await page.locator('.stage-toolbar .more-tools-btn').click();
   await page.locator('.stage-toolbar .tool[data-tool="place"]').click();
   await clickTv(page, 0.3, 0.4);
   await clickTv(page, 0.7, 0.4);
-  expect(await page.evaluate(() =>
-    window.Studio.getState().builder.modules.scene.config.instances.length)).toBe(2);
+  expect(await sceneCount(page)).toBe(before + 2);
   await page.locator('.ent-row .icon-btn').first().click();
-  expect(await page.evaluate(() =>
-    window.Studio.getState().builder.modules.scene.config.instances.length)).toBe(1);
+  expect(await sceneCount(page)).toBe(before + 1);
 });

@@ -57,10 +57,29 @@ is created by a `scripts/snapshot-engine.mjs` that copies the live engine
 files into `v<N>/` and writes the manifest. Snapshots are immutable once
 released.
 
-## Build-time selection & fallback
+## Which engine a page targets (`NES_TARGET_ENGINE`) — implemented
+
+Codegen (`builder-modules.js` / the template) gates every version-specific
+feature on `window.NES_TARGET_ENGINE`:
+
+- **The Studio** loads `engine-version.js`, which sets `NES_TARGET_ENGINE` to
+  the **latest** — so it gets the newest engine.
+- **The original seven pages** do **not** load `engine-version.js`; codegen
+  treats an unset target as **v1**, so the stable multi-page site never emits
+  newer-engine features and stays byte-identical to v1. (E.g. per-door is
+  gated on `NES_TARGET_ENGINE >= 2`.)
+
+`play-pipeline` sends `targetEngine` in the `/play` body; the server clamps it
+to `[1, current]` and returns `engineVersion` / `engineLatest` for provenance.
+Because v1↔v2 differ **only in client codegen** (per-door), this gate fully
+pins the multi-page site to v1 today. The server-side snapshot build below is
+the additional enforcement needed **once a future version changes the static
+cc65 sources** (not just client codegen).
+
+## Build-time selection & fallback (server snapshot build — TODO for divergent versions)
 
 On `/play` (and publish):
-1. Determine `target = state.engineVersion || 1`.
+1. Determine `target = targetEngine (body) or state.engineVersion || 1`.
 2. Try the **latest** engine. If it builds and passes a smoke check → use it,
    and if `target < latest` surface the upgrade advisor (below).
 3. If the latest engine **fails** to build the project → retry with the
@@ -101,8 +120,13 @@ concrete checklist.
 - **E-V2 — Selection & fallback.**
   - `snapshot-engine.mjs` script; server builds from `v<target>/`.
   - Latest-then-fallback build flow + the "built with original engine" notice.
-- **E-V3 — Advisor.**
-  - `changelog.json` + the in-Studio "what changed since your engine" panel.
+- **E-V3 — Advisor. ✅ implemented.**
+  - The Studio's ⚙ Engine chrome button shows the project's engine version and
+    highlights when it's behind the latest. It opens an advisor modal that
+    fetches `/engine/CHANGELOG.md` (a server route serving `tools/engines/`),
+    lists the entries newer than the project's version ("what changed since
+    your engine"), and offers **Update this game to v<latest>** (bumps
+    `state.engineVersion`). Covered by `tools/studio-tests/engine.spec.js`.
 
 **The first engine feature (per-door) becomes engine v2:** snapshot v1
 first, ship per-door as v2 with a CHANGELOG entry, so every existing v1 game

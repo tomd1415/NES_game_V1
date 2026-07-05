@@ -38,6 +38,27 @@
 
 ---
 
+## Branch state (2026-07-05)
+
+The redesign **merged to `main`** (commit "Merge redesign/ui-ux…"). Engine
+work now happens on **`feature/nes-engine`**, which added, on top of the
+merge:
+
+- **NES-engine versioning** (`docs/design/engine-versioning.md`): every
+  project stamped `engineVersion`; `tools/engines/ENGINE_VERSION` +
+  `engine-version.js`; per-version snapshots (`tools/engines/v1`, `v2`) via
+  `scripts/snapshot-engine.mjs`; `CHANGELOG.md`; builder-tests enforce
+  version-agreement + snapshot-integrity. **Still open:** E-V2 (build-time
+  fallback to a game's target engine) and E-V3 (in-Studio "what changed"
+  upgrade advisor).
+- **Engine v2 — per-door destinations** (same-room + cross-room): each Door
+  tile has its own spawn/target, edited in WORLD → Doors. Empty door list =
+  byte-identical v1 ROM (golden-ROM safe); the new C compiles via cc65.
+- **The 7 `notes.md` bugs** fixed (see that file's Resolutions).
+- **Tile default-behaviour** (auto-type on place) + **tile-type overlay**.
+- **Richer starter game** (platforms, ladder, enemy, NPC + dialogue, door,
+  hearts) + "Load a starter game" in the account dropdown + resilient boot.
+
 ## Landed ✅ (2026-07-05)
 
 **Phase 0 — shell & foundation**

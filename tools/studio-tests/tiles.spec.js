@@ -90,7 +90,9 @@ test('CHARS "Edit tiles" jumps into TILES focused on the sprite tile (2.4)', asy
 });
 
 test('dialogue reserves the glyph tile slots in TILES (2.6)', async ({ page }) => {
-  // BG bank, dialogue off → nothing reserved.
+  // Ensure dialogue is OFF first (the sample starter may enable it) → nothing reserved.
+  await page.evaluate(() => { window.Studio.getState().builder.modules.dialogue.enabled = false; });
+  await page.locator('.mode-btn[data-mode="tiles"]').click();
   await expect(page.locator('.tile-cell.reserved')).toHaveCount(0);
   // Turn dialogue on and re-render.
   await page.evaluate(() => {

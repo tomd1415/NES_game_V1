@@ -258,6 +258,9 @@
       playerStart: players.playerStart,
       sceneSprites: sceneSprites,
       mode: opts.mode === 'native' ? 'native' : 'browser',
+      // Which engine this page targets (the multi-page site defaults to v1,
+      // the Studio to the latest) — recorded for build provenance / fallback.
+      targetEngine: (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1,
     };
     if (customMainC !== null)   payload.customMainC = customMainC;
     if (customMainAsm !== null) payload.customMainAsm = customMainAsm;

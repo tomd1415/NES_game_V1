@@ -2896,12 +2896,31 @@ def _find_snippet(snippet_id):
     return None
 
 
+def _resolve_engine_versions(body):
+    """(target_engine, current_engine) for build provenance / versioning.
+
+    The original multi-page site defaults to v1 (stable/pinned); the Studio
+    targets the latest.  For v1..v2 the static cc65 sources are identical, so
+    this is provenance-only today — it is the hook where a future engine whose
+    static sources diverge would build the target's snapshot."""
+    try:
+        current_engine = int((ROOT / "tools" / "engines" / "ENGINE_VERSION").read_text().strip())
+    except Exception:
+        current_engine = 1
+    try:
+        target_engine = int(body.get("targetEngine", 1))
+    except (TypeError, ValueError):
+        target_engine = 1
+    return max(1, min(current_engine, target_engine)), current_engine
+
+
 def run_play(body):
     # mode: "browser" (default) returns ROM bytes for jsnes to run in the
     # tab; "native" launches fceux on the server's desktop (only useful for
     # the offline single-user workflow).  "native" auto-falls-back to
     # browser behaviour with a warning if fceux isn't on PATH.
     mode = (body.get("mode") or "browser").lower()
+    target_engine, current_engine = _resolve_engine_versions(body)
 
     started = time.time()
     try:
@@ -2918,7 +2937,8 @@ def run_play(body):
     result = {"ok": True, "log": build_log, "size": len(rom_bytes),
               "built_epoch": built_epoch,
               "built_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(built_epoch)),
-              "build_time_ms": int((built_epoch - started) * 1000)}
+              "build_time_ms": int((built_epoch - started) * 1000),
+              "engineVersion": target_engine, "engineLatest": current_engine}
 
     if mode == "native":
         if not FCEUX_PATH:
@@ -3255,6 +3275,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             served = self._gallery_static(parsed.path)
             if served is not None:
                 return served
+        if parsed.path.startswith("/engine/"):
+            # Serve the engine version registry (CHANGELOG.md, ENGINE_VERSION)
+            # so the Studio's upgrade advisor can show "what changed".
+            served = self._engine_static(parsed.path)
+            if served is not None:
+                return served
         if parsed.path.startswith("/docs/"):
             # 2026-04-27 — Editor-page links to pupil-facing docs
             # (e.g. audio.html -> ../../docs/guides/AUDIO_GUIDE.md)
@@ -3268,6 +3294,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if served is not None:
                 return served
         return super().do_GET()
+
+    def _engine_static(self, url_path):
+        """Serve files under `tools/engines/` (CHANGELOG.md, ENGINE_VERSION)."""
+        rel = unquote(url_path[len("/engine/"):])
+        base = (ROOT / "tools" / "engines").resolve()
+        target = (base / rel).resolve()
+        try:
+            target.relative_to(base)
+        except ValueError:
+            self.send_error(404)
+            return True
+        if not target.is_file():
+            return None
+        data = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+        return True
 
     def _docs_static(self, url_path):
         """Serve files under the project-root `docs/` directory."""

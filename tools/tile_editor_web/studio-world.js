@@ -20,6 +20,8 @@
   var paintPalette = 0;  // selected bg palette (0-3)
   var paintType = 1;     // selected behaviour type id (solid_ground)
   var showGrid = true;
+  var showTypes = false; // tile-type (behaviour) overlay toggle
+  var BEH_COLORS = { 1: '#8d6e4b', 2: '#555555', 3: '#6aa3ff', 4: '#ffd866', 5: '#ff78a2', 6: '#c08a3c', 7: '#33dddd' };
   var hover = null;      // {cx,cy}
   var placeChar = -1;    // sprite index the Place tool drops (-1 = auto)
   var selInst = null;    // selected scene-instance id
@@ -83,6 +85,82 @@
     return bg.behaviour;
   }
 
+  // ---- Per-door destinations editor (engine v2) -------------------------
+  var DOOR_TYPE_ID = 4; // behaviour id for "door"
+  // Find every door tile (behaviour == DOOR) in a background's grid.
+  function findDoorTiles(bg) {
+    var out = [], beh = (bg && bg.behaviour) || [];
+    for (var r = 0; r < beh.length; r++) {
+      var row = beh[r] || [];
+      for (var c = 0; c < row.length; c++) if ((row[c] | 0) === DOOR_TYPE_ID) out.push({ tx: c, ty: r });
+    }
+    return out;
+  }
+  function doorsModule(s) {
+    if (!s.builder || !s.builder.modules) return null;
+    var node = s.builder.modules.doors;
+    if (!node) return null;
+    if (!node.config) node.config = {};
+    if (!Array.isArray(node.config.doorList)) node.config.doorList = [];
+    return node;
+  }
+  function findDoorEntry(list, bgIdx, tx, ty) {
+    for (var i = 0; i < list.length; i++) {
+      var d = list[i];
+      if ((d.bg | 0) === bgIdx && (d.tx | 0) === tx && (d.ty | 0) === ty) return d;
+    }
+    return null;
+  }
+  function renderDoorsSection(dock, ctx, s, bg) {
+    if (!ctx.levelAtLeast('maker')) return;
+    var node = doorsModule(s);
+    if (!node) return;
+    var doorTiles = findDoorTiles(bg);
+    var bgIdx = s.selectedBgIdx | 0;
+    var list = node.config.doorList;
+    // Prune entries on THIS background whose door tile no longer exists.
+    var present = {};
+    doorTiles.forEach(function (t) { present[t.tx + ',' + t.ty] = 1; });
+    for (var i = list.length - 1; i >= 0; i--) {
+      if ((list[i].bg | 0) === bgIdx && !present[(list[i].tx | 0) + ',' + (list[i].ty | 0)]) list.splice(i, 1);
+    }
+    var sec = UI.section('Doors', el('span', { class: 'chip', text: 'destinations' }));
+    if (!doorTiles.length) {
+      sec.appendChild(el('div', { class: 'dock-note', text: 'Paint a Door tile (⛰ Type → Door) to place a door, then set where it leads here.' }));
+      dock.appendChild(sec);
+      return;
+    }
+    if (!node.enabled) node.enabled = true; // doors must be on for per-door to build
+    sec.appendChild(el('div', { class: 'dock-note', text: 'Each door on this screen can send the player somewhere different — a spawn spot, and optionally another background (a room).' }));
+    var bgCount = (s.backgrounds || []).length;
+    doorTiles.forEach(function (t) {
+      var d = findDoorEntry(list, bgIdx, t.tx, t.ty);
+      if (!d) { d = { bg: bgIdx, tx: t.tx, ty: t.ty, spawnX: 24, spawnY: 120, targetBgIdx: -1 }; list.push(d); }
+      var card = el('div', { style: 'border:2px solid var(--line);padding:6px;margin-top:6px' });
+      card.appendChild(el('div', { class: 'dock-note', style: 'color:var(--sel)', text: '🚪 Door at tile ' + t.tx + ',' + t.ty }));
+      function numField(label, key, min, max) {
+        var inp = el('input', { type: 'number', min: min, max: max, style: 'width:64px' });
+        inp.value = d[key];
+        inp.addEventListener('change', function () {
+          var v = parseInt(inp.value, 10); if (isNaN(v)) return;
+          ctx.pushUndo(); d[key] = Math.max(min, Math.min(max, v)); ctx.markDirty();
+        });
+        return el('div', { class: 'field inline' }, [el('span', { text: label }), inp]);
+      }
+      card.appendChild(numField('Spawn X', 'spawnX', 0, 240));
+      card.appendChild(numField('Spawn Y', 'spawnY', 16, 200));
+      // Target background selector.
+      var tgt = el('select');
+      tgt.appendChild(el('option', { value: '-1', text: 'Same room' }));
+      for (var b = 0; b < bgCount; b++) tgt.appendChild(el('option', { value: String(b), text: 'Room ' + (b + 1) + ((s.backgrounds[b] && s.backgrounds[b].name) ? ' (' + s.backgrounds[b].name + ')' : '') }));
+      tgt.value = String(d.targetBgIdx == null ? -1 : d.targetBgIdx);
+      tgt.addEventListener('change', function () { ctx.pushUndo(); d.targetBgIdx = parseInt(tgt.value, 10); ctx.markDirty(); });
+      card.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Leads to' }), tgt]));
+      sec.appendChild(card);
+    });
+    dock.appendChild(sec);
+  }
+
   // Resize a background to sx×sy screens (bug #7), preserving existing art.
   function resizeBackground(ctx, sx, sy) {
     var bg = activeBg(ctx);
@@ -117,8 +195,14 @@
     var tool = ctx.getActiveTool();
     if (tool === 'stamp') {
       nt[wy][wx] = { tile: stampTile, palette: paintPalette };
+      // Tile default-behaviour: placing a tile that has a default type also
+      // sets this cell's behaviour to that type (e.g. a ground tile becomes
+      // solid automatically). Override later with the ⛰ Type tool.
+      var def = s.bg_tiles[stampTile] && s.bg_tiles[stampTile].defaultBehaviour;
+      if (def != null) ensureBehaviour(bg)[wy][wx] = def | 0;
     } else if (tool === 'erase') {
       nt[wy][wx] = { tile: 0, palette: 0 };
+      ensureBehaviour(bg)[wy][wx] = 0; // removing the tile clears its type
     } else if (tool === 'palette') {
       // Attribute granularity: a whole 2×2 quadrant shares one palette.
       var qx = wx - (wx % 2), qy = wy - (wy % 2);
@@ -151,9 +235,12 @@
     var toTile = tool === 'erase' ? 0 : stampTile;
     var toPal = tool === 'erase' ? 0 : paintPalette;
     if (fromTile === toTile && fromPal === toPal) return;
+    var s2 = ctx.getState();
+    var def2 = tool === 'erase' ? 0 : (s2.bg_tiles[stampTile] && s2.bg_tiles[stampTile].defaultBehaviour);
+    var beh2 = (tool === 'erase' || def2 != null) ? ensureBehaviour(bg) : null;
     floodGeneric(wx, wy, cols, rows,
       function (x, y) { return nt[y][x].tile === fromTile && nt[y][x].palette === fromPal; },
-      function (x, y) { nt[y][x] = { tile: toTile, palette: toPal }; });
+      function (x, y) { nt[y][x] = { tile: toTile, palette: toPal }; if (beh2) beh2[y][x] = def2 | 0; });
   }
   function floodGeneric(sx, sy, cols, rows, match, set) {
     var stack = [[sx, sy]], seen = {};
@@ -303,6 +390,27 @@
       for (var ax = 0; ax <= SCREEN_W; ax += 2) { g.beginPath(); g.moveTo(ax * 8 + 0.5, 0); g.lineTo(ax * 8 + 0.5, 240); g.stroke(); }
       for (var ay = 0; ay <= SCREEN_H; ay += 2) { g.beginPath(); g.moveTo(0, ay * 8 + 0.5); g.lineTo(256, ay * 8 + 0.5); g.stroke(); }
       g.globalAlpha = 1;
+    }
+    // Tile-type (behaviour) overlay: translucent colour per cell so a pupil
+    // sees what each tile *does* at a glance.
+    if (showTypes) {
+      var tbg = _octx && activeBg(_octx);
+      if (tbg && !isMetatileBg(tbg)) {
+        var tbeh = tbg.behaviour || [];
+        var to = off(_octx);
+        g.globalAlpha = 0.45;
+        for (var ty = 0; ty < SCREEN_H; ty++) {
+          var trow = tbeh[ty + to.cy] || [];
+          for (var tx = 0; tx < SCREEN_W; tx++) {
+            var bid = trow[tx + to.cx] | 0;
+            var col = BEH_COLORS[bid];
+            if (!col) continue;
+            g.fillStyle = col;
+            g.fillRect(tx * 8, ty * 8, 8, 8);
+          }
+        }
+        g.globalAlpha = 1;
+      }
     }
     if (hover) {
       g.strokeStyle = '#FA9E00'; g.lineWidth = 2;
@@ -637,6 +745,9 @@
     });
     typeSec.appendChild(el('div', { class: 'dock-note', text: 'With the ⛰ Type tool, paint what each tile does. These slots are named for your current game type — solid ground and platforms are what your hero stands on.' }));
     dock.appendChild(typeSec);
+
+    // --- Doors: per-door destinations (engine v2, Maker+) ---
+    renderDoorsSection(dock, ctx, s, bg);
     }
 
     // --- Entities (scene instances) ---
@@ -736,12 +847,17 @@
       ]));
     }
 
-    // --- Grid toggle ---
+    // --- Grid + tile-type overlay toggles ---
     var gridSec = el('div', { class: 'dock-section' }, [
       el('label', { class: 'switch' }, [
         (function () { var c = el('input', { type: 'checkbox' }); c.checked = showGrid;
           c.addEventListener('change', function () { showGrid = c.checked; ctx.renderLive(); }); return c; })(),
         el('span', { text: 'Show grid' }),
+      ]),
+      el('label', { class: 'switch', style: 'margin-top:6px' }, [
+        (function () { var c = el('input', { type: 'checkbox', 'data-toggle-types': '1' }); c.checked = showTypes;
+          c.addEventListener('change', function () { showTypes = c.checked; ctx.renderLive(); }); return c; })(),
+        el('span', { text: 'Show tile types' }),
       ]),
     ]);
     dock.appendChild(gridSec);
@@ -869,7 +985,7 @@
       if (c) { stampTile = c.tile | 0; paintPalette = c.palette | 0; ctx.renderDock(); }
     },
     // Test/inspection hooks.
-    _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, selRect: selRect, clipboard: clipboard }; },
+    _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, showTypes: showTypes, selRect: selRect, clipboard: clipboard }; },
     _conflicts: function () { var s = global.Studio.getState(); return countAttrConflicts(s.backgrounds[s.selectedBgIdx] || s.backgrounds[0]); },
     _set: function (o) { if (o.stampTile != null) stampTile = o.stampTile; if (o.paintPalette != null) paintPalette = o.paintPalette; if (o.paintType != null) paintType = o.paintType; },
   };

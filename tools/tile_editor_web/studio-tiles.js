@@ -182,6 +182,22 @@
     var nameIn = el('input', { class: 'mini-input', type: 'text', value: (t && t.name) || '', placeholder: 'tile name' });
     nameIn.addEventListener('change', function () { t.name = nameIn.value; ctx.markDirty(); });
     opsSec.appendChild(el('div', { class: 'field', style: 'margin-top:6px' }, [el('span', { text: 'Name' }), nameIn]));
+
+    // Default behaviour (BG tiles only): placing this tile in WORLD sets the
+    // cell's type to this automatically (e.g. a ground tile → solid).
+    if (bank === 'bg') {
+      var behSel = el('select', { 'data-tile-default-beh': '1' });
+      var BEH = { '': 'None (no auto-type)', 1: 'Solid ground', 2: 'Wall', 3: 'Platform', 4: 'Door', 5: 'Trigger', 6: 'Ladder' };
+      Object.keys(BEH).forEach(function (k) { behSel.appendChild(el('option', { value: k, text: BEH[k] })); });
+      behSel.value = (t && t.defaultBehaviour != null) ? String(t.defaultBehaviour) : '';
+      behSel.addEventListener('change', function () {
+        ctx.pushUndo();
+        if (behSel.value === '') delete t.defaultBehaviour;
+        else t.defaultBehaviour = parseInt(behSel.value, 10);
+        ctx.markDirty();
+      });
+      opsSec.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Default type when placed' }), behSel]));
+    }
     var used = usage(state, selIdx);
     opsSec.appendChild(el('div', { class: 'dock-note', text: 'Used by ' + used + ' reference' + (used === 1 ? '' : 's') +
       '. Editing this tile updates every one of them. Use [ and ] to step tiles.' }));

@@ -41,3 +41,27 @@ Fixed on `redesign/ui-ux`, covered by `tools/studio-tests/bugfixes.spec.js`:
    navigator (◀▶▲▼) to pan the TV; painting/eyedropper/region/attribute all
    respect the view offset. (Entity placement across screens is a follow-up;
    tiles + behaviour + scroll now work beyond one screen.)
+
+## Requested features (2026-07-05) — tracked
+
+- **Richer starter game.** The sample starter should include more content out
+  of the box: multiple platforms + ladders, an enemy or two, an NPC with
+  dialogue, a door (showcasing per-door destinations), and hearts/HP — so
+  Beginner mode is immediately usable and demonstrates the feature set.
+- **Tile default-behaviour (place-time auto-typing).** When a BG tile is
+  *created*, the user can pick its **default behaviour** (solid / platform /
+  ladder / door / …). Then, whenever that tile is **placed** on a background,
+  the matching behaviour cell is set to that default automatically; **removing**
+  the tile clears the behaviour cell. The user can **override** a cell's type
+  by hand. Plus a WORLD **button to toggle the tile-type overlay** on the
+  background so you can see what each tile does at a glance. *(Design: store a
+  per-tile `defaultBehaviour` on `bg_tiles[i]`; the WORLD stamp/erase tools
+  apply/clear it unless a manual override flag is set on that cell.)* This also
+  strengthens the bug-6 fix — painting a solid tile makes it solid without a
+  separate step.
+- **Per-door destinations** — ✅ shipped as engine **v2** (see
+  `tools/engines/CHANGELOG.md`): each door tile has its own spawn + target
+  room, edited in WORLD → Doors.
+- **NES-engine versioning** — ✅ foundation shipped (see
+  [`engine-versioning.md`](engine-versioning.md)): every project stamped with
+  `engineVersion`, each engine snapshotted for rollback/fallback.

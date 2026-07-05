@@ -71,6 +71,7 @@ const standalone = [
   'tour.js',
   // Studio redesign (Phase 0) shell modules.
   'studio.js', 'studio-starter.js',
+  'engine-version.js', 'studio-promo.js',
 ];
 for (const f of standalone) {
   const full = path.join(WEB, f);
@@ -81,6 +82,20 @@ for (const f of standalone) {
   });
   if (!ok) anyFail = true;
 }
+
+// Engine versioning: ENGINE_VERSION matches engine-version.js, and the
+// current engine snapshot is intact (no drift from live sources).
+check('engine version constants agree', () => {
+  const num = fs.readFileSync(path.join(ROOT, 'tools', 'engines', 'ENGINE_VERSION'), 'utf8').trim();
+  const js = fs.readFileSync(path.join(WEB, 'engine-version.js'), 'utf8');
+  const m = js.match(/NES_ENGINE_VERSION\s*=\s*(\d+)/);
+  if (!m) throw new Error('engine-version.js: NES_ENGINE_VERSION not found');
+  if (m[1] !== num) throw new Error(`ENGINE_VERSION (${num}) != engine-version.js (${m[1]})`);
+}) || (anyFail = true);
+check('engine snapshot matches live sources', () => {
+  const r = spawnSync('node', [path.join(ROOT, 'scripts', 'snapshot-engine.mjs'), '--check'], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error((r.stderr || r.stdout || '').trim());
+}) || (anyFail = true);
 
 // Inline <script> bodies in the HTML pages.  Regex-extract, write to
 // /tmp, then node --check each one.  (These are the heavyweight scripts

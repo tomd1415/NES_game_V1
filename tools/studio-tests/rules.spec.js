@@ -23,14 +23,15 @@ test('changing the game type updates state.builder', async ({ page }) => {
 });
 
 test('toggling an optional module flips node.enabled', async ({ page }) => {
-  // Damage is off by default.
-  const before = await page.evaluate(() =>
-    window.Studio.getState().builder.modules.damage.enabled);
-  expect(before).toBe(false);
-  await page.locator('input[data-module="damage"]').check();
-  const after = await page.evaluate(() =>
-    window.Studio.getState().builder.modules.damage.enabled);
-  expect(after).toBe(true);
+  // Toggle an optional module and assert it flips (robust to starter defaults).
+  const mod = 'pickups';
+  const before = await page.evaluate((m) =>
+    window.Studio.getState().builder.modules[m].enabled, mod);
+  const cb = page.locator(`input[data-module="${mod}"]`);
+  if (before) await cb.uncheck(); else await cb.check();
+  const after = await page.evaluate((m) =>
+    window.Studio.getState().builder.modules[m].enabled, mod);
+  expect(after).toBe(!before);
 });
 
 test('editing a numeric field commits to config and is undoable', async ({ page }) => {
