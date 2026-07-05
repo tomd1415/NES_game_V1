@@ -9,6 +9,30 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v9 — 2026-07-05
+
+### Added
+- **SMB OAM flicker** (`BW_OAM_FLICKER`, SMB + engine v9) — the engine rotates
+  the scene-sprite OAM region one slot per frame, so a scanline with more than
+  the NES's 8 sprites drops a **different** sprite each frame (a flicker) instead
+  of the same one permanently — exactly how the real SMB copes with crowded
+  rows. Player + HUD keep their fixed priority (drawn earlier). Toggle in the
+  Style tab's Rendering panel. Stays **NROM** (decision D-9).
+
+### Changed / migration
+- No migration. Gated on `BW_OAM_FLICKER` (SMB game type, engine v9+), so every
+  existing game (and pre-v9 targets) builds byte-identically — golden‑ROM
+  hashes unchanged.
+
+### Not yet
+- **8×16 sprite mode** and a true **sprite-0 background HUD split** — larger
+  rendering changes deferred as advanced polish; the 8×8 metasprites + OAM HUD
+  work well and stay NROM. Column-stream scroll is already in place from the
+  multi-screen work.
+
+### Breaking
+- (none.)
+
 ## v8 — 2026-07-05
 
 ### Added

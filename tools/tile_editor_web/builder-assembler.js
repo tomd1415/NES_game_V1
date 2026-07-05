@@ -120,7 +120,8 @@
   // silently skipped it every build.  Removed.
   const MODULE_ORDER = ['game', 'globals', 'players', 'scene',
     'behaviour_walls', 'pickups', 'spawn', 'damage', 'powerups', 'blocks',
-    'smbhud', 'pipes', 'flagpole', 'hud', 'doors', 'dialogue', 'win_condition'];
+    'smbhud', 'pipes', 'flagpole', 'smbrender', 'hud', 'doors', 'dialogue',
+    'win_condition'];
 
   function assemble(state, templateText) {
     if (!templateText || typeof templateText !== 'string') {

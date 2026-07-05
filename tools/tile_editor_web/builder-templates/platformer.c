@@ -274,6 +274,15 @@ void bw_hud_digit(unsigned char hx, unsigned char hy, unsigned char d) {
 }
 #endif
 
+#ifdef BW_OAM_FLICKER
+/* OAM flicker (engine v9).  The scene-sprite OAM region [bw_scene_oam0,
+ * bw_scene_oam1) is rotated one slot each frame, so a scanline with more than
+ * the NES's 8 sprites drops a DIFFERENT sprite every frame (a flicker) rather
+ * than the same one permanently — how real SMB copes with crowded rows. */
+unsigned char bw_scene_oam0 = 0;
+unsigned char bw_scene_oam1 = 0;
+#endif
+
 /* Gravity application macro — Builder's Globals module
  * (T1.6 in docs/plans/current/2026-04-26-fixes-and-features.md)
  * overrides this via the declarations slot above.  The default
@@ -2274,6 +2283,9 @@ void main(void) {
         // instance when the pupil has tagged such an animation.  The
         // `#if BW_HAS_SCENE_ANIM` / `#else` keeps the original
         // baseline path byte-identical when nothing is tagged.
+#ifdef BW_OAM_FLICKER
+        bw_scene_oam0 = oam_idx;   /* scene sprites start here (for flicker) */
+#endif
 #if BW_HAS_SCENE_ANIM
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             const unsigned char *src_tiles;
@@ -2363,6 +2375,20 @@ void main(void) {
                     }
                 }
             }
+        }
+#endif
+
+#ifdef BW_OAM_FLICKER
+        /* Rotate the scene-sprite OAM region left by one slot per frame. */
+        bw_scene_oam1 = oam_idx;
+        if (bw_scene_oam1 > (unsigned char)(bw_scene_oam0 + 4)) {
+            unsigned char ft0, ft1, ft2, ft3, fi;
+            ft0 = oam_buf[bw_scene_oam0]; ft1 = oam_buf[bw_scene_oam0 + 1];
+            ft2 = oam_buf[bw_scene_oam0 + 2]; ft3 = oam_buf[bw_scene_oam0 + 3];
+            for (fi = bw_scene_oam0; (unsigned char)(fi + 4) < bw_scene_oam1; fi++)
+                oam_buf[fi] = oam_buf[fi + 4];
+            oam_buf[bw_scene_oam1 - 4] = ft0; oam_buf[bw_scene_oam1 - 3] = ft1;
+            oam_buf[bw_scene_oam1 - 2] = ft2; oam_buf[bw_scene_oam1 - 1] = ft3;
         }
 #endif
 

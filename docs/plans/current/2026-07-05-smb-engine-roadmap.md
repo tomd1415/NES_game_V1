@@ -171,13 +171,18 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 > tiles — no engine feature) and the **bonus room** (a door/pipe to another
 > area).
 
-### v9 — Rendering / hardware scaling
-- **8×16 sprite mode** (DM‑3), OAM **priority cycling** (flicker over
-  drop‑out for the 8‑per‑scanline limit), **one‑way column‑streaming scroll**
-  polish (buffer a nametable column + attributes per 16 px, flush in vblank),
-  and — if one 8 KB CHR page is exhausted — **MMC3** for 1 KB CHR banks +
-  scanline IRQ (this also unlocks bigger worlds, DM‑ and Phase‑4 items).
-- Tests: compile under MMC3; golden ROM (NROM path) unchanged.
+### v9 — Rendering (NROM)  *(✅ core LANDED 2026-07-05)*
+
+> **Landed (engine v9):** **OAM flicker / priority cycling** — the scene-sprite
+> OAM region rotates one slot per frame, so a >8-sprite scanline flickers (drops
+> a different sprite each frame) instead of a permanent drop-out; player + HUD
+> keep fixed priority. Style-tab Rendering toggle. `smb-render.mjs` covers it;
+> golden ROM byte-identical. **Stays NROM** (decision D-9 — no MMC3).
+>
+> **Deferred (advanced polish):** 8×16 sprite mode and a true **sprite-0
+> background HUD split**. The 8×8 metasprites + OAM HUD already work; column-
+> stream scroll is in place from the multi-screen work. MMC3 is out of scope
+> (real SMB is NROM).
 
 ## Backlog (someday / low priority)
 

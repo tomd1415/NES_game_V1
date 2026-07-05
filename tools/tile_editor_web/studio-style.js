@@ -144,6 +144,13 @@
       pipeSec.appendChild(el('div', { class: 'dock-note', text: 'Down-to-enter warps (underground bonus sections) are placed on the World page.' }));
       pipeSec.appendChild(el('button', { class: 'btn', text: 'Edit pipes in World →', onclick: function () { ctx.selectMode('world'); } }));
       dock.appendChild(pipeSec);
+
+      // Rendering (engine v9) — OAM flicker.
+      var rend = moduleNode(s, 'smbrender', {});
+      var rendSec = UI.section('Rendering', el('span', { class: 'chip', text: rend.enabled ? 'flicker on' : 'flicker off' }));
+      rendSec.appendChild(boolField(ctx, 'Sprite flicker on busy screens', rend,
+        'Real NES shows at most 8 sprites per scanline. On = a crowded row flickers (like real SMB) instead of some sprites vanishing.'));
+      dock.appendChild(rendSec);
     }
   }
 

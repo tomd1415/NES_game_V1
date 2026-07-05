@@ -1484,6 +1484,35 @@
   };
 
   // --------------------------------------------------------------------
+  // Rendering (engine v9) — SMB-style OAM flicker.  When on, the engine
+  // rotates the scene-sprite OAM region one slot per frame, so a scanline with
+  // more than the NES's 8 sprites flickers (drops a different sprite each frame)
+  // instead of dropping the same one permanently.  Gated on SMB + engine v9.
+  // --------------------------------------------------------------------
+  modules['smbrender'] = {
+    label: 'Sprite flicker (busy screens)',
+    description: 'Real NES hardware shows at most 8 sprites per scanline. With ' +
+      'this on, a crowded row flickers (like the real SMB) instead of some ' +
+      'sprites vanishing. Needs the 🍄 SMB game type.',
+    detailedHelp: [
+      'The engine rotates which sprites get drawn first each frame, so the ' +
+      'ones that overflow a scanline change every frame — you see a flicker ' +
+      'rather than a permanent drop-out.',
+      'A v9 engine feature — only builds on engine v9+ with the SMB game type.',
+    ],
+    defaultConfig: {},
+    schema: [],
+    applyToTemplate(template, node, state) {
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      const gt = state && state.builder && state.builder.modules && state.builder.modules.game &&
+                 state.builder.modules.game.config && state.builder.modules.game.config.type;
+      if (targetEngine < 9 || gt !== 'smb') return template;   // gated → byte-identical
+      return A.appendToSlot(template, 'declarations',
+        '/* [builder] rendering (engine v9) — SMB OAM flicker. */\n#define BW_OAM_FLICKER 1');
+    },
+  };
+
+  // --------------------------------------------------------------------
   // Spawn (R-3) — pop a short-lived effect sprite when the player steps
   // onto a TRIGGER tile (painted on the Behaviour page).  Uses the shared
   // engine spawn pool (platformer.c, #if BW_SPAWN_ENABLED — byte-identical
@@ -2510,6 +2539,10 @@
         flagpole: {
           enabled: false,
           config: Object.assign({}, modules['flagpole'].defaultConfig),
+        },
+        smbrender: {
+          enabled: false,
+          config: {},
         },
         hud: {
           enabled: false,
