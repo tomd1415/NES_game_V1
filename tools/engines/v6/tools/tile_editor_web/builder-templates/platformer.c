@@ -202,6 +202,37 @@ unsigned char fb_active[2];
 #endif
 #endif
 
+#ifdef BW_SMB_BLOCKS
+/* Block dispense pool (engine v6).  A ? block whose contents are a power-up
+ * spawns ONE item here that rises out of the block (SMB's "pop"), then either
+ * walks (mushroom) or sits (fire flower / star / 1-Up) until the player touches
+ * it, applying the power.  One slot — SMB only ever has one item out at a time.
+ * Kinds: 0 mushroom, 1 fire flower, 2 star, 3 1-Up.  The block module writes
+ * the per-kind sprite tiles + BW_SMB_BLOCKS; the engine owns the pool so it can
+ * draw + collide in the OAM build. */
+unsigned char bw_disp_active = 0;
+unsigned char bw_disp_kind = 0;
+unsigned char bw_disp_rise = 0;    /* pixels still to rise out of the block */
+signed char   bw_disp_dir = 1;     /* mushroom walk direction */
+pxcoord_t     bw_disp_x = 0;
+pxcoord_t     bw_disp_y = 0;
+#ifndef BW_DISP_TILE0
+#define BW_DISP_TILE0 0            /* mushroom */
+#endif
+#ifndef BW_DISP_TILE1
+#define BW_DISP_TILE1 0            /* fire flower */
+#endif
+#ifndef BW_DISP_TILE2
+#define BW_DISP_TILE2 0            /* star */
+#endif
+#ifndef BW_DISP_TILE3
+#define BW_DISP_TILE3 0            /* 1-Up */
+#endif
+#ifndef BW_DISP_PAL
+#define BW_DISP_PAL 2
+#endif
+#endif
+
 /* Gravity application macro — Builder's Globals module
  * (T1.6 in docs/plans/current/2026-04-26-fixes-and-features.md)
  * overrides this via the declarations slot above.  The default
@@ -787,6 +818,9 @@ void main(void) {
     smb_star = 0;
     fb_active[0] = 0;
     fb_active[1] = 0;
+#endif
+#ifdef BW_SMB_BLOCKS
+    bw_disp_active = 0;   /* no dispensed item in flight on (re)start */
 #endif
 
 #if PLAYER2_HP_ENABLED
@@ -1576,6 +1610,40 @@ void main(void) {
         }
 #endif
 
+#ifdef BW_SMB_BLOCKS
+        /* Dispensed item — rise out of the block, then a mushroom walks (fire
+         * flower / star / 1-Up sit still), and touching it applies the power. */
+        if (bw_disp_active) {
+            if (bw_disp_rise) { if (bw_disp_y) bw_disp_y--; bw_disp_rise--; }
+            else if (bw_disp_kind == 0) {
+                /* mushroom: walk + reverse at walls, and fall onto the ground. */
+                unsigned char dcol, drow, db, frow, fb2;
+                dcol = (bw_disp_dir > 0) ? (unsigned char)((bw_disp_x + 8) >> 3)
+                                         : (unsigned char)((bw_disp_x ? (bw_disp_x - 1) : 0) >> 3);
+                drow = (unsigned char)((bw_disp_y + 4) >> 3);
+                db = behaviour_at((unsigned int)dcol, (unsigned int)drow);
+                if (db == BEHAVIOUR_SOLID_GROUND || db == BEHAVIOUR_WALL) bw_disp_dir = -bw_disp_dir;
+                else bw_disp_x = (pxcoord_t)(bw_disp_x + bw_disp_dir);
+                frow = (unsigned char)((bw_disp_y + 8) >> 3);
+                fb2 = behaviour_at((unsigned int)(bw_disp_x >> 3), (unsigned int)frow);
+                if (!(fb2 == BEHAVIOUR_SOLID_GROUND || fb2 == BEHAVIOUR_WALL || fb2 == BEHAVIOUR_PLATFORM)
+                    && (unsigned int)bw_disp_y + 8 < WORLD_H_PX) bw_disp_y++;
+            }
+            if (!(px + (PLAYER_W << 3) <= bw_disp_x || px >= bw_disp_x + 8 ||
+                  py + (PLAYER_H << 3) <= bw_disp_y || py >= bw_disp_y + 8)) {
+#ifdef BW_SMB_POWERUPS
+                if (bw_disp_kind == 0) { if (smb_pstate < 1) smb_pstate = 1; }
+                else if (bw_disp_kind == 1) smb_pstate = 2;
+                else if (bw_disp_kind == 2) smb_star = BW_STAR_FRAMES;
+#if PLAYER_HP_ENABLED
+                else if (bw_disp_kind == 3) player_hp = PLAYER_MAX_HP;
+#endif
+#endif
+                bw_disp_active = 0;
+            }
+        }
+#endif
+
         //@ insert: per_frame
 
         /* [engine] Game-over tint.  The modules set the flags — the damage
@@ -1930,6 +1998,26 @@ void main(void) {
                 oam_buf[oam_idx++] = (unsigned char)fb_x[fbi];
 #endif
             }
+        }
+#endif
+
+#ifdef BW_SMB_BLOCKS
+        /* --- Dispensed item: one 8x8 sprite, tile by kind. --- */
+        if (bw_disp_active && oam_idx <= 252) {
+            unsigned char dtile = (bw_disp_kind == 0) ? BW_DISP_TILE0 :
+                                  (bw_disp_kind == 1) ? BW_DISP_TILE1 :
+                                  (bw_disp_kind == 2) ? BW_DISP_TILE2 : BW_DISP_TILE3;
+#ifdef SCROLL_BUILD
+            oam_buf[oam_idx++] = world_to_screen_y((unsigned int)bw_disp_y);
+            oam_buf[oam_idx++] = dtile;
+            oam_buf[oam_idx++] = BW_DISP_PAL;
+            oam_buf[oam_idx++] = world_to_screen_x((unsigned int)bw_disp_x);
+#else
+            oam_buf[oam_idx++] = (unsigned char)bw_disp_y;
+            oam_buf[oam_idx++] = dtile;
+            oam_buf[oam_idx++] = BW_DISP_PAL;
+            oam_buf[oam_idx++] = (unsigned char)bw_disp_x;
+#endif
         }
 #endif
 

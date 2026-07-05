@@ -1205,15 +1205,20 @@
       'This is a v6 engine feature: it only builds on engine v6+ with the SMB ' +
       'game type.',
     ],
-    defaultConfig: { blockList: [] },   // [{ x, y, kind }]  kind: coin|question|brick
+    // [{ x, y, kind, usedTile, contents }]  kind: coin|question|brick
+    //   contents (? blocks only): coin|mushroom|fireflower|star|oneup
+    // dispTiles: sprite tiles for a dispensed power-up (mushroom/flower/star/1up)
+    defaultConfig: { blockList: [], dispTiles: { mushroom: 10, fireflower: 11, star: 12, oneup: 10 }, dispPal: 2 },
     customRender: true,
     applyToTemplate(template, node, state) {
       const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
       const gt = state && state.builder && state.builder.modules && state.builder.modules.game &&
                  state.builder.modules.game.config && state.builder.modules.game.config.type;
-      const list = (node && node.config && node.config.blockList) || [];
+      const cfg = (node && node.config) || {};
+      const list = cfg.blockList || [];
       if (targetEngine < 6 || gt !== 'smb' || list.length === 0) return template;  // gated → byte-identical
       const KIND = { coin: 0, question: 1, brick: 2 };
+      const CONTENTS = { coin: 0, mushroom: 1, fireflower: 2, star: 3, oneup: 4 };
       const rows = [];
       for (let i = 0; i < list.length; i++) {
         const b = list[i] || {};
@@ -1221,13 +1226,21 @@
         const y = A.clampInt(b.y, 0, 29, 0);
         const k = KIND[b.kind] != null ? KIND[b.kind] : 1;
         const usedTile = A.clampInt(b.usedTile, 0, 255, 0);  // tile shown once consumed (0 = empty)
-        rows.push([x, y, k, usedTile]);
+        const contents = CONTENTS[b.contents] != null ? CONTENTS[b.contents] : 0;  // ? contents (0 = coin)
+        rows.push([x, y, k, usedTile, contents]);
       }
+      const dt = cfg.dispTiles || {};
       const decl = [
         '/* [builder] blocks (engine v6) — interactive ?/brick/coin blocks. */',
         '#define BW_SMB_BLOCKS 1',
         '#define BW_BLOCK_COUNT ' + rows.length,
-        'const unsigned char bw_block_tbl[] = {   /* x, y (tiles), kind 0=coin 1=? 2=brick, usedTile */',
+        '/* Sprite tiles for a dispensed power-up (0 mushroom .. 3 1-Up). */',
+        '#define BW_DISP_TILE0 ' + A.clampInt(dt.mushroom, 0, 255, 10),
+        '#define BW_DISP_TILE1 ' + A.clampInt(dt.fireflower, 0, 255, 11),
+        '#define BW_DISP_TILE2 ' + A.clampInt(dt.star, 0, 255, 12),
+        '#define BW_DISP_TILE3 ' + A.clampInt(dt.oneup, 0, 255, 10),
+        '#define BW_DISP_PAL ' + A.clampInt(cfg.dispPal, 0, 3, 2),
+        'const unsigned char bw_block_tbl[] = {   /* x, y, kind 0=coin 1=? 2=brick, usedTile, contents */',
         '    ' + rows.map(r => r.join(', ')).join(',\n    '),
         '};',
         'unsigned char bw_block_used[BW_BLOCK_COUNT];',
@@ -1260,7 +1273,7 @@
         '            unsigned char bw_hrow = (py >= 1) ? (unsigned char)((py - 1) >> 3) : 0;',
         '            for (bw_bi = 0; bw_bi < BW_BLOCK_COUNT; bw_bi++) {',
         '                if (bw_block_used[bw_bi]) continue;',
-        '                bw_bb = bw_bi * 4;',
+        '                bw_bb = bw_bi * 5;',
         '                bw_bcol = bw_block_tbl[bw_bb];',
         '                bw_brow = bw_block_tbl[bw_bb + 1];',
         '                bw_bkind = bw_block_tbl[bw_bb + 2];',
@@ -1275,11 +1288,23 @@
         '                } else if (jumping && jmp_up > 0 && bw_hrow == bw_brow && bw_hcol == bw_bcol) {',
         '                    /* ? or brick — bumped from below while rising. */',
         '                    if (bw_bkind == 1) {',
+        '                        unsigned char bw_cont = bw_block_tbl[bw_bb + 4];   /* what comes out */',
+        '                        if (bw_cont == 0) {',
+        '                            bw_coins++;   /* ? gives a coin */',
+        '                        } else {',
         '#ifdef BW_SMB_POWERUPS',
-        '                        if (smb_pstate < 1) smb_pstate = 1; else smb_pstate = 2;',
+        '                            /* dispense the chosen power-up: it rises out of the block. */',
+        '                            if (!bw_disp_active) {',
+        '                                bw_disp_active = 1;',
+        '                                bw_disp_kind = bw_cont - 1;   /* 1..4 -> disp 0..3 */',
+        '                                bw_disp_x = (pxcoord_t)((unsigned int)bw_bcol << 3);',
+        '                                bw_disp_y = (pxcoord_t)((unsigned int)bw_brow << 3);',
+        '                                bw_disp_rise = 8; bw_disp_dir = 1;',
+        '                            }',
         '#else',
-        '                        bw_coins++;',
+        '                            bw_coins++;   /* no power-ups module -> coin fallback */',
         '#endif',
+        '                        }',
         '                        bw_block_used[bw_bi] = 1;',
         '                        jmp_up = 0;   /* bonk */',
         '                    } else {',
