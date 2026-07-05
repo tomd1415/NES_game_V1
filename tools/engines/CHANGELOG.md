@@ -9,6 +9,36 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v7 — 2026-07-05
+
+### Added
+- **SMB HUD** — a new HUD module (`BW_SMB_HUD`, SMB game type + engine v7): a
+  fixed on-screen read-out of **coins**, a **count-down timer**, a **score**
+  and **lives**, drawn as **OAM digit sprites** at fixed screen positions (so it
+  doesn't scroll with the level). The server seeds the 0-9 glyphs into the
+  **sprite** pool at their ASCII indices, so the digits have art automatically.
+- **Game logic:** the timer counts down ~every 0.4s and **time-up is a death**;
+  each death **spends a life**; **coins add 200 to the score** (enemy-stomp
+  points are a later addition). Digits spread over two tile-rows so no scanline
+  exceeds the 8-sprite limit.
+- Studio: a **HUD panel in the Style tab** (SMB) — toggle + start time + lives.
+
+### Changed / migration
+- No migration. All HUD code is gated on `BW_SMB_HUD` (only emitted for the SMB
+  game type on engine v7+), so every existing game (and pre-v7 targets) builds
+  byte-identically — golden‑ROM hashes unchanged. Needs Player HP for the
+  time-up death / life spend.
+
+### Not yet
+- A true **sprite-0 background split** (SMB draws the HUD in the nametable and
+  splits scroll mid-frame). The current HUD is OAM-sprite based — simpler and
+  scroll-fixed, but costs sprites; the background/split version is deferred to
+  the **v9** rendering pass. Also: a 6-digit score, enemy-stomp scoring, and
+  deeper lives↔checkpoint-respawn integration.
+
+### Breaking
+- (none.)
+
 ## v6 — 2026-07-05
 
 ### Added

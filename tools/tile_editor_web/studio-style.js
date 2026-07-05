@@ -118,6 +118,17 @@
       blkSec.appendChild(el('div', { class: 'dock-note', text: 'Coins, ? blocks (choose their contents) and bricks are placed on the World page.' }));
       blkSec.appendChild(el('button', { class: 'btn', text: 'Edit blocks in World →', onclick: function () { ctx.selectMode('world'); } }));
       dock.appendChild(blkSec);
+
+      // HUD (engine v7).
+      var hud = moduleNode(s, 'smbhud', { startTime: 400, startLives: 3, hudPal: 0 });
+      var hudSec = UI.section('HUD', el('span', { class: 'chip', text: hud.enabled ? 'on' : 'off' }));
+      hudSec.appendChild(boolField(ctx, 'Show coins / time / score / lives', hud,
+        'A fixed status read-out across the top. Turn on Player HP (in Rules) so the timer / lives can end a life.'));
+      if (hud.enabled) {
+        hudSec.appendChild(numField(ctx, 'Start time', hud.config, 'startTime', 0, 999, 'Counts down about every 0.4s; hitting 0 is a death.'));
+        hudSec.appendChild(numField(ctx, 'Lives', hud.config, 'startLives', 1, 9));
+      }
+      dock.appendChild(hudSec);
     }
   }
 

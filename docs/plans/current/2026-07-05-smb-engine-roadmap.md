@@ -145,11 +145,18 @@ interactions, and the finish/HUD on top — behind the `smb` style.
 > scene instances) over a per-metatile property table — same gameplay, far
 > lower risk, and no dependency on the 16×16 metatile path.
 
-### v7 — HUD + score/timer/lives + sprite‑0 split
-- Fixed HUD (score, coins, world, time, lives) as **background** with a
-  **sprite‑0‑hit scroll split** over the scrolling field.
-- Timer ticks every 24 frames (~0.4 s/unit); lives; score.
-- Tests: compile; headless HUD renders and doesn't scroll with the field.
+### v7 — HUD + score/timer/lives  *(✅ core LANDED 2026-07-05)*
+
+> **Landed (engine v7):** a fixed **coins / time / score / lives** HUD as **OAM
+> digit sprites** (server seeds 0-9 into the sprite pool) — scroll-fixed without
+> a mid-frame split. Timer ticks ~every 24 frames and **time-up = death**; each
+> death spends a life; coins add 200 to the score. Studio HUD panel in the Style
+> tab. `smb-hud.mjs` compiles it and jsnes-verifies the timer counts down; golden
+> ROM byte-identical.
+>
+> **Deferred:** the true **sprite-0 background split** (SMB draws the HUD in the
+> nametable, splits scroll mid-frame) → folded into the **v9** rendering pass;
+> plus a 6-digit score, enemy-stomp scoring, and lives↔checkpoint-respawn.
 
 ### v8 — Level structure: pipes/warps, flagpole finish, staircase, bonus room
 - Enterable **pipes** (down‑press warp to a target like per‑door), the

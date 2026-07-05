@@ -233,6 +233,47 @@ pxcoord_t     bw_disp_y = 0;
 #endif
 #endif
 
+#ifdef BW_SMB_HUD
+/* SMB HUD (engine v7).  A fixed on-screen status read-out drawn as OAM digit
+ * sprites (the server seeds the 0-9 glyphs into the sprite pool at their ASCII
+ * indices, so BW_HUD_DIGIT_BASE + d is the tile for digit d).  Tracks a score,
+ * a coin count (shared with the blocks module when present), a count-down timer
+ * (time-up = death) and lives.  All gated on BW_SMB_HUD so non-HUD games are
+ * byte-identical. */
+unsigned int  bw_score = 0;
+unsigned int  bw_timer = 0;
+unsigned char bw_lives = 0;
+unsigned char bw_timer_sub = 0;   /* frame accumulator for the ~0.4s timer tick */
+unsigned char bw_prev_dead = 0;   /* edge-detect death to spend a life once */
+#ifndef BW_SMB_BLOCKS
+unsigned int  bw_coins = 0;       /* the blocks module owns bw_coins when it is on */
+#endif
+#ifndef BW_HUD_START_TIME
+#define BW_HUD_START_TIME 400
+#endif
+#ifndef BW_HUD_START_LIVES
+#define BW_HUD_START_LIVES 3
+#endif
+#ifndef BW_HUD_TIME_TICKS
+#define BW_HUD_TIME_TICKS 24      /* frames per timer unit (~0.4s) */
+#endif
+#ifndef BW_HUD_DIGIT_BASE
+#define BW_HUD_DIGIT_BASE 48      /* sprite tile of '0' (ASCII), seeded by the server */
+#endif
+#ifndef BW_HUD_PAL
+#define BW_HUD_PAL 0
+#endif
+/* Draw one HUD digit as an OAM sprite (fixed screen position, so it doesn't
+ * scroll).  oam_buf / oam_idx are the shared OAM shadow + cursor. */
+void bw_hud_digit(unsigned char hx, unsigned char hy, unsigned char d) {
+    if (oam_idx > 252) return;
+    oam_buf[oam_idx++] = hy;
+    oam_buf[oam_idx++] = (unsigned char)(BW_HUD_DIGIT_BASE + d);
+    oam_buf[oam_idx++] = BW_HUD_PAL;
+    oam_buf[oam_idx++] = hx;
+}
+#endif
+
 /* Gravity application macro — Builder's Globals module
  * (T1.6 in docs/plans/current/2026-04-26-fixes-and-features.md)
  * overrides this via the declarations slot above.  The default
@@ -821,6 +862,16 @@ void main(void) {
 #endif
 #ifdef BW_SMB_BLOCKS
     bw_disp_active = 0;   /* no dispensed item in flight on (re)start */
+#endif
+#ifdef BW_SMB_HUD
+    bw_score = 0;
+    bw_timer = BW_HUD_START_TIME;
+    bw_lives = BW_HUD_START_LIVES;
+    bw_timer_sub = 0;
+    bw_prev_dead = 0;
+#ifndef BW_SMB_BLOCKS
+    bw_coins = 0;
+#endif
 #endif
 
 #if PLAYER2_HP_ENABLED
@@ -1644,6 +1695,34 @@ void main(void) {
         }
 #endif
 
+#ifdef BW_SMB_HUD
+        /* Count-down timer (~every BW_HUD_TIME_TICKS frames); time-up = death.
+         * Spend a life on the rising edge of death. */
+        if (bw_timer) {
+            bw_timer_sub++;
+            if (bw_timer_sub >= BW_HUD_TIME_TICKS) {
+                bw_timer_sub = 0;
+                bw_timer--;
+#if PLAYER_HP_ENABLED
+                if (bw_timer == 0) player_dead = 1;
+#endif
+            }
+        }
+#if PLAYER_HP_ENABLED
+        if (player_dead && !bw_prev_dead && bw_lives) bw_lives--;
+        bw_prev_dead = player_dead;
+#endif
+        /* Score follows coins collected (+200 each) — a simple SMB-ish score;
+         * enemy-stomp points are a future addition. */
+        {
+            static unsigned int bw_prev_coins = 0;
+            if (bw_coins > bw_prev_coins) {
+                bw_score += (unsigned int)(bw_coins - bw_prev_coins) * 200;
+                bw_prev_coins = bw_coins;
+            }
+        }
+#endif
+
         //@ insert: per_frame
 
         /* [engine] Game-over tint.  The modules set the flags — the damage
@@ -2018,6 +2097,33 @@ void main(void) {
             oam_buf[oam_idx++] = BW_DISP_PAL;
             oam_buf[oam_idx++] = (unsigned char)bw_disp_x;
 #endif
+        }
+#endif
+
+#ifdef BW_SMB_HUD
+        /* --- SMB HUD: coins + time on the top row, lives + score below.
+         * Digits are OAM sprites at fixed screen positions (they don't scroll).
+         * Spread across two tile-rows so no scanline exceeds the 8-sprite limit. */
+        {
+            unsigned int hv;
+            /* COINS (2 digits) top-left. */
+            hv = bw_coins; if (hv > 99) hv = 99;
+            bw_hud_digit(24, 8, (unsigned char)(hv / 10));
+            bw_hud_digit(32, 8, (unsigned char)(hv % 10));
+            /* TIME (3 digits) top-centre. */
+            hv = bw_timer; if (hv > 999) hv = 999;
+            bw_hud_digit(120, 8, (unsigned char)((hv / 100) % 10));
+            bw_hud_digit(128, 8, (unsigned char)((hv / 10) % 10));
+            bw_hud_digit(136, 8, (unsigned char)(hv % 10));
+            /* LIVES (1 digit) second row left. */
+            bw_hud_digit(24, 20, (unsigned char)(bw_lives % 10));
+            /* SCORE (5 digits) second row centre. */
+            hv = bw_score;
+            bw_hud_digit(112, 20, (unsigned char)((hv / 10000) % 10));
+            bw_hud_digit(120, 20, (unsigned char)((hv / 1000) % 10));
+            bw_hud_digit(128, 20, (unsigned char)((hv / 100) % 10));
+            bw_hud_digit(136, 20, (unsigned char)((hv / 10) % 10));
+            bw_hud_digit(144, 20, (unsigned char)(hv % 10));
         }
 #endif
 

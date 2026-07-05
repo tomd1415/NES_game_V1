@@ -773,6 +773,37 @@ def _seed_dialogue_font(state):
             tile["pixels"] = [row[:] for row in glyph]
 
 
+def _smbhud_enabled(state):
+    """True when the SMB HUD module is on (needs sprite digits seeded)."""
+    try:
+        m = state["builder"]["modules"]
+        if m.get("game", {}).get("config", {}).get("type") != "smb":
+            return False
+        return bool(m.get("smbhud", {}).get("enabled"))
+    except Exception:
+        return False
+
+
+def _seed_hud_digits(state):
+    """Seed the built-in 0-9 glyphs into blank SPRITE tiles at their ASCII
+    indices (48..57) when the SMB HUD is on, so the OAM digit read-out has art.
+    Mirrors _seed_dialogue_font but writes the sprite pool (the HUD draws OAM
+    sprites, which read the sprite pattern table, not the bg one).  A no-op when
+    the HUD is off, so non-HUD ROMs are unchanged."""
+    if not _smbhud_enabled(state):
+        return
+    sp = state.get("sprite_tiles")
+    if not isinstance(sp, list):
+        return
+    for d in "0123456789":
+        idx = ord(d)
+        if not (0 <= idx < len(sp)):
+            continue
+        tile = sp[idx]
+        if isinstance(tile, dict) and _pixels_blank(tile.get("pixels")):
+            tile["pixels"] = [row[:] for row in _DIALOGUE_FONT[d]]
+
+
 def build_chr(state):
     """Two independent 256-tile pools -> 8KB CHR.
 
@@ -786,6 +817,7 @@ def build_chr(state):
     letters without the pupil painting a font.
     """
     _seed_dialogue_font(state)
+    _seed_hud_digits(state)
     if "sprite_tiles" in state and "bg_tiles" in state:
         return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
              + _encode_pool(state["bg_tiles"], "bg_tiles")

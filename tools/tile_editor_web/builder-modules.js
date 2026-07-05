@@ -1345,6 +1345,43 @@
   };
 
   // --------------------------------------------------------------------
+  // SMB HUD (engine v7) — a fixed on-screen read-out: coins, a count-down
+  // timer (time-up = death), a score (+200 per coin) and lives, drawn as OAM
+  // digit sprites (the server seeds 0-9 into the sprite pool at their ASCII
+  // indices).  Gated on the SMB game type + engine v7 → byte-identical
+  // otherwise.  Needs Player HP for the time-up death + life spend.
+  // --------------------------------------------------------------------
+  modules['smbhud'] = {
+    label: 'HUD (coins / time / score / lives)',
+    description: 'A fixed status read-out across the top: coins, a count-down ' +
+      'timer (running out is a death), a score, and lives. Needs the 🍄 SMB ' +
+      'game type. Turn on Player HP so the timer / lives can end a life.',
+    detailedHelp: [
+      'The digits are drawn as sprites at fixed screen positions, so they stay ' +
+      'put while the level scrolls underneath.',
+      'The timer counts down about every 0.4s; reaching 0 is a death. Each ' +
+      'death spends a life. Coins add 200 to the score.',
+      'A v7 engine feature — only builds on engine v7+ with the SMB game type.',
+    ],
+    defaultConfig: { startTime: 400, startLives: 3, hudPal: 0 },
+    schema: [],
+    applyToTemplate(template, node, state) {
+      const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      const gt = state && state.builder && state.builder.modules && state.builder.modules.game &&
+                 state.builder.modules.game.config && state.builder.modules.game.config.type;
+      if (targetEngine < 7 || gt !== 'smb') return template;   // gated → byte-identical
+      const c = (node && node.config) || {};
+      return A.appendToSlot(template, 'declarations', [
+        '/* [builder] SMB HUD (engine v7) — coins / time / score / lives. */',
+        '#define BW_SMB_HUD 1',
+        '#define BW_HUD_START_TIME ' + A.clampInt(c.startTime, 0, 999, 400),
+        '#define BW_HUD_START_LIVES ' + A.clampInt(c.startLives, 1, 9, 3),
+        '#define BW_HUD_PAL ' + A.clampInt(c.hudPal, 0, 3, 0),
+      ].join('\n'));
+    },
+  };
+
+  // --------------------------------------------------------------------
   // Spawn (R-3) — pop a short-lived effect sprite when the player steps
   // onto a TRIGGER tile (painted on the Behaviour page).  Uses the shared
   // engine spawn pool (platformer.c, #if BW_SPAWN_ENABLED — byte-identical
@@ -2359,6 +2396,10 @@
         blocks: {
           enabled: false,
           config: { blockList: [] },
+        },
+        smbhud: {
+          enabled: false,
+          config: Object.assign({}, modules['smbhud'].defaultConfig),
         },
         hud: {
           enabled: false,
