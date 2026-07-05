@@ -33,6 +33,10 @@ of how we got here.
   in [`design/`](design/). For **what is done and what is left** as a
   checklist, see the execution tracker
   [`plans/current/2026-07-05-studio-redesign.md`](plans/current/2026-07-05-studio-redesign.md).
+- **Planning the Studio quest tutorials?** Read
+  [`design/quest-tutorials.md`](design/quest-tutorials.md) for the
+  side-by-side tutorial system, accessibility requirements, checking
+  model, starter kits, and draft quest content for each game style.
 - **Changing the NES engine?** (the C templates, `builder-assembler.js`,
   or the cc65 project under `steps/Step_Playground/` that turn a project
   into a ROM) — **this is a versioned engine.** Read
