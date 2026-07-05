@@ -161,9 +161,13 @@ off here and update the status note in
       *that* (play-pipeline `customMainC` path); RULES shows a hand-coded
       banner with a "Go to CODE" jump; "↩ Return to visual editor" flips
       back. This replaces the old silently-inert-Builder eject trap (1.5).
-      **Still open (CODE-port polish):** CodeMirror + guided editable
-      regions, the lessons/snippets libraries, the symbol reference, the
-      C/asm toggle, and attribute-bytes-at-Advanced.
+      **Now also landed:** a **CodeMirror** editor (C syntax highlighting,
+      line numbers, active-line, dracula theme) for the ejected code, plus a
+      **snippet palette** of common C helpers that insert at the cursor.
+      **Still open (CODE-port polish):** guided editable *regions* on the
+      non-ejected generated C, the lessons library plugged into the quest
+      log, a full symbol reference, the C/asm toggle, and
+      attribute-bytes-at-Advanced.
 
 ### Phase 4 — reach (genuinely not built)
 - [ ] 4.1 Accounts completion (P3–P6 of

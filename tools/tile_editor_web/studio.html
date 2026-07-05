@@ -300,6 +300,12 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   #tv-canvas{width:384px;height:360px}
 }
 </style>
+<link rel="stylesheet" href="codemirror.min.css">
+<link rel="stylesheet" href="codemirror-theme-dracula.min.css">
+<style>
+/* Fit CodeMirror into the CODE dock. */
+#code-cm .CodeMirror{height:52vh;border:2px solid var(--line);font-size:11px;background:#000}
+</style>
 </head>
 <body>
 
@@ -451,6 +457,9 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 <script src="studio-rules.js"></script>
 <script src="studio-tiles.js"></script>
 <script src="studio-sound.js"></script>
+<script src="codemirror.min.js"></script>
+<script src="codemirror-clike.min.js"></script>
+<script src="codemirror-active-line.min.js"></script>
 <script src="studio-code.js"></script>
 <script src="studio.js"></script>
 </body>

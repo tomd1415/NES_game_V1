@@ -63,7 +63,15 @@ test('CODE: eject to hand-coded C at Advanced, banner in RULES, return (3.6)', a
   const code = await page.evaluate(() => window.Studio.getState().customMainC);
   expect(typeof code).toBe('string');
   expect(code.length).toBeGreaterThan(100);
-  await expect(page.locator('#code-edit')).toBeVisible();
+  // CodeMirror editor mounts (with a textarea fallback if CM is absent).
+  await expect(page.locator('#code-cm .CodeMirror, #code-edit')).toBeVisible();
+
+  // Inserting a snippet extends the hand-coded C.
+  const beforeLen = code.length;
+  await page.locator('#code-snippet-select').selectOption({ label: 'Wait a frame' });
+  const afterLen = await page.evaluate(() => window.Studio.getState().customMainC.length);
+  expect(afterLen).toBeGreaterThan(beforeLen);
+  expect(await page.evaluate(() => window.Studio.getState().customMainC)).toContain('ppu_wait_nmi');
 
   // RULES shows the hand-coded banner.
   await page.locator('.mode-btn[data-mode="rules"]').click();
