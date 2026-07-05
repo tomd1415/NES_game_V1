@@ -83,6 +83,82 @@
     return bg.behaviour;
   }
 
+  // ---- Per-door destinations editor (engine v2) -------------------------
+  var DOOR_TYPE_ID = 4; // behaviour id for "door"
+  // Find every door tile (behaviour == DOOR) in a background's grid.
+  function findDoorTiles(bg) {
+    var out = [], beh = (bg && bg.behaviour) || [];
+    for (var r = 0; r < beh.length; r++) {
+      var row = beh[r] || [];
+      for (var c = 0; c < row.length; c++) if ((row[c] | 0) === DOOR_TYPE_ID) out.push({ tx: c, ty: r });
+    }
+    return out;
+  }
+  function doorsModule(s) {
+    if (!s.builder || !s.builder.modules) return null;
+    var node = s.builder.modules.doors;
+    if (!node) return null;
+    if (!node.config) node.config = {};
+    if (!Array.isArray(node.config.doorList)) node.config.doorList = [];
+    return node;
+  }
+  function findDoorEntry(list, bgIdx, tx, ty) {
+    for (var i = 0; i < list.length; i++) {
+      var d = list[i];
+      if ((d.bg | 0) === bgIdx && (d.tx | 0) === tx && (d.ty | 0) === ty) return d;
+    }
+    return null;
+  }
+  function renderDoorsSection(dock, ctx, s, bg) {
+    if (!ctx.levelAtLeast('maker')) return;
+    var node = doorsModule(s);
+    if (!node) return;
+    var doorTiles = findDoorTiles(bg);
+    var bgIdx = s.selectedBgIdx | 0;
+    var list = node.config.doorList;
+    // Prune entries on THIS background whose door tile no longer exists.
+    var present = {};
+    doorTiles.forEach(function (t) { present[t.tx + ',' + t.ty] = 1; });
+    for (var i = list.length - 1; i >= 0; i--) {
+      if ((list[i].bg | 0) === bgIdx && !present[(list[i].tx | 0) + ',' + (list[i].ty | 0)]) list.splice(i, 1);
+    }
+    var sec = UI.section('Doors', el('span', { class: 'chip', text: 'destinations' }));
+    if (!doorTiles.length) {
+      sec.appendChild(el('div', { class: 'dock-note', text: 'Paint a Door tile (⛰ Type → Door) to place a door, then set where it leads here.' }));
+      dock.appendChild(sec);
+      return;
+    }
+    if (!node.enabled) node.enabled = true; // doors must be on for per-door to build
+    sec.appendChild(el('div', { class: 'dock-note', text: 'Each door on this screen can send the player somewhere different — a spawn spot, and optionally another background (a room).' }));
+    var bgCount = (s.backgrounds || []).length;
+    doorTiles.forEach(function (t) {
+      var d = findDoorEntry(list, bgIdx, t.tx, t.ty);
+      if (!d) { d = { bg: bgIdx, tx: t.tx, ty: t.ty, spawnX: 24, spawnY: 120, targetBgIdx: -1 }; list.push(d); }
+      var card = el('div', { style: 'border:2px solid var(--line);padding:6px;margin-top:6px' });
+      card.appendChild(el('div', { class: 'dock-note', style: 'color:var(--sel)', text: '🚪 Door at tile ' + t.tx + ',' + t.ty }));
+      function numField(label, key, min, max) {
+        var inp = el('input', { type: 'number', min: min, max: max, style: 'width:64px' });
+        inp.value = d[key];
+        inp.addEventListener('change', function () {
+          var v = parseInt(inp.value, 10); if (isNaN(v)) return;
+          ctx.pushUndo(); d[key] = Math.max(min, Math.min(max, v)); ctx.markDirty();
+        });
+        return el('div', { class: 'field inline' }, [el('span', { text: label }), inp]);
+      }
+      card.appendChild(numField('Spawn X', 'spawnX', 0, 240));
+      card.appendChild(numField('Spawn Y', 'spawnY', 16, 200));
+      // Target background selector.
+      var tgt = el('select');
+      tgt.appendChild(el('option', { value: '-1', text: 'Same room' }));
+      for (var b = 0; b < bgCount; b++) tgt.appendChild(el('option', { value: String(b), text: 'Room ' + (b + 1) + ((s.backgrounds[b] && s.backgrounds[b].name) ? ' (' + s.backgrounds[b].name + ')' : '') }));
+      tgt.value = String(d.targetBgIdx == null ? -1 : d.targetBgIdx);
+      tgt.addEventListener('change', function () { ctx.pushUndo(); d.targetBgIdx = parseInt(tgt.value, 10); ctx.markDirty(); });
+      card.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Leads to' }), tgt]));
+      sec.appendChild(card);
+    });
+    dock.appendChild(sec);
+  }
+
   // Resize a background to sx×sy screens (bug #7), preserving existing art.
   function resizeBackground(ctx, sx, sy) {
     var bg = activeBg(ctx);
@@ -637,6 +713,9 @@
     });
     typeSec.appendChild(el('div', { class: 'dock-note', text: 'With the ⛰ Type tool, paint what each tile does. These slots are named for your current game type — solid ground and platforms are what your hero stands on.' }));
     dock.appendChild(typeSec);
+
+    // --- Doors: per-door destinations (engine v2, Maker+) ---
+    renderDoorsSection(dock, ctx, s, bg);
     }
 
     // --- Entities (scene instances) ---

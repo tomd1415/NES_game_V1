@@ -13,5 +13,5 @@
  */
 (function (global) {
   'use strict';
-  global.NES_ENGINE_VERSION = 1;
+  global.NES_ENGINE_VERSION = 2;
 })(typeof window !== 'undefined' ? window : globalThis);

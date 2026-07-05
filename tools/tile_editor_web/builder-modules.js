@@ -1010,13 +1010,20 @@
       'If Target background is -1, the door is a same-room ' +
       'teleport — secret passages, fall-off-map respawns, puzzle ' +
       'shortcuts.',
-      'All doors share the same (spawn, target) in this MVP.  ' +
-      'Per-door config is a future UI upgrade.',
+      'Per-door destinations (engine v2): give each door tile its own ' +
+      'spawn point and target background by editing the door list ' +
+      '(config.doorList). When the list is empty, all doors share the ' +
+      'single (spawn, target) below — byte-identical to engine v1.',
     ],
     defaultConfig: {
       spawnX: 24,
       spawnY: 120,
       targetBgIdx: -1,
+      // Per-door table (engine v2). Each entry:
+      //   { bg, tx, ty, spawnX, spawnY, targetBgIdx }
+      // bg/tx/ty identify the door TILE (background index + world tile coords);
+      // an empty list keeps the v1 single-global-door behaviour.
+      doorList: [],
     },
     schema: [
       {
@@ -1044,9 +1051,99 @@
     ],
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
+      const bgs = (state && state.backgrounds) || [];
+
+      // ---- Per-door destinations (engine v2) ----------------------------
+      // Active only when the pupil has configured a door list; an empty list
+      // falls through to the v1 single-global-door path below (byte-identical
+      // ROM, so the golden-ROM contract is preserved).
+      const doorList = Array.isArray(c.doorList) ? c.doorList : [];
+      if (doorList.length > 0) {
+        const maxBg = bgs.length ? bgs.length - 1 : 0;
+        const entries = [];
+        let anyCrossRoom = false;
+        for (const d of doorList) {
+          const bg = A.clampInt(d.bg, 0, maxBg, 0);
+          const tx = A.clampInt(d.tx, 0, 255, 0);
+          const ty = A.clampInt(d.ty, 0, 255, 0);
+          const sx = A.clampInt(d.spawnX, 0, 240, 24);
+          const sy = A.clampInt(d.spawnY, 16, 200, 120);
+          const tRaw = (d.targetBgIdx == null) ? -1 : (d.targetBgIdx | 0);
+          const validTarget = tRaw >= 0 && tRaw < bgs.length;
+          if (validTarget && tRaw !== bg) anyCrossRoom = true;
+          const tgtByte = validTarget ? tRaw : 0xFF; // 0xFF = same room
+          entries.push([bg, tx, ty, sx, sy, tgtByte]);
+        }
+        // Room tracking (current_bg + load_background_n) is needed when doors
+        // swap rooms OR when there is more than one background (so a door on a
+        // non-zero background matches the room it lives in).
+        const needsRoom = anyCrossRoom || bgs.length > 1;
+        const decl = [
+          '#define BW_DOORS_PERDOOR_ENABLED 1',
+          '#define BW_DOOR_COUNT ' + entries.length,
+        ];
+        if (needsRoom) decl.push('#define BW_DOORS_MULTIBG_ENABLED 1');
+        decl.push('const unsigned char bw_door_tbl[] = {');
+        decl.push('    ' + entries.map(e => e.join(', ')).join(',\n    '));
+        decl.push('};');
+        decl.push('#if BW_DOORS_MULTIBG_ENABLED');
+        decl.push('#define BW_DOOR_ROOM current_bg');
+        decl.push('#else');
+        decl.push('#define BW_DOOR_ROOM 0');
+        decl.push('#endif');
+        template = A.appendToSlot(template, 'declarations', decl.join('\n'));
+        if (needsRoom) {
+          let startBg = (state && state.selectedBgIdx) | 0;
+          if (!(startBg >= 0 && startBg < bgs.length)) startBg = 0;
+          template = A.appendToSlot(template, 'init', '    current_bg = ' + startBg + ';');
+        }
+        const perDoor = [
+          '        // [builder] per-door destinations (engine v2).',
+          '        {',
+          '            unsigned char bw_dcx = (unsigned char)((px + ((PLAYER_W << 3) >> 1)) >> 3);',
+          '            unsigned char bw_dcy = (unsigned char)((py + ((PLAYER_H << 3) >> 1)) >> 3);',
+          '            if (behaviour_at((unsigned int)bw_dcx, (unsigned int)bw_dcy) == BEHAVIOUR_DOOR) {',
+          '                unsigned char bw_di;',
+          '                for (bw_di = 0; bw_di < BW_DOOR_COUNT; bw_di++) {',
+          '                    unsigned char bw_b = bw_di * 6;',
+          '                    if (bw_door_tbl[bw_b] == BW_DOOR_ROOM && bw_door_tbl[bw_b + 1] == bw_dcx && bw_door_tbl[bw_b + 2] == bw_dcy) {',
+          '#if BW_DOORS_MULTIBG_ENABLED',
+          '                        if (bw_door_tbl[bw_b + 5] != 0xFF && current_bg != bw_door_tbl[bw_b + 5]) load_background_n(bw_door_tbl[bw_b + 5]);',
+          '#endif',
+          '                        px = bw_door_tbl[bw_b + 3]; py = bw_door_tbl[bw_b + 4];',
+          '                        jumping = 0; jmp_up = 0;',
+          '                        break;',
+          '                    }',
+          '                }',
+          '            }',
+          '#if PLAYER2_ENABLED',
+          '            {',
+          '                unsigned char bw_d2x = (unsigned char)((px2 + ((PLAYER2_W << 3) >> 1)) >> 3);',
+          '                unsigned char bw_d2y = (unsigned char)((py2 + ((PLAYER2_H << 3) >> 1)) >> 3);',
+          '                if (behaviour_at((unsigned int)bw_d2x, (unsigned int)bw_d2y) == BEHAVIOUR_DOOR) {',
+          '                    unsigned char bw_dj;',
+          '                    for (bw_dj = 0; bw_dj < BW_DOOR_COUNT; bw_dj++) {',
+          '                        unsigned char bw_b2 = bw_dj * 6;',
+          '                        if (bw_door_tbl[bw_b2] == BW_DOOR_ROOM && bw_door_tbl[bw_b2 + 1] == bw_d2x && bw_door_tbl[bw_b2 + 2] == bw_d2y) {',
+          '#if BW_DOORS_MULTIBG_ENABLED',
+          '                            if (bw_door_tbl[bw_b2 + 5] != 0xFF && current_bg != bw_door_tbl[bw_b2 + 5]) load_background_n(bw_door_tbl[bw_b2 + 5]);',
+          '#endif',
+          '                            px2 = bw_door_tbl[bw_b2 + 3]; py2 = bw_door_tbl[bw_b2 + 4];',
+          '                            jumping2 = 0; jmp_up2 = 0;',
+          '                            break;',
+          '                        }',
+          '                    }',
+          '                }',
+          '            }',
+          '#endif',
+          '        }',
+        ];
+        return A.appendToSlot(template, 'per_frame', perDoor.join('\n'));
+      }
+
+      // ---- v1 single global door (unchanged; byte-identical) ------------
       const spawnX = A.clampInt(c.spawnX, 0, 240, 24);
       const spawnY = A.clampInt(c.spawnY, 16, 200, 120);
-      const bgs = (state && state.backgrounds) || [];
       const rawTarget = (c.targetBgIdx == null) ? -1 : (c.targetBgIdx | 0);
       // Valid if in range of backgrounds[]; otherwise same-room.
       const multiBg = rawTarget >= 0 && rawTarget < bgs.length;

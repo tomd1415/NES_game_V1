@@ -9,6 +9,24 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v2 — 2026-07-05
+
+### Added
+- **Per-door destinations.** Each Door tile can carry its own spawn point and
+  target background (same-room teleport *or* a room swap), instead of one
+  spawn/target shared by every door. Authored in WORLD → Doors; stored as
+  `builder.modules.doors.config.doorList` (`[{bg,tx,ty,spawnX,spawnY,targetBgIdx}]`).
+  Emits a `bw_door_tbl[]` lookup keyed by (room, tile-x, tile-y).
+
+### Changed / migration
+- **No migration needed.** An empty `doorList` (all existing v1 projects)
+  builds the exact v1 single-global-door code — byte-identical ROM, so the
+  golden-ROM hash is unchanged. A v1 game opened here still works; to use
+  per-door destinations, configure the door list.
+
+### Breaking
+- (none.)
+
 ## v1 — 2026-07-05 (baseline)
 
 The shipped engine as of the `redesign/ui-ux` merge: four game types
