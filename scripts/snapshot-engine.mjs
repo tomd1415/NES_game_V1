@@ -37,9 +37,15 @@ const INCLUDE_DIRS = [
 ];
 const INCLUDE_FILES = [
   'tools/tile_editor_web/builder-assembler.js',
+  'tools/tile_editor_web/builder-modules.js',
   'tools/tile_editor_web/engine-version.js',
   'steps/Step_Playground/Makefile',
 ];
+// NOTE: the build server (tools/playground_server.py) also performs ROM
+// codegen (behaviour.c, CHR, palettes, scene.inc, …). It is a single large
+// file mixing server + codegen, so it is not file-copied here yet; it is
+// still versioned via git. Extracting its codegen into a snapshottable
+// module is tracked as an E-V2 follow-up (see docs/design/engine-versioning.md).
 const EXCLUDE_RE = /(^|\/)(build|dist|node_modules)(\/|$)|\.nes$|\.o$/;
 
 function walk(dir, acc) {

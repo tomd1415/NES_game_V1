@@ -66,6 +66,10 @@
       "sha1": "9e6ce2b94bc1cec05c8db623523a08dc7d149ecc"
     },
     {
+      "path": "tools/tile_editor_web/builder-modules.js",
+      "sha1": "b9037f13a2a73340fe97862ded16b30571ad7961"
+    },
+    {
       "path": "tools/tile_editor_web/builder-templates/platformer.c",
       "sha1": "548e75726121f0fc671e80438c186b4de4230448"
     },
