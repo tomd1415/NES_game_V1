@@ -92,17 +92,28 @@ the main CSRF vector for these routes. A full per-session CSRF token
   pages as legacy-until-parity (ADVICE #6).
 - **Consolidate planning docs** — one active tracker; link out instead of
   duplicating checklists (ADVICE #5).
-- **CSRF tokens** — `/auth/csrf` + `X-CSRF-Token` on state-changing POSTs
-  (ADVICE auth). *Deliberately sequenced last in Sprint 2 and done as its own
-  focused unit:* the real cross-site vector is already blocked (`SameSite=Lax`
+- **CSRF — done as an Origin check (✅ 2026-07-05), not tokens.** After
+  weighing it: the real cross-site vector is already blocked (`SameSite=Lax`
   session cookie), and teacher routes authenticate via an admin secret in the
-  body (not a cookie → inherently CSRF-immune), so this is defence-in-depth. It
-  touches **every** client that POSTs (Studio + all seven old pages + the
-  feedback widget + account UI), so it must land with all clients updated and a
-  headless test, not half-migrated — otherwise un-updated pages break. No
-  zero-risk partial exists (an *optional* token gives no protection; a
-  *required* one breaks stragglers), which is why it is not bundled with the
-  low-risk doc items above.
+  body (not a cookie → inherently CSRF-immune). A per-session `X-CSRF-Token`
+  would touch **every** client that POSTs (Studio + seven old pages + feedback
+  widget + account UI) with a real half-migration breakage risk. An **Origin/
+  Referer check needs zero client changes** and gives the same defence-in-depth,
+  so that is what landed:
+  - `_csrf_origin_ok()` rejects a state-change only when the request's `Origin`
+    (or `Referer`) host is *provably* not ours. Expected hosts = the request
+    `Host` **and** any `X-Forwarded-Host` (the classroom runs behind an HTTPS
+    proxy) **plus** an optional `PLAYGROUND_ALLOWED_ORIGINS` allowlist.
+  - **Fail-open on ambiguity:** no Origin/Referer (curl, tests, non-browser) →
+    allowed; kill-switch `PLAYGROUND_DISABLE_CSRF_ORIGIN_CHECK=1` — a
+    misconfigured proxy can never lock users out.
+  - Applies only to the cookie-authed state-change routes
+    (`/gallery/publish`, `/gallery/remove`, `/me/projects` POST/PUT/DELETE);
+    the hot `/play` path and anonymous/admin-secret routes are exempt.
+  - Tests: `tools/builder-tests/csrf-origin.mjs` (9 checks) + the real-browser
+    `publish.spec.js` confirms same-origin publish still returns 200.
+  - A token scheme remains an option if a concrete threat emerges; captured in
+    the "Later" backlog rather than blocking here.
 - **"When to snapshot" rule** into `docs/design/engine-versioning.md`; keep
   `snapshot-engine.mjs --check` mandatory (ADVICE #7 — already followed for
   v3–v9).
@@ -112,7 +123,10 @@ the main CSRF vector for these routes. A full per-session CSRF token
   for shared assets); removes the Play-queue bottleneck + the build-dirt that
   complicates the harness (ADVICE #8).
 - **SQLite WAL + busy timeout + checkpoint/backup**; keep `accounts.db` on local
-  disk (ADVICE SQLite).
+  disk (ADVICE SQLite). *(WAL was already on; added `synchronous=NORMAL` (the
+  recommended WAL pairing) + `busy_timeout=5000` so a lock held by a backup /
+  second process waits instead of instantly raising "database is locked" —
+  2026-07-05. Checkpoint/backup + extracted metadata table still open.)*
 - **Extracted project-metadata table** (name, engine version, game style,
   updated, sprite/bg counts, builds?) for future dashboards without reading
   every blob (ADVICE #9).

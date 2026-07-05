@@ -3481,6 +3481,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if self._csrf_blocked(parsed.path):
+            return
         if parsed.path == "/play":
             try:
                 length = int(self.headers.get("Content-Length", "0") or "0")
@@ -3522,12 +3524,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         parsed = urlparse(self.path)
+        if self._csrf_blocked(parsed.path):
+            return
         if parsed.path.startswith("/me/projects/"):
             return self._me_projects_put(parsed.path)
         return self.send_error(404)
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if self._csrf_blocked(parsed.path):
+            return
         if parsed.path.startswith("/me/projects/"):
             return self._me_projects_delete(parsed.path)
         return self.send_error(404)
@@ -3748,6 +3754,56 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if k == "session":
                 return v or None
         return None
+
+    def _csrf_origin_ok(self):
+        """Return False only when we can POSITIVELY tell a state-changing
+        request came from another site (a CSRF attempt).  Defence-in-depth on
+        top of the SameSite=Lax session cookie.
+
+        A browser always sends `Origin` on POST/PUT/DELETE.  If it's present and
+        its host is not one of ours, reject.  We accept the request's own `Host`
+        header and any `X-Forwarded-Host` the reverse proxy set (the classroom
+        instance is proxied), plus an explicit `PLAYGROUND_ALLOWED_ORIGINS`
+        allowlist.  If `Origin` is absent we fall back to `Referer`.  If BOTH
+        are absent (curl, the test harness, non-browser tools) there is no
+        ambient-cookie CSRF vector, so we allow it — fail-open on ambiguity so a
+        misconfigured proxy can never lock users out."""
+        if not CSRF_ORIGIN_CHECK:
+            return True
+        origin = self.headers.get("Origin")
+        source = origin if origin and origin.lower() != "null" else None
+        if source is None:
+            ref = self.headers.get("Referer")
+            source = ref or None
+        if source is None:
+            return True   # no Origin/Referer → not a browser CSRF vector
+        src_host = (urlparse(source).netloc or "").lower()
+        if not src_host:
+            return True   # unparseable → don't block legitimate traffic
+        expected = set(CSRF_ALLOWED_ORIGINS)
+        for h in (self.headers.get("Host"), self.headers.get("X-Forwarded-Host")):
+            if not h:
+                continue
+            for part in h.split(","):
+                part = part.strip().lower()
+                if part:
+                    expected.add(part)
+                    # Allowlist may be scheme-qualified; match on host too.
+                    expected.add(urlparse("//" + part).netloc or part)
+        # Allowlist entries may be full origins (https://host); reduce to host.
+        expected = {urlparse(e).netloc or e for e in expected} | expected
+        return src_host in expected
+
+    def _csrf_blocked(self, path):
+        """If `path` is a cookie-authed state-change route and the Origin looks
+        cross-site, emit a 403 and return True so the caller returns at once."""
+        protected = path in CSRF_PROTECTED_PATHS or path.startswith("/me/projects/")
+        if protected and not self._csrf_origin_ok():
+            self._json(403, {"ok": False, "code": "bad_origin",
+                             "error": "This request looks like it came from another "
+                                      "site and was blocked."})
+            return True
+        return False
 
     def _auth_cookie(self, token=None, clear=False):
         """Build a Set-Cookie value for the session cookie.  Secure only over
