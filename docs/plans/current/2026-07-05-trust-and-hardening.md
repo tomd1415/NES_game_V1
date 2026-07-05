@@ -93,7 +93,16 @@ the main CSRF vector for these routes. A full per-session CSRF token
 - **Consolidate planning docs** — one active tracker; link out instead of
   duplicating checklists (ADVICE #5).
 - **CSRF tokens** — `/auth/csrf` + `X-CSRF-Token` on state-changing POSTs
-  (ADVICE auth).
+  (ADVICE auth). *Deliberately sequenced last in Sprint 2 and done as its own
+  focused unit:* the real cross-site vector is already blocked (`SameSite=Lax`
+  session cookie), and teacher routes authenticate via an admin secret in the
+  body (not a cookie → inherently CSRF-immune), so this is defence-in-depth. It
+  touches **every** client that POSTs (Studio + all seven old pages + the
+  feedback widget + account UI), so it must land with all clients updated and a
+  headless test, not half-migrated — otherwise un-updated pages break. No
+  zero-risk partial exists (an *optional* token gives no protection; a
+  *required* one breaks stragglers), which is why it is not bundled with the
+  low-risk doc items above.
 - **"When to snapshot" rule** into `docs/design/engine-versioning.md`; keep
   `snapshot-engine.mjs --check` mandatory (ADVICE #7 — already followed for
   v3–v9).

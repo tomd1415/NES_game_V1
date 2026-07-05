@@ -59,6 +59,27 @@ of how we got here.
   *first*, then add (or link) it under the matching tier in the
   current plan.
 
+## Current editor status
+
+There are **two browser front-ends** over the same project state and build
+server:
+
+- **Studio** (`tools/tile_editor_web/studio.html`) is the **primary** editor —
+  a single unified app (mode rail + docks). New feature work targets Studio. It
+  shipped via the `redesign/ui-ux` → `main` merge and is where the SMB-engine
+  Style options, gallery/open buttons, and quest tutorials live.
+- The **seven original pages** (`index` / `sprites` / `behaviour` / `builder` /
+  `code` / `audio` / `gallery` `.html`) are **legacy — kept until Studio reaches
+  parity.** They still work and still round-trip the same project JSON, so
+  import/export stays compatible in both directions, but they should get
+  *critical fixes only*, not new features. Retirement (freeze + redirect default
+  nav to Studio) is scheduled for Sprint 5 of
+  [`plans/current/2026-07-05-trust-and-hardening.md`](plans/current/2026-07-05-trust-and-hardening.md).
+
+The shared **project-state schema** (what both front-ends read/write, which
+fields reach the ROM, versioning + migrations) is documented in
+[`reference/project-state-schema.md`](reference/project-state-schema.md).
+
 ## File-name conventions
 
 - **Plans** in `plans/current/` and `plans/archive/` are
