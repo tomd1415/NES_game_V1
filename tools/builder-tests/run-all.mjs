@@ -69,6 +69,8 @@ const standalone = [
   'builder-assembler.js', 'builder-modules.js', 'builder-validators.js',
   'play-pipeline.js', 'emulator.js', 'help.js',
   'tour.js',
+  // Studio redesign (Phase 0) shell modules.
+  'studio.js', 'studio-starter.js',
 ];
 for (const f of standalone) {
   const full = path.join(WEB, f);

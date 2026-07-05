@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NES Studio</title>
+<link rel="icon" href="favicon.svg">
+<style>
+/* ===================================================================
+   NES Studio shell — Phase 0.
+   Every colour below is a real NES system-palette entry (see
+   sprite-render.js NES_PALETTE_RGB), per the "NES-authentic surface,
+   including the app's own chrome" guardrail.
+   =================================================================== */
+:root{
+  --nes-black:#000000;      /* 0x0F */
+  --nes-white:#FFFFFF;      /* 0x30 */
+  --nes-grey:#ABABAB;       /* 0x10 */
+  --nes-dkgrey:#4E4E4E;     /* 0x2D */
+  --nes-line:#626262;       /* 0x00 */
+  --nes-sky:#53AEFF;        /* 0x21 */
+  --nes-blue:#003C76;       /* 0x0C */
+  --nes-orange:#FA9E00;     /* 0x27 */
+  --nes-cyan:#2CD5F6;       /* 0x2C */
+  --nes-green:#43F611;      /* 0x2A */
+  --nes-red:#C72E00;        /* 0x16 */
+  --nes-salmon:#FF7757;     /* 0x26 */
+  --nes-lav:#CED1FF;        /* 0x32 */
+
+  --bg:var(--nes-black);
+  --panel:#001018;          /* near-black; reads as a CRT panel */
+  --line:var(--nes-dkgrey);
+  --text:var(--nes-white);
+  --muted:var(--nes-grey);
+  --accent:var(--nes-orange);
+  --sel:var(--nes-cyan);
+  --ok:var(--nes-green);
+  --warn:var(--nes-red);
+
+  --rail-w:74px;
+  --dock-w:230px;
+  --quest-w:290px;
+  --mono:ui-monospace,'Menlo','Consolas','Courier New',monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--mono);font-size:14px;line-height:1.4;
+  display:flex;flex-direction:column;overflow:hidden;
+  image-rendering:pixelated;
+}
+button{font-family:inherit}
+h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase}
+
+/* --- Top chrome ---------------------------------------------------- */
+.app-header{
+  flex:0 0 auto;display:flex;align-items:center;gap:12px;
+  padding:8px 12px;border-bottom:2px solid var(--line);
+  background:linear-gradient(var(--panel),var(--bg));
+  flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--accent);
+  letter-spacing:2px;text-transform:uppercase;white-space:nowrap}
+.brand .logo{
+  width:20px;height:20px;display:inline-block;background:var(--accent);
+  box-shadow:0 -6px 0 var(--sel),6px 0 0 var(--green,var(--nes-green));
+  clip-path:polygon(0 0,100% 0,100% 100%,0 100%);
+}
+.chrome-group{display:flex;align-items:center;gap:8px}
+.chrome-spacer{flex:1 1 auto}
+#project-name{
+  background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:5px 8px;font-family:inherit;font-size:14px;min-width:150px;
+}
+#project-name:focus{outline:none;border-color:var(--sel)}
+.btn{
+  background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:6px 10px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;
+  font-size:12px;white-space:nowrap;
+}
+.btn:hover{border-color:var(--sel);color:var(--sel)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{border-color:var(--accent);color:var(--accent)}
+.btn.primary:hover{background:var(--accent);color:var(--bg)}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.save-status{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+#save-dot{width:10px;height:10px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 6px var(--ok)}
+#save-dot.dirty{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+#save-dot.error{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.level-switch{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+#level-select{
+  background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:5px 6px;font-family:inherit;font-size:12px;text-transform:uppercase;
+}
+
+/* --- Main four-region layout -------------------------------------- */
+.studio-main{
+  flex:1 1 auto;display:grid;min-height:0;
+  grid-template-columns:var(--rail-w) var(--dock-w) 1fr var(--quest-w);
+}
+.region{min-height:0;min-width:0;overflow:auto;border-right:2px solid var(--line)}
+.region:last-child{border-right:none}
+
+/* Mode rail */
+.mode-rail{display:flex;flex-direction:column;gap:2px;padding:8px 6px;
+  background:var(--panel)}
+.mode-btn{
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  background:var(--bg);color:var(--muted);border:2px solid var(--line);
+  padding:8px 2px;cursor:pointer;text-transform:uppercase;font-size:9px;
+  letter-spacing:1px;
+}
+.mode-btn .ico{font-size:20px;line-height:1}
+.mode-btn:hover{color:var(--text);border-color:var(--muted)}
+.mode-btn.active{border-color:var(--accent);color:var(--accent);background:#0a0500}
+.mode-btn[hidden]{display:none}
+.mode-btn .lock{font-size:9px;color:var(--muted)}
+.mode-btn.locked{opacity:.45;border-style:dashed}
+.mode-btn.locked:hover{color:var(--muted);border-color:var(--line)}
+.level-hint{font-size:10px;color:var(--muted);max-width:180px;line-height:1.2}
+.level-hint.flash{color:var(--accent);font-weight:700}
+
+/* Contextual dock */
+.dock{background:var(--panel)}
+.dock-inner{padding:12px}
+.dock h2{color:var(--sel);font-size:13px;margin-bottom:6px}
+.dock .dock-sub{color:var(--muted);font-size:11px;margin-bottom:12px}
+.dock .placeholder{
+  border:2px dashed var(--line);padding:14px;color:var(--muted);font-size:11px;
+  line-height:1.6;
+}
+.dock-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.dock-list button{
+  text-align:left;background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:7px 9px;cursor:pointer;font-family:inherit;font-size:12px;
+}
+.dock-list button.active{border-color:var(--sel);color:var(--sel)}
+.dock-list button:hover{border-color:var(--muted)}
+.dock-mini{margin-top:14px;color:var(--muted);font-size:11px}
+.dock-mini .btn{margin-top:6px}
+
+/* The TV */
+.tv-region{display:flex;flex-direction:column;background:#000;overflow:hidden}
+.stage-toolbar{
+  flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:8px 10px;
+  border-bottom:2px solid var(--line);background:var(--panel);
+}
+.stage-toolbar .tool{
+  background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:5px 9px;cursor:pointer;font-size:12px;
+}
+.stage-toolbar .tool.active{border-color:var(--sel);color:var(--sel)}
+.stage-toolbar .mode-name{color:var(--accent);font-size:12px;text-transform:uppercase;
+  letter-spacing:1px;margin-left:auto}
+.tv-stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;
+  padding:18px;min-height:0}
+.crt{
+  position:relative;padding:16px;border-radius:16px;
+  background:linear-gradient(#2a2a2a,#141414);
+  box-shadow:0 0 0 3px var(--nes-dkgrey),0 0 0 6px #000,0 12px 40px #000;
+}
+.crt::after{
+  content:"";position:absolute;inset:16px;pointer-events:none;border-radius:4px;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 2px,transparent 2px 4px);
+  mix-blend-mode:multiply;
+}
+#tv-canvas{
+  display:block;background:var(--nes-sky);image-rendering:pixelated;
+  width:512px;height:480px;max-width:100%;border:2px solid #000;
+}
+.tv-footer{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:6px 12px;
+  border-top:2px solid var(--line);background:var(--panel);font-size:11px}
+.tv-state{display:flex;align-items:center;gap:6px;color:var(--ok);text-transform:uppercase;
+  letter-spacing:1px}
+.tv-state .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 6px var(--ok)}
+.tv-hint{color:var(--muted)}
+
+/* Quest log + needs attention */
+.quest-region{background:var(--panel)}
+.quest-inner{padding:12px}
+.quest-inner h2{font-size:13px;color:var(--accent);margin-bottom:8px}
+.quest-inner h2.attn{color:var(--warn);margin-top:18px}
+.quest{
+  display:flex;gap:8px;align-items:flex-start;border:2px solid var(--line);
+  padding:8px;margin-bottom:6px;font-size:11px;line-height:1.5;
+}
+.quest .tick{width:16px;height:16px;border:2px solid var(--muted);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--bg)}
+.quest.done{border-color:var(--ok);color:var(--muted)}
+.quest.done .tick{background:var(--ok);border-color:var(--ok)}
+.quest.done .q-title{text-decoration:line-through}
+.q-title{color:var(--text)}
+.attn-item{border:2px solid var(--line);padding:8px;margin-bottom:6px;font-size:11px}
+.attn-item.error{border-color:var(--warn)}
+.attn-item.warn{border-color:var(--accent)}
+.attn-item .sev{text-transform:uppercase;font-size:9px;letter-spacing:1px}
+.attn-item.error .sev{color:var(--warn)}
+.attn-item.warn .sev{color:var(--accent)}
+.attn-item .fix{color:var(--muted);margin-top:4px}
+.attn-empty{color:var(--ok);font-size:11px;border:2px dashed var(--line);padding:10px}
+
+/* Cartridge budget meters */
+.budget{margin-bottom:8px;font-size:11px}
+.budget .blabel{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:3px}
+.budget .bar{height:8px;background:#111;border:1px solid var(--line);overflow:hidden}
+.budget .fill{height:100%;background:var(--ok);transition:width .2s}
+.budget.warn .fill{background:var(--accent)}
+.budget.full .fill{background:var(--warn)}
+.budget .blabel .val{color:var(--text)}
+
+/* --- Dialog (Time Machine) ---------------------------------------- */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;
+  align-items:center;justify-content:center;z-index:50}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--panel);border:3px solid var(--accent);max-width:520px;
+  width:92%;max-height:80vh;overflow:auto;padding:16px}
+.modal h2{color:var(--accent);font-size:15px;margin-bottom:6px}
+.modal .modal-sub{color:var(--muted);font-size:11px;margin-bottom:12px}
+.snap-row{display:flex;align-items:center;gap:10px;border:2px solid var(--line);
+  padding:8px;margin-bottom:6px;font-size:12px}
+.snap-row .meta{flex:1 1 auto}
+.snap-row .when{color:var(--muted);font-size:11px}
+.snap-row .reason{color:var(--sel);font-size:10px;text-transform:uppercase}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.tm-section-title{color:var(--sel);font-size:12px;text-transform:uppercase;
+  margin:14px 0 6px;letter-spacing:1px}
+
+/* --- Shared mode-dock components ---------------------------------- */
+.dock-section{margin-top:14px}
+.dock-section > .title{color:var(--sel);font-size:11px;text-transform:uppercase;
+  letter-spacing:1px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.dock-note{color:var(--muted);font-size:10px;margin-top:4px;line-height:1.5}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.mini-input{background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:4px 6px;font-family:inherit;font-size:12px;width:100%}
+.mini-input:focus{outline:none;border-color:var(--sel)}
+
+/* Tileset / picker grids */
+.tile-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-top:6px}
+.tile-grid.sprites{grid-template-columns:repeat(8,1fr)}
+.tile-cell{position:relative;width:100%;aspect-ratio:1;padding:0;border:2px solid var(--line);
+  background:#111;cursor:pointer;image-rendering:pixelated;display:block}
+.tile-cell canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+.tile-cell.sel{border-color:var(--sel);box-shadow:0 0 0 1px var(--sel)}
+.tile-cell.used{border-color:#2a5a2a}
+.tile-cell.shared{border-color:var(--accent)}
+.tile-cell.orphan{border-color:var(--warn)}
+.tile-cell.reserved{box-shadow:inset 0 0 0 2px var(--nes-lav)}
+.tile-cell.reserved::after{content:'T';position:absolute;top:0;right:1px;font-size:8px;
+  line-height:1;color:var(--nes-lav);font-family:var(--mono);pointer-events:none}
+
+/* Palette swatches */
+.swatch-row{display:flex;gap:3px;flex-wrap:wrap;align-items:center;margin:4px 0}
+.swatch{width:22px;height:22px;border:2px solid var(--line);cursor:pointer;padding:0}
+.swatch.sel{border-color:var(--sel);box-shadow:0 0 0 1px var(--sel)}
+.swatch.locked{cursor:not-allowed;position:relative}
+.swatch.locked::after{content:"🔒";position:absolute;inset:0;font-size:10px;
+  display:flex;align-items:center;justify-content:center}
+.pal-strip{display:flex;align-items:center;gap:6px;border:2px solid var(--line);
+  padding:5px;margin-bottom:5px;cursor:pointer}
+.pal-strip.sel{border-color:var(--sel)}
+.pal-strip .label{font-size:10px;color:var(--muted);width:34px}
+.master-grid{display:grid;grid-template-columns:repeat(16,1fr);gap:1px;margin-top:6px}
+.master-grid .swatch{width:100%;height:auto;aspect-ratio:1;border-width:1px}
+
+/* Rules cards */
+.rule-card{border:2px solid var(--line);padding:10px;margin-bottom:8px}
+.rule-card > .head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.rule-card .card-title{color:var(--text);font-size:12px;text-transform:uppercase;letter-spacing:1px}
+.rule-card.on{border-color:#2a5a2a}
+.rule-card .body{margin-top:8px;display:none}
+.rule-card.expanded .body{display:block}
+.field{display:flex;flex-direction:column;gap:3px;margin:6px 0;font-size:11px;color:var(--muted)}
+.field input[type=number],.field input[type=text],.field select{
+  background:var(--bg);color:var(--text);border:2px solid var(--line);padding:4px 6px;
+  font-family:inherit;font-size:12px}
+.field.inline{flex-direction:row;align-items:center;justify-content:space-between}
+.switch{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px}
+.chip{display:inline-block;background:#0a0500;border:1px solid var(--accent);color:var(--accent);
+  font-size:9px;padding:1px 5px;text-transform:uppercase;letter-spacing:1px}
+
+/* List with select/rename/delete (backgrounds, sprites, animations) */
+.entity-row{display:flex;align-items:center;gap:6px;border:2px solid var(--line);
+  padding:5px 7px;margin-bottom:4px;cursor:pointer;font-size:12px}
+.entity-row.sel{border-color:var(--sel);color:var(--sel)}
+.entity-row .thumb{width:26px;height:26px;flex:0 0 auto;background:#111;image-rendering:pixelated;
+  border:1px solid var(--line)}
+.entity-row .grow{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 4px}
+.icon-btn:hover{color:var(--sel)}
+
+/* Sprite / tile editor canvas */
+.paint-canvas{image-rendering:pixelated;background:#111;border:2px solid var(--line);
+  touch-action:none;cursor:crosshair;max-width:100%}
+
+/* Accessibility: honour high-contrast theme injected by a11y.js */
+:root[data-ui-theme="high-contrast"] body{--muted:#FFFFFF;--line:#FFFFFF}
+
+@media (max-width:1100px){
+  :root{--dock-w:190px;--quest-w:230px}
+  #tv-canvas{width:384px;height:360px}
+}
+</style>
+<link rel="stylesheet" href="codemirror.min.css">
+<link rel="stylesheet" href="codemirror-theme-dracula.min.css">
+<style>
+/* Fit CodeMirror into the CODE dock. */
+#code-cm .CodeMirror{height:52vh;border:2px solid var(--line);font-size:11px;background:#000}
+</style>
+</head>
+<body>
+
+<!-- ===================== TOP CHROME ===================== -->
+<header class="app-header">
+  <div class="brand"><span class="logo" aria-hidden="true"></span> NES Studio</div>
+
+  <div class="chrome-group">
+    <label class="visually-hidden" for="project-name">Project name</label>
+    <input id="project-name" type="text" aria-label="Project name" spellcheck="false">
+    <button id="btn-new-game" class="btn" type="button" title="Start a fresh starter platformer to learn with (keeps your other projects)">🎮 New game</button>
+    <!-- AccountMenu anchors #account-control immediately after this. -->
+    <span id="projects-menu"></span>
+  </div>
+
+  <div class="chrome-spacer"></div>
+
+  <div class="chrome-group">
+    <button id="btn-play" class="btn primary" type="button">▶ Play</button>
+    <button id="btn-publish" class="btn" type="button" title="Build your game and share it to the class gallery">📤 Publish</button>
+    <div class="save-status"><span id="save-dot" title="Save status"></span>
+      <span id="save-text">Saved</span></div>
+    <button id="btn-time-machine" class="btn" type="button">⟲ Time Machine</button>
+    <div class="level-switch">
+      <label for="level-select">Level</label>
+      <select id="level-select" aria-label="Expertise level">
+        <option value="beginner">Beginner</option>
+        <option value="maker">Maker</option>
+        <option value="advanced">Advanced</option>
+      </select>
+      <span id="level-hint" class="level-hint"></span>
+    </div>
+    <button id="btn-help" class="btn" type="button" title="Help">?</button>
+  </div>
+</header>
+
+<!-- ===================== FOUR REGIONS ===================== -->
+<main class="studio-main">
+
+  <!-- Mode rail -->
+  <nav class="region mode-rail" id="mode-rail" aria-label="Modes"></nav>
+
+  <!-- Contextual dock -->
+  <section class="region dock" aria-label="Tools"><div class="dock-inner" id="dock"></div></section>
+
+  <!-- The TV -->
+  <section class="region tv-region" aria-label="Game screen">
+    <div class="stage-toolbar" id="stage-toolbar">
+      <button class="tool active" type="button" data-tool="select">▣ Select</button>
+      <button class="tool" type="button" data-tool="paint">✎ Paint</button>
+      <button class="tool" type="button" data-tool="more">More tools ▾</button>
+      <span class="mode-name" id="stage-mode-name">World</span>
+    </div>
+    <div class="tv-stage">
+      <div class="crt">
+        <canvas id="tv-canvas" width="256" height="240" aria-label="Live game screen"></canvas>
+      </div>
+    </div>
+    <div class="tv-footer">
+      <span class="tv-state" id="tv-state"><span class="dot"></span><span id="tv-state-label">Live</span></span>
+      <span class="tv-hint" id="tv-hint">Editing the current screen live — press ▶ Play to run it.</span>
+    </div>
+  </section>
+
+  <!-- Quest log + needs attention -->
+  <aside class="region quest-region" aria-label="Quests and needs attention">
+    <div class="quest-inner">
+      <h2>Cartridge</h2>
+      <div id="budget-list"></div>
+      <h2>Quests</h2>
+      <div id="quest-list"></div>
+      <h2 class="attn">Needs attention</h2>
+      <div id="attn-list"></div>
+    </div>
+  </aside>
+</main>
+
+<!-- ===================== TIME MACHINE ===================== -->
+<div class="modal-backdrop" id="tm-backdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tm-title">
+    <h2 id="tm-title">⟲ Time Machine</h2>
+    <div class="modal-sub">Jump back to an earlier version. Your <em>current</em> work is
+      snapshotted first, so nothing is lost — you can always come back.</div>
+    <div id="tm-body"></div>
+    <div class="tm-section-title">Project file</div>
+    <div class="dock-note">Save a copy of your whole game to your computer, or open one you saved before.</div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="tm-export" type="button">⬇ Save project file</button>
+      <button class="btn" id="tm-import" type="button">⬆ Open project file</button>
+      <input id="tm-import-file" type="file" accept=".json" style="display:none">
+    </div>
+    <div class="tm-section-title">Pattern tables (.chr)</div>
+    <div class="dock-note">Export or import the raw 8×8 tiles for an emulator or another tool. Import replaces both banks (a snapshot is taken first).</div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="tm-export-chr" type="button">⬇ Export .chr</button>
+      <button class="btn" id="tm-import-chr" type="button">⬆ Import .chr</button>
+      <input id="tm-import-chr-file" type="file" accept=".chr,.bin" style="display:none">
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="tm-export-pal" type="button">⬇ Export .pal</button>
+      <button class="btn" id="tm-import-pal" type="button">⬆ Import .pal</button>
+      <input id="tm-import-pal-file" type="file" accept=".pal,.bin" style="display:none">
+      <button class="btn" id="tm-export-nam" type="button">⬇ Export .nam</button>
+      <button class="btn" id="tm-import-nam" type="button">⬆ Import .nam</button>
+      <input id="tm-import-nam-file" type="file" accept=".nam,.bin" style="display:none">
+    </div>
+    <div class="dock-note">.pal = colours · .nam = the current screen's layout (8×8 backgrounds).</div>
+    <div class="modal-actions">
+      <button class="btn" id="tm-close" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PUBLISH ===================== -->
+<div class="modal-backdrop" id="pub-backdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pub-title">
+    <h2 id="pub-title">📤 Publish to the gallery</h2>
+    <div class="modal-sub">Build your game and share it so the rest of the class can play it.</div>
+    <div class="field"><span>Title</span><input id="pub-title-input" type="text" maxlength="60"></div>
+    <div class="field"><span>Description (optional)</span><input id="pub-desc-input" type="text" maxlength="200"></div>
+    <div class="field"><span>Your handle (optional, no real names)</span><input id="pub-handle-input" type="text" maxlength="24"></div>
+    <div id="pub-status" class="dock-note"></div>
+    <div class="modal-actions">
+      <button class="btn" id="pub-cancel" type="button">Cancel</button>
+      <button class="btn primary" id="pub-submit" type="button">Publish</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shared modules (order matters: assembler → modules → validators). -->
+<script src="storage.js"></script>
+<script src="metatiles.js"></script>
+<script src="sprite-render.js"></script>
+<script src="default-state.js"></script>
+<script src="a11y.js"></script>
+<script src="account-menu.js"></script>
+<script src="cookie-notice.js"></script>
+<script src="feedback.js"></script>
+<script src="help.js"></script>
+<script src="builder-assembler.js"></script>
+<script src="builder-modules.js"></script>
+<script src="builder-validators.js"></script>
+<script src="play-pipeline.js"></script>
+<script src="emulator.js"></script>
+<script src="studio-starter.js"></script>
+<script src="studio-ui.js"></script>
+<!-- Mode modules register into window.StudioModes before the shell boots. -->
+<script src="studio-world.js"></script>
+<script src="studio-chars.js"></script>
+<script src="studio-pals.js"></script>
+<script src="studio-rules.js"></script>
+<script src="studio-tiles.js"></script>
+<script src="studio-sound.js"></script>
+<script src="codemirror.min.js"></script>
+<script src="codemirror-clike.min.js"></script>
+<script src="codemirror-active-line.min.js"></script>
+<script src="studio-code.js"></script>
+<script src="studio.js"></script>
+</body>
+</html>

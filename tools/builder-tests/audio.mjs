@@ -27,7 +27,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const sha1 = (buf) => crypto.createHash('sha1').update(buf).digest('hex');
 
-const ROOT = '/home/duguid/projects/nesgame/attempt1';
+const ROOT = new URL('../..', import.meta.url).pathname;
 const PORT = 18815;
 
 const mkCells = (w, h, t = 1) => Array.from({ length: h }, () =>

@@ -11,6 +11,7 @@ of how we got here.
 | Folder | What's in it |
 | ------ | ------------ |
 | [`guides/`](guides/) | Pupil-, teacher- and developer-facing reference docs. These change less often than plans and tend to grow in place. |
+| [`design/`](design/) | Design intent for the UI/UX redesign — vision, principles, wireframes, component specs, and design decisions. Plans say *what/when*; design docs say *why/how it should look and feel*. The redesign roadmap lives in [`design/phased-plan.md`](design/phased-plan.md). |
 | [`plans/current/`](plans/current/) | Active plan(s) the project is currently executing against. Should be a small number of files at any time. |
 | [`plans/archive/`](plans/archive/) | Superseded plans, named `YYYY-MM-DD-<slug>.md` so they sort chronologically. Old code/comment cross-references that point here are still meaningful — please don't delete or rename them. |
 | [`feedback/`](feedback/) | Pupil and teacher bug reports / feature requests, plus broader feedback summaries. The [running bugs list](feedback/recently-observed-bugs.md) feeds the next plan. |
@@ -26,6 +27,12 @@ of how we got here.
   [`plans/current/2026-04-26-fixes-and-features.md`](plans/current/2026-04-26-fixes-and-features.md)
   is the live plan; it lists open items in tiered order and links
   back to the bugs/feedback that motivated each one.
+- **Working on the UI/UX redesign?** (branch `redesign/ui-ux`)
+  Start with the roadmap
+  [`design/phased-plan.md`](design/phased-plan.md) and its companions
+  in [`design/`](design/). For **what is done and what is left** as a
+  checklist, see the execution tracker
+  [`plans/current/2026-07-05-studio-redesign.md`](plans/current/2026-07-05-studio-redesign.md).
 - **Looking for context on a past decision?**  Walk
   [`plans/archive/`](plans/archive/) — the chronological filenames
   let you scan quickly, and most of the recent entries
@@ -96,6 +103,7 @@ references the old name, this is your lookup table.
 | New path | What it tracks |
 | -------- | -------------- |
 | `docs/plans/current/2026-04-26-fixes-and-features.md` | The post-Phase-4 plan: fixes the 27 outstanding pupil-reported items in tiered order. |
+| `docs/plans/current/2026-07-05-studio-redesign.md` | The UI/UX redesign execution tracker — what has landed (Phases 0–3) and the remaining backlog, cross-linked to `docs/design/`. |
 
 ### Feedback / changelog (now in `docs/feedback/` and `docs/changelog/`)
 

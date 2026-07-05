@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&amp;family=VT323&amp;family=Spline+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+html, body { margin:0; padding:0; background:#0b0a10; }
+@media print { .desk { background:#fff !important; padding:0 !important; } .sheet { box-shadow:none !important; margin:0 !important; } .noprint { display:none !important; } }
+.sheet p { line-height:1.62; }
+.sheet li { line-height:1.55; margin-bottom:7px; }
+</style>
+</helmet>
+
+<div class="desk" style="min-height:100vh; background:#0b0a10; padding:36px 20px; display:flex; flex-direction:column; align-items:center; gap:26px; font-family:'Spline Sans',system-ui,sans-serif;">
+
+  <!-- ── COVER ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#141019; color:#F3EFE2; border:3px solid #000; box-shadow:0 10px 0 #000; padding:44px 52px; position:relative; overflow:hidden;">
+    <div style="position:absolute; top:0; left:0; right:0; height:8px; background:repeating-linear-gradient(90deg,#C72E00 0 40px,#FA9E00 40px 80px,#43F611 80px 120px,#2CD5F6 120px 160px,#0D57FF 160px 200px);"></div>
+    <div style="font-family:'Press Start 2P',monospace; font-size:11px; color:#FA9E00; letter-spacing:1px; margin-top:14px;">DESIGN HANDOVER &amp; DIRECTION</div>
+    <h1 style="font-family:'Press Start 2P',monospace; font-size:30px; line-height:1.5; color:#fff; margin:20px 0 8px;">NES GAME<br>CREATION PLATFORM</h1>
+    <div style="font-family:'VT323',monospace; font-size:23px; color:#9d97ab; margin-bottom:26px;">The unified “SpriteMaker Studio” redesign — what to keep, what to fix, and how to build it properly.</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; font-family:'VT323',monospace; font-size:18px;">
+      <span style="background:#003C76; border:2px solid #2CD5F6; color:#B6E1FF; padding:5px 12px;">For: the development team</span>
+      <span style="background:#1a2a10; border:2px solid #43F611; color:#BDFB9A; padding:5px 12px;">Status: direction approved · prototype only</span>
+      <span style="background:#2a1c1e; border:2px solid #FF7757; color:#FFC6C3; padding:5px 12px;">v1 · July 2026</span>
+    </div>
+    <div style="margin-top:30px; padding:16px 18px; background:#000; border:2px solid #FA9E00;">
+      <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#FA9E00; margin-bottom:9px;">READ THIS FIRST</div>
+      <p style="margin:0; font-size:16px; color:#E9E1D4;">The interactive prototype (<b>“SpriteMaker Studio.dc.html”</b>) that accompanies this document is a <b>vision piece</b>, not a foundation to extend. Its <b>look, tone and overall UX approach are the approved direction.</b> Its <b>data model and several core mechanics are deliberately simplified and, in places, technically wrong about how the NES actually works.</b> This document separates the two so you know exactly what to carry forward and what to rebuild.</p>
+    </div>
+  </div>
+
+  <!-- ── 1. HOW TO READ ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#FBF7EC; color:#221c14; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#C72E00; margin-bottom:6px;">1 · Purpose</div>
+    <div style="height:3px; background:#221c14; margin-bottom:20px;"></div>
+    <p style="margin-top:0;">This is a direction document, not a spec sheet. It exists because the previous build had grown into seven loosely-connected pages that pupils found confusing, and the redesign has proven that a <b>single, game-first workspace</b> is the right answer. That much is settled. What remains is a substantial, careful engineering effort to put a <b>correct NES data model</b> underneath that UX and to keep the interface calm as features grow.</p>
+    <p>Two explicit, load-bearing statements for the team:</p>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:14px;">
+      <div style="flex:1; min-width:330px; background:#eaf6ea; border:2px solid #1F8A3B; padding:16px 18px;">
+        <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#1F8A3B; margin-bottom:8px;">✓ THE STYLE &amp; APPROACH ARE WANTED</div>
+        <p style="margin:0; font-size:15px;">The retro-NES aesthetic, the one-screen studio, the game always running in the centre, the quest-log-instead-of-popups, and the “never lose your work” safety model are all <b>endorsed</b>. Build on this vocabulary — don’t re-open these decisions.</p>
+      </div>
+      <div style="flex:1; min-width:330px; background:#fdeee9; border:2px solid #C72E00; padding:16px 18px;">
+        <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#C72E00; margin-bottom:8px;">! IT IS A STARTING POINT ONLY</div>
+        <p style="margin:0; font-size:15px;">The current UI/UX is an early prototype. There is <b>a lot of work to do</b> before it behaves as it should. Expect to rebuild the graphics data model from the ground up, add the missing primitives, and actively fight clutter as you go.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. KEEP ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#FBF7EC; color:#221c14; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#1F8A3B; margin-bottom:6px;">2 · What to keep (the approved direction)</div>
+    <div style="height:3px; background:#221c14; margin-bottom:20px;"></div>
+    <ul style="margin:0; padding-left:22px;">
+      <li><b>One unified workspace.</b> Mode rail on the left, contextual dock, the game on a “TV” in the centre, quest log on the right. This replaces the seven old pages and is the core win — protect it.</li>
+      <li><b>Game-first, never a blank canvas.</b> Booting straight into a working, editable starter game removes the “I don’t know how to start” paralysis pupils reported. Keep starters for every game type.</li>
+      <li><b>Learn-by-doing, not by pop-up.</b> The self-ticking <b>Quest Log</b> and the <b>“Needs attention”</b> validator (with <i>Fix →</i> / <i>Show me</i> jumps) are the replacement for the intro dialogs pupils skipped. This is the right model; extend it, don’t revert to modal tutorials.</li>
+      <li><b>Progress safety.</b> Autosave on every change, minute snapshots + snapshot-before-Play, and the Time Machine (which snapshots <i>before</i> restoring) directly answer “make sure work is very unlikely to be lost”. Carry this into the accounts/server-save work — never regress it.</li>
+      <li><b>NES-authentic surface.</b> The whole UI is drawn from the 64-colour NES system palette, the CRT framing, pixel type. This is deliberate and liked. Keep it.</li>
+      <li><b>Graduated depth.</b> Code visible one click away, Advanced mode for the pupils who already read C. The <i>principle</i> is right (see §6 for how to structure it).</li>
+    </ul>
+  </div>
+
+  <!-- ── 3. THE CORE MISUNDERSTANDING ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#FBF7EC; color:#221c14; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#C72E00; margin-bottom:6px;">3 · The core misunderstanding: tiles &amp; the graphics pipeline</div>
+    <div style="height:3px; background:#221c14; margin-bottom:20px;"></div>
+    <p style="margin-top:0;">This is the most important section. The prototype treats a “tile” as a self-contained 16×16 block that owns its own pixels, and it treats each character as owning its own pixels too. <b>That is not how the NES works, and it quietly makes the tool teach the wrong mental model.</b> On real hardware, pixels live in <i>one shared place</i> and everything else <i>points at them</i>.</p>
+
+    <div style="background:#fff; border:2px solid #C7B9A0; padding:20px; margin:18px 0;">
+      <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#7a1fa2; margin-bottom:14px;">THE REAL NES GRAPHICS PIPELINE</div>
+      <div style="display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; font-size:13px;">
+        <div style="flex:1; min-width:150px; background:#efe7fb; border:2px solid #7a1fa2; padding:12px;">
+          <b>1 · Pattern tables (CHR)</b><br><span style="color:#4a4256;">The ONLY place pixels exist. Two tables of 256 <b>8×8</b> tiles (512 total). Each tile = 2 bits/pixel → 4 values (0–3), stored as 16 bytes. Typically one table for background, one for sprites.</span>
+        </div>
+        <div style="align-self:center; font-family:'Press Start 2P'; font-size:12px; color:#7a1fa2;">→</div>
+        <div style="flex:1; min-width:150px; background:#e7f0fb; border:2px solid #0D57FF; padding:12px;">
+          <b>2 · Nametable</b><br><span style="color:#4a4256;">The screen: a <b>32×30</b> grid of <b>tile indices</b>. Each cell just says “draw tile #57 here”. No pixels of its own — pure references into the pattern table.</span>
+        </div>
+        <div style="align-self:center; font-family:'Press Start 2P'; font-size:12px; color:#0D57FF;">→</div>
+        <div style="flex:1; min-width:150px; background:#e7faf0; border:2px solid #1F8A3B; padding:12px;">
+          <b>3 · Attribute table</b><br><span style="color:#4a4256;">64 bytes that colour the screen. Palette is chosen per <b>2×2-tile (16×16px) quadrant</b> — not per tile. This is why NES art has its famous colour-blocking.</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; font-size:13px; margin-top:10px;">
+        <div style="flex:1; min-width:150px; background:#fdf0e7; border:2px solid #C72E00; padding:12px;">
+          <b>4 · Palettes</b><br><span style="color:#4a4256;">1 shared backdrop + 4 background palettes + 4 sprite palettes, <b>3 colours each</b>, all chosen from the 64-colour system palette. Colour 0 = backdrop / transparent.</span>
+        </div>
+        <div style="align-self:center; font-family:'Press Start 2P'; font-size:12px; color:#C72E00;">→</div>
+        <div style="flex:1; min-width:150px; background:#fdf7e7; border:2px solid #C79A00; padding:12px;">
+          <b>5 · Sprites (OAM)</b><br><span style="color:#4a4256;">64 hardware sprites, each <b>8×8 or 8×16</b>, each pointing at a pattern-table tile + one sprite palette + flip bits. Bigger characters = several sprites grouped (a “metasprite”).</span>
+        </div>
+        <div style="align-self:center; font-family:'Press Start 2P'; font-size:12px; color:#C79A00;">→</div>
+        <div style="flex:1; min-width:150px; background:#f0f0f0; border:2px solid #555; padding:12px;">
+          <b>6 · The catch</b><br><span style="color:#4a4256;">Max <b>8 sprites per scanline</b> or they flicker/drop. Tile memory is tiny (256+256). <b>Reusing tiles is the whole craft.</b></span>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fdeee9; border-left:6px solid #C72E00; padding:14px 18px; margin-bottom:8px;">
+      <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#C72E00; margin-bottom:8px;">WHERE THE PROTOTYPE DIVERGES — FIX THESE</div>
+      <ul style="margin:0; padding-left:20px; font-size:15px;">
+        <li><b>There is no way to make a single 8×8 tile.</b> The fundamental unit of all NES art is missing. This is the headline gap: the tool cannot do the one thing the hardware is actually built around.</li>
+        <li><b>“Blocks” own their pixels.</b> A block should be a <i>2×2 arrangement of references</i> into the shared tile sheet, not a monolithic 16×16 bitmap. As built, identical bricks can’t share tiles, tile reuse is impossible, and the CHR budget is meaningless.</li>
+        <li><b>Characters own their pixels too.</b> A character should be a <b>metasprite</b>: a layout of 8×8 tile references + per-sprite palette. The prototype’s “size in tiles” and “per-cell palette” are the <i>right instincts</i> pointing at the wrong data — they should select and colour <b>shared tiles</b>, not slice a private bitmap.</li>
+        <li><b>The nametable/attribute tables aren’t modelled.</b> The world is a 16×16 grid of block letters; the real 32×30 tile grid and the 2×2-tile attribute granularity are hidden. The binary export fakes them on the way out instead of them being the source of truth.</li>
+        <li><b>Animation is stored as whole private frames.</b> On NES, animation swaps <i>tile indices</i> (or CHR banks). Frames-as-copies is an acceptable <i>beginner abstraction</i>, but it must compile down to shared tiles, not balloon the tile budget.</li>
+      </ul>
+    </div>
+    <p style="margin-bottom:0; font-size:15px;"><b>The original site already had this right</b> — it had a “Shared tileset”, a tile-0 concept, <kbd>[</kbd>/<kbd>]</kbd> tile stepping, and drag-to-swap tiles that updated every reference. The redesign dropped that foundation for monolithic blocks. <b>The correct move is to bring the shared-tileset model back and put the new UX on top of it.</b></p>
+  </div>
+
+  <!-- ── 4. DATA MODEL ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#FBF7EC; color:#221c14; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#0D57FF; margin-bottom:6px;">4 · The data model to build (tile-first)</div>
+    <div style="height:3px; background:#221c14; margin-bottom:20px;"></div>
+    <p style="margin-top:0;">Make the <b>shared pattern table the single source of truth</b>. Everything references it by index. This one change fixes most of §3 at once and makes the CHR budget, tile reuse and exports fall out naturally.</p>
+    <div style="background:#0f1420; color:#c7d0e0; border:2px solid #000; padding:18px 20px; font-family:'VT323',monospace; font-size:18px; line-height:1.5; margin:8px 0 16px; overflow-x:auto;">
+      <span style="color:#7fd0ff;">PatternTable</span> { tiles: Tile[512] }        <span style="color:#6d7a90;">// each Tile = 8×8, values 0–3</span><br>
+      <span style="color:#7fd0ff;">Palettes</span>   { backdrop, bg[4][3], sp[4][3] }  <span style="color:#6d7a90;">// indices into the 64-colour NES set</span><br>
+      <span style="color:#7fd0ff;">Block</span>      { tiles:[tl,tr,bl,br], palette }  <span style="color:#6d7a90;">// 2×2 REFERENCES + which BG palette</span><br>
+      <span style="color:#7fd0ff;">Metasprite</span> { cells:[{tile,palette,flipH,flipV,dx,dy}], w,h }<br>
+      <span style="color:#7fd0ff;">Animation</span>  { frames:[metaspriteId], fps, tag }  <span style="color:#6d7a90;">// walk / jump / attack / idle</span><br>
+      <span style="color:#7fd0ff;">Screen</span>     { nametable:[32×30 tileIdx], attr:[16×15 palIdx] }<br>
+      <span style="color:#7fd0ff;">Entity</span>     { metaspriteId, role, x, y, behaviour }  <span style="color:#6d7a90;">// placed in a Screen</span>
+    </div>
+    <ul style="margin:0; padding-left:22px;">
+      <li><b>One editor, three lenses.</b> The 8×8 tile editor is the primitive. The block editor and the metasprite editor are <i>assemblers</i> that pick tiles and palettes. The world editor stamps blocks/entities. All read/write the same tile store.</li>
+      <li><b>Edit-a-tile-changes-everywhere is a feature, not a bug</b> — but surface it. When a shared tile is about to be edited from two places, show the “also used by…” notice the old site had, with a one-click <i>Duplicate first</i>.</li>
+      <li><b>Budgets become real and teachable.</b> “CHR 214/256” now means something, because blocks and metasprites consume shared tiles. Wire this into the quest/validator layer as a positive challenge (“reuse tiles to fit the cartridge”).</li>
+      <li><b>Exports stop being fabricated.</b> `.chr`, `.nam`, `.pal` and the cc65 C/asm all serialise the real structures directly — no on-the-way-out reconstruction.</li>
+    </ul>
+  </div>
+
+  <!-- ── 5. THE 8x8 EDITOR ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#FBF7EC; color:#221c14; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#7a1fa2; margin-bottom:6px;">5 · The missing primitive: an 8×8 tile editor</div>
+    <div style="height:3px; background:#221c14; margin-bottom:20px;"></div>
+    <p style="margin-top:0;">Add a first-class <b>Tiles</b> mode whose job is one thing: draw and manage the 8×8 tiles in the two pattern tables. Everything else references what’s made here.</p>
+    <div style="display:flex; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:300px;">
+        <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#7a1fa2; margin-bottom:10px;">MUST HAVE</div>
+        <ul style="margin:0; padding-left:20px; font-size:15px;">
+          <li>A <b>16×16 grid of the 256 tiles</b> per bank (background / sprite), click to select, <kbd>[</kbd>/<kbd>]</kbd> to step, arrow keys to move.</li>
+          <li>A large <b>8×8 paint canvas</b> with the 4-value pen (0 = transparent/backdrop), previewed under a chosen palette.</li>
+          <li><b>New / duplicate / delete / clear</b> a tile; <b>flip H/V, rotate, copy/paste</b> (all were in the old site — keep the shortcuts).</li>
+          <li><b>Drag-to-swap tiles</b> that rewrites every reference, so pupils can tidy their sheet without breaking art.</li>
+          <li>A live <b>“used by”</b> readout: which blocks / metasprites / screens reference this tile.</li>
+        </ul>
+      </div>
+      <div style="flex:1; min-width:300px;">
+        <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#7a1fa2; margin-bottom:10px;">KEEP IT FROM OVERWHELMING BEGINNERS</div>
+        <ul style="margin:0; padding-left:20px; font-size:15px;">
+          <li><b>Gate it behind the “Maker/Advanced” level</b> (see §6). Beginners paint blocks and characters; the tile sheet is there when they’re ready to see “what it’s really made of”.</li>
+          <li>Offer <b>“edit the tiles of this block/sprite”</b> as a jump-in from the block and metasprite editors, so the primitive is discoverable in context rather than as a wall of 256 squares.</li>
+          <li>Teach the 2×2 attribute rule <i>at the point of colouring</i> with the quadrant grid overlaid, not as prose.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. CLUTTER ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#FBF7EC; color:#221c14; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#C79A00; margin-bottom:6px;">6 · Keeping it calm: the anti-clutter strategy</div>
+    <div style="height:3px; background:#221c14; margin-bottom:20px;"></div>
+    <p style="margin-top:0;">The redesign fixed “too many pages” but is now trending toward “too much on one page”. The tool must serve KS2 beginners <i>and</i> KS5 pupils writing C. The answer is <b>progressive disclosure</b>, not more tabs. Adopt these as standing rules:</p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 16px;">
+      <div style="flex:1; min-width:230px; background:#eaf6ea; border:2px solid #1F8A3B; padding:14px;">
+        <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#1F8A3B; margin-bottom:6px;">① EXPERTISE LEVELS</div>
+        <p style="margin:0; font-size:14px;">A single <b>Beginner → Maker → Advanced</b> switch (per pupil, teacher-settable per class). Beginner: blocks, characters, play, quests. Maker: palettes, types, tile sheet, animations. Advanced: raw C/asm, CHR banks, attribute bytes. Higher levels <i>reveal</i> tools; they never rearrange the ones already learned.</p>
+      </div>
+      <div style="flex:1; min-width:230px; background:#e7f0fb; border:2px solid #0D57FF; padding:14px;">
+        <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#0D57FF; margin-bottom:6px;">② CONTEXTUAL TOOLS</div>
+        <p style="margin:0; font-size:14px;">The stage toolbar currently shows paint/erase/palette/type/fill/copy/stamp at once. Show the <b>common two</b> and tuck the rest behind a “more tools” affordance. Surface a tool when its target is selected, hide it otherwise.</p>
+      </div>
+      <div style="flex:1; min-width:230px; background:#fdf7e7; border:2px solid #C79A00; padding:14px;">
+        <div style="font-family:'Press Start 2P',monospace; font-size:9px; color:#C79A00; margin-bottom:6px;">③ ONE JOB PER DOCK</div>
+        <p style="margin:0; font-size:14px;">Each mode’s dock should teach one idea. Where a dock has grown a second job (e.g. characters + background tiles crammed together), that’s a signal to split the mode or move the second job to where it belongs.</p>
+      </div>
+    </div>
+    <ul style="margin:0; padding-left:22px;">
+      <li><b>Default to few, reveal on demand.</b> Every control that only Advanced pupils need should be invisible to a Year-7 on their first lesson.</li>
+      <li><b>Rules is a growing list — give it search/grouping</b> before it becomes a wall of cards, and only show cards relevant to the current game type.</li>
+      <li><b>Measure it.</b> “Could a confused KS3 pupil ignore this control and still finish a game?” If yes, it belongs behind a level or a disclosure.</li>
+    </ul>
+  </div>
+
+  <!-- ── 7. BACKLOG ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#FBF7EC; color:#221c14; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#C72E00; margin-bottom:6px;">7 · Prioritised backlog</div>
+    <div style="height:3px; background:#221c14; margin-bottom:20px;"></div>
+
+    <div style="font-family:'Press Start 2P',monospace; font-size:10px; color:#C72E00; margin:6px 0 10px;">P0 — FOUNDATIONS (do before adding features)</div>
+    <ul style="margin:0 0 18px; padding-left:22px;">
+      <li>Tile-first data model with a shared pattern table (§4).</li>
+      <li>The 8×8 tile editor (§5).</li>
+      <li>Honest nametable (32×30) + attribute table (2×2-tile palette granularity), as the world’s real storage.</li>
+      <li>Metasprite model (OAM entries, 8×8/8×16, per-sprite palette) replacing private character bitmaps.</li>
+      <li>Real, round-trippable exports serialised from the above; a matching import.</li>
+    </ul>
+
+    <div style="font-family:'Press Start 2P',monospace; font-size:10px; color:#C79A00; margin:6px 0 10px;">P1 — CORRECTNESS &amp; TEACHING</div>
+    <ul style="margin:0 0 18px; padding-left:22px;">
+      <li>Expertise levels + progressive disclosure (§6).</li>
+      <li><b>8-sprites-per-scanline visualiser</b> and a live CHR-budget meter, wired into the validator as teachable limits.</li>
+      <li>Sprite-reactions matrix (per sprite × per tile-type: block / land / bounce / exit / ignore / call_handler) — this existed in the old <i>behaviour</i> page and is real depth worth restoring.</li>
+      <li>Accounts + server saves (the class-cloud UI is mocked today); preserve the snapshot/Time-Machine guarantees on top of it.</li>
+      <li>Teacher tools for real: class progress, arcade moderation queue, showcase pinning (mocked today).</li>
+    </ul>
+
+    <div style="font-family:'Press Start 2P',monospace; font-size:10px; color:#1F8A3B; margin:6px 0 10px;">P2 — REACH</div>
+    <ul style="margin:0; padding-left:22px;">
+      <li>Real game types beyond platformer: top-down, auto-runner, racer (the engine templates already exist in the old builder).</li>
+      <li>Scrolling worlds (multi-screen nametables) rather than discrete rooms.</li>
+      <li>Spawn-effect sprites on triggers; checkpoints polish; per-door destinations.</li>
+      <li>CHR bank switching for larger games; music import (FamiStudio) made real.</li>
+      <li><b>In-browser cc65 → .nes compile</b> so “Download ROM” produces a real cartridge image; wire to the bundled jsnes emulator for true play-in-browser.</li>
+    </ul>
+  </div>
+
+  <!-- ── 8. CONSTRAINTS CHECKLIST ── -->
+  <div class="sheet" style="width:860px; max-width:100%; box-sizing:border-box; background:#141019; color:#F3EFE2; border:3px solid #000; box-shadow:0 10px 0 #000; padding:40px 52px;">
+    <div style="font-family:'Press Start 2P',monospace; font-size:14px; color:#43F611; margin-bottom:6px;">8 · NES constraints the tool must always enforce</div>
+    <div style="height:3px; background:#43F611; margin-bottom:20px;"></div>
+    <p style="margin-top:0; color:#c9c3d6;">These are non-negotiable truths of the hardware. If the tool lets a pupil build something that violates one, it is teaching a lie. Bake them into the model so they <i>can’t</i> be broken, and explain them where they bite.</p>
+    <div style="display:flex; flex-wrap:wrap; gap:10px; font-size:15px;">
+      <div style="flex:1; min-width:240px; background:#000; border:2px solid #43F611; padding:12px 14px;"><b style="color:#43F611;">Colour.</b> 64-colour system palette; 1 backdrop + 4+4 palettes of 3. No free RGB, anywhere — including the app’s own chrome.</div>
+      <div style="flex:1; min-width:240px; background:#000; border:2px solid #2CD5F6; padding:12px 14px;"><b style="color:#2CD5F6;">Tiles.</b> 8×8, 2 bits/pixel; 256 background + 256 sprite. The budget is real and visible.</div>
+      <div style="flex:1; min-width:240px; background:#000; border:2px solid #FA9E00; padding:12px 14px;"><b style="color:#FA9E00;">Attributes.</b> Background palette is chosen per 2×2-tile (16×16px) block — not per tile. Show the quadrant grid.</div>
+      <div style="flex:1; min-width:240px; background:#000; border:2px solid #FF7757; padding:12px 14px;"><b style="color:#FF7757;">Sprites.</b> 64 total, 8×8 or 8×16, one palette + flip each; <b>8 per scanline</b> before flicker.</div>
+      <div style="flex:1; min-width:240px; background:#000; border:2px solid #D365FF; padding:12px 14px;"><b style="color:#D365FF;">Sprite colour 0</b> is always transparent — you cannot draw black with it. Outlines need a real colour.</div>
+      <div style="flex:1; min-width:240px; background:#000; border:2px solid #B6E1FF; padding:12px 14px;"><b style="color:#B6E1FF;">Everything references tiles.</b> Reuse is the craft; edits propagate; swaps rewrite references.</div>
+    </div>
+    <div style="margin-top:22px; padding-top:18px; border-top:2px solid #2a2536; color:#9d97ab; font-size:14px; font-family:'VT323',monospace;">
+      Companion prototype: <b style="color:#F3EFE2;">SpriteMaker Studio.dc.html</b> — approved for look &amp; UX, illustrative only for data &amp; mechanics. &nbsp;·&nbsp; Reference source: the previous seven-page build (tomd1415/NES_game_V1) whose shared-tileset model should be recovered. &nbsp;·&nbsp; This document supersedes ad-hoc notes; treat §3–§5 as the definition of “correct”.
+    </div>
+  </div>
+
+  <div class="noprint" style="font-family:'VT323',monospace; font-size:17px; color:#5a5468; padding-bottom:20px;">End of handover · print to PDF for circulation</div>
+</div>
+
+</x-dc>
+</body>
+</html>

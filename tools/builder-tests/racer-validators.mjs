@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const WEB = '/home/duguid/projects/nesgame/attempt1/tools/tile_editor_web';
+const WEB = new URL('../../tools/tile_editor_web', import.meta.url).pathname;
 function fail(m) { console.error('FAIL:', m); process.exit(1); }
 function assert(c, m) { if (!c) fail(m); }
 

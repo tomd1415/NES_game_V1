@@ -1,5 +1,13 @@
 # Next-phase master plan — 2026-06-18
 
+> **See also — UI/UX redesign (branch `redesign/ui-ux`).** A full
+> single-workspace redesign of the editor is planned separately in
+> [`../../design/phased-plan.md`](../../design/phased-plan.md). It
+> reframes much of the UI surface these arcs touch (backgrounds,
+> sprites, behaviour, builder, code) into one game-first Studio. Where
+> an arc below overlaps the redesign, prefer the redesign's phasing for
+> UI work; this plan remains authoritative for engine/codegen depth.
+
 The detailed, sequenced plan to complete every suggestion in
 [`2026-06-18-next-phase-suggestions.md`](2026-06-18-next-phase-suggestions.md).
 This is the **entry point**: it gives the cross-arc sequence, dependencies,
