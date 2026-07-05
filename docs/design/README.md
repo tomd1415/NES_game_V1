@@ -20,7 +20,8 @@ shippable plan for the redesign. It links the three docs that give it its
 | [`phased-plan.md`](phased-plan.md) | **The roadmap.** Phase 0–4, mapped to the handover's P0/P1/P2, grounded in the current `tools/tile_editor_web/` code. Read this to know *what happens in what order*. |
 | [`design-principles.md`](design-principles.md) | The approved direction & the NES constraints the tool must always enforce — the tie-breaker when a decision is unclear. |
 | [`ui-architecture.md`](ui-architecture.md) | The unified-workspace IA: mode rail, contextual dock, the central "TV", quest log; how the old seven pages map to the new modes. |
-| [`target-data-model.md`](target-data-model.md) | The tile-first data model + an honest gap analysis: what the current build already stores correctly vs. the five real gaps. |
+| [`target-data-model.md`](target-data-model.md) | The tile-first data model + an honest gap analysis: what the current build already stores correctly vs. the real gaps. |
+| [`feature-parity.md`](feature-parity.md) | **The parity yardstick.** Everything the current seven pages do (from a 2026-07-05 code audit), page by page — no page retires until its checklist is covered. |
 
 ### Source material (incoming design documents)
 

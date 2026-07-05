@@ -70,17 +70,21 @@ The model is mostly right. What's genuinely missing or wrong:
    TILES mode (handover §5); recover the old shared-tileset editor's
    shortcuts.
 
-3. **Explicit OAM detail on metasprite cells.** Cells reference tiles;
-   verify/complete per-cell `flipH/flipV` + `palette`, and 8×8 vs 8×16
-   sprite mode, so cells are true OAM entries.
+3. **8×16 sprite mode.** *(Revised after the 2026-07-05 audit.)* Cells
+   are already true OAM entries — per-cell `flipH/flipV`, `palette` *and*
+   `priority` (behind-BG) all ship on the Sprites page, and `sprites.inc`
+   exports them as real OAM attribute bytes. The remaining gap is 8×8 vs
+   **8×16** sprite mode.
 
 4. **Real budgets.** With shared tiles, `CHR 214/256` is meaningful.
    **Build** a live CHR-budget meter and an **8-sprites-per-scanline**
    visualiser, wired into the validator as teachable limits.
 
-5. **Round-trippable exports.** `.chr` / `.nam` / `.pal` and the cc65
-   C/asm must serialise the real structures directly (no on-the-way-out
-   reconstruction), with a matching import.
+5. **Round-trippable exports.** *(Revised after the 2026-07-05 audit.)*
+   The exports largely exist — `.chr` / `.nam` / `.pal` /
+   `my_tiles.txt` / `sprites.inc`+`.h` and the cc65 build all serialise
+   from the real structures today. What's missing is the **matching
+   import** side and round-trip tests proving export→import is lossless.
 
 ## Invariants to enforce in the model
 
