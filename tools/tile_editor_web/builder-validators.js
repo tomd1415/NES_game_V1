@@ -244,6 +244,55 @@
       return null;
     },
 
+    // V22: too many sprites can line up on one scanline.  The NES shows at
+    // most 8 hardware sprites (8px-wide cells) per scanline; the 9th+ flicker
+    // or vanish.  Estimate statically from the Scene instances' initial
+    // placements: for each 8px row, count the cells whose vertical span covers
+    // it, but only within any single 256px-wide screen window (so enemies
+    // spread across a scrolling level — never on screen together — don't
+    // false-positive).  Warn only; the engine's OAM flicker (v9) softens it,
+    // and real positions move at runtime.
+    function tooManySpritesPerScanline(state) {
+      if (!moduleEnabled(state, 'scene')) return null;
+      const node = moduleNode(state, 'scene');
+      const instances = (node && node.config && node.config.instances) || [];
+      const sprs = sprites(state);
+      const actors = [];
+      for (const inst of instances) {
+        const sp = sprs[inst.spriteIdx];
+        if (!sp) continue;                       // dangling ref — a different validator flags it
+        const w = Math.max(1, sp.width | 0);     // hardware sprites per row (cells)
+        const h = Math.max(1, sp.height | 0);
+        const y = inst.y | 0;
+        actors.push({ x: inst.x | 0, y0: y, y1: y + h * 8, w });
+      }
+      if (actors.length < 2) return null;
+      let worst = 0;
+      for (let yy = 0; yy < 240; yy += 8) {
+        const here = actors.filter(a => yy >= a.y0 && yy < a.y1);
+        if (here.length < 2) continue;
+        here.sort((a, b) => a.x - b.x);
+        // Sliding 256px window: the most cells that can share this row on one screen.
+        let lo = 0, sum = 0;
+        for (let hi = 0; hi < here.length; hi++) {
+          sum += here[hi].w;
+          while (here[hi].x - here[lo].x >= 256) { sum -= here[lo].w; lo++; }
+          if (sum > worst) worst = sum;
+        }
+      }
+      if (worst <= 8) return null;
+      return {
+        id: 'too-many-sprites-per-scanline',
+        severity: 'warn',
+        message: 'Up to ' + worst + ' sprites can line up on one row here — the ' +
+          'NES only shows 8 per row, so some will flicker or disappear.',
+        fix: 'Spread enemies/pickups out vertically (different heights) or place ' +
+          'fewer on the same row. Sprite flicker (SMB rendering options) helps ' +
+          'share the slots but cannot show more than 8 at once.',
+        jumpTo: null,
+      };
+    },
+
     // V15: Player 2 on + damage on but P2 maxHp == 0.  Same shape
     // as V10 (hp-zero-with-damage) but for P2.  Warn only — the
     // game still plays, P2 just can't be hurt; pupils might

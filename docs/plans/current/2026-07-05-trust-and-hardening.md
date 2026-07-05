@@ -150,10 +150,15 @@ push hardest), each with a headless test:
 - `flagpoleBeyondLevel` — flagpole column past the level width → unreachable →
   **warn** (`smb-flagpole-validators.mjs`).
 
+- `tooManySpritesPerScanline` — estimates the classic NES 8-sprites-per-
+  scanline limit from Scene instances, counting only cells that can share a
+  256px screen window (so a scrolling level's spread-out enemies don't
+  false-positive) → **warn** (`sprites-per-scanline.mjs`).
+
 Audit found the plan's door/pipe gap is already covered
 (`doorsTargetBgOutOfRange`; pipes are same-room only, so they can't target a
-missing background). Remaining Sprint 4 items (8-sprites-per-scanline, audio
-ROM budget, bug-repro-card template) unstarted.
+missing background). Remaining Sprint 4 items (audio ROM budget, bug-repro-card
+template) unstarted.
 
 ### Sprint 5 — Old-page retirement + audio config  *(ADVICE #6, audio)*
 Freeze old pages except critical fixes; keep import/export compat tests; redirect
