@@ -441,6 +441,14 @@ The [`notes.md`](notes.md) review of the prototype is folded in:
 
 ## Open questions to settle with the team
 
+> **Settled during the 2026-07-05 implementation** (revisit if the team
+> disagrees): *rebuild vs. re-skin* → **evolved in place** (new shell +
+> modes over the existing state/engine/validators). *Framework* → **stayed
+> vanilla JS** (a small `window.StudioModes` plugin pattern, no framework).
+> *Per-instance entity config* → **lives in the WORLD dock** on selection,
+> RULES keeps game-wide modules. The remaining questions below are still
+> open.
+
 - **Rebuild vs. re-skin the current app?** Given the model is already
   correct *and* the feature surface is large and classroom-tested, the
   recommendation is firmly to **evolve `tools/tile_editor_web/` in
@@ -459,6 +467,7 @@ The [`notes.md`](notes.md) review of the prototype is folded in:
 
 ---
 
-*This plan supersedes ad-hoc redesign notes. It is tracked from
-`docs/plans/current/` (see the redesign entry there) and reviewed at each
-phase exit.*
+*This plan supersedes ad-hoc redesign notes. The executable work-tracker —
+what is done and what is left, as a checklist — lives at
+[`docs/plans/current/2026-07-05-studio-redesign.md`](../plans/current/2026-07-05-studio-redesign.md);
+this doc holds the design intent and is reviewed at each phase exit.*
