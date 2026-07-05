@@ -198,15 +198,18 @@ test('full-screen preview opens a modal with a canvas', async ({ page }) => {
 
 test('tile-type slots are named for the game type (3.4)', async ({ page }) => {
   await page.locator('#level-select').selectOption('maker');
+  // Target the Tile-type section by its title (a "Show tile types" toggle
+  // elsewhere would otherwise match a plain hasText).
+  const typeSectionByTitle = () => page.locator('.dock-section')
+    .filter({ has: page.locator('.title', { hasText: 'Tile type' }) });
   // Platformer (starter default): slot 7 reads "Spike", not a generic label.
-  await expect(page.locator('.dock-section', { hasText: 'Tile type' }))
-    .toContainText('Spike');
+  await expect(typeSectionByTitle()).toContainText('Spike');
   // Switch to racer in RULES → the same slots become checkpoints / finish.
   await page.evaluate(() => {
     window.Studio.getState().builder.modules.game.config.type = 'racer';
   });
   await page.locator('.mode-btn[data-mode="world"]').click(); // re-render dock
-  const typeSection = page.locator('.dock-section', { hasText: 'Tile type' });
+  const typeSection = typeSectionByTitle();
   await expect(typeSection).toContainText('Checkpoint 1');
   await expect(typeSection).toContainText('Finish line');
   await expect(typeSection).not.toContainText('Spike');
