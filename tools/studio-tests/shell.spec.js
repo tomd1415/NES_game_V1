@@ -93,9 +93,9 @@ test('the World dock adds a background and the TV follows', async ({ page }) => 
   await page.locator('#world-add-bg').click();
   const after = await page.evaluate(() => window.Studio.getState().backgrounds.length);
   expect(after).toBe(before + 1);
-  // The new background is selected and there are now N picker buttons.
-  await expect(page.locator('.dock-list button')).toHaveCount(after);
-  await expect(page.locator('.dock-list button.active')).toHaveCount(1);
+  // The new background is selected and there are now N picker rows.
+  await expect(page.locator('.bg-row')).toHaveCount(after);
+  await expect(page.locator('.bg-row.sel')).toHaveCount(1);
 });
 
 test('renaming the project updates the shared state and persists', async ({ page }) => {

@@ -44,6 +44,58 @@
   var currentLevel = 'beginner';
   var playedThisSession = false;
   var saveTimer = null;
+  var activeTool = null;
+  var undoStack = [];
+  var redoStack = [];
+  var UNDO_LIMIT = 40;
+
+  // ---- Undo / redo (in-memory, distinct from snapshots) -----------------
+  function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
+  function pushUndo() {
+    undoStack.push(cloneState(state));
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack.length = 0;
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(cloneState(state));
+    state = undoStack.pop();
+    afterExternalStateChange();
+  }
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(cloneState(state));
+    state = redoStack.pop();
+    afterExternalStateChange();
+  }
+  function afterExternalStateChange() {
+    if (state.selectedBgIdx == null) state.selectedBgIdx = 0;
+    state.selectedBgIdx = Math.min(state.selectedBgIdx, state.backgrounds.length - 1);
+    Storage.saveCurrent(state);
+    $('project-name').value = state.name || '';
+    renderLive();
+    renderDock();
+    refreshQuestsAndAttention();
+    setSaveState('saved');
+  }
+
+  // ---- Shared context handed to every mode module -----------------------
+  var ctx = {
+    getState: function () { return state; },
+    setState: function (s) { state = s; },
+    markDirty: function () { markDirty(); },
+    pushUndo: pushUndo,
+    renderLive: function () { renderLive(); },
+    renderDock: function () { renderDock(); },
+    refresh: function () { refreshQuestsAndAttention(); },
+    getLevel: function () { return currentLevel; },
+    levelAtLeast: function (name) { return (LEVELS[currentLevel] || 0) >= (LEVELS[name] || 0); },
+    getActiveTool: function () { return activeTool; },
+    activeBackground: function () { return activeBackground(); },
+    tvCanvas: function () { return $('tv-canvas'); },
+    NesRender: function () { return window.NesRender; },
+    selectMode: function (id) { selectMode(id); },
+  };
 
   // ---- State migration / validation for the storage layer ---------------
   function migrateState(s) {
@@ -110,8 +162,8 @@
   }
   function renderLive() {
     var canvas = $('tv-canvas');
-    var ctx = canvas.getContext('2d');
-    var img = ctx.createImageData(256, 240);
+    var g = canvas.getContext('2d');
+    var img = g.createImageData(256, 240);
     var buf = new Uint32Array(img.data.buffer);
     var nt = activeNametable();
     var tiles = state.bg_tiles || [];
@@ -135,8 +187,14 @@
         }
       }
     }
-    ctx.putImageData(img, 0, 0);
-    drawPlayerPreview(ctx);
+    g.putImageData(img, 0, 0);
+    // Modes may suppress the idle hero preview while painting.
+    var mod = window.StudioModes && window.StudioModes[currentMode];
+    if (!(mod && mod.hidePlayerPreview)) drawPlayerPreview(g);
+    // Modes may draw an overlay (grid, hover cell, selection) on top.
+    if (mod && typeof mod.onRenderOverlay === 'function') {
+      try { mod.onRenderOverlay(g, ctx); } catch (e) {}
+    }
   }
   // A calm LIVE preview of the hero at its resting spot on the floor, so
   // the TV is game-first rather than an empty map.
@@ -225,11 +283,31 @@
     });
   }
   function selectMode(id) {
+    var prev = window.StudioModes && window.StudioModes[currentMode];
+    if (prev && typeof prev.onExit === 'function') { try { prev.onExit(ctx); } catch (e) {} }
     currentMode = id;
     highlightMode();
-    renderDock();
     var m = MODES.find(function (mm) { return mm.id === id; });
     $('stage-mode-name').textContent = m ? m.name : id;
+    var mod = window.StudioModes && window.StudioModes[id];
+    renderStageToolbar(mod && mod.renderDock ? mod : null);
+    renderDock();
+    if (mod && typeof mod.onEnter === 'function') { try { mod.onEnter(ctx); } catch (e) {} }
+    renderLive();
+  }
+  // Map a pointer event on the TV canvas to an 8×8 nametable cell + pixel.
+  function tvCellFromEvent(evt) {
+    var canvas = $('tv-canvas');
+    var r = canvas.getBoundingClientRect();
+    var sx = canvas.width / r.width, sy = canvas.height / r.height;
+    var px = (evt.clientX - r.left) * sx;
+    var py = (evt.clientY - r.top) * sy;
+    return {
+      px: px, py: py,
+      cx: Math.max(0, Math.min(SCREEN_W - 1, Math.floor(px / 8))),
+      cy: Math.max(0, Math.min(SCREEN_H - 1, Math.floor(py / 8))),
+      inBounds: px >= 0 && py >= 0 && px < canvas.width && py < canvas.height,
+    };
   }
   function renderDock() {
     var dock = $('dock');
@@ -239,58 +317,70 @@
     var sub = document.createElement('div'); sub.className = 'dock-sub'; sub.textContent = m.sub;
     dock.appendChild(sub);
 
-    if (currentMode === 'world') { renderWorldDock(dock); return; }
+    // Delegate to the mode's plugin module if one is registered. The
+    // stage toolbar is built once per mode (in selectMode), NOT here —
+    // renderDock is called on every dock interaction and must not reset
+    // the active tool.
+    var mod = window.StudioModes && window.StudioModes[currentMode];
+    if (mod && typeof mod.renderDock === 'function') {
+      try { mod.renderDock(dock, ctx); }
+      catch (e) { console.error('[studio] ' + currentMode + ' dock failed', e); }
+      return;
+    }
 
     var ph = document.createElement('div');
     ph.className = 'placeholder';
-    ph.textContent = 'This mode arrives in Phase 1 of the redesign. The shell, the shared ' +
+    ph.textContent = 'This mode arrives later in the redesign. The shell, the shared ' +
       'project, the live TV and the safety net are ready now — the ' + m.name +
       ' tools dock in here next.';
     dock.appendChild(ph);
   }
-  // WORLD is Beginner and the TV shows its background, so its dock gets a
-  // working background picker in Phase 0 (demonstrates dock↔TV↔state).
-  // renderDock() clears the dock and calls this once, so it just appends.
-  function renderWorldDock(dock) {
-    var label = document.createElement('div');
-    label.className = 'dock-mini';
-    label.textContent = 'Backgrounds';
-    dock.appendChild(label);
 
-    var list = document.createElement('div');
-    list.className = 'dock-list';
-    (state.backgrounds || []).forEach(function (bg, idx) {
+  // The stage toolbar shows a mode's tools (design §4.2: "two tools by
+  // default, more behind a disclosure"). A mode without a module keeps the
+  // Phase-0 scaffold toolbar.
+  function renderStageToolbar(mod) {
+    var bar = $('stage-toolbar');
+    // Preserve the trailing mode-name label; rebuild the tool buttons.
+    Array.prototype.slice.call(bar.querySelectorAll('.tool, .more-tools-btn')).forEach(function (t) { t.remove(); });
+    var nameEl = $('stage-mode-name');
+    var tools = (mod && mod.stageTools) || [
+      { id: 'select', label: '▣ Select' },
+      { id: 'paint', label: '✎ Paint' },
+    ];
+    var moreTools = (mod && mod.moreTools) || [];
+    // At levels where fewer tools apply, a mode can filter its own lists;
+    // the shell just renders what it is given.
+    activeTool = null;
+    function addToolButton(tool, makeActive) {
       var b = document.createElement('button');
+      b.className = 'tool' + (makeActive ? ' active' : '');
       b.type = 'button';
-      b.textContent = (bg.name || ('background ' + (idx + 1)));
-      b.className = idx === state.selectedBgIdx ? 'active' : '';
+      b.dataset.tool = tool.id;
+      b.textContent = tool.label;
+      if (tool.title) b.title = tool.title;
+      if (makeActive) { activeTool = tool.id; }
       b.addEventListener('click', function () {
-        state.selectedBgIdx = idx;
-        renderLive();
-        renderDock();
-        markDirty();
+        bar.querySelectorAll('.tool').forEach(function (o) { o.classList.remove('active'); });
+        b.classList.add('active');
+        activeTool = tool.id;
+        if (mod && mod.onToolChange) mod.onToolChange(tool.id, ctx);
       });
-      list.appendChild(b);
-    });
-    dock.appendChild(list);
-
-    var addBtn = document.createElement('button');
-    addBtn.className = 'btn';
-    addBtn.type = 'button';
-    addBtn.id = 'world-add-bg';
-    addBtn.textContent = '+ Background';
-    addBtn.style.marginTop = '10px';
-    addBtn.addEventListener('click', function () {
-      var fresh = window.StudioStarter.create();
-      var nb = fresh.backgrounds[0];
-      nb.name = 'background ' + (state.backgrounds.length + 1);
-      state.backgrounds.push(nb);
-      state.selectedBgIdx = state.backgrounds.length - 1;
-      renderLive();
-      renderDock();
-      markDirty();
-    });
-    dock.appendChild(addBtn);
+      bar.insertBefore(b, nameEl);
+      return b;
+    }
+    tools.forEach(function (tool, i) { addToolButton(tool, i === 0); });
+    if (moreTools.length) {
+      var more = document.createElement('button');
+      more.className = 'tool more-tools-btn';
+      more.type = 'button';
+      more.textContent = 'More tools ▾';
+      more.addEventListener('click', function () {
+        more.remove();
+        moreTools.forEach(function (tool) { addToolButton(tool, false); });
+      });
+      bar.insertBefore(more, nameEl);
+    }
   }
 
   // ---- Level switch ------------------------------------------------------
@@ -498,13 +588,53 @@
     $('btn-help').addEventListener('click', openHelp);
     $('level-select').addEventListener('change', onLevelChange);
 
-    // Stage toolbar (Phase 0: visual scaffold of the "2 tools + more" rule).
-    Array.prototype.forEach.call(document.querySelectorAll('.stage-toolbar .tool'), function (t) {
-      t.addEventListener('click', function () {
-        if (t.dataset.tool === 'more') return;
-        document.querySelectorAll('.stage-toolbar .tool').forEach(function (o) { o.classList.remove('active'); });
-        t.classList.add('active');
-      });
+    // TV pointer interaction — delegated to the active mode module.
+    // A mode implements onTvDown/onTvMove/onTvUp(cell, ctx, evt).
+    var tv = $('tv-canvas');
+    var painting = false;
+    function tvDispatch(fnName, evt) {
+      var mod = window.StudioModes && window.StudioModes[currentMode];
+      if (!mod || typeof mod[fnName] !== 'function') return;
+      var cell = tvCellFromEvent(evt);
+      try { mod[fnName](cell, ctx, evt); } catch (e) { console.error('[studio] TV ' + fnName, e); }
+    }
+    tv.addEventListener('pointerdown', function (evt) {
+      evt.preventDefault();
+      painting = true;
+      try { tv.setPointerCapture(evt.pointerId); } catch (e) {}
+      tvDispatch('onTvDown', evt);
+    });
+    tv.addEventListener('pointermove', function (evt) {
+      tvDispatch('onTvHover', evt);
+      if (painting) tvDispatch('onTvMove', evt);
+    });
+    function endPaint(evt) {
+      if (!painting) return;
+      painting = false;
+      tvDispatch('onTvUp', evt);
+    }
+    tv.addEventListener('pointerup', endPaint);
+    tv.addEventListener('pointercancel', endPaint);
+    tv.addEventListener('pointerleave', function (evt) {
+      tvDispatch('onTvLeave', evt);
+    });
+    tv.addEventListener('contextmenu', function (evt) {
+      // Right-click is the eyedropper in paint modes — never a browser menu.
+      var mod = window.StudioModes && window.StudioModes[currentMode];
+      if (mod && mod.onTvRightClick) { evt.preventDefault(); mod.onTvRightClick(tvCellFromEvent(evt), ctx, evt); }
+    });
+
+    // Undo / redo — global, in-memory (distinct from snapshots).
+    window.addEventListener('keydown', function (evt) {
+      var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((evt.target && evt.target.tagName) || '');
+      if (typing) return;
+      var mod = (evt.metaKey || evt.ctrlKey);
+      if (mod && !evt.shiftKey && evt.key.toLowerCase() === 'z') { evt.preventDefault(); undo(); }
+      else if (mod && (evt.key.toLowerCase() === 'y' || (evt.shiftKey && evt.key.toLowerCase() === 'z'))) { evt.preventDefault(); redo(); }
+      else {
+        var m2 = window.StudioModes && window.StudioModes[currentMode];
+        if (m2 && m2.onKey) m2.onKey(evt, ctx);
+      }
     });
 
     // Shared chrome modules.
@@ -531,7 +661,12 @@
       getState: function () { return state; },
       getMode: function () { return currentMode; },
       getLevel: function () { return currentLevel; },
+      selectMode: selectMode,
       renderLive: renderLive,
+      refresh: refreshQuestsAndAttention,
+      undo: undo,
+      redo: redo,
+      ctx: ctx,
       _play: onPlay,
     };
     document.body.dataset.studioReady = '1';
