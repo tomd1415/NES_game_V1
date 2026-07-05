@@ -364,7 +364,9 @@
     tileSec.appendChild(el('div', { class: 'dock-note', text: 'Pick a tile, then paint it onto the screen. Right-click a screen cell to pick up its tile.' }));
     dock.appendChild(tileSec);
 
-    // --- Tile type (behaviour) ---
+    // --- Tile type (behaviour) --- (Maker+: what a tile *does* is a
+    // step beyond just drawing the picture.)
+    if (ctx.levelAtLeast('maker')) {
     var typeSec = UI.section('Tile type', el('span', { class: 'chip', text: 'what it does' }));
     Object.keys(BEH_LABELS).forEach(function (id) {
       id = +id;
@@ -376,6 +378,7 @@
     });
     typeSec.appendChild(el('div', { class: 'dock-note', text: 'With the ⛰ Type tool, paint what each tile does — solid ground and platforms are what your hero stands on.' }));
     dock.appendChild(typeSec);
+    }
 
     // --- Entities (scene instances) ---
     var entSec = UI.section('Entities', el('span', { class: 'chip', text: 'place' }));
@@ -439,7 +442,8 @@
     }
     dock.appendChild(entSec);
 
-    // --- Selection / clipboard (region copy-paste) ---
+    // --- Selection / clipboard (region copy-paste) --- (Maker+)
+    if (ctx.levelAtLeast('maker')) {
     var selSec = UI.section('Selection', el('span', { class: 'chip', text: '▦ region' }));
     selSec.appendChild(el('div', { class: 'dock-note', text: selRect
       ? 'Region ' + (normRect(selRect).x1 - normRect(selRect).x0 + 1) + '×' + (normRect(selRect).y1 - normRect(selRect).y0 + 1)
@@ -456,6 +460,7 @@
     ]));
     if (clipboard) selSec.appendChild(el('div', { class: 'dock-note', text: 'Clipboard holds ' + clipboard[0].length + '×' + clipboard.length + ' tiles.' }));
     dock.appendChild(selSec);
+    }
 
     // --- Full-screen preview ---
     var prevSec = el('div', { class: 'dock-section' }, [
@@ -528,9 +533,9 @@
     moreTools: [
       { id: 'fill', label: '🪣 Fill' },
       { id: 'palette', label: '🎨 Colour' },
-      { id: 'type', label: '⛰ Type' },
       { id: 'place', label: '🧍 Place' },
-      { id: 'select', label: '▦ Select' },
+      { id: 'type', label: '⛰ Type', minLevel: 'maker' },
+      { id: 'select', label: '▦ Select', minLevel: 'maker' },
     ],
     renderDock: renderDock,
     onRenderOverlay: onRenderOverlay,

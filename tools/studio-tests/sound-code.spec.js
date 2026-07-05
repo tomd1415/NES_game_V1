@@ -37,6 +37,8 @@ test('CODE: shows the read-only generated C', async ({ page }) => {
 });
 
 test('Needs-attention findings carry a Studio jump button', async ({ page }) => {
+  // Warnings (and their jump buttons) are Maker+ (finer disclosure, 1.7).
+  await page.locator('#level-select').selectOption('maker');
   // The starter has a win-condition/trigger warning etc. Any finding with a
   // known jumpTo gets a "Fix in <Mode> →" button.
   const attn = page.locator('#attn-list');

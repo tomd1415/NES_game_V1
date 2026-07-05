@@ -99,9 +99,12 @@ off here and update the status note in
       ignore/block/land/land_top/bounce/exit/call_handler), Maker-gated.
       Port from `behaviour.html`; parity requires it
       ([feature-parity](../../design/feature-parity.md) "Behaviour page").
-- [ ] **Finer expertise gating (1.7):** hide/reveal individual dock
-      controls by level, not just whole modes; contextual stage toolbar
-      per level.
+- [x] **Finer expertise gating (1.7):** per-tool `minLevel` on the stage
+      toolbar (WORLD ⛰ Type / ▦ Select are Maker+); dock sections gated by
+      `ctx.levelAtLeast` (WORLD Tile-type + Selection, CHARS Animations +
+      Flip); Beginner "Needs attention" shows only build-blocking errors
+      (warnings wait for Maker). Level change now re-renders toolbar + dock
+      + attention live.
 - [~] **WORLD parity gaps vs `index.html`:** ✅ region select/copy/paste
       (▦ Select tool + clipboard); ✅ full-screen preview modal (clean NES
       render, no grid/entities). **Still open:** metatile (16×16) block

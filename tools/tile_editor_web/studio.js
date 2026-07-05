@@ -355,8 +355,12 @@
       { id: 'paint', label: '✎ Paint' },
     ];
     var moreTools = (mod && mod.moreTools) || [];
-    // At levels where fewer tools apply, a mode can filter its own lists;
-    // the shell just renders what it is given.
+    // Finer progressive disclosure (1.7): a tool may declare a minLevel and
+    // the shell hides it below that level, so Beginner sees a calmer toolbar.
+    var lvl = LEVELS[currentLevel] || 0;
+    function toolAllowed(t) { return !t.minLevel || lvl >= (LEVELS[t.minLevel] || 0); }
+    tools = tools.filter(toolAllowed);
+    moreTools = moreTools.filter(toolAllowed);
     activeTool = null;
     function addToolButton(tool, makeActive) {
       var b = document.createElement('button');
@@ -402,9 +406,13 @@
     Storage.writePrefs(prefs);
     applyLevelGating();
     highlightMode();
-    // Re-render the dock so level-gated controls (e.g. the RULES reactions
-    // matrix) appear/disappear immediately, not only on the next mode switch.
+    // Re-render the dock AND the stage toolbar so level-gated controls and
+    // tools (e.g. WORLD's ⛰ Type / ▦ Select, the RULES reactions matrix)
+    // appear/disappear immediately, not only on the next mode switch.
+    var mod = window.StudioModes && window.StudioModes[currentMode];
+    renderStageToolbar(mod && mod.renderDock ? mod : null);
     renderDock();
+    refreshQuestsAndAttention();
   }
 
   // ---- Quests + Needs attention -----------------------------------------
@@ -478,6 +486,11 @@
     try {
       if (window.BuilderValidators) problems = window.BuilderValidators.validate(state) || [];
     } catch (e) { problems = []; }
+    // Progressive disclosure (1.7): Beginners see only build-blocking errors —
+    // warnings (often pointing at Maker-level controls) wait until Maker.
+    if ((LEVELS[currentLevel] || 0) < LEVELS.maker) {
+      problems = problems.filter(function (p) { return p.severity === 'error'; });
+    }
     if (!problems.length) {
       var ok = document.createElement('div');
       ok.className = 'attn-empty';

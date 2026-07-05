@@ -263,17 +263,19 @@
         ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); ctx.refresh();
       } }),
     ]));
-    // Non-destructive whole-character transforms: rearrange cells + toggle
-    // per-cell flip flags. Shared tile pixels are never touched, so other
-    // characters using the same tiles are unaffected.
-    propSec.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
-      el('button', { class: 'btn', text: '⇋ Flip H', title: 'Mirror left/right', onclick: function () {
-        ctx.pushUndo(); flipChar(sp, 'h'); ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
-      } }),
-      el('button', { class: 'btn', text: '⇵ Flip V', title: 'Mirror up/down', onclick: function () {
-        ctx.pushUndo(); flipChar(sp, 'v'); ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
-      } }),
-    ]));
+    // Non-destructive whole-character transforms (Maker+): rearrange cells +
+    // toggle per-cell flip flags. Shared tile pixels are never touched, so
+    // other characters using the same tiles are unaffected.
+    if (ctx.levelAtLeast('maker')) {
+      propSec.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
+        el('button', { class: 'btn', text: '⇋ Flip H', title: 'Mirror left/right', onclick: function () {
+          ctx.pushUndo(); flipChar(sp, 'h'); ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+        } }),
+        el('button', { class: 'btn', text: '⇵ Flip V', title: 'Mirror up/down', onclick: function () {
+          ctx.pushUndo(); flipChar(sp, 'v'); ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+        } }),
+      ]));
+    }
     dock.appendChild(propSec);
 
     // --- Pen ---
@@ -292,7 +294,9 @@
     penSec.appendChild(el('div', { class: 'dock-note', text: 'Draw on the big canvas. Each 8×8 cell is a shared tile — editing it updates every character that uses it.' }));
     dock.appendChild(penSec);
 
-    renderAnimations(dock, ctx);
+    // Animations are a Maker-level concept (a still character is fine for a
+    // first game); hide the whole section for Beginners.
+    if (ctx.levelAtLeast('maker')) renderAnimations(dock, ctx);
   }
 
   var animSel = null;

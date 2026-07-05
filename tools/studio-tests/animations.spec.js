@@ -4,6 +4,8 @@ const { test, expect } = require('@playwright/test');
 test.beforeEach(async ({ page }) => {
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  // Animations + warnings are Maker-level (finer disclosure, 1.7).
+  await page.locator('#level-select').selectOption('maker');
   await page.locator('.mode-btn[data-mode="chars"]').click();
 });
 

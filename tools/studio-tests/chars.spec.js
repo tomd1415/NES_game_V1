@@ -60,6 +60,7 @@ test('drawing on the TV edits a shared sprite tile', async ({ page }) => {
 });
 
 test('flip H mirrors the character non-destructively (involution)', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker'); // flips are Maker+
   const before = await page.evaluate(() =>
     JSON.stringify(window.Studio.getState().sprites[0].cells));
   const tilesBefore = await page.evaluate(() =>
@@ -111,6 +112,7 @@ test('painting a shared tile offers Duplicate-first, which forks the tile', asyn
 });
 
 test('animation preview toggles play/stop', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker'); // animations are Maker+
   // Create an animation (auto-wires walk with the current frame).
   const animSection = page.locator('.dock-section')
     .filter({ has: page.locator('.title', { hasText: 'Animations' }) });

@@ -14,13 +14,25 @@ async function clickCell(page, cx, cy) {
   await page.mouse.click(x, y);
 }
 
-test('WORLD dock shows backgrounds, palette, tiles and types', async ({ page }) => {
+test('WORLD dock shows backgrounds, palette and tiles at Beginner', async ({ page }) => {
   await expect(page.locator('.dock-section .title', { hasText: 'Backgrounds' })).toBeVisible();
   await expect(page.locator('.dock-section .title', { hasText: 'Paint colour' })).toBeVisible();
   await expect(page.locator('.dock-section .title', { hasText: 'Tiles' })).toBeVisible();
-  await expect(page.locator('.dock-section .title', { hasText: 'Tile type' })).toBeVisible();
   // 64 tile-picker cells.
   await expect(page.locator('.tile-grid .tile-cell')).toHaveCount(64);
+  // Tile type + Selection are Maker-level (finer disclosure, 1.7).
+  await expect(page.locator('.dock-section .title', { hasText: 'Tile type' })).toHaveCount(0);
+  await expect(page.locator('.dock-section .title', { hasText: 'Selection' })).toHaveCount(0);
+});
+
+test('Tile type + Selection reveal at Maker (finer gating 1.7)', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker');
+  await expect(page.locator('.dock-section .title', { hasText: 'Tile type' })).toBeVisible();
+  await expect(page.locator('.dock-section .title', { hasText: 'Selection' })).toBeVisible();
+  // The ⛰ Type and ▦ Select tools appear only after More tools, at Maker.
+  await page.locator('.stage-toolbar .more-tools-btn').click();
+  await expect(page.locator('.stage-toolbar .tool[data-tool="type"]')).toBeVisible();
+  await expect(page.locator('.stage-toolbar .tool[data-tool="select"]')).toBeVisible();
 });
 
 test('stamping a tile onto the TV changes the nametable', async ({ page }) => {
@@ -75,6 +87,7 @@ test('Colour tool paints a whole 2×2 attribute quadrant', async ({ page }) => {
 });
 
 test('Type tool paints the behaviour map', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker'); // Type tool is Maker+
   await page.locator('.stage-toolbar .more-tools-btn').click();
   await page.locator('.stage-toolbar .tool[data-tool="type"]').click();
   // Pick "Platform" (id 3).
@@ -99,6 +112,7 @@ async function dragCells(page, x0, y0, x1, y1) {
 }
 
 test('region select → copy → paste duplicates a chunk of the level', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker'); // Select tool is Maker+
   // Lay down two known tiles.
   await page.locator('.stage-toolbar .tool[data-tool="stamp"]').click();
   await page.locator('.tile-grid .tile-cell').nth(1).click();
