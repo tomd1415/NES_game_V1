@@ -21,6 +21,23 @@ deferred.
 
 ---
 
+## Storage-load fix + from-scratch tutorial — 2026-07-06
+
+- **Fixed a loading bug** where opening a saved game or tutorial needed clearing
+  localStorage/cookies and a force reload. Cause: localStorage filled with
+  full-state snapshots/backups, so a write threw QuotaExceededError mid-load.
+  Now every write frees the oldest snapshots/backups and retries
+  (`safeSetItem`), so saving/loading never hard-fails; `createProject` stays
+  atomic and the editor degrades gracefully if truly full.
+- **New "🧱 Build from scratch" tutorial** — 20 small steps from a **blank
+  screen** to a complete game: draw the hero, choose colours, draw + paint the
+  ground and make it solid, test it, build a platform, create + draw + place an
+  enemy, add hearts, add a coin, paint a goal + turn on winning, tune the jump,
+  and play. Also a "📄 Blank project" starter.
+- **Leave and come back** — a "⏸ Hide" button pauses any tutorial (progress
+  saved); the 🎓 Tutorial button then offers "▶ Resume your tutorial", and a
+  half-finished tutorial resumes automatically next time its project opens.
+
 ## Tutorials deepened + teacher tools — 2026-07-06
 
 Built on the guided tutorials the same day:
