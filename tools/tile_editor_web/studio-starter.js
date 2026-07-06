@@ -672,7 +672,19 @@
       '.222222.', '2......2', '2.2222.2', '2.2..2.2', '2.2..2.2', '2.2222.2', '2......2', '.222222.',
     ]);
     state.bg_tiles[6].defaultBehaviour = 5;    // checkpoint 1 (trigger slot)
-    var car = playerSprite(); car.name = 'Car';
+    // A simple top-down car (points up): two tiles mirrored left/right so the
+    // whole 2×2 metasprite reads as a car, not the walking hero.
+    state.sprite_tiles[13] = tileFrom('car-top', [
+      '....1111', '...11111', '..111111', '..113311', '..113311', '..111111', '.2111111', '.2111111',
+    ]);
+    state.sprite_tiles[14] = tileFrom('car-bot', [
+      '..111111', '..111111', '..113311', '..113311', '..111111', '.2111111', '.2111111', '..111111',
+    ]);
+    function carCell(tile, flip) { return { tile: tile, palette: 0, flipH: !!flip, flipV: false, priority: false, empty: false }; }
+    var car = {
+      name: 'Car', role: 'player', flying: false, width: 2, height: 2,
+      cells: [[carCell(13, false), carCell(13, true)], [carCell(14, false), carCell(14, true)]],
+    };
     state.sprites = [car];
     var g = blankBg(state, 2, 2);   // racer needs ≥2 screens on an axis
     // Solid outer border (2 thick) + a solid central block → a road ring.
