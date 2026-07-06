@@ -14,7 +14,8 @@ const bad = (m) => { console.error('FAIL: ' + m); failed = true; };
 const ENEMY = { x: 120, y: 208 };     // static enemy resting on the floor
 const START = { x: 120, y: 150 };     // player starts directly above it
 
-function makeState(win, stomp) {
+function makeState(win, stomp, start) {
+  var st = start || START;
   const rows = 30, cols = 32;
   const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
   for (let c = 0; c < cols; c++) beh[28][c] = 1;            // SOLID_GROUND floor
@@ -38,7 +39,7 @@ function makeState(win, stomp) {
   };
   // Damage module ON with HP so PLAYER_HP_ENABLED; toggle the stomp option.
   const p1 = s.builder.modules.players.submodules.player1;
-  p1.config = Object.assign({}, p1.config, { startX: START.x, startY: START.y, maxHp: 3 });
+  p1.config = Object.assign({}, p1.config, { startX: st.x, startY: st.y, maxHp: 3 });
   s.builder.modules.damage.enabled = true;
   s.builder.modules.damage.config = Object.assign({}, s.builder.modules.damage.config,
     { amount: 1, invincibilityFrames: 20, stompDefeat: stomp, stompBounce: 12 });
@@ -108,6 +109,39 @@ try {
       }
       if (!everDefeated) ok('stomp OFF — enemy is NOT defeated by the same fall (gate works)');
       else bad('stomp OFF — enemy got defeated without the option (gate broken)');
+    }
+  }
+
+  // ---- Build C: stomp ON, but a SIDE approach on the ground hurts (the
+  // stomp is directional — feet must be near the enemy's top). A too-loose
+  // condition would wrongly defeat an enemy the player merely walks into.
+  {
+    const SIDE = { x: 60, y: 208 };   // player on the floor, left of the enemy
+    const s = makeState(win, true, SIDE);
+    const r = await H.buildRom(PORT, {
+      state: s, playerSpriteIdx: 0, playerStart: SIDE,
+      sceneSprites: [{ spriteIdx: 1, x: ENEMY.x, y: ENEMY.y }],
+      mode: 'browser', customMainC: win.BuilderAssembler.assemble(s, tpl),
+    });
+    if (!r.ok) {
+      bad('stomp side-approach build failed at stage ' + r.stage);
+    } else {
+      const h = H.openRom(r.romBytes);
+      h.frames(6);
+      h.hold(H.BTN.RIGHT);
+      let contacted = false, defeated = false;
+      for (let f = 0; f < 100; f++) {
+        h.frames(1);
+        const p = H.oamSprite(h.nes, 0), e = H.oamSprite(h.nes, 4);
+        // horizontal overlap of the two 16px boxes (both on the floor row)
+        if (p.x + 16 > ENEMY.x && p.x < ENEMY.x + 16 && e.y < 0xEF) contacted = true;
+        if (e.y >= 0xEF) defeated = true;
+      }
+      h.release(H.BTN.RIGHT);
+      if (contacted) ok('side-approach — player reached the enemy on the ground');
+      else bad('side-approach — player never overlapped the enemy (test setup off)');
+      if (!defeated) ok('side-approach — walking into the enemy does NOT stomp it (hurts instead)');
+      else bad('side-approach — a side touch wrongly defeated the enemy (stomp not directional)');
     }
   }
 } catch (e) {
