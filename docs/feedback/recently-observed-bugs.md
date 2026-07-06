@@ -49,6 +49,50 @@ was a massive improvement.
 
 ---
 
+## Bug-reproduction card (template)
+
+Copy this block into the diagnosis-notes section below when a new bug
+is reported (or an old one is re-reported).  A filled-in card turns a
+vague "it's broken" into something a future debugger can act on
+without re-interviewing the pupil.  Leave blanks you genuinely can't
+fill — an empty field is itself a signal of what to capture next time.
+
+```
+### Item <N> — <one-line title> (status: NOT YET REPRODUCED, <YYYY-MM-DD>)
+
+- Reported by / when: <name or "anonymous"> · <date>
+- Game style:         <platformer | smb | top-down | runner | racer>
+- Engine version:     <state.engineVersion, e.g. 10>   (Engine button in Studio)
+- Modules on:         <damage? dialogue? doors? pickups? scene? audio? …>
+
+**What the pupil saw** (their words, verbatim if possible):
+> <quote>
+
+**Minimal repro** (fewest steps that still show it):
+1. <step>
+2. <step>
+3. <step>
+
+**Expected vs actual:**
+- Expected: <…>
+- Actual:   <…>
+
+**Where it likely lives** (tick one after a first look, don't guess blind):
+- [ ] Editor UI / state (studio-*.js) — wrong data saved
+- [ ] Codegen (builder-modules.js / builder-assembler.js) — wrong C emitted
+- [ ] Engine C template (builder-templates/*.c) — wrong runtime behaviour
+- [ ] Server build (playground_server.py) — build/link/asset step
+- [ ] Render only (sprite-render.js) — editor preview ≠ ROM
+
+**First observation** (run the repro ONCE, record what you actually see —
+OAM dump, a screenshot, the emitted C snippet, the server log tail):
+> <observation>
+
+Resolved <YYYY-MM-DD>: <commit ref>   (add on close; do not delete the card)
+```
+
+---
+
 ## Diagnosis notes
 
 When fixing items below, rather than guessing at a cause, run a

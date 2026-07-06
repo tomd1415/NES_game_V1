@@ -150,7 +150,7 @@ the main CSRF vector for these routes. A full per-session CSRF token
   empty-background projects still look sparse: a content issue, not a capture
   one.)*
 
-### Sprint 4 — Validators & pupil-facing safety  *(ADVICE validators)*
+### Sprint 4 — Validators & pupil-facing safety  *(✅ complete 2026-07-06)*
 Expand `builder-validators.js` (turn compiler failures into pupil guidance):
 per-screen entity placed outside the editable screen; dialogue on with
 missing/reserved font tiles; door/pipe destination into a missing background;
@@ -175,8 +175,17 @@ push hardest), each with a headless test:
 
 Audit found the plan's door/pipe gap is already covered
 (`doorsTargetBgOutOfRange`; pipes are same-room only, so they can't target a
-missing background). Remaining Sprint 4 items (audio ROM budget, bug-repro-card
-template) unstarted.
+missing background).
+
+**Sprint 4 closed 2026-07-06.** The **bug-reproduction-card template** landed in
+`recently-observed-bugs.md` (a copy-paste card: reporter/style/engine/modules,
+minimal repro, expected-vs-actual, a "where it likely lives" checklist, and a
+first-observation slot). The **audio ROM-budget validator** is deliberately
+**folded into Sprint 5's budget meter** rather than done here: audio is
+server-mediated (FamiStudio song/SFX blobs linked by `playground_server.py`
+into a fixed-size NROM), so a meaningful "over budget" check needs the compiled
+blob sizes the server computes — it belongs with the pre-Play budget meter, not
+the client-side `builder-validators.js`. Tracked there.
 
 ### Sprint 5 — Old-page retirement + audio config  *(ADVICE #6, audio)*
 Freeze old pages except critical fixes; keep import/export compat tests; redirect
