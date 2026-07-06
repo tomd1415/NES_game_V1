@@ -424,6 +424,27 @@
       listProjects() {
         return syncList().projects.slice();
       },
+      // Storage-usage introspection (for the "storage used / manage projects"
+      // indicator).  Counts characters (~bytes) held in localStorage.
+      usageBytes() {
+        let n = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i); if (!k) continue;
+          const v = localStorage.getItem(k);
+          n += k.length + (v ? v.length : 0);
+        }
+        return n;
+      },
+      quotaBytes() { return 5 * 1024 * 1024; },   // typical localStorage budget (~5 MB)
+      projectBytes(id) {
+        const prefix = PROJECT_PREFIX + id + '.';
+        let n = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.indexOf(prefix) === 0) { const v = localStorage.getItem(k); n += k.length + (v ? v.length : 0); }
+        }
+        return n;
+      },
       getActiveProjectId() { return activeId(); },
       getActiveProject() {
         return syncList().projects.find(p => p.id === activeId()) || null;

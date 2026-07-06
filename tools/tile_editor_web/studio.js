@@ -538,6 +538,7 @@
     // engine button / advisor affordance.
     if (typeof refreshEngineButton === 'function') { try { refreshEngineButton(); } catch (e) {} }
     maybeStartTutorial();
+    updateStorageIndicator();
   }
 
   function makeStarter(id) {
@@ -1367,6 +1368,64 @@
   }
 
   // ---- Boot --------------------------------------------------------------
+  // ---- Storage-used indicator + project manager --------------------------
+  function fmtBytes(n) {
+    if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    if (n >= 1024) return Math.round(n / 1024) + ' KB';
+    return (n | 0) + ' B';
+  }
+  function storagePct() {
+    try { return Math.min(100, Math.round(Storage.usageBytes() / Storage.quotaBytes() * 100)); }
+    catch (e) { return 0; }
+  }
+  function updateStorageIndicator() {
+    var b = document.getElementById('btn-storage'); if (!b) return;
+    var pct = storagePct();
+    b.textContent = '💾 ' + pct + '%';
+    b.classList.toggle('warn', pct >= 75 && pct < 90);
+    b.classList.toggle('full', pct >= 90);
+    b.title = 'Storage ' + pct + '% used — click to manage your saved projects' + (pct >= 90 ? ' (nearly full — delete an old project)' : '');
+  }
+  function openStorageManager() {
+    if (!(window.StudioUI && window.StudioUI.modal)) return;
+    var el = window.StudioUI.el;
+    var host = el('div', {});
+    function rerender() {
+      host.innerHTML = '';
+      var pct = storagePct();
+      host.appendChild(el('div', { class: 'dock-note', text: 'Storage ' + pct + '% used (' + fmtBytes(Storage.usageBytes()) + ' of about ' + fmtBytes(Storage.quotaBytes()) + '). Your games are saved in this browser — delete old ones to free space.' }));
+      host.appendChild(el('div', { class: 'sm-meter' }, [el('div', { class: 'sm-fill' + (pct >= 80 ? ' warn' : ''), style: 'width:' + pct + '%' })]));
+      var projs = (Storage.listProjects() || []).slice().sort(function (a, b) { return Storage.projectBytes(b.id) - Storage.projectBytes(a.id); });
+      var activeId = Storage.getActiveProjectId();
+      projs.forEach(function (p) {
+        var isCur = p.id === activeId;
+        var row = el('div', { class: 'sm-row' + (isCur ? ' sm-current' : '') }, [
+          el('span', { class: 'sm-name', text: (isCur ? '▶ ' : '') + (p.name || 'untitled') + (isCur ? '  (current)' : '') }),
+          el('span', { class: 'sm-size', text: fmtBytes(Storage.projectBytes(p.id)) }),
+        ]);
+        if (!isCur && projs.length > 1) {
+          row.appendChild(el('button', {
+            class: 'btn', type: 'button', text: '🗑 Delete', onclick: function () {
+              if (!window.confirm('Delete "' + (p.name || 'untitled') + '"? This cannot be undone.')) return;
+              Storage.deleteProject(p.id);
+              updateStorageIndicator();
+              if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+              rerender();
+            },
+          }));
+        }
+        host.appendChild(row);
+      });
+    }
+    rerender();
+    window.StudioUI.modal({
+      title: '💾 Storage & projects',
+      sub: 'How much browser storage your saved games use, and where to delete old ones. To switch projects, use the projects menu.',
+      bodyNodes: [host],
+      actions: [{ label: 'Done', value: null, kind: 'primary' }],
+    }).then(function () { updateStorageIndicator(); });
+  }
+
   function boot() {
     Storage = window.createTileEditorStorage({ migrateState: migrateState, validateState: validateState });
     window.Storage = Storage; // shared account-menu.js reads this
@@ -1479,6 +1538,7 @@
     $('btn-tutorial').addEventListener('click', onTutorial);
     $('quest-collapse').addEventListener('click', function () { setQuestsCollapsed(true); });
     $('quest-expand').addEventListener('click', function () { setQuestsCollapsed(false); });
+    $('btn-storage').addEventListener('click', openStorageManager);
     // Let the shared account menu offer "Load a starter game" too (bug: the
     // starter/projects aren't loading) — available even when signed out.
     window.onLoadStarterGame = onNewGame;
@@ -1573,7 +1633,7 @@
     try { if (window.CookieNotice) window.CookieNotice.mount(); } catch (e) {}
 
     // Snapshot / backup cadence (progress-safety guarantees).
-    setInterval(function () { Storage.saveSnapshot(state, 'auto_30s'); }, 30000);
+    setInterval(function () { Storage.saveSnapshot(state, 'auto_30s'); updateStorageIndicator(); }, 30000);
     setInterval(function () { Storage.saveBackup(state); }, 5 * 60000);
     window.addEventListener('beforeunload', function () {
       Storage.flushPending();
@@ -1611,6 +1671,7 @@
     };
     // Resume a guided tutorial if the loaded project is mid-tutorial.
     maybeStartTutorial();
+    updateStorageIndicator();
     document.body.dataset.studioReady = '1';
   }
 

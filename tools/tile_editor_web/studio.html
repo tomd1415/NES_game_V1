@@ -112,6 +112,15 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .tut-toprow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .tut-hide{font:inherit;font-size:12px;padding:4px 8px;border:2px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;cursor:pointer}
 .tut-hide:hover{filter:brightness(1.12)}
+#btn-storage.warn{border-color:var(--warn);color:var(--warn)}
+#btn-storage.full{background:var(--warn);border-color:var(--warn);color:#000;font-weight:700}
+.sm-meter{height:14px;border:2px solid var(--line);border-radius:7px;overflow:hidden;background:var(--bg);margin:4px 0 2px}
+.sm-fill{height:100%;background:var(--nes-green);transition:width .2s ease}
+.sm-fill.warn{background:var(--warn)}
+.sm-row{display:flex;align-items:center;gap:8px;margin:4px 0;border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.sm-row .sm-name{flex:1;font-size:13px}
+.sm-row .sm-size{font-size:12px;opacity:.75;min-width:52px;text-align:right}
+.sm-row.sm-current{border-color:var(--sel)}
 .tut-progress{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
 .tut-progress-fill{height:100%;background:var(--nes-green);transition:width .25s ease}
 :root[data-theme="dark"] .tut-progress-fill,
@@ -432,6 +441,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
     <div class="save-status"><span id="save-dot" title="Save status"></span>
       <span id="save-text">Saved</span></div>
     <button id="btn-time-machine" class="btn" type="button">⟲ Time Machine</button>
+    <button id="btn-storage" class="btn" type="button" title="Storage used — click to manage your saved projects">💾 …</button>
     <div class="level-switch">
       <label for="level-select">Level</label>
       <select id="level-select" aria-label="Expertise level">

@@ -223,6 +223,28 @@ test('the runtime applies a step override to the launched tutorial', async ({ pa
   await page.evaluate(() => { const p = window.Storage.readPrefs() || {}; delete p.tutorialOverrides; window.Storage.writePrefs(p); });
 });
 
+test('storage indicator + project manager (delete frees a project)', async ({ page }) => {
+  page.on('dialog', (d) => d.accept());   // accept the delete confirm
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  await expect(page.locator('#btn-storage')).toContainText('%');   // a live usage indicator
+
+  // Make a second project so there is a non-current one to delete.
+  await page.locator('#btn-tutorial').click();
+  await page.locator('.modal-actions .btn', { hasText: 'Platformer' }).click();
+  await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
+  const before = await page.evaluate(() => window.Storage.listProjects().length);
+  expect(before).toBeGreaterThanOrEqual(2);
+
+  await page.locator('#btn-storage').click();
+  await expect(page.locator('.modal-backdrop.open .sm-meter')).toBeVisible();
+  await expect(page.locator('.modal-backdrop.open .sm-row.sm-current')).toHaveCount(1);
+  await page.locator('.modal-backdrop.open .sm-row:not(.sm-current) button', { hasText: 'Delete' }).first().click();
+  const after = await page.evaluate(() => window.Storage.listProjects().length);
+  expect(after).toBe(before - 1);
+  await page.locator('.modal-actions .btn', { hasText: 'Done' }).click();
+});
+
 test('a normal project does not show the tutorial panel', async ({ page }) => {
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
