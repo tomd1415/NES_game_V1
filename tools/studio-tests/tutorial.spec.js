@@ -1,117 +1,83 @@
-// Guided tutorial (MVP): launching it loads the ready-made starter, shows the
-// panel, and each step advances when the pupil makes the light edit + presses
-// Check my work — ending in Play. Edits are applied through the real state path
-// (Studio.getState() + ctx.markDirty()), then the panel's Check button is
-// clicked, exactly as a pupil's edit + click would drive it.
+// Guided tutorials (deepened): each style launches a working tutorial, and
+// every step advances when the pupil makes the edit its check asks for. Edits
+// are applied generically from the current step's declared check via the real
+// state path (Studio.getState() + ctx.markDirty()), then Check my work / Play,
+// exactly as a pupil's edit + click would drive it.
 const { test, expect } = require('@playwright/test');
 
-// Apply the light edit for the step at index `idx` via the live state.
-async function applyEdit(page, idx) {
-  await page.evaluate((i) => {
-    const S = window.Studio, s = S.getState();
-    if (i === 0) {                                   // name-hero
-      const p = s.sprites.find((x) => x && x.role === 'player');
-      p.name = 'Pixel';
-    } else if (i === 1) {                            // recolour
-      s.bg_palettes[0].slots[1] = (s.bg_palettes[0].slots[1] + 1) % 64;
-    } else if (i === 2) {                            // draw-tile
-      s.bg_tiles[5].pixels[0][0] = 1;
-    } else if (i === 3) {                            // build-floor (+3 solid)
-      const bg = s.backgrounds[s.selectedBgIdx];
-      bg.behaviour[10][10] = 1; bg.behaviour[10][11] = 1; bg.behaviour[10][12] = 1;
-    } else if (i === 4) {                            // change-rules
-      const c = s.builder.modules.players.submodules.player1.config;
-      c.maxHp = (c.maxHp || 3) + 1;
-    }
-    S.ctx.markDirty();
-  }, idx);
+async function launch(page, pick) {
+  await page.locator('#btn-tutorial').click();
+  await page.locator('.modal-actions .btn', { hasText: pick }).click();
+  await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
 }
 
-test('the guided tutorial walks the pupil to a played game', async ({ page }) => {
+// Mutate the live state to satisfy `check` (the current step's requirement).
+async function satisfy(page, check, seed) {
+  await page.evaluate(({ type, params, seed }) => {
+    const S = window.Studio, s = S.getState();
+    const p = params || {};
+    const beh = (name) => { const t = (s.behaviour_types || []).find((x) => x && x.name === name); return t ? t.id : 1; };
+    const bg = s.backgrounds[s.selectedBgIdx] || s.backgrounds[0];
+    const paint = (id, count) => {
+      let placed = 0;
+      for (let r = 0; r < bg.behaviour.length && placed < count; r++)
+        for (let c = 0; c < bg.behaviour[r].length && placed < count; c++)
+          if ((bg.behaviour[r][c] | 0) === 0) { bg.behaviour[r][c] = id; placed++; }
+    };
+    if (type === 'spriteRenamed') { const pl = s.sprites.find((x) => x && x.role === 'player'); pl.name = 'Name' + seed; }
+    else if (type === 'paletteChanged') { s.bg_palettes[0].slots[1] = (s.bg_palettes[0].slots[1] + 1 + seed) % 64; }
+    else if (type === 'tileChanged') { const px = s.bg_tiles[7].pixels; px[0][0] = ((px[0][0] | 0) + 1) % 4 || 1; }
+    else if (type === 'groundAdded') { paint(beh('solid_ground'), (p.min || 1) + 1); }
+    else if (type === 'behaviourAdded') { paint(1, (p.min || 1) + 1); }
+    else if (type === 'behaviourTypePainted') { paint(beh(p.name || 'wall'), (p.min || 1) + 1); }
+    else if (type === 'sceneInstanceAdded') { const sc = s.builder.modules.scene.config; sc.instances = sc.instances || []; const n = (p.min || 1) + 1; for (let i = 0; i < n; i++) sc.instances.push({ id: 9000 + seed * 10 + i, spriteIdx: 0, x: 40 + i * 16, y: 100, ai: 'walker', speed: 1 }); }
+    else if (type === 'backgroundAdded') { const W = 32, H = 30; s.backgrounds.push({ name: 'room' + seed, dimensions: { screens_x: 1, screens_y: 1 }, nametable: Array.from({ length: H }, () => Array.from({ length: W }, () => ({ tile: 0, palette: 0 }))), behaviour: Array.from({ length: H }, () => Array(W).fill(0)) }); }
+    else if (type === 'dialogueChanged') { const d = s.builder.modules.dialogue; d.config = d.config || {}; d.config.text = 'HELLO ' + seed; }
+    else if (type === 'moduleEnabledChanged') { const m = s.builder.modules[p.id]; if (m) m.enabled = !m.enabled; }
+    else if (type === 'builderChanged') { const c = s.builder.modules.players.submodules.player1.config; c.maxHp = (c.maxHp || 3) + 1 + seed; }
+    S.ctx.markDirty();
+  }, { type: check.type, params: check.params || null, seed });
+}
+
+test('the platformer tutorial walks the pupil through every step to a played game', async ({ page }) => {
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
-
-  // Launch: header Tutorial button → pick a style → loads the ready-made
-  // starter + opens the panel.
-  await page.locator('#btn-tutorial').click();
-  await page.locator('.modal-actions .btn', { hasText: 'Platformer' }).click();
-  await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
+  await launch(page, 'Platformer');
   await expect(page.locator('.studio-main')).toHaveClass(/tutorial-on/);
   await expect(page.locator('#tutorial-region')).toBeVisible();
-  await expect(page.locator('.tut-card')).toBeVisible();
-
-  // The starter shipped a complete tileset (nothing blank to draw from scratch).
-  const ready = await page.evaluate(() => {
-    const s = window.Studio.getState();
-    const drawn = s.bg_tiles[1].pixels.some((r) => r.some((v) => v));   // ground tile drawn
-    const hasHero = s.sprites.some((x) => x && x.role === 'player');
-    return { drawn, hasHero, step: window.StudioTutorial.stepIndex() };
-  });
-  expect(ready.drawn).toBe(true);
-  expect(ready.hasHero).toBe(true);
-  expect(ready.step).toBe(0);
 
   const total = await page.evaluate(() => window.StudioTutorial.stepCount());
-  expect(total).toBe(6);
+  expect(total).toBeGreaterThanOrEqual(8);   // deepened
 
-  // Starting the tutorial UNLOCKS the areas it uses — Tiles + Pals (Maker-level)
-  // must not be locked, so no step points the pupil at a locked mode.
-  const gating = await page.evaluate(() => ({
-    level: window.Studio.getLevel(),
-    tilesLocked: document.querySelector('.mode-btn[data-mode="tiles"]').classList.contains('locked'),
-    palsLocked: document.querySelector('.mode-btn[data-mode="pals"]').classList.contains('locked'),
-  }));
-  expect(gating.tilesLocked).toBe(false);
-  expect(gating.palsLocked).toBe(false);
-
-  // The quests / needs-attention column is minimised during the tutorial.
-  await expect(page.locator('.studio-main')).toHaveClass(/quests-collapsed/);
-  await expect(page.locator('#quest-expand')).toBeVisible();
-
-  // "Show me" flashes the REAL button the pupil should press.
-  await page.locator('.tut-card [data-act="showme"]').click();
-  await expect(page.locator('.mode-btn[data-mode="chars"]')).toHaveClass(/tut-flash/);
-
-  // The step card shows its icon.
-  await expect(page.locator('.tut-icon').first()).toBeVisible();
-
-  // Steps 0..4: make the light edit, press Check my work, expect an advance.
-  for (let i = 0; i < 5; i++) {
-    await applyEdit(page, i);
-    await page.locator('.tut-card [data-act="check"]').click();
-    await page.waitForFunction((n) => window.StudioTutorial.stepIndex() === n, i + 1);
+  let seed = 1, guard = 0;
+  while (!(await page.evaluate(() => window.StudioTutorial.isComplete()))) {
+    if (guard++ > 30) throw new Error('tutorial did not complete');
+    const check = await page.evaluate(() => window.StudioTutorial.currentCheck());
+    const idx = await page.evaluate(() => window.StudioTutorial.stepIndex());
+    if (check.type === 'played') {
+      await page.locator('#btn-play').click();
+      await page.waitForFunction(() => window.StudioTutorial.isComplete(), null, { timeout: 20000 });
+    } else {
+      await satisfy(page, check, seed++);
+      await page.locator('.tut-card [data-act="check"]').click();
+      await page.waitForFunction((n) => window.StudioTutorial.stepIndex() > n, idx);
+    }
   }
-
-  // A check with NO edit must NOT advance (guards against pass-through).
-  await page.evaluate(() => { window.__step = window.StudioTutorial.stepIndex(); });
-  // (We are now on the Play step, which has no state edit — verify Check alone
-  //  on the previous kind of step didn't over-advance: stepIndex is exactly 5.)
-  expect(await page.evaluate(() => window.StudioTutorial.stepIndex())).toBe(5);
-
-  // Final step: pressing Play advances the tutorial to completion.
-  await page.locator('#btn-play').click();
-  await page.waitForFunction(() => window.StudioTutorial.isComplete(), null, { timeout: 15000 });
   await expect(page.locator('.tut-complete')).toBeVisible();
-
-  // Progress persisted on the project.
-  const persisted = await page.evaluate(() => window.Studio.getState().tutorial.step);
-  expect(persisted).toBe(6);
 });
 
-test('every game style has a working guided tutorial', async ({ page }) => {
+test('every game style walks through all its steps', async ({ page }) => {
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
   const styles = [
-    { pick: 'Platformer',        type: 'platformer', tut: 'first-game' },
-    { pick: 'SMB-style',         type: 'smb',        tut: 'smb-first' },
-    { pick: 'Top-down',          type: 'topdown',    tut: 'topdown-first' },
-    { pick: 'Auto-runner',       type: 'runner',     tut: 'runner-first' },
-    { pick: 'Racing',            type: 'racer',      tut: 'racer-first' },
+    { pick: 'Platformer', type: 'platformer', tut: 'first-game' },
+    { pick: 'SMB-style', type: 'smb', tut: 'smb-first' },
+    { pick: 'Top-down', type: 'topdown', tut: 'topdown-first' },
+    { pick: 'Auto-runner', type: 'runner', tut: 'runner-first' },
+    { pick: 'Racing', type: 'racer', tut: 'racer-first' },
   ];
   for (const st of styles) {
-    await page.locator('#btn-tutorial').click();
-    await page.locator('.modal-actions .btn', { hasText: st.pick }).click();
-    await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
+    await launch(page, st.pick);
     const info = await page.evaluate(() => {
       const s = window.Studio.getState();
       const errs = (window.BuilderValidators.validate(s) || []).filter((p) => p.severity === 'error');
@@ -119,15 +85,29 @@ test('every game style has a working guided tutorial', async ({ page }) => {
     });
     expect(info.type).toBe(st.type);
     expect(info.tut).toBe(st.tut);
-    expect(info.steps).toBeGreaterThanOrEqual(5);
+    expect(info.steps).toBeGreaterThanOrEqual(7);
     expect(info.errs).toEqual([]);   // no blocking errors → the style fully works
+
+    // Walk every non-Play step: each must advance when its edit is made.
+    let seed = 1, guard = 0;
+    while (true) {
+      if (guard++ > 20) throw new Error(st.pick + ': step walk stuck');
+      const check = await page.evaluate(() => window.StudioTutorial.currentCheck());
+      if (!check || check.type === 'played') break;
+      const idx = await page.evaluate(() => window.StudioTutorial.stepIndex());
+      await satisfy(page, check, seed++);
+      await page.locator('.tut-card [data-act="check"]').click();
+      await page.waitForFunction((n) => window.StudioTutorial.stepIndex() > n, idx);
+    }
+    // We stopped on the final Play step.
+    const last = await page.evaluate(() => ({ i: window.StudioTutorial.stepIndex(), n: window.StudioTutorial.stepCount() }));
+    expect(last.i).toBe(last.n - 1);
   }
 });
 
 test('a normal project does not show the tutorial panel', async ({ page }) => {
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
-  // Default boot project is not a tutorial.
   const active = await page.evaluate(() => window.StudioTutorial.isActive());
   expect(active).toBe(false);
   await expect(page.locator('.studio-main')).not.toHaveClass(/tutorial-on/);

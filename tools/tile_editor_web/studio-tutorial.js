@@ -57,25 +57,52 @@
   function palKey(s) { return JSON.stringify([s.universal_bg, s.bg_palettes, s.sprite_palettes]); }
   function tileKey(s) { return JSON.stringify([s.bg_tiles, s.sprite_tiles]); }
   function builderKey(s) { return JSON.stringify((s.builder && s.builder.modules) || {}); }
+  function mods(s) { return (s.builder && s.builder.modules) || {}; }
+  function modEnabled(s, id) {
+    var parts = String(id).split('.'), node = mods(s)[parts[0]];
+    for (var i = 1; i < parts.length && node; i++) node = node.submodules ? node.submodules[parts[i]] : null;
+    return !!(node && node.enabled);
+  }
+  function sceneCount(s) { try { return (mods(s).scene.config.instances || []).length; } catch (e) { return 0; } }
+  function bgCount(s) { return (s.backgrounds || []).length; }
+  function dialogueText(s) { try { return (mods(s).dialogue.config.text || ''); } catch (e) { return ''; } }
+  function behIdByName(s, name) { var t = (s.behaviour_types || []).find(function (x) { return x && x.name === name; }); return t ? (t.id | 0) : -1; }
+  function behTypeCount(s, name) {
+    var id = behIdByName(s, name); if (id < 0) return 0; var n = 0;
+    (s.backgrounds || []).forEach(function (bg) { var b = bg && bg.behaviour; if (!Array.isArray(b)) return; b.forEach(function (row) { if (Array.isArray(row)) row.forEach(function (v) { if ((v | 0) === id) n++; }); }); });
+    return n;
+  }
+  var TRACK_MODS = ['doors', 'smbhud', 'dialogue', 'damage', 'blocks', 'powerups', 'flagpole', 'pickups', 'win_condition', 'players.player2', 'behaviour_walls'];
+  var TRACK_BEH = ['solid_ground', 'wall', 'platform', 'door', 'trigger', 'ladder', 'spike', 'finish'];
+  function snapshotMods(s) { var o = {}; TRACK_MODS.forEach(function (id) { o[id] = modEnabled(s, id); }); return o; }
+  function snapshotBeh(s) { var o = {}; TRACK_BEH.forEach(function (n) { o[n] = behTypeCount(s, n); }); return o; }
 
   function snapshot(s) {
     return {
       playerName: playerName(s),
-      palKey: palKey(s),
-      tileKey: tileKey(s),
-      groundCount: solidCount(s),
-      behaviourCount: behaviourCount(s),
+      palKey: palKey(s), tileKey: tileKey(s),
+      groundCount: solidCount(s), behaviourCount: behaviourCount(s),
       builderKey: builderKey(s),
+      sceneCount: sceneCount(s), bgCount: bgCount(s), dialogueText: dialogueText(s),
+      mods: snapshotMods(s), beh: snapshotBeh(s),
     };
   }
 
   // --- declarative check registry -------------------------------------------
+  // Every check is diffed against the PER-STEP baseline (re-taken each time a
+  // step becomes current), so sequential "paint/add more" steps each need a
+  // fresh action.  All are lenient — any qualifying edit passes.
   var CHECKS = {
     spriteRenamed: function (s, base) { return playerName(s) !== base.playerName; },
     paletteChanged: function (s, base) { return palKey(s) !== base.palKey; },
     tileChanged: function (s, base) { return tileKey(s) !== base.tileKey; },
     groundAdded: function (s, base, p) { return solidCount(s) >= base.groundCount + ((p && p.min) || 1); },
     behaviourAdded: function (s, base, p) { return behaviourCount(s) >= (base.behaviourCount || 0) + ((p && p.min) || 1); },
+    behaviourTypePainted: function (s, base, p) { var name = (p && p.name) || 'wall'; return behTypeCount(s, name) >= ((base.beh && base.beh[name]) || 0) + ((p && p.min) || 1); },
+    sceneInstanceAdded: function (s, base, p) { return sceneCount(s) >= (base.sceneCount || 0) + ((p && p.min) || 1); },
+    backgroundAdded: function (s, base) { return bgCount(s) > (base.bgCount || 0); },
+    dialogueChanged: function (s, base) { return dialogueText(s) !== (base.dialogueText || ''); },
+    moduleEnabledChanged: function (s, base, p) { var id = p && p.id; if (!id) return false; return modEnabled(s, id) !== !!(base.mods && base.mods[id]); },
     builderChanged: function (s, base) { return builderKey(s) !== base.builderKey; },
     played: function () { return played; },
   };
@@ -243,6 +270,9 @@
     var s = getState();
     if (!s || !s.tutorial) return;
     s.tutorial.step = Math.min((s.tutorial.step | 0) + 1, tut.steps.length);
+    // Re-baseline for the NEW step, so its "add/paint more" delta starts from
+    // here (not from the whole tutorial's start).
+    s.tutorial.base = snapshot(s);
     markDirty();
     render();
     // Silent visual celebration (no sound) — a brief highlight of the panel.
@@ -291,6 +321,7 @@
     render: render,
     stepIndex: stepIndex,     // for tests / progress display
     stepCount: function () { return tut ? tut.steps.length : 0; },
+    currentCheck: function () { var st = currentStep(); return st ? st.check : null; },
     isComplete: isComplete,
     _checks: CHECKS,          // exposed for tests
     _snapshot: snapshot,      // exposed for tests
