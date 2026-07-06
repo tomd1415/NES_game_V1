@@ -22,6 +22,7 @@ Or everything: `./run-all.sh`.
 | 1 | `world_to_screen_x` | scroll.c | ✅ 12/12 cases | 66 → **20** | ~120+ → **~28** | ⬜ (flag pending) |
 | 2 | `world_to_screen_y` | scroll.c | ✅ 10/10 cases | 66 → **24** | ~120+ → **~32** | ⬜ (flag pending) |
 | 3 | `behaviour_at` | behaviour.c | ✅ 12/12 cases | 89 → **~70** | ~200+ → **~55** | ⬜ (flag pending) |
+| 4 | `reaction_for` | behaviour.c | ✅ 10/10 cases | 64 → **35** | ~120+ → **~30** | ⬜ (flag pending) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -61,7 +62,13 @@ free, so no carry). Passed 12/12 (corners, on/off-bounds each axis, far-OOB).
   A multi-screen world uses a different multiply (e.g. `<<6` for 64); the engine
   integration will emit the shift set for the project's actual WORLD_COLS.
 
+### 4. `reaction_for(unsigned char sprite, unsigned char beh) -> unsigned char`
+Two **char** args: the earlier one is pushed as a single byte (`pusha`), so
+`sprite` is at `(sp),0` and the callee pops 1 byte (`incsp1`). Because `sprite<2`
+and `beh<8`, the index `(sprite<<3)|beh` is 0..15 — a plain 8-bit `,X` lookup,
+no `shlax3`/`ptr1`. 10/10 (valid, sprite-OOB, beh-OOB, both-OOB — behaviour is
+checked first). 35 bytes / ~30 cycles vs the C's 64 + `shlax3` + `pusha`/`incsp2`.
+
 ## Up next (leaf-first order)
-- `reaction_for` — bounds-check + small 2D table index.
 - `read_controller` — `$4016` strobe + 8-bit shift-in.
 - then upward toward the per-frame loops and NMI where practical.

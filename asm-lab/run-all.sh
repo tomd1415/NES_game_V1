@@ -28,6 +28,9 @@ node functions/world_to_screen_y/test.mjs || fail=1
 run bat "functions/behaviour_at/ref.c functions/behaviour_at/test.c functions/behaviour_at/asm.s"
 node functions/behaviour_at/test.mjs || fail=1
 
+run rf "functions/reaction_for/ref.c functions/reaction_for/test.c functions/reaction_for/asm.s"
+node functions/reaction_for/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
