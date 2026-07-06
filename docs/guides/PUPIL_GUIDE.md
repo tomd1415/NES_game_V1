@@ -326,9 +326,16 @@ Things you can build out of the box:
 - Platformers with walking + jumping + gravity + wall collision.
 - Two-player co-op games (Controller 2 uses the `I` / `J` / `K` /
   `L` keys + `O` for A + `U` for B).
-- Enemies that walk back-and-forth, chase the player, or stand
-  still.  Animate them by tagging an animation **Enemy / Walk**
-  on the Sprites page.
+- Enemies that walk back-and-forth, chase the player, stand
+  still, **fly** (hover up and down and drift toward you), or
+  **patrol** (pace a set distance and turn on their own, so they
+  stay on an open platform).  Give an enemy or pickup its own
+  animation with the **+ New** button while that character is
+  selected — it's tagged for that character automatically.
+- **Jump on enemies to defeat them** (platformer): tick *"Jump on
+  enemies to defeat them"* in the **Damage** module.  Landing on an
+  enemy from above squashes it and bounces you; a side bump still
+  hurts.
 - Pickups (coins, keys) that disappear on touch and increment a
   counter.
 - Hearts that appear at the top of the screen (paint one tile

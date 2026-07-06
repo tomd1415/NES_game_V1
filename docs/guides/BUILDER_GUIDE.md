@@ -130,13 +130,21 @@ logic.  The template duplicates the P1 block variable-for-variable
 for P2 behind `#if PLAYER2_ENABLED`.
 
 Max HP > 0 combined with the **Damage** module below enables the
-HP system.
+HP system.  The Damage module also has a **"Jump on enemies to
+defeat them"** option (engine v11, platformer only): landing on an
+enemy from above defeats it and bounces the player, while a side or
+below touch still hurts.  A **bounce height** setting tunes the hop.
 
 ### `scene`
 Explicit sprite placement.  A scene instance is `{spriteIdx, x, y,
 ai}` — `spriteIdx` points at a sprite definition (same sprite can
 appear multiple times), `x/y` are pixel coordinates, `ai` is
-`static` / `walker` / `chaser`.
+`static` / `walker` / `chaser`, plus the SMB actors `goomba` /
+`koopa` (engine v4+) and, from **engine v10**, `flyer` (hovers up
+and down and drifts toward the player, ignoring gravity) and
+`patrol` (paces a fixed distance and turns on its own — no wall
+needed).  Instances can be placed on **any screen** of a scrolling
+background, not just the first.
 
 Leaving the list empty auto-places one of every non-player sprite
 so quick-and-dirty projects still work.
