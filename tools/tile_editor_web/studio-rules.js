@@ -22,9 +22,38 @@
   // hides the player's movement fields — one home for those numbers, per type.
   var CARD_ORDER = ['game', 'players', 'scene', 'pickups', 'spawn',
     'damage', 'powerups', 'hud', 'doors', 'dialogue', 'behaviour_walls', 'win_condition'];
-  // Only player 1's movement is surfaced in the Style tab, so only hide player
-  // 1's fields here — player 2's speed/jump stay editable in its RULES card.
-  var MOVED_TO_STYLE = { 'players.player1': ['walkSpeed', 'jumpHeight'] };
+
+  // ---- Rules vs Style split (game-type audit 2026-07-06) -----------------
+  // Principle: RULES shows only what applies to the CURRENTLY-SELECTED game type
+  // and is universal across types; anything type-specific lives in the 🎮 Style
+  // tab under the type(s) it applies to. Four knobs drive the filtering:
+  //   MODULE_APPLIES     — a module renders in RULES only for these types
+  //                        (omitted id = universal, every type).
+  //   STYLE_HOME_MODULES — a whole module whose editing home is the Style tab;
+  //                        never shown in RULES (Style surfaces it per type).
+  //   MOVED_TO_STYLE     — per-module fields that live in the Style tab, hidden
+  //                        from that module's RULES card.
+  //   FIELD_APPLIES      — a RULES field shown only for these types.
+  var MODULE_APPLIES = {
+    dialogue: ['platformer', 'smb', 'topdown', 'racer'],   // inert in auto-runner
+  };
+  var STYLE_HOME_MODULES = { powerups: 1 };                // SMB feel — Style tab
+  // Player 2's speed/jump stay in its RULES card; only player 1's move to Style.
+  // The game card's per-type knobs (racer/runner speeds) live in Style too.
+  var MOVED_TO_STYLE = {
+    game: ['autoscrollSpeed', 'racerTopSpeed', 'racerLaps', 'racerCheckpoints'],
+    'players.player1': ['walkSpeed', 'jumpHeight'],
+  };
+  var FIELD_APPLIES = { 'damage.stompDefeat': ['platformer'] };
+
+  function moduleAppliesTo(id, type) {
+    var a = MODULE_APPLIES[id.split('.')[0]];
+    return !a || a.indexOf(type) >= 0;
+  }
+  function fieldAppliesTo(id, key, type) {
+    var a = FIELD_APPLIES[id + '.' + key];
+    return !a || a.indexOf(type) >= 0;
+  }
   // Modules that are structural — no on/off toggle.
   var REQUIRED = { game: 1, players: 1, scene: 1 };
 
@@ -228,7 +257,7 @@
     return wrap;
   }
 
-  function renderCard(container, ctx, id, node) {
+  function renderCard(container, ctx, id, node, gt) {
     var def = (global.BuilderModules && global.BuilderModules[id]) || { label: id, schema: [] };
     var enabled = !!node.enabled;
     var required = !!REQUIRED[id.split('.')[0]] && id.indexOf('.') < 0;
@@ -260,15 +289,17 @@
     var body = el('div', { class: 'body' });
     if (def.description) body.appendChild(el('div', { class: 'dock-note', text: def.description }));
     var skip = MOVED_TO_STYLE[id] || [];
+    var movedAny = false;
     (def.schema || []).forEach(function (field) {
-      if (skip.indexOf(field.key) >= 0) return;   // lives in the Style tab now
+      if (skip.indexOf(field.key) >= 0) { movedAny = true; return; }   // in Style tab
+      if (!fieldAppliesTo(id, field.key, gt)) return;   // not for this game type
       body.appendChild(renderField(ctx, node, def, field));
     });
-    if (skip.length) body.appendChild(el('div', { class: 'dock-note', text: 'Speed & jump are in the 🎮 Style tab.' }));
+    if (movedAny) body.appendChild(el('div', { class: 'dock-note', text: 'Type-specific options (speed, jump, per-type knobs) are in the 🎮 Style tab.' }));
     // Nested submodules (e.g. players.player1 / player2).
     if (node.submodules) {
       Object.keys(node.submodules).forEach(function (subId) {
-        renderCard(body, ctx, id + '.' + subId, node.submodules[subId]);
+        renderCard(body, ctx, id + '.' + subId, node.submodules[subId], gt);
       });
     }
     card.appendChild(body);
@@ -290,13 +321,16 @@
     }
     var gt = (tree.modules.game && tree.modules.game.config && tree.modules.game.config.type) || 'platformer';
     dock.appendChild(el('div', { class: 'dock-note',
-      text: 'How your game behaves. Changes apply the next time you press ▶ Play. Current game type: ' + gt + '.' }));
+      text: 'How your game behaves. These rules apply to every game type; options specific to ' + gt +
+            ' (speed, jump, ' + gt + '-only features) are in the 🎮 Style tab. Changes apply next ▶ Play.' }));
 
     var sec = UI.section('Modules');
     CARD_ORDER.forEach(function (id) {
       var node = tree.modules[id];
       if (!node) return;
-      renderCard(sec, ctx, id, node);
+      if (STYLE_HOME_MODULES[id]) return;         // its editing home is the Style tab
+      if (!moduleAppliesTo(id, gt)) return;       // not used by this game type
+      renderCard(sec, ctx, id, node, gt);
     });
     dock.appendChild(sec);
 

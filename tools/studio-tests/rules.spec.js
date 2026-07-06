@@ -22,6 +22,23 @@ test('changing the game type updates state.builder', async ({ page }) => {
   expect(t).toBe('topdown');
 });
 
+test('RULES shows only game-type-applicable, universal cards', async ({ page }) => {
+  // powerups is SMB "feel" — its editing home is the 🎮 Style tab, never RULES.
+  await expect(page.locator('.rule-card .card-title', { hasText: 'Power-ups & fireballs' }))
+    .toHaveCount(0);
+  // Dialogue applies to the default platformer — visible here…
+  await expect(page.locator('.rule-card .card-title', { hasText: 'Dialogue (NPC talk)' }))
+    .toBeVisible();
+  // …but is inert in an auto-runner, so RULES filters it out there.
+  const gameCard = page.locator('.rule-card', { hasText: 'Game type' }).first();
+  await gameCard.locator('select').first().selectOption('runner');
+  await expect(page.locator('.rule-card .card-title', { hasText: 'Dialogue (NPC talk)' }))
+    .toHaveCount(0);
+  // The game card no longer leaks racer/runner speed knobs into RULES either —
+  // those live in Style. Only the type picker remains as a <select>.
+  await expect(gameCard.locator('input[type="number"]')).toHaveCount(0);
+});
+
 test('toggling an optional module flips node.enabled', async ({ page }) => {
   // Toggle an optional module and assert it flips (robust to starter defaults).
   const mod = 'pickups';

@@ -176,6 +176,8 @@
   function renderRunner(dock, ctx, s, gc) {
     var sec = UI.section('Auto-runner options');
     sec.appendChild(numField(ctx, 'Scroll speed', gc, 'autoscrollSpeed', 1, 4, 'How fast the world scrolls past. Tap (A / Up) to jump.'));
+    var p1 = p1Cfg(s);
+    if (p1) sec.appendChild(numField(ctx, 'Jump height', p1, 'jumpHeight', 1, 60, 'Frames of rise on a tap — bigger = higher jump.'));
     dock.appendChild(sec);
   }
   function renderTopdown(dock, ctx, s) {
