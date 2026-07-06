@@ -71,8 +71,20 @@ Each step has a `finishedEnough` line and a hint.
 - Full Studio E2E (`npx playwright test`) + builder suite must stay green
   (changes are additive; the panel is hidden unless a tutorial is active).
 
-## Out of scope for the MVP (design captured, not built)
+## Update 2026-07-06 — shipped beyond the MVP
 
-Pair variant, teacher toggles UI, in-Studio step editor, audio narration,
-the other four game-style tutorials. The manifest + check registry are shaped so
-these slot in later without rework.
+- Step **icons**, a **"Show me" that flashes the real button** (`flashSelector`),
+  **auto-unlock** of Maker-level areas (`minLevel`), and a **minimisable quests
+  column** that flashes on a warning.
+- **All five game styles** now selectable + fully working (compile + play) with
+  their own guided tutorial: platformer, SMB, top-down, auto-runner, racer. New
+  starters `createTopdown`/`createRunner`/`createRacer`; the 🎓 button opens a
+  style picker → `StudioStarter.tutorialFor(style)`; manifests in
+  `tutorial-styles.js`. Guarded by `builder-tests/style-starters.mjs`.
+
+## Out of scope (design captured, not built)
+
+Pair variant, teacher-toggles UI, in-Studio step editor, audio narration,
+per-style tutorial depth (manifests are short/lenient by design), and bespoke
+racer car/road art (racer reuses the hero sprite as the car). The manifest +
+check registry are shaped so these slot in later without rework.

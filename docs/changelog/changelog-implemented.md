@@ -21,6 +21,29 @@ deferred.
 
 ---
 
+## Guided tutorials + all five game styles selectable — 2026-07-06
+
+The Studio gained a working, in-app **guided tutorial** and every game style is
+now a first-class, selectable, fully-working starter. Design:
+[`docs/design/quest-tutorials.md`](../design/quest-tutorials.md).
+
+- **Guided tutorial** (`studio-tutorial.js` + `tutorial-first-game.js` /
+  `tutorial-styles.js`): a collapsible panel walks a pupil through one light
+  edit per section (name → colour → tile → world → rules → Play) on a ready-made
+  game — nothing drawn from scratch. Declarative, lenient checks (any light edit
+  passes); progress persists per project. Step **icons**, a **"Show me" that
+  flashes the real button**, and it **auto-unlocks** the Maker-level areas
+  (Tiles/Pals) it uses.
+- **All five styles work + selectable**: platformer, SMB, top-down, auto-runner,
+  and racer each ship a complete-tileset starter that compiles + plays
+  (`createTopdown`/`createRunner`/`createRacer` join `create`/`createSmb`), all
+  in the New-game picker. The 🎓 **Tutorial** button opens a style picker; each
+  style has its own guided tutorial (`StudioStarter.tutorialFor`).
+- **Quests column** is now minimisable and flashes only when a warning appears;
+  the basics starter no longer ships a dead win-condition (was a red error for
+  every pupil). Tests: `builder-tests/style-starters.mjs`,
+  `studio-tests/tutorial.spec.js`.
+
 ## Full SMB engine (v3–v9) + trust & hardening — 2026-07-05
 
 On `feature/smb-engine`: the versioned engine grew a complete Super-Mario-style
