@@ -12,9 +12,12 @@
 .export _write_palettes
 .export _draw_text
 .export _clear_text_row
+.export _advance_animation
 .import _palette_bytes
 .import _waitvsync
 .import _scroll_apply_ppu
+.import _anim_mode, _anim_prev_mode, _anim_frame, _anim_tick
+.import _anim_frame_count, _anim_frame_ticks, _anim_base
 .import incsp2
 .importzp sp, ptr1, tmp1, tmp2, tmp3
 
@@ -154,4 +157,47 @@ PPU_DATA   = $2007
     lda #$1E
     sta PPU_MASK
     jmp incsp2
+.endproc
+
+; void advance_animation(void) — per-frame player animation state machine (from
+; main.c). Mode-change resets frame/tick; when frame_count>1, tick advances and
+; rolls the frame at frame_ticks, wrapping at frame_count. anim_base =
+; anim_frame * PLAYER_TILES_PER_FRAME, baked as <<2 (PLAYER_TILES_PER_FRAME==4;
+; guarded by a #error in main.c). Proven equivalent in asm-lab/functions/
+; advance_animation (9 cases). Engine-owned anim_* globals — no per-project data.
+.proc _advance_animation
+    lda _anim_mode
+    cmp _anim_prev_mode
+    beq @same
+    lda #0
+    sta _anim_frame
+    sta _anim_tick
+    lda _anim_mode
+    sta _anim_prev_mode
+@same:
+    lda _anim_frame_count
+    cmp #2
+    bcc @base                   ; frame_count < 2 -> static, skip advance
+    inc _anim_tick
+    lda _anim_tick
+    cmp _anim_frame_ticks
+    bcc @base                   ; tick < frame_ticks -> not yet
+    lda #0
+    sta _anim_tick
+    inc _anim_frame
+    lda _anim_frame
+    cmp _anim_frame_count
+    bcc @base
+    lda #0
+    sta _anim_frame             ; wrap to frame 0
+@base:
+    lda _anim_frame             ; anim_base = anim_frame << 2 (16-bit)
+    asl
+    sta _anim_base
+    lda #0
+    rol
+    sta _anim_base+1
+    asl _anim_base
+    rol _anim_base+1
+    rts
 .endproc

@@ -31,6 +31,20 @@ Or everything: `./run-all.sh`.
 | 9 | `scroll_follow` | scroll.c | ✅ 20/20 cases | 435 → **289** | big → smaller | ✅ **v13** (`NES_ASM_SCROLL`) |
 | 10 | `scroll_apply_ppu` | scroll.c | ✅ 16/16 cases | — | — | ✅ **v16** (`NES_ASM_SCROLL`) |
 | 11 | `scroll_stream_prepare` | scroll.c | ✅ 8/8 cases | — | index-loop → +64-stride walk | ✅ **v17** (`NES_ASM_SCROLL`) |
+| 12 | `advance_animation` | main.c (main loop) | ✅ 9/9 cases | — | — | ✅ **v18** (`NES_ASM_LEAF`) |
+
+### Main-loop conversion boundary (v18)
+
+`advance_animation` is the first *main-loop gameplay* block converted — it runs
+on engine-owned, non-`static` `anim_*` globals, so it hand-converts cleanly (the
+inline C stays under `#else`; flag-on calls the ASM). The **scene-sprite gravity
+loop** — the other hot inline block — cannot be hand-converted: it reads/writes
+the **server-generated `ss_x/ss_y/…` arrays**, which are `static`, vary u8↔u16 by
+sprite position, and vary in count per project. Converting it needs the *server*
+to emit a project-matched ASM variant (codegen generation, the "full ASM engine"
+route); its dominant cost, `behaviour_at`, is already ASM. So the cleanly
+hand-convertible discrete + inline-engine-owned functions are essentially done;
+what remains is per-project generated code, which is a codegen project.
 
 **Phase 2 (leaf-first) goal met at v15**; **Phase 3 (harder integration
 functions) in progress.** All integrated behind off-by-default flags

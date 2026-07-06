@@ -201,6 +201,15 @@ unsigned int  anim_base;
 const unsigned char *anim_tiles;
 const unsigned char *anim_attrs;
 
+/* advance_animation has a hand-written 6502 twin in main_asm.s (NES_ASM_LEAF).
+   The ASM bakes anim_base = anim_frame * PLAYER_TILES_PER_FRAME as a <<2, so it
+   is only valid when PLAYER_TILES_PER_FRAME == 4 — guard it rather than bake
+   silently. */
+void advance_animation(void);
+#if defined(NES_ASM_LEAF) && (PLAYER_TILES_PER_FRAME != 4)
+#error "NES_ASM_LEAF advance_animation bakes PLAYER_TILES_PER_FRAME==4; regenerate the ASM shift for this project's player size."
+#endif
+
 unsigned char read_controller(void);   /* prototype: definition below or in main_asm.s */
 #ifndef NES_ASM_LEAF   /* ASM twin in main_asm.s */
 unsigned char read_controller(void) {
@@ -573,6 +582,9 @@ void main(void) {
             anim_frame_ticks = 1;
         }
 
+#ifdef NES_ASM_LEAF   /* hand-written 6502 twin in main_asm.s (proven in asm-lab) */
+        advance_animation();
+#else
         if (anim_mode != anim_prev_mode) {
             anim_frame = 0;
             anim_tick = 0;
@@ -587,6 +599,7 @@ void main(void) {
             }
         }
         anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
+#endif
 
 #if BW_GAME_STYLE == 0
 //>> gravity: Scene sprites fall until they land on solid_ground or platform. Tick 🕊 Flying on the Sprites page to make a sprite hover instead.

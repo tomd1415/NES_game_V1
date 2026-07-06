@@ -9,6 +9,36 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v18 — 2026-07-06
+
+### Added
+- **First main-loop *gameplay* function on hand-written 6502:**
+  `advance_animation` (extends `NES_ASM_LEAF`) in `main_asm.s`. This is the
+  per-frame player animation state machine (mode-change reset → tick advance at
+  `anim_frame_ticks` → frame wrap at `anim_frame_count` → `anim_base =
+  anim_frame * PLAYER_TILES_PER_FRAME`). It runs on the engine-owned, already
+  non-`static` `anim_*` globals — no per-project generated data — so it is a
+  clean hand-conversion. The inline C block in `main.c` is preserved verbatim
+  under `#else`; flag-on calls the ASM. Proven equivalent in
+  `asm-lab/functions/advance_animation` (9 cases: mode-change reset, tick
+  threshold, frame wrap, static `count==1`, the `*4` base).
+- A compile-time `#error` guards the baked `PLAYER_TILES_PER_FRAME==4` (the ASM
+  computes `anim_base` as `<<2`), so a project with a different player size fails
+  loudly instead of silently baking the wrong shift.
+
+### Changed / migration
+- **Default unchanged.** Flags off ⇒ byte-identical to v17 (golden
+  `d0a0fa7ad715`). At matched game-logic progress the all-ASM build (now
+  including the anim state machine, exercised live every walking frame) is
+  byte-identical to all-C (OAM/palette/nametables).
+- **Boundary finding — the scene-sprite gravity loop stays in C.** The other hot
+  main-loop block (per-enemy gravity) reads/writes the **server-generated
+  `ss_x/ss_y/…` scene arrays**, which are `static` and whose element width
+  varies u8↔u16 by sprite position and whose count varies per project. A stable
+  hand-written twin isn't possible; it needs the *server* to emit a
+  project-matched ASM variant (codegen generation) — the "full ASM engine"
+  route. Its dominant per-sprite cost (`behaviour_at`) is already ASM.
+
 ## v17 — 2026-07-06
 
 ### Added
