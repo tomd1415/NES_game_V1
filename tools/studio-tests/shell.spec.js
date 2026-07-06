@@ -139,9 +139,9 @@ test('Time Machine: Play snapshots first, and the dialog lists it', async ({ pag
   await page.locator('#btn-time-machine').click();
   await expect(page.locator('#tm-backdrop')).toHaveClass(/open/);
   await expect(page.locator('.snap-row .reason', { hasText: 'before_play' })).toBeVisible();
-  // Copy fix: it must say "keeps 8", never "keeps 5".
-  await expect(page.locator('#tm-body')).toContainText('keeps 8');
-  await expect(page.locator('#tm-body')).not.toContainText('keeps 5');
+  // The "keeps N" copy tracks MAX_SNAPSHOTS (reduced to 4 to keep per-project
+  // storage small — a 2×2 level state is ~180 KB per copy).
+  await expect(page.locator('#tm-body')).toContainText('keeps 4');
 });
 
 test('Time Machine restore snapshots current state first (nothing lost)', async ({ page }) => {

@@ -1395,6 +1395,22 @@
       var pct = storagePct();
       host.appendChild(el('div', { class: 'dock-note', text: 'Storage ' + pct + '% used (' + fmtBytes(Storage.usageBytes()) + ' of about ' + fmtBytes(Storage.quotaBytes()) + '). Your games are saved in this browser — delete old ones to free space.' }));
       host.appendChild(el('div', { class: 'sm-meter' }, [el('div', { class: 'sm-fill' + (pct >= 80 ? ' warn' : ''), style: 'width:' + pct + '%' })]));
+      // "Clear old versions" reclaims the Time-Machine history (the biggest use
+      // of space) across every project without deleting any game.
+      var clearRow = el('div', { style: 'display:flex;align-items:center;gap:8px;margin:6px 0 10px' }, [
+        el('button', {
+          class: 'btn', type: 'button', text: '🧹 Clear old versions', title: 'Delete every project’s undo/backup history to free space (your games are kept)',
+          onclick: function () {
+            if (!window.confirm('Clear the saved undo/backup history for all projects? Your games are kept — only the Time Machine history is cleared.')) return;
+            var freed = Storage.pruneAllHistory();
+            updateStorageIndicator();
+            rerender();
+            try { window.alert('Freed ' + fmtBytes(freed) + '.'); } catch (e) {}
+          },
+        }),
+        el('span', { class: 'dock-note', style: 'margin:0', text: 'Frees the Time Machine history (keeps your games).' }),
+      ]);
+      host.appendChild(clearRow);
       var projs = (Storage.listProjects() || []).slice().sort(function (a, b) { return Storage.projectBytes(b.id) - Storage.projectBytes(a.id); });
       var activeId = Storage.getActiveProjectId();
       projs.forEach(function (p) {
