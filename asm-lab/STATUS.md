@@ -19,8 +19,8 @@ Or everything: `./run-all.sh`.
 
 | # | Function | Source | Gate 1 (unit) | Bytes (C→ASM) | ~Cycles (C→ASM) | Integrated |
 |---|----------|--------|---------------|---------------|-----------------|------------|
-| 1 | `world_to_screen_x` | scroll.c | ✅ 12/12 cases | 66 → **20** | ~120+ → **~28** | ⬜ (flag pending) |
-| 2 | `world_to_screen_y` | scroll.c | ✅ 10/10 cases | 66 → **24** | ~120+ → **~32** | ⬜ (flag pending) |
+| 1 | `world_to_screen_x` | scroll.c | ✅ 12/12 cases | 66 → **20** | ~120+ → **~28** | ✅ **v12** (`NES_ASM_SCROLL`) |
+| 2 | `world_to_screen_y` | scroll.c | ✅ 10/10 cases | 66 → **24** | ~120+ → **~32** | ✅ **v12** (`NES_ASM_SCROLL`) |
 | 3 | `behaviour_at` | behaviour.c | ✅ 12/12 cases | 89 → **~70** | ~200+ → **~55** | ⬜ (flag pending) |
 | 4 | `reaction_for` | behaviour.c | ✅ 10/10 cases | 64 → **35** | ~120+ → **~30** | ⬜ (flag pending) |
 | 5 | `read_controller` | main.c | ✅ 7/7 combos | 61 → **23** | ~300+ → **~150** | ⬜ (flag pending) |
@@ -124,7 +124,26 @@ writes (with `waitvsync` and value-across-call preservation on the HW stack),
 and complex branchy 16-bit camera math. The harness (unit + JS model + size) has
 caught 4 real defects along the way. `./run-all.sh` builds + runs all of them.
 
-## Remaining = integration phase (touches the shipped engine)
+## Integration phase (IN PROGRESS)
+
+**Done — engine v12:** `world_to_screen_x` / `world_to_screen_y` are wired into
+the shipped engine. `steps/Step_Playground/src/scroll_asm.s` holds the ca65
+versions; the Makefile flag `NES_ASM_SCROLL=1` links it and `#ifdef`s out the C
+in `scroll.c`. Default OFF ⇒ pure C ⇒ golden ROMs byte-identical. Verified
+in-engine: a 64-col world built both ways renders identical OAM across 160
+frames incl. 80 of scrolling.
+
+**Next to integrate (`scroll.c`, same flag):**
+- `scroll_follow` — generalise the lab ASM's hard-coded `max_cam_x=256` /
+  `max_cam_y=240` to the per-project `WORLD_W/H_PX - SCREEN_*` (pass as
+  constants the codegen bakes, or read a `max_cam_*` global).
+- `scroll_apply_ppu` — after generalising, prove via the ROM-level render suite
+  (the `$2005/$2006` latch is a rendered-frame property).
+Then move to `behaviour.c` / `main.c` functions — those files are
+server-regenerated, so integrating them means teaching `playground_server.py`'s
+codegen to emit the `.s` + `#ifdef` the C (a bigger, separate change).
+
+## Remaining functions still C (integration continues)
 These are **not** cleanly unit-testable in isolation — their behaviour is the
 whole-frame / whole-world result, so they get proven by the existing ROM-level
 render/behaviour suites once wired in:
