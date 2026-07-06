@@ -20,6 +20,7 @@ Or everything: `./run-all.sh`.
 | # | Function | Source | Gate 1 (unit) | Bytes (C→ASM) | ~Cycles (C→ASM) | Integrated |
 |---|----------|--------|---------------|---------------|-----------------|------------|
 | 1 | `world_to_screen_x` | scroll.c | ✅ 12/12 cases | 66 → **20** | ~120+ → **~28** | ⬜ (flag pending) |
+| 2 | `world_to_screen_y` | scroll.c | ✅ 10/10 cases | 66 → **24** | ~120+ → **~32** | ⬜ (flag pending) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -34,9 +35,14 @@ Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
 - **Efficiency:** C ref 66 bytes + 7 runtime-helper `jsr`s (pushax×2, ldax0sp×3,
   incsp2×2); ASM 20 bytes, 0 `jsr`, ~28 cycles. Smaller **and** faster.
 
+### 2. `world_to_screen_y(unsigned int) -> unsigned char`
+Same as `_x` but screen height is **240**, so `off >= 240` is a real compare,
+not a high-byte test: after the subtract, `bcc`(world<cam)→0xFF, `bne`(hi≠0,
+i.e. ≥256)→0xFF, else `cmp #240 / bcs`→0xFF, else return the low byte. Passed
+10/10 first attempt (aligned, 239/240 boundary, 255, underflow, max). 24 bytes
+(4 more than `_x`) / ~32 cycles vs the C's 66 bytes + helpers / ~120+.
+
 ## Up next (leaf-first order)
-- `world_to_screen_y` — identical shape (cam_y / SCREEN_H_PX=240; the ≥240 test
-  is NOT a clean high-byte test, so it needs an explicit compare — good contrast).
 - `behaviour_at` — bounds-check + `map[row*WORLD_COLS + col]`; introduces a
   constant multiply + a `(ptr),Y` deref.
 - `reaction_for` — bounds-check + small 2D table index.

@@ -22,6 +22,9 @@ node harness/smoke.mjs || fail=1
 run w2sx "functions/world_to_screen_x/ref.c functions/world_to_screen_x/test.c functions/world_to_screen_x/asm.s"
 node functions/world_to_screen_x/test.mjs || fail=1
 
+run w2sy "functions/world_to_screen_y/ref.c functions/world_to_screen_y/test.c functions/world_to_screen_y/asm.s"
+node functions/world_to_screen_y/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
