@@ -348,6 +348,20 @@
     playHooked = true;
   }
 
+  // A teacher can reorder / add / remove steps (studio.js step editor); the
+  // result is stored in prefs.tutorialOverrides[id].steps.  Validate defensively
+  // so a bad override never breaks the tutorial — fall back to the base steps.
+  function applyOverride(id, base) {
+    try {
+      var p = (global.Storage && global.Storage.readPrefs && global.Storage.readPrefs()) || {};
+      var ov = (p.tutorialOverrides || {})[id];
+      if (!ov || !Array.isArray(ov.steps)) return base;
+      var steps = ov.steps.filter(function (st) { return st && st.check && st.check.type && st.title; });
+      if (!steps.length) return base;
+      return { id: base.id, title: base.title, minLevel: base.minLevel, intro: base.intro, steps: steps };
+    } catch (e) { return base; }
+  }
+
   // --- public API -----------------------------------------------------------
   function start(c) {
     if (c) ctx = c;
@@ -357,6 +371,8 @@
     if (!s.tutorial.active) s.tutorial.active = true;
     var id = s.tutorial.id || 'first-game';
     tut = (global.STUDIO_TUTORIALS || {})[id] || (global.STUDIO_TUTORIALS || {})['first-game'];
+    if (!tut) return;
+    tut = applyOverride(id, tut);   // teacher's edited steps, if any
     if (!tut) return;
     if (!s.tutorial.base) { s.tutorial.base = snapshot(s); markDirty(); }
     ensureLevel();       // unlock Tiles/Pals etc. before any step points at them

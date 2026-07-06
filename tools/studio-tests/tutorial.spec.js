@@ -129,6 +129,39 @@ test('teacher settings turn on pair mode + hide hints; pupil can still go solo',
   await page.evaluate(() => { const p = window.Storage.readPrefs() || {}; p.teacherConfig = { pairing: 'solo', celebration: 'visual', hints: true }; window.Storage.writePrefs(p); });
 });
 
+test('teacher step editor writes a step override', async ({ page }) => {
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  const baseCount = await page.evaluate(() => window.STUDIO_TUTORIALS['first-game'].steps.length);
+  await page.locator('#btn-tutorial').click();
+  await page.locator('.modal-actions .btn', { hasText: 'Teacher settings' }).click();
+  await page.locator('.modal-actions .btn', { hasText: 'Edit steps' }).click();
+  // Editor defaults to the Platformer tutorial — remove the first step, save.
+  await page.locator('.modal-backdrop.open button', { hasText: '✖' }).first().click();
+  await page.locator('.modal-actions .btn', { hasText: 'Save' }).click();
+  const saved = await page.evaluate(() => { const p = window.Storage.readPrefs() || {}; const o = (p.tutorialOverrides || {})['first-game']; return o ? o.steps.length : -1; });
+  expect(saved).toBe(baseCount - 1);
+  await page.evaluate(() => { const p = window.Storage.readPrefs() || {}; if (p.tutorialOverrides) delete p.tutorialOverrides['first-game']; window.Storage.writePrefs(p); });
+});
+
+test('the runtime applies a step override to the launched tutorial', async ({ page }) => {
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  await page.evaluate(() => {
+    const p = window.Storage.readPrefs() || {};
+    p.tutorialOverrides = { 'first-game': { steps: [
+      { id: 'a', title: 'Change a colour', mode: 'pals', check: { type: 'paletteChanged' } },
+      { id: 'b', title: 'Play', mode: null, flashSelector: '#btn-play', check: { type: 'played' } },
+    ] } };
+    window.Storage.writePrefs(p);
+  });
+  await page.locator('#btn-tutorial').click();
+  await page.locator('.modal-actions .btn', { hasText: 'Platformer' }).click();
+  await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
+  expect(await page.evaluate(() => window.StudioTutorial.stepCount())).toBe(2);
+  await page.evaluate(() => { const p = window.Storage.readPrefs() || {}; delete p.tutorialOverrides; window.Storage.writePrefs(p); });
+});
+
 test('a normal project does not show the tutorial panel', async ({ page }) => {
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');

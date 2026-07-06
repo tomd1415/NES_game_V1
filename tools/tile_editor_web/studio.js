@@ -613,13 +613,91 @@
       title: '🧑‍🏫 Teacher settings',
       sub: 'Class defaults for the guided tutorials — saved on this computer. Pupils can always turn pairing off; accessibility is never limited.',
       bodyNodes: body,
-      actions: [{ label: 'Save', value: 'save', kind: 'primary' }, { label: 'Cancel', value: null }],
+      actions: [{ label: 'Save', value: 'save', kind: 'primary' }, { label: '✏ Edit steps', value: 'edit' }, { label: 'Cancel', value: null }],
     }).then(function (v) {
       if (v === 'save') {
         var pr = Storage.readPrefs() || {};
         pr.teacherConfig = cfg; Storage.writePrefs(pr);
         if (window.StudioTutorial && typeof window.StudioTutorial.render === 'function') { try { window.StudioTutorial.render(); } catch (e) {} }
       }
+      if (v === 'edit') { openStepEditor(function () { openTeacherSettings(onClose); }); return; }
+      if (typeof onClose === 'function') onClose();
+    });
+  }
+
+  // Teacher step editor: reorder / add / remove a tutorial's steps.  Saves an
+  // OVERRIDE in prefs (the base tutorial is never mutated); Reset restores it.
+  // Progress is index-based, so overrides are best set before pupils start.
+  function openStepEditor(onClose) {
+    if (!(window.StudioUI && window.StudioUI.modal)) return;
+    var el = window.StudioUI.el;
+    var tutorials = [
+      { id: 'first-game', label: '🎮 Platformer' }, { id: 'smb-first', label: '🍄 SMB' },
+      { id: 'topdown-first', label: '🧭 Top-down' }, { id: 'runner-first', label: '🏃 Runner' },
+      { id: 'racer-first', label: '🏎️ Racer' },
+    ];
+    var curId = tutorials[0].id;
+    function loadSteps(id) {
+      var prefs = Storage.readPrefs() || {};
+      var ov = (prefs.tutorialOverrides || {})[id];
+      if (ov && Array.isArray(ov.steps) && ov.steps.length) return JSON.parse(JSON.stringify(ov.steps));
+      var base = (window.STUDIO_TUTORIALS || {})[id];
+      return base ? JSON.parse(JSON.stringify(base.steps)) : [];
+    }
+    var working = loadSteps(curId);
+    var iconBtn = function (label, fn) { return el('button', { class: 'btn', type: 'button', text: label, style: 'padding:3px 7px', onclick: fn }); };
+    var listWrap = el('div', { style: 'margin:8px 0;max-height:230px;overflow:auto' });
+    function renderList() {
+      listWrap.innerHTML = '';
+      working.forEach(function (st, i) {
+        var row = el('div', { style: 'display:flex;align-items:center;gap:6px;margin:3px 0;border:1px solid var(--line);border-radius:6px;padding:4px 6px' }, [
+          el('span', { style: 'flex:1;font-size:13px', text: (st.icon ? st.icon + ' ' : '') + st.title + '  (' + st.check.type + ')' }),
+          iconBtn('▲', function () { if (i > 0) { var t = working[i - 1]; working[i - 1] = working[i]; working[i] = t; renderList(); } }),
+          iconBtn('▼', function () { if (i < working.length - 1) { var t = working[i + 1]; working[i + 1] = working[i]; working[i] = t; renderList(); } }),
+          iconBtn('✖', function () { working.splice(i, 1); renderList(); }),
+        ]);
+        listWrap.appendChild(row);
+      });
+      if (!working.length) listWrap.appendChild(el('div', { class: 'dock-note', text: 'No steps — add one below.' }));
+    }
+    var titleInput = el('input', { type: 'text', placeholder: 'New step title (e.g. Add a coin)', style: 'flex:1;min-width:130px' });
+    var CHECK_OPTS = [
+      { v: 'paletteChanged', label: 'Change a colour (Pals)', mode: 'pals', icon: '🎨' },
+      { v: 'tileChanged', label: 'Draw on a tile (Tiles)', mode: 'tiles', icon: '🧩' },
+      { v: 'behaviourAdded', label: 'Paint some blocks (World)', mode: 'world', icon: '🧱' },
+      { v: 'sceneInstanceAdded', label: 'Place a character (World)', mode: 'world', icon: '👾' },
+      { v: 'builderChanged', label: 'Change a rule (Rules)', mode: 'rules', icon: '⚙️' },
+      { v: 'played', label: 'Play the game', mode: null, icon: '🎮' },
+    ];
+    var checkSel = el('select', {});
+    CHECK_OPTS.forEach(function (o) { checkSel.appendChild(el('option', { value: o.v, text: o.label })); });
+    var addRow = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px' }, [
+      titleInput, checkSel,
+      el('button', {
+        class: 'btn', type: 'button', text: '➕ Add', onclick: function () {
+          var title = (titleInput.value || '').trim(); if (!title) return;
+          var opt = CHECK_OPTS.filter(function (o) { return o.v === checkSel.value; })[0] || CHECK_OPTS[0];
+          var step = { id: 'custom-' + Math.random().toString(36).slice(2, 7), chapter: 'Extra', mode: opt.mode, icon: opt.icon, title: title, instruction: title + '.', why: '', finishedEnough: '', hint: 'Try it, then press Check my work.', check: { type: opt.v } };
+          if (opt.v === 'behaviourAdded') step.check.params = { min: 3 };
+          if (opt.v === 'sceneInstanceAdded') step.check.params = { min: 1 };
+          if (opt.v === 'played') step.flashSelector = '#btn-play';
+          working.push(step); titleInput.value = ''; renderList();
+        },
+      }),
+    ]);
+    var tutSel = el('select', { onchange: function () { curId = tutSel.value; working = loadSteps(curId); renderList(); } });
+    tutorials.forEach(function (t) { tutSel.appendChild(el('option', { value: t.id, text: t.label })); });
+    renderList();
+    window.StudioUI.modal({
+      title: '✏ Edit tutorial steps',
+      sub: 'Reorder ▲▼, remove ✖ or add steps. Saved on this computer; the base tutorial is never changed. Reset restores the original.',
+      bodyNodes: [el('div', { class: 'dock-note', style: 'margin-bottom:6px' }, [el('strong', { text: 'Tutorial: ' }), tutSel]), listWrap, addRow],
+      actions: [{ label: 'Save', value: 'save', kind: 'primary' }, { label: 'Reset to default', value: 'reset' }, { label: 'Cancel', value: null }],
+    }).then(function (v) {
+      var prefs = Storage.readPrefs() || {};
+      prefs.tutorialOverrides = prefs.tutorialOverrides || {};
+      if (v === 'save') { prefs.tutorialOverrides[curId] = { steps: working }; Storage.writePrefs(prefs); }
+      else if (v === 'reset') { delete prefs.tutorialOverrides[curId]; Storage.writePrefs(prefs); }
       if (typeof onClose === 'function') onClose();
     });
   }
