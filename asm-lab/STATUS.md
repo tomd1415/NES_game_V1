@@ -23,6 +23,7 @@ Or everything: `./run-all.sh`.
 | 2 | `world_to_screen_y` | scroll.c | ✅ 10/10 cases | 66 → **24** | ~120+ → **~32** | ⬜ (flag pending) |
 | 3 | `behaviour_at` | behaviour.c | ✅ 12/12 cases | 89 → **~70** | ~200+ → **~55** | ⬜ (flag pending) |
 | 4 | `reaction_for` | behaviour.c | ✅ 10/10 cases | 64 → **35** | ~120+ → **~30** | ⬜ (flag pending) |
+| 5 | `read_controller` | main.c | ✅ 7/7 combos | 61 → **23** | ~300+ → **~150** | ⬜ (flag pending) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -69,6 +70,28 @@ and `beh<8`, the index `(sprite<<3)|beh` is 0..15 — a plain 8-bit `,X` lookup,
 no `shlax3`/`ptr1`. 10/10 (valid, sprite-OOB, beh-OOB, both-OOB — behaviour is
 checked first). 35 bytes / ~30 cycles vs the C's 64 + `shlax3` + `pusha`/`incsp2`.
 
-## Up next (leaf-first order)
-- `read_controller` — `$4016` strobe + 8-bit shift-in.
+### 5. `read_controller(void) -> unsigned char`
+Hardware I/O, no args. Strobe `$4016` (write 1, 0), then 8× { read `$4016`;
+`lsr a` puts bit 0 in carry; `rol tmp1` collects carries MSB-first }. The
+initial `tmp1` is irrelevant (its bits shift out). Harness holds real jsnes
+buttons per combo and checks 7 combos incl. A→0x80, Right→0x01, all→0xFF. 23
+bytes / ~150 cycles vs cc65's stack-local loop (61 bytes + `pusha`/`decsp1` /
+~300+): cc65 keeps `result` and `j` on the param stack and does `asl (sp),y`
+etc. every iteration — the worst-case for a register-starved loop.
+
+## Up next
+- `write_palettes`, `draw_text`, `clear_text_row` — PPU nametable/`$3F00` writes
+  (a behaviour gate, not just RAM in/out — assert PPU/VRAM state).
+- `scroll_*` (`scroll_init`, `scroll_follow`, `world_to_screen_*` done, then
+  `scroll_apply_ppu` which touches the `$2005/$2006` latch — needs the ROM-level
+  behaviour test, the touchiest ones for timing).
+- Upward toward the per-frame loop / NMI where practical.
+
+## Integration plan (after the leaf batch)
+Wire the proven `.s` files into the shipped engine behind an off-by-default
+build flag (`NES_ASM_<fn>=1`), a new engine version; the C stays as the default
+and the fallback. Golden ROMs remain byte-identical with the flag off; with it
+on, the existing render/behaviour suites must still pass (gate 2). Because ASM
+isn't byte-identical to the C, the flag-on ROMs get their own golden hash (or
+are validated behaviourally only).
 - then upward toward the per-frame loops and NMI where practical.
