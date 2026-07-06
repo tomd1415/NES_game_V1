@@ -57,6 +57,9 @@ node functions/scroll_follow/test.mjs || fail=1
 run sap "functions/scroll_apply_ppu/ref.c functions/scroll_apply_ppu/test.c functions/scroll_apply_ppu/asm.s"
 node functions/scroll_apply_ppu/test.mjs || fail=1
 
+run ssp "functions/scroll_stream_prepare/ref.c functions/scroll_stream_prepare/test.c functions/scroll_stream_prepare/asm.s"
+node functions/scroll_stream_prepare/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."

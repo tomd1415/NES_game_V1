@@ -38,7 +38,10 @@ const unsigned int scroll_max_cam_y = WORLD_H_PX - SCREEN_H_PX;
 /* Camera position the last time we streamed a column / row.  Used to
    detect 8-px (tile) boundary crossings so we write exactly one
    column/row per boundary crossed. */
-static unsigned int prev_cam_x;
+/* prev_cam_x is non-`static` so the ASM scroll_stream_prepare can read/advance
+   it (linkage-only; BSS unchanged, default ROM byte-identical). prev_cam_y stays
+   static — the horizontal-only ASM path never touches it. */
+unsigned int prev_cam_x;
 static unsigned int prev_cam_y;
 
 void scroll_init(void) {
@@ -139,10 +142,14 @@ void scroll_apply_ppu(void) {
    into col_buf / row_buf outside vblank trims the in-vblank loop to
    roughly *buf -> PPU_DATA, halving its cycle cost. */
 
+/* Non-`static` so scroll_stream_prepare's hand-written 6502 twin (scroll_asm.s,
+   NES_ASM_SCROLL) can `.import` the column buffer it fills for scroll_stream to
+   drain. Linkage-only — the emitted BSS is unchanged, so the default (flag-off)
+   ROM stays byte-identical. */
 #if (BG_WORLD_COLS > 32)
-static unsigned char col_buf[30];
-static unsigned int  col_addr;
-static unsigned char col_pending;  /* 1 = col_buf has a column ready */
+unsigned char col_buf[30];
+unsigned int  col_addr;
+unsigned char col_pending;  /* 1 = col_buf has a column ready */
 #endif
 #if (BG_WORLD_ROWS > 30)
 static unsigned char row_buf[32];
@@ -150,6 +157,13 @@ static unsigned int  row_addr;
 static unsigned char row_pending;
 #endif
 
+/* scroll_stream_prepare has a hand-written 6502 twin in scroll_asm.s (proven in
+   asm-lab/functions/scroll_stream_prepare). The ASM covers the horizontal column
+   path for this build's BG_WORLD_COLS=64 / horizontal-only world; a vertical
+   world (BG_WORLD_ROWS>30) still needs this C body, so the twin is only valid for
+   horizontal 64-wide worlds under NES_ASM_SCROLL. Flag off = pure C = byte
+   identical. */
+#ifndef NES_ASM_SCROLL
 void scroll_stream_prepare(void) {
 #if (BG_WORLD_COLS > 32)
     col_pending = 0;
@@ -219,6 +233,7 @@ void scroll_stream_prepare(void) {
     }
 #endif
 }
+#endif /* NES_ASM_SCROLL */
 
 /* Fully unrolled column / row burst.  cc65 is invoked without `-O`, so
    a `for (i = 0; i < N; i++) PPU_DATA = buf[i];` loop costs roughly

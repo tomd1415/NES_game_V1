@@ -9,6 +9,35 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v17 — 2026-07-06
+
+### Added
+- **`scroll_stream_prepare` (horizontal column path) on hand-written 6502**
+  (extends `NES_ASM_SCROLL`) in `scroll_asm.s`; C body gated with
+  `#ifndef NES_ASM_SCROLL`. This is the function whose cc65-slow
+  `bg_world_tiles[rr*64 + col]` index loop (30 iterations, each a 16-bit
+  multiply + array load) pushed the column-stream frame over the NTSC vblank
+  budget. The ASM replaces it with a constant **+64-stride pointer walk** down
+  the column. Proven equivalent to the C in
+  `asm-lab/functions/scroll_stream_prepare` (8 cases: no-cross, right/left
+  boundary cross, NT0/NT1 select, col-0, out-of-world clamp, the column copy).
+- **Shared streaming state de-`static`'d** in `scroll.c` (`col_buf`, `col_addr`,
+  `col_pending`, `prev_cam_x`) so the ASM can `.import` them — linkage-only, BSS
+  unchanged, default ROM byte-identical.
+
+### Changed / migration
+- **Default unchanged.** `NES_ASM_SCROLL` off ⇒ pure C ⇒ byte-identical to v16
+  (golden `d0a0fa7ad715`). At matched game-logic progress the all-ASM build is
+  byte-identical to all-C (cam_x, OAM, palette, nametables); the all-ASM engine
+  holds 60 fps (0 dropped frames) over a scroll where pure-C drops 5.
+- **Specialisation (documented):** the ASM `scroll_stream_prepare` bakes
+  `BG_WORLD_COLS=64` and the horizontal-only world shape (like `behaviour_at`
+  bakes `WORLD_COLS=64`). A vertically-scrolling world (`BG_WORLD_ROWS>30`) needs
+  the C row path, so `NES_ASM_SCROLL` remains a horizontal-64-wide-world flag.
+- **Left in C on purpose:** `scroll_stream`'s in-vblank burst is already fully
+  unrolled by cc65 to `lda buf+N / sta $2007` (optimal), so an ASM twin would
+  save ~nothing; `load_world_bg` runs once at startup (no per-frame budget).
+
 ## v16 — 2026-07-06
 
 ### Added

@@ -288,3 +288,113 @@ PPU_SCROLL = $2005
     sta PPU_SCROLL             ; scroll_y = reduced cy (0..239, never 240..255)
     rts
 .endproc
+
+; void scroll_stream_prepare(void) — horizontal column path, specialised to this
+; build's BG_WORLD_COLS=64 / BG_WORLD_ROWS<=30 (horizontal scroll only) and
+; SCREEN_W_PX=256, exactly like behaviour_at bakes WORLD_COLS=64. Detects an 8-px
+; tile-boundary crossing, steps prev_cam_x one tile toward cam_x, and copies the
+; exposed 30-tile column into col_buf with a constant +64-stride pointer walk —
+; replacing the cc65-slow `bg_world_tiles[rr*64+col]` index loop that pushed the
+; column-stream frame over the NTSC vblank budget. Proven equivalent to the C in
+; asm-lab/functions/scroll_stream_prepare (8 cases). NOTE: a world with vertical
+; scrolling (BG_WORLD_ROWS>30) needs the row path too — not covered here; keep
+; NES_ASM_SCROLL for horizontal 64-wide worlds (the shipped fixture).
+.export _scroll_stream_prepare
+.import _prev_cam_x, _col_buf, _col_addr, _col_pending, _bg_world_tiles
+.importzp ptr1
+.proc _scroll_stream_prepare
+    lda #0
+    sta _col_pending
+    lda _cam_x                  ; boundary crossed? diff in any bit >= 3
+    eor _prev_cam_x
+    and #$F8
+    sta tmp1
+    lda _cam_x+1
+    eor _prev_cam_x+1
+    ora tmp1
+    bne @crossed
+    rts
+@crossed:
+    lda _cam_x                  ; cam_x - prev_cam_x: borrow => moving left
+    cmp _prev_cam_x
+    lda _cam_x+1
+    sbc _prev_cam_x+1
+    bcc @left
+    lda _prev_cam_x             ; right: prev_cam_x += 8
+    clc
+    adc #8
+    sta _prev_cam_x
+    lda _prev_cam_x+1
+    adc #0
+    sta _prev_cam_x+1
+    lda _prev_cam_x             ; col = (prev_cam_x + 248) >> 3
+    clc
+    adc #248
+    sta tmp1
+    lda _prev_cam_x+1
+    adc #0
+    sta tmp2
+    jmp @shr3
+@left:
+    lda _prev_cam_x             ; left: prev_cam_x -= 8
+    sec
+    sbc #8
+    sta _prev_cam_x
+    lda _prev_cam_x+1
+    sbc #0
+    sta _prev_cam_x+1
+    lda _prev_cam_x             ; col = prev_cam_x >> 3
+    sta tmp1
+    lda _prev_cam_x+1
+    sta tmp2
+@shr3:
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp2
+    bne @done                   ; col >= 256
+    lda tmp1
+    cmp #64
+    bcs @done                   ; col >= 64 -> outside the world
+    lda #<_bg_world_tiles       ; ptr1 = bg_world_tiles + col
+    clc
+    adc tmp1
+    sta ptr1
+    lda #>_bg_world_tiles
+    adc #0
+    sta ptr1+1
+    ldy #0
+    ldx #0
+@cploop:
+    lda (ptr1),y                ; col_buf[rr] = *(ptr1); ptr1 += 64
+    sta _col_buf,x
+    lda ptr1
+    clc
+    adc #64
+    sta ptr1
+    bcc @nocarry
+    inc ptr1+1
+@nocarry:
+    inx
+    cpx #30
+    bne @cploop
+    lda tmp1                    ; col_addr = (col&0x20?0x2400:0x2000) + (col&0x1F)
+    and #$1F
+    sta _col_addr
+    lda tmp1
+    and #$20
+    beq @nt0
+    lda #$24
+    bne @sethi
+@nt0:
+    lda #$20
+@sethi:
+    sta _col_addr+1
+    lda #1
+    sta _col_pending
+@done:
+    rts
+.endproc

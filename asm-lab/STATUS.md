@@ -30,6 +30,7 @@ Or everything: `./run-all.sh`.
 
 | 9 | `scroll_follow` | scroll.c | ✅ 20/20 cases | 435 → **289** | big → smaller | ✅ **v13** (`NES_ASM_SCROLL`) |
 | 10 | `scroll_apply_ppu` | scroll.c | ✅ 16/16 cases | — | — | ✅ **v16** (`NES_ASM_SCROLL`) |
+| 11 | `scroll_stream_prepare` | scroll.c | ✅ 8/8 cases | — | index-loop → +64-stride walk | ✅ **v17** (`NES_ASM_SCROLL`) |
 
 **Phase 2 (leaf-first) goal met at v15**; **Phase 3 (harder integration
 functions) in progress.** All integrated behind off-by-default flags
