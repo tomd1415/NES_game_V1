@@ -31,6 +31,11 @@ export function boot(romPath) {
     },
     rd(addr) { return nes.cpu.mem[addr] & 0xFF; },
     rd16(addr) { return (nes.cpu.mem[addr] & 0xFF) | ((nes.cpu.mem[addr + 1] & 0xFF) << 8); },
+    // PPU/VRAM byte (e.g. palette $3F00-$3F1F, nametables $2000-$2FFF). For
+    // functions whose observable effect is PPU state, not CPU RAM.
+    rdPPU(addr) { return nes.ppu.vramMem[addr] & 0xFF; },
+    // OAM shadow byte (sprite table, $0200 -> $4014 DMA target).
+    rdOAM(i) { return nes.ppu.spriteMem[i] & 0xFF; },
   };
   return api;
 }

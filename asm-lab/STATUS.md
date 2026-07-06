@@ -24,6 +24,7 @@ Or everything: `./run-all.sh`.
 | 3 | `behaviour_at` | behaviour.c | ✅ 12/12 cases | 89 → **~70** | ~200+ → **~55** | ⬜ (flag pending) |
 | 4 | `reaction_for` | behaviour.c | ✅ 10/10 cases | 64 → **35** | ~120+ → **~30** | ⬜ (flag pending) |
 | 5 | `read_controller` | main.c | ✅ 7/7 combos | 61 → **23** | ~300+ → **~150** | ⬜ (flag pending) |
+| 6 | `write_palettes` | main.c | ✅ PPU RAM ≡ | 42 → **24** | — | ⬜ (flag pending) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -79,9 +80,18 @@ bytes / ~150 cycles vs cc65's stack-local loop (61 bytes + `pusha`/`decsp1` /
 ~300+): cc65 keeps `result` and `j` on the param stack and does `asl (sp),y`
 etc. every iteration — the worst-case for a register-starved loop.
 
+### 6. `write_palettes(void)` — PPU palette load
+First **PPU-effect** function: observable output is palette RAM ($3F00-$3F1F),
+not CPU RAM. Harness pattern (new): build the driver twice — C ref vs ASM,
+selected by `-DASM_VARIANT` (`run2` in run-all.sh) — boot each, read
+`nes.ppu.vramMem[$3F00+i]` via `rdPPU`, and assert the 32 entries are identical
+(plus the non-mirrored ones carry the source bytes; $3F10/14/18/1C mirror the
+backdrops, which both implementations hit the same way). ASM uses X as both the
+loop counter and the `palette_bytes,X` index: 24 bytes vs the C's 42.
+
 ## Up next
-- `write_palettes`, `draw_text`, `clear_text_row` — PPU nametable/`$3F00` writes
-  (a behaviour gate, not just RAM in/out — assert PPU/VRAM state).
+- `draw_text`, `clear_text_row` — PPU nametable writes at a computed address
+  (same dual-build PPU-compare pattern; assert the nametable region).
 - `scroll_*` (`scroll_init`, `scroll_follow`, `world_to_screen_*` done, then
   `scroll_apply_ppu` which touches the `$2005/$2006` latch — needs the ROM-level
   behaviour test, the touchiest ones for timing).

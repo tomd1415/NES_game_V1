@@ -10,6 +10,14 @@ run() { # name  src...
   echo "── $name ──────────────────────────────────────────────"
   make ROM="$name" SRC="$*" >/dev/null 2>build/.$name.log || { echo "BUILD FAIL"; cat build/.$name.log; fail=1; return; }
 }
+# For PPU-effect functions we build the driver twice (C ref vs ASM) so the
+# harness can compare their effect on PPU/VRAM state.
+run2() { # base  src...   (builds <base>_ref and <base>_asm)
+  local base="$1"; shift
+  echo "── $base (ref+asm) ────────────────────────────────────"
+  make ROM="${base}_ref" SRC="$*" >/dev/null 2>build/.${base}_ref.log || { echo "REF BUILD FAIL"; cat build/.${base}_ref.log; fail=1; return; }
+  make ROM="${base}_asm" CFLAGS="-Os -DASM_VARIANT" SRC="$*" >/dev/null 2>build/.${base}_asm.log || { echo "ASM BUILD FAIL"; cat build/.${base}_asm.log; fail=1; return; }
+}
 
 make clean >/dev/null 2>&1 || true
 mkdir -p build
@@ -33,6 +41,9 @@ node functions/reaction_for/test.mjs || fail=1
 
 run rc "functions/read_controller/ref.c functions/read_controller/test.c functions/read_controller/asm.s"
 node functions/read_controller/test.mjs || fail=1
+
+run2 wp "functions/write_palettes/ref.c functions/write_palettes/test.c functions/write_palettes/asm.s"
+node functions/write_palettes/test.mjs || fail=1
 
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
