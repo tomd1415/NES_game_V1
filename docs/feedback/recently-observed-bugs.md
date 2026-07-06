@@ -6,6 +6,9 @@ appears to get confused and show the wrong background for one of the screens.
 3. When the there is a jump to a different background, sometimes the the 'behaviour blocks' are from the
 wrong background.
 4. Please find NES game creation resources and reference them to help.
+   *Done:* curated in [`docs/reference/nes-resources.md`](../reference/nes-resources.md)
+   (NESdev wiki frame/NMI/PPU/scrolling, cc65, FamiStudio, etc., each with a
+   one-line "what it answers"), anchored by the codegen/architecture review.
 5. Convert more parts of the C code for game creation into assembly as last time this was done there
 was a massive improvement.
 6. Add more to the builder, including more fine tuning and the ability to be more specific to individual sprites and areas on the game. Have the ability to change the speed of the jump.
@@ -14,6 +17,11 @@ was a massive improvement.
 9. Fix scrolling errors in vertical and 2 by 2 backgrounds.
 10. Enable scrolling platform games to go beyond 2 screens (research how far we can make these go)
 11. Add the ability to make a 'Geometry Dash' style game. This has been requested by many of the younger pupils and making this as easy as possible would be very helpful.
+    *Largely covered:* the **runner** style is an auto-scroller with tap-to-jump
+    and an instant restart when the player touches a spike tile — the Geometry
+    Dash core loop. It has a starter + tutorial. A dedicated "Geometry Dash"
+    preset name / obstacle-pack could still make it more discoverable for the
+    younger pupils (nice-to-have, not a missing capability).
 12. Add an option for a top down racing game (like the classic Micro Machines game).
 13. More options for enemy paths.
 14. Currently the user can only place enemies and players on the first screen of the first background they should be able to do that for all screens in all backgrounds.
