@@ -250,6 +250,17 @@ parts.push('            if (!bw_sprite_blocked(ss_x['+i+'], ss_y['+i+'], ss_w['+
 > `px + (PLAYER_W<<3) + walk_speed - 1` at `platformer.c:584`). Keep that as a
 > follow-up; clamp `max:4` to bound the overshoot. This generalisation is the
 > natural shared step toward **T2.8** (enemy paths).
+>
+> **T2.8 update (2026-07-06 — shipped, engine v10).** Two new per-instance
+> enemy paths landed in the World dock's AI dropdown (v10+): **flyer** (hovers
+> ±20px around its placed height and drifts toward the player, overriding the
+> scene gravity loop by writing `ss_y` absolutely each frame — guarded on
+> `ss_y < 0xEF` so a defeated actor stays parked) and **patrol** (paces a fixed
+> ±40px and turns on its own, no wall needed, for open platforms). Both reuse
+> the R-4 per-instance `speed` and degrade to `walker` below v10, so golden
+> ROMs stay byte-identical. Covered by `tools/builder-tests/flyer-patrol.mjs`.
+> The `bw_sprite_blocked` `step`-argument generalisation above is still open —
+> flyer/patrol sidestep it (flyer ignores walls; patrol turns on distance).
 
 **Editor UI.** In the scene instance-row renderer in `builder.html`, add a small
 `<input type="number" min="1" max="4">` (or a 4-option select) labelled "Speed",
