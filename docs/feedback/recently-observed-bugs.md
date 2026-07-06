@@ -95,6 +95,19 @@ was a massive improvement.
     dialogue box not open at all, does it open with wrong text,
     does it freeze the game, does it lock player input, does it
     show stale text from a previous NPC, …?).
+    *2026-07-06 audit — the font-tile class of bug is well-guarded now,*
+    so a fresh symptom capture is needed before coding. The old "adding
+    letters onto the ASCII tiles glitches the stage" report (feedback
+    2026-04-29) is addressed: the server seeds a built-in uppercase font into
+    **blank** bg slots only (preserving pupil art, `_seed_dialogue_font`); the
+    Studio TILES view **marks the reserved glyph slots** (space/0-9/A-Z/a-z)
+    with a `T` badge + a "reserved for text glyphs" banner when dialogue is on
+    (`studio-tiles.js`); the `dialogueUnsupportedChars` validator warns on
+    characters the font lacks; and a `run-all.mjs` guard keeps the font set, the
+    editor marking, and the validator in sync. Existing behaviour is covered by
+    `render-dialogue-box.mjs`, `dialogue-scroll.mjs`, `dialogue-font.mjs`,
+    `round2-dialogue.mjs`. If dialogue still misbehaves, capture WHICH symptom
+    (box/text/freeze/input) with the module config so it can be reproduced.
 29. Vertical scrolling still not behaving as it should.  Originally
     item 9; re-reported 2026-04-27 — pupils are still seeing
     glitches in 1×2 / 2×2 backgrounds even after the multi-bg
