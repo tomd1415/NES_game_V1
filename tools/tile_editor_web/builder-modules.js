@@ -569,6 +569,10 @@
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' chases the player, stopping at solid tiles');
+          // Skip a defeated (parked at y=0xFF) chaser: it seeks the player on
+          // BOTH axes, so without this guard a stomped one would crawl its Y
+          // back down from 0xFF and reappear on screen.
+          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
           parts.push('        if (ss_x[' + i + '] + ' + speed + ' <= px) {');
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ss_x[' + i + '] += ' + speed + ';');
           parts.push('        } else if (ss_x[' + i + '] >= px + ' + speed + ') {');
@@ -578,6 +582,7 @@
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 2)) ss_y[' + i + '] += ' + speed + ';');
           parts.push('        } else if (ss_y[' + i + '] >= py + ' + speed + ') {');
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= ' + speed + ';');
+          parts.push('        }');
           parts.push('        }');
         } else if (sp.role === 'enemy' && ai === 'flyer') {
           // Engine v10 — flyer: a flying enemy for open air / ceilings. It
@@ -998,6 +1003,8 @@
       spawnOnHit: false,    // R-6: show an effect sprite where the player is hurt
       spawnSpriteIdx: 0,
       spawnTtl: 16,
+      stompDefeat: false,   // #15 — jump on an enemy from above to defeat it
+      stompBounce: 12,      // hop height after a stomp (jump-rise ticks)
     },
     schema: [
       {
@@ -1051,6 +1058,23 @@
         min: 1, max: 120,
         help: 'How long the effect sprite stays on screen after each hit.',
       },
+      {
+        key: 'stompDefeat',
+        label: 'Jump on enemies to defeat them (platformer)',
+        type: 'bool',
+        help: 'When Player 1 lands on an enemy from above (falling, feet near ' +
+          'the enemy\'s top) the enemy is defeated and the player bounces off, ' +
+          'instead of taking damage.  A side or below touch still hurts.  ' +
+          'Platformer style only.',
+      },
+      {
+        key: 'stompBounce',
+        label: 'Bounce height after a stomp',
+        type: 'int',
+        min: 4, max: 30,
+        help: 'How high Player 1 hops after defeating an enemy by jumping on ' +
+          'it.  Higher = a bigger bounce.  Only used when the option above is on.',
+      },
     ],
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
@@ -1060,10 +1084,28 @@
       const respawnHp = A.clampInt(c.respawnHp, 1, 9, 1);
       const spawnOnHit = !!c.spawnOnHit;
       const spawnTtl = A.clampInt(c.spawnTtl, 1, 120, 16);
+      // #15 — stomp-to-defeat.  Platformer only (it needs the jump/gravity
+      // state); the emitted collision code is #ifdef-guarded so a project with
+      // this off is byte-identical.
+      const gtype = (state && state.builder && state.builder.modules &&
+        state.builder.modules.game && state.builder.modules.game.config &&
+        state.builder.modules.game.config.type) || 'platformer';
+      const stompDefeat = !!c.stompDefeat && gtype === 'platformer';
+      const stompBounce = A.clampInt(c.stompBounce, 4, 30, 12);
       const decls = [
         '#define DAMAGE_AMOUNT ' + amount,
         '#define INVINCIBILITY_FRAMES ' + iframes,
       ];
+      if (stompDefeat) {
+        decls.push(
+          '#define BW_STOMP_DEFEAT 1',
+          '#ifndef BW_STOMP_MARGIN',
+          '#define BW_STOMP_MARGIN 8',
+          '#endif',
+          '#ifndef BW_STOMP_BOUNCE',
+          '#define BW_STOMP_BOUNCE ' + stompBounce,
+          '#endif');
+      }
       if (spawnOnHit) {
         // BR-05 (model B): this is the hit effect — kind 1, with its OWN art
         // (server emits SPAWN1_*) and lifetime (SPAWN_TTL_1).  Independent of
@@ -1094,6 +1136,9 @@
         '#if PLAYER_HP_ENABLED',
         '        if (!player_dead && player_iframes == 0) {',
         '            unsigned char dmg_hit = 0;',
+        '#ifdef BW_STOMP_DEFEAT',
+        '            unsigned char stomp_hit = 0;',
+        '#endif',
         '            for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
         '                if (ss_role[i] != ROLE_ENEMY) continue;',
         '                if (ss_y[i] >= 240) continue;',
@@ -1101,8 +1146,18 @@
         '                if (px >= ss_x[i] + (ss_w[i] << 3)) continue;',
         '                if (py + (PLAYER_H << 3) <= ss_y[i]) continue;',
         '                if (py >= ss_y[i] + (ss_h[i] << 3)) continue;',
+        '#ifdef BW_STOMP_DEFEAT',
+        '                /* #15 — landing on the enemy from above (not rising, feet',
+        '                 * near its top) defeats it instead of hurting the player. */',
+        '                if (jmp_up == 0 && py + (PLAYER_H << 3) <= ss_y[i] + BW_STOMP_MARGIN) {',
+        '                    ss_y[i] = 0xFF; stomp_hit = 1; continue;',
+        '                }',
+        '#endif',
         '                dmg_hit = 1; break;',
         '            }',
+        '#ifdef BW_STOMP_DEFEAT',
+        '            if (stomp_hit) { jumping = 1; jmp_up = BW_STOMP_BOUNCE; }',
+        '#endif',
         '            if (dmg_hit) {',
         '                player_hp = (player_hp > DAMAGE_AMOUNT)',
         '                          ? (player_hp - DAMAGE_AMOUNT) : 0;',

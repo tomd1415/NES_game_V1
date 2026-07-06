@@ -9,6 +9,29 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v11 — 2026-07-06
+
+### Added
+- **Stomp to defeat (plain platformer)** (bug #15 "no way to kill an enemy").
+  A new **Damage** module option — *"Jump on enemies to defeat them"* — plus a
+  tunable **bounce height**. When Player 1 falls onto an enemy from above (not
+  rising, feet within `BW_STOMP_MARGIN`=8px of the enemy's top) the enemy is
+  defeated (parked at `y=0xFF`) and the player bounces (`jmp_up =
+  BW_STOMP_BOUNCE`, default 12) instead of taking damage; a side/below touch
+  still hurts. Platformer style only (it needs the jump/gravity state) and
+  emitted `#ifdef BW_STOMP_DEFEAT`, so a project with the option off is
+  **byte-identical**. The SMB style already had goomba/koopa stomp + fireballs;
+  this brings a defeat mechanic to the basic platformer's walker/chaser/flyer/
+  patrol enemies. Behavioural test `stomp-basic.mjs` (ON defeats + bounces;
+  OFF leaves the enemy alive).
+
+### Changed / migration
+- **Chaser AI now skips a defeated (parked) actor.** The basic `chaser` seeks
+  the player on both axes, so once a defeat mechanic (the new stomp) can park
+  it at `y=0xFF` it would otherwise crawl its Y back on-screen. Guarded with
+  `if (ss_y[i] < 0xEF)`. Only affects projects that place a `chaser`; the
+  no-modules golden ROM and the walker/static `_rom-equiv` config are unchanged.
+
 ## v10 — 2026-07-06
 
 ### Added
