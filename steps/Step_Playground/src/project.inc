@@ -18,6 +18,7 @@
 ; --- Full-world background (scroll_stream_prepare / streamers) ---
 .define BG_WORLD_COLS          64
 .define BG_WORLD_ROWS          30
+.define BG_WORLD_ATTR_COLS     16
 ; --- Player (advance_animation) ---
 .define PLAYER_W               2
 .define PLAYER_H               2

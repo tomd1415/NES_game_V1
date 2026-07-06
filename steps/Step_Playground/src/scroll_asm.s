@@ -613,3 +613,200 @@ PPU_DATA2 = $2007
     sta PPU_CTRL
     rts
 .endproc
+
+; void load_world_bg(void) — boot-time nametable + attribute fill (rendering off,
+; so no vblank timing). Loads n_screens_x * n_screens_y screens (1 or 2 per axis
+; by BG_WORLD_COLS/ROWS) from bg_world_tiles/attrs into NT0/1/2, with running
+; source pointers (no per-cell multiply) and MULC-free constant offsets. Verified
+; by the corpus nametable comparison. Finishes scroll.c on ASM.
+.if BG_WORLD_COLS > 32
+  .define NSX_VAL 2
+.else
+  .define NSX_VAL 1
+.endif
+.if BG_WORLD_ROWS > 30
+  .define NSY_VAL 2
+.else
+  .define NSY_VAL 1
+.endif
+.export _load_world_bg
+.import _bg_world_attrs
+.segment "BSS"
+lwb_sx:   .res 1
+lwb_sy:   .res 1
+lwb_rr:   .res 1
+lwb_nthi: .res 1
+.segment "CODE"
+.proc _load_world_bg
+    lda #$10
+    sta PPU_CTRL                 ; +1 stride
+    lda #0
+    sta lwb_sy
+@sy:
+    lda lwb_sy
+    cmp #NSY_VAL
+    bcc @sybody
+    jmp @done
+@sybody:
+    lda #0
+    sta lwb_sx
+@sx:
+    lda lwb_sx
+    cmp #NSX_VAL
+    bcc @sxbody
+    jmp @sxnext
+@sxbody:
+    lda #$20                     ; nt_base hi = 0x20 + (sx?4) + (sy?8)
+    ldx lwb_sx
+    beq @nsx
+    clc
+    adc #$04
+@nsx:
+    ldx lwb_sy
+    beq @nsy
+    clc
+    adc #$08
+@nsy:
+    sta lwb_nthi
+    ; --- tiles: ptr1 = bg_world_tiles + sy*30*BG_WORLD_COLS + sx*32 ---
+    lda #<_bg_world_tiles
+    sta ptr1
+    lda #>_bg_world_tiles
+    sta ptr1+1
+    lda lwb_sy
+    beq @tnosy
+    clc
+    lda ptr1
+    adc #<(30*BG_WORLD_COLS)
+    sta ptr1
+    lda ptr1+1
+    adc #>(30*BG_WORLD_COLS)
+    sta ptr1+1
+@tnosy:
+    lda lwb_sx
+    beq @tnosx
+    clc
+    lda ptr1
+    adc #32
+    sta ptr1
+    lda ptr1+1
+    adc #0
+    sta ptr1+1
+@tnosx:
+    lda #0
+    sta lwb_rr
+@trow:
+    lda lwb_rr                   ; PPU addr = nt_base + rr*32
+    sta tmp1
+    lda #0
+    sta tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2                     ; tmp2:tmp1 = rr*32
+    lda lwb_nthi
+    clc
+    adc tmp2
+    sta PPU_ADDR2                ; hi
+    lda tmp1
+    sta PPU_ADDR2                ; lo
+    ldy #0
+@tcol:
+    lda (ptr1),y
+    sta PPU_DATA2
+    iny
+    cpy #32
+    bne @tcol
+    lda ptr1                     ; ptr1 += BG_WORLD_COLS (next painted row)
+    clc
+    adc #<BG_WORLD_COLS
+    sta ptr1
+    lda ptr1+1
+    adc #>BG_WORLD_COLS
+    sta ptr1+1
+    inc lwb_rr
+    lda lwb_rr
+    cmp #30
+    beq @tdone
+    jmp @trow
+@tdone:
+    ; --- attrs: ptr1 = bg_world_attrs + sy*8*BG_WORLD_ATTR_COLS + sx*8 ---
+    lda #<_bg_world_attrs
+    sta ptr1
+    lda #>_bg_world_attrs
+    sta ptr1+1
+    lda lwb_sy
+    beq @anosy
+    clc
+    lda ptr1
+    adc #<(8*BG_WORLD_ATTR_COLS)
+    sta ptr1
+    lda ptr1+1
+    adc #>(8*BG_WORLD_ATTR_COLS)
+    sta ptr1+1
+@anosy:
+    lda lwb_sx
+    beq @anosx
+    clc
+    lda ptr1
+    adc #8
+    sta ptr1
+    lda ptr1+1
+    adc #0
+    sta ptr1+1
+@anosx:
+    lda #0
+    sta lwb_rr
+@arow:
+    lda lwb_rr                   ; PPU addr = nt_base + 0x3C0 + rr*8
+    asl a
+    asl a
+    asl a
+    clc
+    adc #$C0
+    sta tmp1                     ; lo (0xC0..0xF8)
+    lda lwb_nthi
+    clc
+    adc #$03
+    sta PPU_ADDR2                ; hi
+    lda tmp1
+    sta PPU_ADDR2                ; lo
+    ldy #0
+@acol:
+    lda (ptr1),y
+    sta PPU_DATA2
+    iny
+    cpy #8
+    bne @acol
+    lda ptr1                     ; ptr1 += BG_WORLD_ATTR_COLS
+    clc
+    adc #<BG_WORLD_ATTR_COLS
+    sta ptr1
+    lda ptr1+1
+    adc #>BG_WORLD_ATTR_COLS
+    sta ptr1+1
+    inc lwb_rr
+    lda lwb_rr
+    cmp #8
+    beq @adone
+    jmp @arow
+@adone:
+    inc lwb_sx
+    jmp @sx
+@sxnext:
+    inc lwb_sy
+    jmp @sy
+@done:
+    lda #0
+    sta _prev_cam_x
+    sta _prev_cam_x+1
+    sta _prev_cam_y
+    sta _prev_cam_y+1
+    rts
+.endproc

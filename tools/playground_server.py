@@ -2296,7 +2296,7 @@ def build_project_inc(state, player_idx, scene_sprites):
     because ca65 won't fold an `=` constant inside a `.proc` for `.if` / MULC.
     See docs/plans/current/2026-07-06-asm-engine-generator.md (Phase 1)."""
     wcols, wrows = _behaviour_world_dims(state)              # WORLD_COLS/ROWS
-    _, _, bcols, brows, _, _ = _world_nametable(state)       # BG_WORLD_COLS/ROWS
+    _, _, bcols, brows, acols, _ = _world_nametable(state)   # BG_WORLD_COLS/ROWS + attr cols
     sprites = state.get("sprites") or []
     num_beh = len(sprites)
     num_static = len(scene_sprites or [])
@@ -2313,6 +2313,7 @@ def build_project_inc(state, player_idx, scene_sprites):
         f".define WORLD_ROWS             {wrows}",
         f".define BG_WORLD_COLS          {bcols}",
         f".define BG_WORLD_ROWS          {brows}",
+        f".define BG_WORLD_ATTR_COLS     {acols}",
         f".define PLAYER_W               {pw}",
         f".define PLAYER_H               {ph}",
         f".define PLAYER_TILES_PER_FRAME {pw * ph}",

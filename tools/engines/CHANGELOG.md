@@ -9,6 +9,22 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v23 — 2026-07-06 — load_world_bg on ASM (scroll.c is now 100% hand-written 6502)
+
+### Added
+- **load_world_bg on hand-written 6502** (NES_ASM_SCROLL) — the boot-time
+  nametable + attribute fill (rendering off, so no vblank timing). Running source
+  pointers (no per-cell multiply), constant screen-offsets, top-test loops with
+  jmp-backs for the outer screen loops. project.inc gains BG_WORLD_ATTR_COLS
+  (server build_project_inc + checked-in). **scroll.c now has NO C bodies when
+  NES_ASM_SCROLL=1** — the whole scroll subsystem is ASM.
+- Verified: golden byte-identical (1730448e); the corpus's nametable comparison
+  confirms every shape (1x1..2x2, WORLD_COLS=96, all-modules) loads the background
+  rendered-identically.
+
+### Changed / migration
+- Default unchanged (golden 1730448e).
+
 ## v22 — 2026-07-06 — ASM generator: scroll_stream on ASM (scroll.c nearly all ASM)
 
 ### Added

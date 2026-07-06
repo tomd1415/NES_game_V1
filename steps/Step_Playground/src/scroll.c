@@ -308,6 +308,9 @@ void scroll_stream(void) {
 #undef SCROLL_EMIT
 #undef SCROLL_EMIT_ROW
 
+/* load_world_bg has a hand-written 6502 twin in scroll_asm.s (boot-time NT+attr
+   fill). NES_ASM_SCROLL gates the C out — scroll.c is then 100% ASM. */
+#ifndef NES_ASM_SCROLL
 void load_world_bg(void) {
     /* Number of screens to load on each axis: 1 for non-scrolling
        axes, 2 for scrolling axes.  Worlds taller / wider than 2
@@ -383,6 +386,7 @@ void load_world_bg(void) {
     prev_cam_x = 0;
     prev_cam_y = 0;
 }
+#endif /* NES_ASM_SCROLL */
 
 /* world_to_screen_x/y have hand-written 6502 twins in scroll_asm.s. When the
    build sets NES_ASM_SCROLL=1 the ASM provides these symbols and the C bodies
