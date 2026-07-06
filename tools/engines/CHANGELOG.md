@@ -9,6 +9,27 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v10 — 2026-07-06
+
+### Added
+- **Two new enemy paths** (bug #13 "more enemy paths") selectable per scene
+  instance in the World dock's **AI** dropdown when the project targets v10+:
+  - **flyer** — ignores gravity, bobs up and down a fixed ±20px range and
+    drifts horizontally toward the player. A flying enemy for open air and
+    ceilings; uses no wall probe, so it floats freely.
+  - **patrol** — walks back and forth a fixed ±40px distance and turns on its
+    own (no wall required), so it stays put on an open platform where a plain
+    `walker` would march straight off the edge.
+  Both use the existing per-instance **speed** (1..4). Emitted by
+  `builder-modules.js` only when an instance's `ai` is `flyer`/`patrol` **and**
+  the target engine is ≥10; on any older target they degrade to `walker`, so a
+  design that picked one still builds and the non-flyer/patrol golden ROMs are
+  byte-identical.
+
+### Changed / migration
+- None. Existing projects contain no `flyer`/`patrol` instances, so their ROM
+  output is unchanged. New projects stamp `engineVersion: 10`.
+
 ## v9 — 2026-07-05
 
 ### Added

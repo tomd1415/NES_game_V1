@@ -541,6 +541,9 @@
         // Pre-v4 targets don't have the actor engine — degrade the SMB
         // enemies to the plain walker so old designs stay byte-identical.
         if ((ai === 'goomba' || ai === 'koopa') && targetEngine < 4) ai = 'walker';
+        // Engine v10 flight paths degrade to a plain walker on older targets so
+        // a design authored with them still builds (byte-identical) pre-v10.
+        if ((ai === 'flyer' || ai === 'patrol') && targetEngine < 10) ai = 'walker';
         // R-4: per-instance speed (px/frame).  1 = today's feel; clamp 1..4.
         // NB bw_sprite_blocked probes 1px ahead, so at speed >= 2 a fast enemy
         // can step its body slightly into a wall before reversing on the next
@@ -575,6 +578,42 @@
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 2)) ss_y[' + i + '] += ' + speed + ';');
           parts.push('        } else if (ss_y[' + i + '] >= py + ' + speed + ') {');
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= ' + speed + ';');
+          parts.push('        }');
+        } else if (sp.role === 'enemy' && ai === 'flyer') {
+          // Engine v10 — flyer: a flying enemy for open air / ceilings. It
+          // hovers in a ±20px band around the height it was placed at and
+          // drifts horizontally toward the player. The scene gravity loop
+          // (which runs earlier in the frame) would otherwise pull it to the
+          // floor, so we write ss_y ABSOLUTELY from its placed home each frame,
+          // overriding gravity — but only while alive (a defeated actor is
+          // parked at y=0xFF and must stay there, so guard on ss_y < 0xEF).
+          emitted++;
+          var flyHome = Math.max(20, Math.min(210, A.clampInt(inst.y, 0, 255, 0)));
+          parts.push(
+            '        // instance ' + i + ' — ' + (sp.name || '?') +
+              ' flies: hovers around its start height and drifts toward the player');
+          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
+          parts.push('            static signed char bw_fdir_' + i + ' = 1;');
+          parts.push('            static signed char bw_foff_' + i + ' = 0;');
+          parts.push('            if (bw_fdir_' + i + ' > 0) { bw_foff_' + i + ' += ' + speed + '; if (bw_foff_' + i + ' >= 20) bw_fdir_' + i + ' = -1; }');
+          parts.push('            else { bw_foff_' + i + ' -= ' + speed + '; if (bw_foff_' + i + ' <= -20) bw_fdir_' + i + ' = 1; }');
+          parts.push('            ss_y[' + i + '] = ' + flyHome + ' + bw_foff_' + i + ';');
+          parts.push('            if (ss_x[' + i + '] + ' + speed + ' <= px) ss_x[' + i + '] += ' + speed + ';');
+          parts.push('            else if (ss_x[' + i + '] >= px + ' + speed + ') ss_x[' + i + '] -= ' + speed + ';');
+          parts.push('        }');
+        } else if (sp.role === 'enemy' && ai === 'patrol') {
+          // Engine v10 — patrol: walks back and forth a fixed distance and
+          // turns on its own (no wall needed), so it works on an open platform
+          // where a plain walker would march straight off the edge.
+          emitted++;
+          parts.push(
+            '        // instance ' + i + ' — ' + (sp.name || '?') +
+              ' patrols back and forth a set distance, turning on its own');
+          parts.push('        {');
+          parts.push('            static signed char bw_pdir_' + i + ' = 1;');
+          parts.push('            static signed char bw_poff_' + i + ' = 0;');
+          parts.push('            if (bw_pdir_' + i + ' > 0) { ss_x[' + i + '] += ' + speed + '; bw_poff_' + i + ' += ' + speed + '; if (bw_poff_' + i + ' >= 40) bw_pdir_' + i + ' = -1; }');
+          parts.push('            else { ss_x[' + i + '] -= ' + speed + '; bw_poff_' + i + ' -= ' + speed + '; if (bw_poff_' + i + ' <= -40) bw_pdir_' + i + ' = 1; }');
           parts.push('        }');
         } else if (sp.role === 'enemy' && ai === 'goomba') {
           // Engine v4 — Goomba: walks (and off ledges, no ledge sensing),

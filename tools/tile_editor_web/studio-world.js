@@ -905,6 +905,12 @@
       if (stEng >= 5 || selected.ai === 'item') {
         aiOpts.push(['item', 'item (power-up the player collects)']);
       }
+      // v10 — extra enemy paths: a flyer (hovers + drifts toward the player)
+      // and a patrol (turns on its own, so it stays on an open platform).
+      if (stEng >= 10 || selected.ai === 'flyer' || selected.ai === 'patrol') {
+        aiOpts.push(['flyer', 'flyer (floats up/down toward the player)']);
+        aiOpts.push(['patrol', 'patrol (paces a set distance, turns itself)']);
+      }
       aiOpts.forEach(function (a) { aiSel.appendChild(el('option', { value: a[0], text: a[1] })); });
       aiSel.value = selected.ai || 'static';
       aiSel.addEventListener('change', function () { ctx.pushUndo(); selected.ai = aiSel.value; ctx.markDirty(); ctx.renderDock(); });
