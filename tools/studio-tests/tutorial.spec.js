@@ -31,8 +31,10 @@ test('the guided tutorial walks the pupil to a played game', async ({ page }) =>
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
 
-  // Launch: header Tutorial button loads the ready-made starter + opens the panel.
+  // Launch: header Tutorial button → pick a style → loads the ready-made
+  // starter + opens the panel.
   await page.locator('#btn-tutorial').click();
+  await page.locator('.modal-actions .btn', { hasText: 'Platformer' }).click();
   await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
   await expect(page.locator('.studio-main')).toHaveClass(/tutorial-on/);
   await expect(page.locator('#tutorial-region')).toBeVisible();
@@ -94,6 +96,32 @@ test('the guided tutorial walks the pupil to a played game', async ({ page }) =>
   // Progress persisted on the project.
   const persisted = await page.evaluate(() => window.Studio.getState().tutorial.step);
   expect(persisted).toBe(6);
+});
+
+test('every game style has a working guided tutorial', async ({ page }) => {
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  const styles = [
+    { pick: 'Platformer',        type: 'platformer', tut: 'first-game' },
+    { pick: 'SMB-style',         type: 'smb',        tut: 'smb-first' },
+    { pick: 'Top-down',          type: 'topdown',    tut: 'topdown-first' },
+    { pick: 'Auto-runner',       type: 'runner',     tut: 'runner-first' },
+    { pick: 'Racing',            type: 'racer',      tut: 'racer-first' },
+  ];
+  for (const st of styles) {
+    await page.locator('#btn-tutorial').click();
+    await page.locator('.modal-actions .btn', { hasText: st.pick }).click();
+    await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
+    const info = await page.evaluate(() => {
+      const s = window.Studio.getState();
+      const errs = (window.BuilderValidators.validate(s) || []).filter((p) => p.severity === 'error');
+      return { type: s.builder.modules.game.config.type, tut: s.tutorial.id, steps: window.StudioTutorial.stepCount(), errs: errs.map((e) => e.id) };
+    });
+    expect(info.type).toBe(st.type);
+    expect(info.tut).toBe(st.tut);
+    expect(info.steps).toBeGreaterThanOrEqual(5);
+    expect(info.errs).toEqual([]);   // no blocking errors → the style fully works
+  }
 });
 
 test('a normal project does not show the tutorial panel', async ({ page }) => {

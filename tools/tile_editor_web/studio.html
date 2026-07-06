@@ -279,7 +279,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 
 /* --- Dialog (Time Machine) ---------------------------------------- */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;
-  align-items:center;justify-content:center;z-index:50}
+  align-items:center;justify-content:center;z-index:10000}
 .modal-backdrop.open{display:flex}
 .modal{background:var(--panel);border:3px solid var(--accent);max-width:520px;
   width:92%;max-height:80vh;overflow:auto;padding:16px}
@@ -290,7 +290,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .snap-row .meta{flex:1 1 auto}
 .snap-row .when{color:var(--muted);font-size:11px}
 .snap-row .reason{color:var(--sel);font-size:10px;text-transform:uppercase}
-.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.modal-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:12px}
 .tm-section-title{color:var(--sel);font-size:12px;text-transform:uppercase;
   margin:14px 0 6px;letter-spacing:1px}
 
@@ -573,8 +573,9 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 <script src="codemirror-clike.min.js"></script>
 <script src="codemirror-active-line.min.js"></script>
 <script src="studio-code.js"></script>
-<!-- Guided tutorial: content manifest + runtime, registered before the shell boots. -->
+<!-- Guided tutorial: content manifests + runtime, registered before the shell boots. -->
 <script src="tutorial-first-game.js"></script>
+<script src="tutorial-styles.js"></script>
 <script src="studio-tutorial.js"></script>
 <script src="studio.js"></script>
 </body>

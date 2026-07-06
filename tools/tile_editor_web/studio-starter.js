@@ -345,6 +345,13 @@
       }
     }
 
+    // The starter loops via a door (no trigger tile), so the default reach-a-
+    // trigger win condition can never fire and only shows a red "no trigger
+    // tiles" warning.  Turn it off so a freshly-loaded starter is clean; a
+    // pupil adds a win when they are ready.  (DECISION: ship without a win
+    // rather than paint a goal tile — revisit if a starter goal is wanted.)
+    turnOffWin(state);
+
     // Stamp the engine this project is authored for (versioning/fallback).
     if (typeof global.NES_ENGINE_VERSION === 'number') {
       state.engineVersion = global.NES_ENGINE_VERSION;
@@ -560,25 +567,160 @@
     return state;
   }
 
-  // Guided tutorial starter: the `basics` project (a complete, working game
-  // with a ready-made tileset) plus a `tutorial` marker that tells the Studio
-  // to open the step-by-step tutorial panel (studio-tutorial.js). The pupil
-  // does one light edit per section, then plays it — nothing is drawn from
-  // scratch.
-  function createTutorial(opts) {
+  // Blank a background to `sx`×`sy` screens and return {bg, put}.  Shared by the
+  // style starters below so they all size + paint the same way.
+  function blankBg(state, sx, sy) {
+    var bg = state.backgrounds[0];
+    var W = 32 * sx, H = 30 * sy;
+    bg.dimensions = { screens_x: sx, screens_y: sy };
+    bg.nametable = []; bg.behaviour = [];
+    for (var r = 0; r < H; r++) {
+      var nt = [], bh = [];
+      for (var c = 0; c < W; c++) { nt.push({ tile: 0, palette: 0 }); bh.push(0); }
+      bg.nametable.push(nt); bg.behaviour.push(bh);
+    }
+    return {
+      bg: bg, W: W, H: H,
+      put: function (x, y, tile, beh) { if (bg.nametable[y] && bg.nametable[y][x]) { bg.nametable[y][x] = { tile: tile, palette: 0 }; bg.behaviour[y][x] = beh; } },
+    };
+  }
+  function turnOffWin(state) {
+    try { var wc = state.builder.modules.win_condition; if (wc) wc.enabled = false; } catch (e) {}
+  }
+  function stampEngine(state) {
+    if (typeof global.NES_ENGINE_VERSION === 'number') state.engineVersion = global.NES_ENGINE_VERSION;
+  }
+
+  // --- Top-down adventure: a walled room, a walker + a villager -------------
+  function createTopdown(opts) {
     opts = opts || {};
-    var state = create({ name: opts.name || 'My First Game', now: opts.now });
-    // The basics starter turns on a reach-a-trigger win condition, but its
-    // level loops via a door and paints no trigger tile — which trips the
-    // "no trigger tiles" validator.  A first tutorial is about learning the
-    // editor, not winning, so switch it off to keep "Needs attention" clean.
-    try {
-      var wc = state.builder && state.builder.modules && state.builder.modules.win_condition;
-      if (wc) wc.enabled = false;
-    } catch (e) {}
-    state.tutorial = { active: true, id: 'first-game', step: 0 };
+    var state = global.DefaultState.create({ name: opts.name || 'Top-down Adventure', template: 'platformer', now: opts.now });
+    seedSharedTiles(state);
+    state.behaviour_types = defaultBehaviourTypes();
+    state.sprites = [playerSprite(), enemySprite(), npcSprite()];
+    var g = blankBg(state, 1, 1);
+    // Wall border (solid ground blocks the player in top-down too), open middle.
+    for (var x = 0; x < g.W; x++) { g.put(x, 0, 1, 1); g.put(x, g.H - 1, 1, 1); }
+    for (var y = 0; y < g.H; y++) { g.put(0, y, 1, 1); g.put(g.W - 1, y, 1, 1); }
+    // A short interior wall to make the room feel like a room, plus a door.
+    for (var iy = 6; iy <= 13; iy++) g.put(18, iy, 1, 1);
+    g.put(g.W - 1, 15, 4, 4);   // door on the right wall
+    state.builder = global.BuilderDefaults();
+    var m = state.builder.modules;
+    m.game.config.type = 'topdown';
+    if (m.behaviour_walls) m.behaviour_walls.enabled = true;
+    if (m.players && m.players.submodules && m.players.submodules.player1) {
+      m.players.submodules.player1.config.startX = 96;
+      m.players.submodules.player1.config.startY = 120;
+    }
+    if (m.scene) {
+      m.scene.config = m.scene.config || {};
+      m.scene.config.instances = [
+        { id: 1, spriteIdx: 1, x: 180, y: 120, ai: 'walker', speed: 1 },
+        { id: 2, spriteIdx: 2, x: 64, y: 80, ai: 'static', speed: 1 },
+      ];
+    }
+    if (m.dialogue) { m.dialogue.enabled = true; m.dialogue.config = m.dialogue.config || {}; m.dialogue.config.text = 'FIND THE DOOR'; }
+    turnOffWin(state);          // top-down win is added later; keep attention clean
+    stampEngine(state);
     return state;
   }
+
+  // --- Auto-runner: 4-screen track, a floor with a gap, a spike ------------
+  function createRunner(opts) {
+    opts = opts || {};
+    var state = global.DefaultState.create({ name: opts.name || 'Auto-runner', template: 'platformer', now: opts.now });
+    seedSharedTiles(state);
+    state.behaviour_types = defaultBehaviourTypes().concat([{ id: 7, name: 'spike', label: 'Spike', color: 0x16 }]);
+    state.bg_tiles[5] = tileFrom('spike', [
+      '........', '........', '...1....', '..111...', '..111...', '.11111..', '11111111', '11111111',
+    ]);
+    state.bg_tiles[5].defaultBehaviour = 7;
+    state.sprites = [playerSprite()];
+    var g = blankBg(state, 4, 1);   // ≥2 screens wide (runner needs a scrolling world)
+    function floor(x0, x1) { for (var x = x0; x <= x1; x++) { g.put(x, 28, 1, 1); g.put(x, 29, 1, 1); } }
+    floor(0, 40); floor(45, g.W - 1);         // a small gap to jump at 41-44
+    for (var p = 20; p <= 23; p++) g.put(p, 24, 2, 3);   // a platform (brick) to hop
+    g.put(50, 27, 5, 7);                       // one spike after the gap
+    state.builder = global.BuilderDefaults();
+    var m = state.builder.modules;
+    m.game.config = m.game.config || {};
+    m.game.config.type = 'runner';
+    m.game.config.autoscrollSpeed = 2;
+    if (m.behaviour_walls) m.behaviour_walls.enabled = true;
+    if (m.dialogue) m.dialogue.enabled = false;   // dialogue is unsupported in runner builds
+    if (m.players && m.players.submodules && m.players.submodules.player1) {
+      m.players.submodules.player1.config.startX = 24;
+      m.players.submodules.player1.config.startY = 176;
+    }
+    turnOffWin(state);
+    stampEngine(state);
+    return state;
+  }
+
+  // --- Top-down racer: a rectangular ring track with a finish + checkpoint --
+  function createRacer(opts) {
+    opts = opts || {};
+    var state = global.DefaultState.create({ name: opts.name || 'Mini GP', template: 'platformer', now: opts.now });
+    seedSharedTiles(state);
+    state.behaviour_types = defaultBehaviourTypes().concat([{ id: 7, name: 'finish', label: 'Finish', color: 0x30 }]);
+    state.bg_tiles[5] = tileFrom('finish', [
+      '13131313', '31313131', '13131313', '31313131', '13131313', '31313131', '13131313', '31313131',
+    ]);
+    state.bg_tiles[5].defaultBehaviour = 7;    // finish line
+    state.bg_tiles[6] = tileFrom('checkpoint', [
+      '.222222.', '2......2', '2.2222.2', '2.2..2.2', '2.2..2.2', '2.2222.2', '2......2', '.222222.',
+    ]);
+    state.bg_tiles[6].defaultBehaviour = 5;    // checkpoint 1 (trigger slot)
+    var car = playerSprite(); car.name = 'Car';
+    state.sprites = [car];
+    var g = blankBg(state, 2, 2);   // racer needs ≥2 screens on an axis
+    // Solid outer border (2 thick) + a solid central block → a road ring.
+    for (var x = 0; x < g.W; x++) { g.put(x, 0, 1, 1); g.put(x, 1, 1, 1); g.put(x, g.H - 2, 1, 1); g.put(x, g.H - 1, 1, 1); }
+    for (var y = 0; y < g.H; y++) { g.put(0, y, 1, 1); g.put(1, y, 1, 1); g.put(g.W - 2, y, 1, 1); g.put(g.W - 1, y, 1, 1); }
+    for (var by = 12; by <= g.H - 13; by++) { for (var bx = 12; bx <= g.W - 13; bx++) g.put(bx, by, 1, 1); }
+    // Finish line across the top straight; checkpoint across the bottom straight.
+    for (var fy = 2; fy <= 11; fy++) g.put(32, fy, 5, 7);
+    for (var cy = g.H - 12; cy <= g.H - 3; cy++) g.put(32, cy, 6, 5);
+    state.builder = global.BuilderDefaults();
+    var m = state.builder.modules;
+    m.game.config = m.game.config || {};
+    m.game.config.type = 'racer';
+    m.game.config.racerTopSpeed = 3;
+    m.game.config.racerLaps = 2;
+    m.game.config.racerCheckpoints = 1;
+    if (m.players && m.players.submodules && m.players.submodules.player1) {
+      m.players.submodules.player1.config.startX = 48;    // on the top-left road
+      m.players.submodules.player1.config.startY = 48;
+    }
+    turnOffWin(state);   // the racer wins by laps, not a trigger tile (which it reuses)
+    stampEngine(state);
+    return state;
+  }
+
+  // Style → (plain starter factory, tutorial manifest id).
+  var STYLES = {
+    platformer: { create: create,        manifest: 'first-game' },
+    smb:        { create: createSmb,     manifest: 'smb-first' },
+    topdown:    { create: createTopdown, manifest: 'topdown-first' },
+    runner:     { create: createRunner,  manifest: 'runner-first' },
+    racer:      { create: createRacer,   manifest: 'racer-first' },
+  };
+
+  // Build the guided-tutorial variant of a style: its ready-made starter plus a
+  // `tutorial` marker (studio-tutorial.js opens the step panel when it sees it).
+  function tutorialFor(style, opts) {
+    var def = STYLES[style] || STYLES.platformer;
+    var state = def.create(opts || {});
+    // The basics platformer loops via a door with no trigger tile, which trips
+    // the win-condition validator — quieten it for the tutorial.
+    if (style === 'platformer') turnOffWin(state);
+    state.tutorial = { active: true, id: def.manifest, step: 0 };
+    return state;
+  }
+
+  // Back-compat: the original platformer tutorial entry/handler.
+  function createTutorial(opts) { return tutorialFor('platformer', opts); }
 
   // Registry of selectable starters, so the Studio can offer a picker.
   // `create(opts)` builds a fresh project; `min` is the engine the starter
@@ -600,8 +742,28 @@
         desc: 'A two-screen scrolling level with the whole SMB toolbox: run physics + variable jump (v3), Goomba stomps and a kickable Koopa shell (v4), Mushroom / Fire Flower / Starman power-ups with B-button fireballs (v5), ? blocks + bricks (v6), a coins/time/score/lives HUD (v7), a flagpole finish (v8) and sprite flicker (v9) — plus hearts, dialogue, a ladder and a warp door.',
         create: createSmb,
       },
+      {
+        id: 'topdown', emoji: '🧭', label: 'Top-down adventure',
+        desc: 'A four-way, no-gravity room to explore: walls you cannot walk through, a wandering enemy, a villager to talk to, and a door.',
+        create: createTopdown,
+      },
+      {
+        id: 'runner', emoji: '🏃', label: 'Auto-runner',
+        desc: 'A side-scroller that moves by itself: run and jump a gap and a platform, dodge a spike. Set the scroll speed in Rules.',
+        create: createRunner,
+      },
+      {
+        id: 'racer', emoji: '🏎️', label: 'Top-down racer',
+        desc: 'A top-down racing track: steer, accelerate and brake around a ring, cross the finish line and a checkpoint each lap.',
+        create: createRacer,
+      },
     ];
   }
 
-  global.StudioStarter = { create: create, createSmb: createSmb, createTutorial: createTutorial, list: list, tileFrom: tileFrom };
+  global.StudioStarter = {
+    create: create, createSmb: createSmb,
+    createTopdown: createTopdown, createRunner: createRunner, createRacer: createRacer,
+    createTutorial: createTutorial, tutorialFor: tutorialFor,
+    list: list, tileFrom: tileFrom,
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

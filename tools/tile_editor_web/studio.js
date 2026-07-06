@@ -514,13 +514,9 @@
   // Build a fresh project from the starter with the given id (from
   // StudioStarter.list()), register it, and switch to it.  Falls back to the
   // default starter when the id is unknown or the registry is unavailable.
-  function makeStarter(id) {
-    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
-    var chosen = null;
-    for (var i = 0; i < starters.length; i++) { if (starters[i].id === id) chosen = starters[i]; }
-    var n = (Storage.listProjects() || []).length + 1;
-    var fresh = chosen ? chosen.create({ name: chosen.label + ' ' + n })
-                       : window.StudioStarter.create({ name: 'My Game ' + n });
+  // Register a freshly-built starter/tutorial project as active and switch the
+  // whole Studio to it.  Shared by makeStarter + makeTutorial.
+  function loadFreshState(fresh) {
     Storage.createProject(fresh.name, fresh); // registers + sets active
     state = Storage.loadCurrent() || fresh;
     undoStack.length = 0; redoStack.length = 0;
@@ -533,6 +529,54 @@
     // engine button / advisor affordance.
     if (typeof refreshEngineButton === 'function') { try { refreshEngineButton(); } catch (e) {} }
     maybeStartTutorial();
+  }
+
+  function makeStarter(id) {
+    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
+    var chosen = null;
+    for (var i = 0; i < starters.length; i++) { if (starters[i].id === id) chosen = starters[i]; }
+    var n = (Storage.listProjects() || []).length + 1;
+    var fresh = chosen ? chosen.create({ name: chosen.label + ' ' + n })
+                       : window.StudioStarter.create({ name: 'My Game ' + n });
+    loadFreshState(fresh);
+  }
+
+  // Load the guided-tutorial variant of a game style (ready-made game + the
+  // step panel).  `style` ∈ platformer/smb/topdown/runner/racer.
+  var TUTORIAL_STYLE_LABEL = { platformer: 'Platformer', smb: 'SMB', topdown: 'Top-down', runner: 'Runner', racer: 'Racer' };
+  function makeTutorial(style) {
+    var n = (Storage.listProjects() || []).length + 1;
+    var name = (TUTORIAL_STYLE_LABEL[style] || 'Tutorial') + ' tutorial ' + n;
+    var fresh = window.StudioStarter.tutorialFor ? window.StudioStarter.tutorialFor(style, { name: name })
+                                                 : window.StudioStarter.createTutorial({ name: name });
+    loadFreshState(fresh);
+  }
+
+  // The 🎓 Tutorial button: pick which kind of game to learn, then load its
+  // guided tutorial.  Any style can be chosen — each fully works.
+  function onTutorial() {
+    Storage.flushPending();
+    var styles = [
+      { v: 'platformer', emoji: '🎮', label: 'Platformer', desc: 'Jump across platforms. The classic place to start.' },
+      { v: 'smb', emoji: '🍄', label: 'SMB-style', desc: 'Faster run + jump, blocks and coins.' },
+      { v: 'topdown', emoji: '🧭', label: 'Top-down adventure', desc: 'Walk around a room to explore. No jumping.' },
+      { v: 'runner', emoji: '🏃', label: 'Auto-runner', desc: 'The screen moves by itself — you jump.' },
+      { v: 'racer', emoji: '🏎️', label: 'Racing', desc: 'Steer a car around a track.' },
+    ];
+    if (!(window.StudioUI && window.StudioUI.modal)) { makeTutorial('platformer'); return; }
+    var el = window.StudioUI.el;
+    var body = styles.map(function (s) {
+      return el('div', { class: 'dock-note', style: 'margin:6px 0;line-height:1.35' }, [
+        el('strong', { text: s.emoji + '  ' + s.label }), el('div', { text: s.desc }),
+      ]);
+    });
+    var actions = styles.map(function (s, i) { return { label: s.emoji + ' ' + s.label, value: s.v, kind: i === 0 ? 'primary' : null }; });
+    actions.push({ label: 'Cancel', value: null });
+    window.StudioUI.modal({
+      title: 'Choose a kind of game to learn',
+      sub: 'A ready-made game will walk you through it, one small step at a time.',
+      bodyNodes: body, actions: actions,
+    }).then(function (v) { if (v) makeTutorial(v); });
   }
 
   // Open the guided-tutorial panel when the loaded project carries an active
@@ -1292,7 +1336,7 @@
     });
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
-    $('btn-tutorial').addEventListener('click', function () { makeStarter('tutorial'); });
+    $('btn-tutorial').addEventListener('click', onTutorial);
     $('quest-collapse').addEventListener('click', function () { setQuestsCollapsed(true); });
     $('quest-expand').addEventListener('click', function () { setQuestsCollapsed(false); });
     // Let the shared account menu offer "Load a starter game" too (bug: the

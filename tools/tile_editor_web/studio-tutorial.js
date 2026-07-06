@@ -43,6 +43,17 @@
     });
     return n;
   }
+  // Any painted behaviour cell (solid / wall / platform / …) — style-agnostic,
+  // so "paint some walls / track / platforms" all just mean "paint something".
+  function behaviourCount(s) {
+    var n = 0;
+    (s.backgrounds || []).forEach(function (bg) {
+      var b = bg && bg.behaviour;
+      if (!Array.isArray(b)) return;
+      b.forEach(function (row) { if (Array.isArray(row)) row.forEach(function (v) { if ((v | 0) !== 0) n++; }); });
+    });
+    return n;
+  }
   function palKey(s) { return JSON.stringify([s.universal_bg, s.bg_palettes, s.sprite_palettes]); }
   function tileKey(s) { return JSON.stringify([s.bg_tiles, s.sprite_tiles]); }
   function builderKey(s) { return JSON.stringify((s.builder && s.builder.modules) || {}); }
@@ -53,6 +64,7 @@
       palKey: palKey(s),
       tileKey: tileKey(s),
       groundCount: solidCount(s),
+      behaviourCount: behaviourCount(s),
       builderKey: builderKey(s),
     };
   }
@@ -63,6 +75,7 @@
     paletteChanged: function (s, base) { return palKey(s) !== base.palKey; },
     tileChanged: function (s, base) { return tileKey(s) !== base.tileKey; },
     groundAdded: function (s, base, p) { return solidCount(s) >= base.groundCount + ((p && p.min) || 1); },
+    behaviourAdded: function (s, base, p) { return behaviourCount(s) >= (base.behaviourCount || 0) + ((p && p.min) || 1); },
     builderChanged: function (s, base) { return builderKey(s) !== base.builderKey; },
     played: function () { return played; },
   };
