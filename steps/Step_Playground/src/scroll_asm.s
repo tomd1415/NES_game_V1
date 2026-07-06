@@ -544,3 +544,20 @@ PPU_SCROLL = $2005
     rts
 .endif
 .endproc
+
+; void scroll_init(void) — zero the camera + streamer baseline. Trivial; ships
+; under NES_ASM_SCROLL so the scroll subsystem's init is hand-written too.
+.export _scroll_init
+.import _prev_cam_x, _prev_cam_y
+.proc _scroll_init
+    lda #0
+    sta _cam_x
+    sta _cam_x+1
+    sta _cam_y
+    sta _cam_y+1
+    sta _prev_cam_x
+    sta _prev_cam_x+1
+    sta _prev_cam_y
+    sta _prev_cam_y+1
+    rts
+.endproc

@@ -57,6 +57,9 @@ node functions/scroll_follow/test.mjs || fail=1
 run sap "functions/scroll_apply_ppu/ref.c functions/scroll_apply_ppu/test.c functions/scroll_apply_ppu/asm.s"
 node functions/scroll_apply_ppu/test.mjs || fail=1
 
+run mulc "functions/mulc/test.c functions/mulc/asm.s"
+node functions/mulc/test.mjs || fail=1
+
 run ssp "functions/scroll_stream_prepare/ref.c functions/scroll_stream_prepare/test.c functions/scroll_stream_prepare/asm.s"
 node functions/scroll_stream_prepare/test.mjs || fail=1
 

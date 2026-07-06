@@ -44,12 +44,15 @@ const unsigned int scroll_max_cam_y = WORLD_H_PX - SCREEN_H_PX;
 unsigned int prev_cam_x;
 unsigned int prev_cam_y;
 
+/* scroll_init has a hand-written 6502 twin in scroll_asm.s (NES_ASM_SCROLL). */
+#ifndef NES_ASM_SCROLL
 void scroll_init(void) {
     cam_x = 0;
     cam_y = 0;
     prev_cam_x = 0;
     prev_cam_y = 0;
 }
+#endif
 
 #ifndef NES_ASM_SCROLL
 void scroll_follow(unsigned int target_world_x, unsigned int target_world_y) {

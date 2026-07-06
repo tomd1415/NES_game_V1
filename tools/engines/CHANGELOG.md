@@ -9,6 +9,24 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v21 — 2026-07-06 — ASM generator: scroll_init on ASM + MULC hardening
+
+### Added
+- **`scroll_init` on hand-written 6502** (`NES_ASM_SCROLL`) — the camera/streamer
+  init. Small, but it means the scroll subsystem's *entry point* is ASM too.
+  (`scroll_stream` stays C — it is already optimally unrolled and vblank-timing
+  sensitive; `load_world_bg` stays C — boot-only, complex address math. Both are
+  the documented next candidates to finish scroll.c.)
+- **`asm-lab/functions/mulc`** — a unit test for the `MULC` shift-add-by-constant
+  macro (the core of Phase 1's `behaviour_at` / `advance_animation`
+  generalisation). Proves `v*K` is exact for every world width the editor can
+  produce — `K ∈ {32,64,96,128}`, including the non-power-of-two `96` (shift-add)
+  that the shipped fixture never exercises. Hardens a now-shipped hot function.
+
+### Changed / migration
+- **Default unchanged** (golden `1730448e`); matched-progress A/B identical; full
+  builder suite green. Behaviourally this is a no-op for the C engine.
+
 ## v20 — 2026-07-06 — ASM engine generator Phase 1: project.inc + 4 more functions
 
 ### Added
