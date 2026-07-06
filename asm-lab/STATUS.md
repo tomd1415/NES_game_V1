@@ -21,6 +21,7 @@ Or everything: `./run-all.sh`.
 |---|----------|--------|---------------|---------------|-----------------|------------|
 | 1 | `world_to_screen_x` | scroll.c | ✅ 12/12 cases | 66 → **20** | ~120+ → **~28** | ⬜ (flag pending) |
 | 2 | `world_to_screen_y` | scroll.c | ✅ 10/10 cases | 66 → **24** | ~120+ → **~32** | ⬜ (flag pending) |
+| 3 | `behaviour_at` | behaviour.c | ✅ 12/12 cases | 89 → **~70** | ~200+ → **~55** | ⬜ (flag pending) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -42,9 +43,25 @@ i.e. ≥256)→0xFF, else `cmp #240 / bcs`→0xFF, else return the low byte. Pas
 10/10 first attempt (aligned, 239/240 boundary, 255, underflow, max). 24 bytes
 (4 more than `_x`) / ~32 cycles vs the C's 66 bytes + helpers / ~120+.
 
+### 3. `behaviour_at(unsigned int col, unsigned int row) -> unsigned char`
+First **2-arg** function: cc65 fastcall puts `row` in A/X and pushes `col` to the
+param stack (confirmed from the call site — `pushwysp` then `ldaxysp`), so the
+ASM reads `col` at `(sp),0/1` and pops 2 bytes with `jmp incsp2` (which
+preserves A/X). WORLD_COLS=32 lets `row*32 + col` avoid any multiply/`tosaddax`
+runtime: `indexHi = row>>3`, `indexLo = ((row&7)<<5) | col` (the low 5 bits are
+free, so no carry). Passed 12/12 (corners, on/off-bounds each axis, far-OOB).
+~70 bytes / ~55 cycles vs the C's 89 bytes + `pushax`/`ldaxysp×3`/`shlax4`/
+`shlax1`/`tosaddax`/`incsp4` (~200+ cycles).
+- **Harness lesson:** the driver clears a 960-byte map (crt0 also zeroes that
+  BSS), which pushed setup past a fixed frame count. Added `frameUntil(addr,
+  val)` to the harness (step frames until the done-marker) so no per-function
+  frame tuning is needed. Also switched the map fill to a running accumulator
+  (`v += 7`) to avoid a per-cell 16-bit multiply.
+- **Integration note:** this version is specialised to WORLD_COLS=32 (1-screen).
+  A multi-screen world uses a different multiply (e.g. `<<6` for 64); the engine
+  integration will emit the shift set for the project's actual WORLD_COLS.
+
 ## Up next (leaf-first order)
-- `behaviour_at` — bounds-check + `map[row*WORLD_COLS + col]`; introduces a
-  constant multiply + a `(ptr),Y` deref.
 - `reaction_for` — bounds-check + small 2D table index.
 - `read_controller` — `$4016` strobe + 8-bit shift-in.
 - then upward toward the per-frame loops and NMI where practical.

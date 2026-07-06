@@ -20,9 +20,7 @@ const model = (cam, world) => {
 
 const r = makeReporter('world_to_screen_x unit');
 const h = boot(path.join(__dirname, '..', '..', 'build', 'w2sx.nes'));
-h.frames(4);
-
-if (h.rd(0x0300) !== 0xAA) { r.bad('driver did not finish (marker $0300 != 0xAA)'); r.done(); }
+if (!h.frameUntil(0x0300, 0xAA)) { r.bad('driver did not finish (marker $0300 != 0xAA)'); r.done(); }
 const n = h.rd(0x0301);
 r.eq('case count', n, cams.length);
 r.eq('mismatch count (ref vs asm)', h.rd(0x0302), 0);

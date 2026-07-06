@@ -19,6 +19,16 @@ export function boot(romPath) {
   const api = {
     nes,
     frames(n) { for (let i = 0; i < n; i++) nes.frame(); return api; },
+    // Step frames until mem[addr] === val (the driver's "done" marker), up to
+    // maxFrames. Robust to per-driver setup cost (e.g. crt0 clearing a big BSS
+    // before main runs). Returns true if the marker appeared.
+    frameUntil(addr, val, maxFrames = 120) {
+      for (let i = 0; i < maxFrames; i++) {
+        nes.frame();
+        if ((nes.cpu.mem[addr] & 0xFF) === (val & 0xFF)) return true;
+      }
+      return false;
+    },
     rd(addr) { return nes.cpu.mem[addr] & 0xFF; },
     rd16(addr) { return (nes.cpu.mem[addr] & 0xFF) | ((nes.cpu.mem[addr + 1] & 0xFF) << 8); },
   };

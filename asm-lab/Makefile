@@ -19,11 +19,14 @@ ROM   ?= smoke
 SRC   ?= src/smoke.c
 BUILD  = build
 
-# Split SRC into C and ASM sources; compile each to build/<base>.o
+# Split SRC into C and ASM sources. Objects go in a PER-ROM subdir so different
+# functions never share ref.o/test.o/asm.o names (that cross-contaminated ROMs
+# when run-all built several in a row).
+OBJDIR = $(BUILD)/$(ROM)
 C_SRC  = $(filter %.c,$(SRC))
 S_SRC  = $(filter %.s,$(SRC))
-C_OBJ  = $(patsubst %.c,$(BUILD)/%.o,$(notdir $(C_SRC)))
-S_OBJ  = $(patsubst %.s,$(BUILD)/%.o,$(notdir $(S_SRC)))
+C_OBJ  = $(patsubst %.c,$(OBJDIR)/%.o,$(notdir $(C_SRC)))
+S_OBJ  = $(patsubst %.s,$(OBJDIR)/%.o,$(notdir $(S_SRC)))
 OBJ    = $(C_OBJ) $(S_OBJ)
 
 VPATH  = src:$(dir $(SRC))
@@ -31,14 +34,14 @@ VPATH  = src:$(dir $(SRC))
 .PHONY: rom clean
 rom: $(BUILD)/$(ROM).nes
 
-$(BUILD):
-	mkdir -p $(BUILD)
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
 
-$(BUILD)/%.o: %.c | $(BUILD)
-	$(CC) -t $(TARGET) $(CFLAGS) -o $(BUILD)/$*.s $<
-	$(AS) -t $(TARGET) -o $@ $(BUILD)/$*.s
+$(OBJDIR)/%.o: %.c | $(OBJDIR)
+	$(CC) -t $(TARGET) $(CFLAGS) -o $(OBJDIR)/$*.s $<
+	$(AS) -t $(TARGET) -o $@ $(OBJDIR)/$*.s
 
-$(BUILD)/%.o: %.s | $(BUILD)
+$(OBJDIR)/%.o: %.s | $(OBJDIR)
 	$(AS) -t $(TARGET) -o $@ $<
 
 $(BUILD)/$(ROM).nes: $(OBJ)
