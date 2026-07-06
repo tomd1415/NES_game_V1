@@ -27,7 +27,7 @@ Or everything: `./run-all.sh`.
 | 6 | `write_palettes` | main.c | ✅ PPU RAM ≡ | 42 → **24** | — | ⬜ (flag pending) |
 | 7 | `draw_text` | main.c | ✅ nametable ≡ (3 spots) | ~110 → **~85** | — | ⬜ (flag pending) |
 | 8 | `clear_text_row` | main.c | ✅ nametable ≡ | ~90 → **~70** | — | ⬜ (flag pending) |
-| 9 | `scroll_follow` | scroll.c | ✅ 10/10 cases | 435 → **289** | big → smaller | ⬜ (flag pending) |
+| 9 | `scroll_follow` | scroll.c | ✅ 20/20 cases | 435 → **289** | big → smaller | ✅ **v13** (`NES_ASM_SCROLL`) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -133,25 +133,30 @@ in `scroll.c`. Default OFF ⇒ pure C ⇒ golden ROMs byte-identical. Verified
 in-engine: a 64-col world built both ways renders identical OAM across 160
 frames incl. 80 of scrolling.
 
-**`scroll_follow` — lab-proven (generalised), in-engine integration DEFERRED.**
-The generalised ASM (reads `_scroll_max_cam_x/y` = `WORLD-SCREEN`, skips an axis
-whose max is 0, deadzone 96/144 fixed) passes the lab unit harness 20/20,
-including a cam=8 boundary sweep. But wiring it into the engine behind
-`NES_ASM_SCROLL` and A/B-testing the 64×30 ROM (all-C vs all-ASM) showed a
-**persistent divergence**: `cam_x` differs by 1 the instant the camera starts
-scrolling, cascading into a 1px scene-sprite shift. The camera *output* and
-*inputs* appear identical and the algorithm is lab-proven, and it is NOT a
-cc65-ZP clobber (giving `scroll_follow` private BSS scratch didn't fix it) — so
-there is a subtler engine-call interaction still to root-cause. **Reverted to
-keep the shipped engine on the clean, verified v12** (`world_to_screen` only,
-0-diff). Repro: build `steps/Step_Playground` with and without `NES_ASM_SCROLL=1`
-on a multi-screen world and diff OAM while scrolling. Next debugging step: read
-the exact `cam_x` (pre-call) and `target_x` handed to `scroll_follow` at the
-first diverging frame in both builds — if the inputs match, the lab and engine C
-disagree (check the per-axis `#if` gating / deadzone macros); if they differ,
-the root is upstream of `scroll_follow`.
+**Done — engine v13:** `scroll_follow` is wired in (same flag). Generalised ASM
+reads `_scroll_max_cam_x/y` = `WORLD-SCREEN`, skips a single-screen axis (max 0),
+deadzone 96/144 baked; private BSS scratch (`sf_*`), not cc65's `ptr1..4`.
+Verified flag-off byte-identical (golden) + flag-on **settle-to-rest** identical
+(all-C vs all-ASM, 64-col world, OAM identical at rest and scrolling).
+
+*Debugging war-story (worth remembering).* A naive A/B (compare from an
+UNSETTLED window) showed a persistent 1px divergence and `cam_x` off-by-1 at
+scroll start. It was NOT a `scroll_follow` bug: instrumenting the call showed
+both implementations compute correctly for their inputs, but the *inputs*
+(`cam_x`, player `px`) were each 1 ahead in the ASM build — a **1-frame phase
+offset from the faster ASM finishing the startup VRAM-streaming load ~1 frame
+sooner** (the `-Os` load-timing sensitivity the Makefile documents). Compared
+from a settled state, 0 diffs. Lesson: A/B ASM-vs-C engine builds **settle to
+rest first** (as the render suite already does), or a benign load-phase shift
+reads as a bug.
+
+**Next to integrate (`scroll.c`, same flag):**
 - `scroll_apply_ppu` — the `$2005/$2006` latch is a rendered-frame property;
-  prove via the ROM-level render suite once `scroll_follow` is unblocked.
+  prove via the settle-to-rest ROM-level A/B like `scroll_follow`.
+- `scroll_init` (trivial; touches file-static `prev_cam_*` — either export them
+  under the flag or keep in C).
+- `scroll_stream_prepare` / `scroll_stream` / `load_world_bg` — the VRAM
+  streamers (larger; whole-frame behaviours).
 Then move to `behaviour.c` / `main.c` functions — those files are
 server-regenerated, so integrating them means teaching `playground_server.py`'s
 codegen to emit the `.s` + `#ifdef` the C (a bigger, separate change).
