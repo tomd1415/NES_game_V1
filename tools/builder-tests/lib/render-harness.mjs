@@ -51,13 +51,13 @@ export function readTemplate() {
 }
 
 // --- Server lifecycle ------------------------------------------------------
-export async function startServer(port) {
+export async function startServer(port, extraEnv = {}) {
   // Point the accounts store (T4.2) at a throwaway temp DB so render/build
   // suites never create or touch the real tools/accounts.db.
   const acctDb = path.join(os.tmpdir(), `pg-harness-accounts-${port}.db`);
   for (const f of [acctDb, acctDb + '-wal', acctDb + '-shm']) { try { fs.unlinkSync(f); } catch {} }
   const srv = spawn('python3', [path.join(ROOT, 'tools', 'playground_server.py')],
-    { env: { ...process.env, PLAYGROUND_PORT: String(port), PLAYGROUND_ACCOUNTS_DB: acctDb },
+    { env: { ...process.env, PLAYGROUND_PORT: String(port), PLAYGROUND_ACCOUNTS_DB: acctDb, ...extraEnv },
       stdio: ['ignore', 'pipe', 'pipe'] });
   const log = { text: '' };
   srv.stdout.on('data', d => { log.text += d.toString(); });
