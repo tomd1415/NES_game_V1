@@ -571,7 +571,13 @@
       { v: 'topdown', emoji: '🧭', label: 'Top-down adventure', desc: 'Walk around a room to explore. No jumping.' },
       { v: 'runner', emoji: '🏃', label: 'Auto-runner', desc: 'The screen moves by itself — you jump.' },
       { v: 'racer', emoji: '🏎️', label: 'Racing', desc: 'Steer a car around a track.' },
+      { v: 'scratch', emoji: '🧱', label: 'Build from scratch (long)', desc: 'Start with a blank screen and build a whole game yourself — draw the hero, the world, enemies and a goal. Many small steps; leave and come back any time.' },
     ];
+    // If THIS project is mid-tutorial, offer to resume it (leave + come back).
+    var resumable = !!(state && state.tutorial && state.tutorial.active);
+    if (resumable && window.StudioTutorial && typeof window.StudioTutorial.start === 'function' && !(window.StudioUI && window.StudioUI.modal)) {
+      window.StudioTutorial.start(ctx); return;
+    }
     if (!(window.StudioUI && window.StudioUI.modal)) { makeTutorial('platformer'); return; }
     var el = window.StudioUI.el;
     var body = styles.map(function (s) {
@@ -579,7 +585,8 @@
         el('strong', { text: s.emoji + '  ' + s.label }), el('div', { text: s.desc }),
       ]);
     });
-    var actions = styles.map(function (s, i) { return { label: s.emoji + ' ' + s.label, value: s.v, kind: i === 0 ? 'primary' : null }; });
+    var actions = styles.map(function (s, i) { return { label: s.emoji + ' ' + s.label, value: s.v, kind: (!resumable && i === 0) ? 'primary' : null }; });
+    if (resumable) actions.unshift({ label: '▶ Resume your tutorial', value: '__resume', kind: 'primary' });
     actions.push({ label: '🧑‍🏫 Teacher settings', value: '__teacher' });
     actions.push({ label: 'Cancel', value: null });
     window.StudioUI.modal({
@@ -588,6 +595,7 @@
       bodyNodes: body, actions: actions,
     }).then(function (v) {
       if (v === '__teacher') { openTeacherSettings(function () { onTutorial(); }); }
+      else if (v === '__resume') { if (window.StudioTutorial) window.StudioTutorial.start(ctx); }
       else if (v) { makeTutorial(v); }
     });
   }
@@ -716,7 +724,7 @@
   // resumes after a reload).  No-op otherwise, so normal projects are untouched.
   function maybeStartTutorial() {
     try {
-      if (state && state.tutorial && state.tutorial.active &&
+      if (state && state.tutorial && state.tutorial.active && !state.tutorial.paused &&
           window.StudioTutorial && typeof window.StudioTutorial.start === 'function') {
         window.StudioTutorial.start(ctx);
       } else {

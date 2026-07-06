@@ -710,8 +710,39 @@
     return state;
   }
 
+  // --- Blank project: nothing drawn, for the long "from scratch" tutorial ---
+  function createScratch(opts) {
+    opts = opts || {};
+    var state = global.DefaultState.create({ name: opts.name || 'My Game', template: 'platformer', now: opts.now });
+    state.behaviour_types = defaultBehaviourTypes();
+    // A single blank hero (role player, tiles 1..4 undrawn) so there is no
+    // "no player" error — the pupil draws + names it. Everything else is empty.
+    state.sprites = [playerSprite()];
+    var bg = state.backgrounds[0];
+    var W = 32, H = 30;
+    bg.dimensions = { screens_x: 1, screens_y: 1 };
+    bg.behaviour = [];
+    for (var r = 0; r < H; r++) { var row = []; for (var c = 0; c < W; c++) row.push(0); bg.behaviour.push(row); }
+    state.builder = global.BuilderDefaults();
+    var m = state.builder.modules;
+    m.game.config.type = 'platformer';
+    if (m.behaviour_walls) m.behaviour_walls.enabled = true;
+    if (m.players && m.players.submodules && m.players.submodules.player1) {
+      m.players.submodules.player1.config.startX = 32;
+      m.players.submodules.player1.config.startY = 60;
+      m.players.submodules.player1.config.maxHp = 3;   // so turning on Damage later is clean
+    }
+    if (m.scene) m.scene.config = { instances: [] };   // no enemies yet
+    if (m.dialogue) m.dialogue.enabled = false;
+    if (m.damage) m.damage.enabled = false;
+    turnOffWin(state);
+    stampEngine(state);
+    return state;
+  }
+
   // Style → (plain starter factory, tutorial manifest id).
   var STYLES = {
+    scratch: { create: createScratch, manifest: 'scratch' },
     platformer: { create: create,        manifest: 'first-game' },
     smb:        { create: createSmb,     manifest: 'smb-first' },
     topdown:    { create: createTopdown, manifest: 'topdown-first' },
@@ -769,12 +800,18 @@
         desc: 'A top-down racing track: steer, accelerate and brake around a ring, cross the finish line and a checkpoint each lap.',
         create: createRacer,
       },
+      {
+        id: 'scratch', emoji: '📄', label: 'Blank project',
+        desc: 'Nothing drawn — a blank hero on an empty screen. Build everything yourself. (The 🎓 "Build from scratch" tutorial walks you through it.)',
+        create: createScratch,
+      },
     ];
   }
 
   global.StudioStarter = {
     create: create, createSmb: createSmb,
     createTopdown: createTopdown, createRunner: createRunner, createRacer: createRacer,
+    createScratch: createScratch,
     createTutorial: createTutorial, tutorialFor: tutorialFor,
     list: list, tileFrom: tileFrom,
   };

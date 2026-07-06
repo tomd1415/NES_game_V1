@@ -22,9 +22,9 @@ for (const f of ['sprite-render.js', 'builder-assembler.js', 'builder-modules.js
 }
 const tpl = fs.readFileSync(path.join(WEB, 'builder-templates/platformer.c'), 'utf8');
 
-// The registry offers all five styles.
+// The registry offers all styles.
 const listIds = window.StudioStarter.list().map(s => s.id);
-for (const id of ['basics', 'smb', 'topdown', 'runner', 'racer']) {
+for (const id of ['basics', 'smb', 'topdown', 'runner', 'racer', 'scratch']) {
   if (listIds.includes(id)) ok('picker offers "' + id + '"'); else bad('picker missing "' + id + '" (' + listIds.join(',') + ')');
 }
 
@@ -34,6 +34,7 @@ const STYLES = [
   { id: 'topdown', make: () => window.StudioStarter.createTopdown(), type: 'topdown' },
   { id: 'runner',  make: () => window.StudioStarter.createRunner(),  type: 'runner' },
   { id: 'racer',   make: () => window.StudioStarter.createRacer(),   type: 'racer' },
+  { id: 'scratch', make: () => window.StudioStarter.createScratch(), type: 'platformer' },
 ];
 
 function playerStart(s) {

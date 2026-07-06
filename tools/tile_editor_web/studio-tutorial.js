@@ -54,6 +54,18 @@
     });
     return n;
   }
+  function nametableCount(s) {
+    var n = 0;
+    (s.backgrounds || []).forEach(function (bg) {
+      var nt = bg && bg.nametable;
+      if (!Array.isArray(nt)) return;
+      nt.forEach(function (row) { if (Array.isArray(row)) row.forEach(function (c) { if (c && (c.tile | 0) !== 0) n++; }); });
+    });
+    return n;
+  }
+  function roleCount(s, role) { return (s.sprites || []).filter(function (x) { return x && x.role === role; }).length; }
+  var TRACK_ROLES = ['player', 'enemy', 'npc', 'pickup'];
+  function snapshotRoles(s) { var o = {}; TRACK_ROLES.forEach(function (r) { o[r] = roleCount(s, r); }); return o; }
   function palKey(s) { return JSON.stringify([s.universal_bg, s.bg_palettes, s.sprite_palettes]); }
   function tileKey(s) { return JSON.stringify([s.bg_tiles, s.sprite_tiles]); }
   function builderKey(s) { return JSON.stringify((s.builder && s.builder.modules) || {}); }
@@ -85,6 +97,7 @@
       builderKey: builderKey(s),
       sceneCount: sceneCount(s), bgCount: bgCount(s), dialogueText: dialogueText(s),
       mods: snapshotMods(s), beh: snapshotBeh(s),
+      nametableCount: nametableCount(s), roles: snapshotRoles(s),
     };
   }
 
@@ -99,6 +112,8 @@
     groundAdded: function (s, base, p) { return solidCount(s) >= base.groundCount + ((p && p.min) || 1); },
     behaviourAdded: function (s, base, p) { return behaviourCount(s) >= (base.behaviourCount || 0) + ((p && p.min) || 1); },
     behaviourTypePainted: function (s, base, p) { var name = (p && p.name) || 'wall'; return behTypeCount(s, name) >= ((base.beh && base.beh[name]) || 0) + ((p && p.min) || 1); },
+    nametablePainted: function (s, base, p) { return nametableCount(s) >= (base.nametableCount || 0) + ((p && p.min) || 1); },
+    spriteRoleAdded: function (s, base, p) { var role = (p && p.role) || 'enemy'; return roleCount(s, role) >= ((base.roles && base.roles[role]) || 0) + ((p && p.min) || 1); },
     sceneInstanceAdded: function (s, base, p) { return sceneCount(s) >= (base.sceneCount || 0) + ((p && p.min) || 1); },
     backgroundAdded: function (s, base) { return bgCount(s) > (base.bgCount || 0); },
     dialogueChanged: function (s, base) { return dialogueText(s) !== (base.dialogueText || ''); },
@@ -214,7 +229,14 @@
     var done = Math.min(stepIndex(), total);
 
     var head = el('div', 'tut-head');
-    head.appendChild(el('div', 'tut-kicker', '🎓 ' + tut.title));
+    var topRow = el('div', 'tut-toprow');
+    topRow.appendChild(el('div', 'tut-kicker', '🎓 ' + tut.title));
+    var hide = el('button', 'tut-hide', '⏸ Hide');
+    hide.type = 'button'; hide.dataset.act = 'hide';
+    hide.title = 'Leave the tutorial — your progress is saved. Reopen it with the 🎓 Tutorial button.';
+    hide.addEventListener('click', pause);
+    topRow.appendChild(hide);
+    head.appendChild(topRow);
     var bar = el('div', 'tut-progress');
     var fill = el('div', 'tut-progress-fill');
     fill.style.width = Math.round((done / total) * 100) + '%';
@@ -375,11 +397,22 @@
     tut = applyOverride(id, tut);   // teacher's edited steps, if any
     if (!tut) return;
     if (!s.tutorial.base) { s.tutorial.base = snapshot(s); markDirty(); }
+    if (s.tutorial.paused) { s.tutorial.paused = false; markDirty(); }   // resuming
     ensureLevel();       // unlock Tiles/Pals etc. before any step points at them
     hookPlay();
     showPanel(true);
     collapseQuests(true);
     render();
+  }
+
+  // Leave the tutorial for now — hide the panel but keep progress + the marker,
+  // so it can be resumed later (this session via the 🎓 button, or next time the
+  // project is opened).
+  function pause() {
+    var s = getState();
+    if (s && s.tutorial) { s.tutorial.paused = true; markDirty(); }
+    showPanel(false);
+    collapseQuests(false);   // give the quests column back
   }
 
   function isActive() {
@@ -389,6 +422,7 @@
 
   global.StudioTutorial = {
     start: start,
+    pause: pause,
     isActive: isActive,
     render: render,
     stepIndex: stepIndex,     // for tests / progress display

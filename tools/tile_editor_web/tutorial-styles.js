@@ -154,6 +154,46 @@
     ],
   };
 
+  // --- The long "from scratch" tutorial: blank project → complete game -------
+  function S(id, mode, icon, title, instruction, why, hint, check, finishedEnough) {
+    return { id: id, chapter: '', mode: mode, icon: icon, title: title, instruction: instruction, why: why, finishedEnough: finishedEnough || 'Give it a go — it does not need to be perfect.', hint: hint, check: check };
+  }
+  var SCRATCH = [
+    // Chapter 1 — your hero
+    S('name-hero', 'chars', '🦸', 'Name your hero', 'Open Chars and give your hero a name.', 'Every game starts with a main character.', 'In Chars, click the hero, then type a name in the Name box.', { type: 'spriteRenamed' }, 'Any name is fine.'),
+    S('draw-hero', 'tiles', '🎨', 'Draw your hero', 'Open Tiles and draw a face and body on your hero.', 'Right now your hero is blank — bring it to life.', 'In Tiles, pick a colour and click on the big square to draw. Your hero uses the first few tiles.', { type: 'tileChanged' }, 'A few pixels is a great start.'),
+    S('colour-hero', 'pals', '🌈', 'Choose your colours', 'Open Pals and change a colour in a palette.', 'Colour makes your hero yours.', 'In Pals, click a colour swatch and pick a new colour.', { type: 'paletteChanged' }, 'One colour change is enough.'),
+    // Chapter 2 — build the ground
+    S('draw-ground', 'tiles', '🟫', 'Draw a ground tile', 'Open Tiles, pick a NEW tile, and draw some grass or dirt on it.', 'The world is built from little tile pictures.', 'In Tiles, click a blank tile in the list first, then draw on it.', { type: 'tileChanged' }, 'A simple pattern is plenty.'),
+    S('paint-floor', 'world', '🗺️', 'Paint a floor', 'Open World and stamp your ground tile along the bottom of the screen.', 'Your hero needs somewhere to stand.', 'In World, pick the Stamp tool and your ground tile, then click along the bottom row.', { type: 'nametablePainted', params: { min: 8 } }, 'A row across the bottom is enough.'),
+    S('make-solid', 'world', '🧱', 'Make the floor solid', 'Use the Type tool in World to mark the floor as Solid ground.', 'A picture is not solid until its Type says so — this is the most important idea!', 'In World open More tools → the ⛰ Type tool, pick Solid ground, then click your floor tiles.', { type: 'behaviourTypePainted', params: { name: 'solid_ground', min: 8 } }, 'Mark the whole floor solid.'),
+    S('play-1', null, '🎮', 'Try it!', 'Press the ▶ Play button and watch your hero stand on the floor.', 'Test early and often — it is the best way to learn.', 'The ▶ Play button is in the top bar.', { type: 'played' }, 'One quick test.'),
+    // Chapter 3 — platforms
+    S('draw-brick', 'tiles', '🟧', 'Draw a brick tile', 'Open Tiles, pick another blank tile, and draw a brick or block.', 'Platforms need their own tile.', 'In Tiles, click a new blank tile, then draw on it.', { type: 'tileChanged' }),
+    S('build-platform', 'world', '🧗', 'Build a platform', 'Stamp a few brick tiles up in the air in World.', 'Platforms turn a flat floor into a jumping game.', 'Pick your brick tile and click a few squares above the floor.', { type: 'nametablePainted', params: { min: 3 } }, 'Two or three bricks is enough.'),
+    S('platform-type', 'world', '🪜', 'Make it a platform', 'Use the Type tool to mark those bricks as Platform.', 'Then your hero can land on them.', 'Type tool → Platform, then click the bricks you placed.', { type: 'behaviourTypePainted', params: { name: 'platform', min: 3 } }),
+    // Chapter 4 — an enemy
+    S('create-enemy', 'chars', '👾', 'Create an enemy', 'In Chars press "+ New" and set the new character\'s Role to Enemy.', 'A game needs a bit of danger.', 'In Chars, "+ New", then choose Enemy in the Role dropdown.', { type: 'spriteRoleAdded', params: { role: 'enemy' } }),
+    S('draw-enemy', 'tiles', '🎨', 'Draw your enemy', 'Open Tiles and draw your enemy.', 'Make it look scary or silly — your choice.', 'Draw on your enemy\'s tiles in Tiles.', { type: 'tileChanged' }),
+    S('place-enemy', 'world', '📍', 'Place your enemy', 'Use the 🧍 Place tool in World to drop your enemy into the level.', 'Put it away from where the hero starts.', 'World → 🧍 Place tool → click an empty spot.', { type: 'sceneInstanceAdded', params: { min: 1 } }),
+    S('add-hearts', 'rules', '❤️', 'Add hearts', 'Open Rules and turn on the Damage / hearts feature.', 'Now the enemy can actually hurt the hero.', 'In Rules, find Damage (hearts) and switch it on.', { type: 'moduleEnabledChanged', params: { id: 'damage' } }),
+    // Chapter 5 — a reward
+    S('create-pickup', 'chars', '🪙', 'Create a coin', 'In Chars press "+ New" and set the Role to Pickup.', 'Something to collect gives a reason to explore.', 'Chars → "+ New" → Role: Pickup.', { type: 'spriteRoleAdded', params: { role: 'pickup' } }),
+    S('place-pickup', 'world', '💎', 'Place your coin', 'Use the 🧍 Place tool to put your coin somewhere to reach.', 'Coins guide the player along the best route.', 'World → 🧍 Place tool → click above a platform.', { type: 'sceneInstanceAdded', params: { min: 1 } }),
+    // Chapter 6 — a goal
+    S('paint-goal', 'world', '🏁', 'Paint a goal', 'Use the Type tool to mark a tile as Trigger — this is the finish.', 'Every game needs a way to win.', 'World → Type tool → Trigger, then click a tile at the end of your level.', { type: 'behaviourTypePainted', params: { name: 'trigger', min: 1 } }),
+    S('turn-on-win', 'rules', '🏆', 'Turn on winning', 'Open Rules and turn on the Win condition.', 'Reaching the trigger tile will now win the game.', 'In Rules, switch on Win condition (reach a trigger tile).', { type: 'moduleEnabledChanged', params: { id: 'win_condition' } }),
+    // Chapter 7 — tune + finish
+    S('change-jump', 'rules', '⚙️', 'Tune the jump', 'Open Rules and change the jump height or speed.', 'Small number changes change how the game feels.', 'In Rules, change a number like jump height.', { type: 'builderChanged' }),
+    S('play-final', null, '🎉', 'Play your finished game!', 'Press ▶ Play and enjoy the game you built from nothing.', 'You drew it, built it, and set the rules — brilliant.', 'Press ▶ Play. Try to reach your goal tile to win!', { type: 'played' }, 'Play it through once.'),
+  ];
+  SCRATCH.forEach(function (st, i) { if (!st.chapter) st.chapter = 'Step ' + (i + 1) + ' of ' + SCRATCH.length; });
+  global.STUDIO_TUTORIALS['scratch'] = {
+    id: 'scratch', title: 'Build a game from scratch', minLevel: 'maker',
+    intro: 'Start with a blank screen and build a whole game, one small step at a time. You can leave and come back whenever you like.',
+    steps: SCRATCH,
+  };
+
   global.STUDIO_TUTORIALS['racer-first'] = {
     id: 'racer-first', title: 'Make a racing game', minLevel: 'maker',
     intro: 'A top-down racer: steer, accelerate and brake around a track. Make it yours, then play it.',

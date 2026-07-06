@@ -32,11 +32,38 @@ async function satisfy(page, check, seed) {
     else if (type === 'behaviourTypePainted') { paint(beh(p.name || 'wall'), (p.min || 1) + 1); }
     else if (type === 'sceneInstanceAdded') { const sc = s.builder.modules.scene.config; sc.instances = sc.instances || []; const n = (p.min || 1) + 1; for (let i = 0; i < n; i++) sc.instances.push({ id: 9000 + seed * 10 + i, spriteIdx: 0, x: 40 + i * 16, y: 100, ai: 'walker', speed: 1 }); }
     else if (type === 'backgroundAdded') { const W = 32, H = 30; s.backgrounds.push({ name: 'room' + seed, dimensions: { screens_x: 1, screens_y: 1 }, nametable: Array.from({ length: H }, () => Array.from({ length: W }, () => ({ tile: 0, palette: 0 }))), behaviour: Array.from({ length: H }, () => Array(W).fill(0)) }); }
+    else if (type === 'nametablePainted') { const nt = bg.nametable; let placed = 0; const need = (p.min || 1) + 1; for (let r = 0; r < nt.length && placed < need; r++) for (let c = 0; c < nt[r].length && placed < need; c++) { if (!nt[r][c] || (nt[r][c].tile | 0) === 0) { nt[r][c] = { tile: 1, palette: 0 }; placed++; } } }
+    else if (type === 'spriteRoleAdded') { const n = (p.min || 1) + 1; for (let i = 0; i < n; i++) s.sprites.push({ name: (p.role || 'e') + seed + i, role: p.role || 'enemy', width: 1, height: 1, cells: [[{ tile: 1, palette: 0, flipH: false, flipV: false, priority: false, empty: false }]] }); }
     else if (type === 'dialogueChanged') { const d = s.builder.modules.dialogue; d.config = d.config || {}; d.config.text = 'HELLO ' + seed; }
     else if (type === 'moduleEnabledChanged') { const m = s.builder.modules[p.id]; if (m) m.enabled = !m.enabled; }
     else if (type === 'builderChanged') { const c = s.builder.modules.players.submodules.player1.config; c.maxHp = (c.maxHp || 3) + 1 + seed; }
     S.ctx.markDirty();
   }, { type: check.type, params: check.params || null, seed });
+}
+
+// Walk EVERY step to completion, handling intermediate + final Play steps.
+async function walkAll(page, maxSteps) {
+  let seed = 1, guard = 0;
+  while (!(await page.evaluate(() => window.StudioTutorial.isComplete()))) {
+    if (guard++ > (maxSteps || 40)) throw new Error('tutorial did not complete');
+    const check = await page.evaluate(() => window.StudioTutorial.currentCheck());
+    const idx = await page.evaluate(() => window.StudioTutorial.stepIndex());
+    if (check.type === 'played') {
+      await page.locator('#btn-play').click();
+      await page.waitForFunction((n) => window.StudioTutorial.stepIndex() > n || window.StudioTutorial.isComplete(), idx, { timeout: 25000 });
+      // The build opens the embedded emulator ~1-2s later; a real pupil closes
+      // the game window before continuing, so dismiss it (unless we're done).
+      if (!(await page.evaluate(() => window.StudioTutorial.isComplete()))) {
+        await page.waitForTimeout(2500);
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+      }
+    } else {
+      await satisfy(page, check, seed++);
+      await page.locator('.tut-card [data-act="check"]').click();
+      await page.waitForFunction((n) => window.StudioTutorial.stepIndex() > n, idx);
+    }
+  }
 }
 
 test('the platformer tutorial walks the pupil through every step to a played game', async ({ page }) => {
@@ -45,25 +72,59 @@ test('the platformer tutorial walks the pupil through every step to a played gam
   await launch(page, 'Platformer');
   await expect(page.locator('.studio-main')).toHaveClass(/tutorial-on/);
   await expect(page.locator('#tutorial-region')).toBeVisible();
+  expect(await page.evaluate(() => window.StudioTutorial.stepCount())).toBeGreaterThanOrEqual(8);
+  await walkAll(page, 30);
+  await expect(page.locator('.tut-complete')).toBeVisible();
+});
 
-  const total = await page.evaluate(() => window.StudioTutorial.stepCount());
-  expect(total).toBeGreaterThanOrEqual(8);   // deepened
+test('the long from-scratch tutorial walks from a blank project to a finished game', async ({ page }) => {
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  await launch(page, 'Build from scratch');
+  // Blank starting point: no drawn background, one blank hero, empty world.
+  const blank = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    const painted = s.backgrounds[0].nametable.some((r) => r.some((c) => c && c.tile));
+    return { painted, players: s.sprites.filter((x) => x && x.role === 'player').length, enemies: s.sprites.filter((x) => x && x.role === 'enemy').length, steps: window.StudioTutorial.stepCount() };
+  });
+  expect(blank.painted).toBe(false);
+  expect(blank.players).toBe(1);
+  expect(blank.enemies).toBe(0);
+  expect(blank.steps).toBeGreaterThanOrEqual(18);   // long
+  await walkAll(page, 60);
+  await expect(page.locator('.tut-complete')).toBeVisible();
+  // The pupil built real content along the way.
+  const built = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    return { enemies: s.sprites.filter((x) => x && x.role === 'enemy').length, pickups: s.sprites.filter((x) => x && x.role === 'pickup').length };
+  });
+  expect(built.enemies).toBeGreaterThanOrEqual(1);
+  expect(built.pickups).toBeGreaterThanOrEqual(1);
+});
 
-  let seed = 1, guard = 0;
-  while (!(await page.evaluate(() => window.StudioTutorial.isComplete()))) {
-    if (guard++ > 30) throw new Error('tutorial did not complete');
+test('a pupil can leave a tutorial (Hide) and resume it later', async ({ page }) => {
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  await launch(page, 'Platformer');
+  // Advance a couple of steps, then leave.
+  for (let i = 0; i < 2; i++) {
     const check = await page.evaluate(() => window.StudioTutorial.currentCheck());
     const idx = await page.evaluate(() => window.StudioTutorial.stepIndex());
-    if (check.type === 'played') {
-      await page.locator('#btn-play').click();
-      await page.waitForFunction(() => window.StudioTutorial.isComplete(), null, { timeout: 20000 });
-    } else {
-      await satisfy(page, check, seed++);
-      await page.locator('.tut-card [data-act="check"]').click();
-      await page.waitForFunction((n) => window.StudioTutorial.stepIndex() > n, idx);
-    }
+    await satisfy(page, check, i + 1);
+    await page.locator('.tut-card [data-act="check"]').click();
+    await page.waitForFunction((n) => window.StudioTutorial.stepIndex() > n, idx);
   }
-  await expect(page.locator('.tut-complete')).toBeVisible();
+  const leftAt = await page.evaluate(() => window.StudioTutorial.stepIndex());
+  await page.locator('.tut-hide').click();
+  await expect(page.locator('#tutorial-region')).toBeHidden();
+  await expect(page.locator('.studio-main')).not.toHaveClass(/tutorial-on/);
+
+  // Come back: the Tutorial button offers Resume, restoring the same step.
+  await page.locator('#btn-tutorial').click();
+  await page.locator('.modal-actions .btn', { hasText: 'Resume' }).click();
+  await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
+  await expect(page.locator('#tutorial-region')).toBeVisible();
+  expect(await page.evaluate(() => window.StudioTutorial.stepIndex())).toBe(leftAt);
 });
 
 test('every game style walks through all its steps', async ({ page }) => {
