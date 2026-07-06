@@ -21,12 +21,19 @@ Or everything: `./run-all.sh`.
 |---|----------|--------|---------------|---------------|-----------------|------------|
 | 1 | `world_to_screen_x` | scroll.c | ✅ 12/12 cases | 66 → **20** | ~120+ → **~28** | ✅ **v12** (`NES_ASM_SCROLL`) |
 | 2 | `world_to_screen_y` | scroll.c | ✅ 10/10 cases | 66 → **24** | ~120+ → **~32** | ✅ **v12** (`NES_ASM_SCROLL`) |
-| 3 | `behaviour_at` | behaviour.c | ✅ 12/12 cases | 89 → **~70** | ~200+ → **~55** | ⬜ (flag pending) |
-| 4 | `reaction_for` | behaviour.c | ✅ 10/10 cases | 64 → **35** | ~120+ → **~30** | ⬜ (flag pending) |
-| 5 | `read_controller` | main.c | ✅ 7/7 combos | 61 → **23** | ~300+ → **~150** | ⬜ (flag pending) |
-| 6 | `write_palettes` | main.c | ✅ PPU RAM ≡ | 42 → **24** | — | ⬜ (flag pending) |
-| 7 | `draw_text` | main.c | ✅ nametable ≡ (3 spots) | ~110 → **~85** | — | ⬜ (flag pending) |
-| 8 | `clear_text_row` | main.c | ✅ nametable ≡ | ~90 → **~70** | — | ⬜ (flag pending) |
+| 3 | `behaviour_at` | behaviour.c | ✅ 12/12 cases | 89 → **~70** | ~200+ → **~55** | ✅ **v14** (`NES_ASM_LEAF`) |
+| 4 | `reaction_for` | behaviour.c | ✅ 10/10 cases | 64 → **35** | ~120+ → **~30** | ✅ **v14** (`NES_ASM_LEAF`) |
+| 5 | `read_controller` | main.c | ✅ 7/7 combos | 61 → **23** | ~300+ → **~150** | ✅ **v14** (`NES_ASM_LEAF`) |
+| 6 | `write_palettes` | main.c | ✅ PPU RAM ≡ | 42 → **24** | — | ✅ **v15** (`NES_ASM_LEAF`) |
+| 7 | `draw_text` | main.c | ✅ nametable ≡ (3 spots) | ~110 → **~85** | — | ✅ **v15** (`NES_ASM_LEAF`) |
+| 8 | `clear_text_row` | main.c | ✅ nametable ≡ | ~90 → **~70** | — | ✅ **v15** (`NES_ASM_LEAF`) |
+
+**🎯 GOAL MET: all 9 lab-proven functions are integrated into the engine** behind
+off-by-default flags (`NES_ASM_SCROLL` + `NES_ASM_LEAF`), golden-safe. Verified
+pure-C vs all-ASM (settle-to-rest A/B): palette RAM + OAM identical at rest,
+scrolling, and jumping. The two nametable writers (`draw_text`/`clear_text_row`)
+are present-but-uncalled in Step_Playground's main.c, so their in-engine proof is
+the lab harness; the other seven are exercised live every frame.
 | 9 | `scroll_follow` | scroll.c | ✅ 20/20 cases | 435 → **289** | big → smaller | ✅ **v13** (`NES_ASM_SCROLL`) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
