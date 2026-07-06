@@ -31,8 +31,8 @@ ROM     = game.nes
 BUILD   = build
 
 # Source files
-C_SRC   = src/main.c
-ASM_SRC = src/graphics.s
+C_SRC   =
+ASM_SRC = src/main.s src/graphics.s
 
 # Object files go in build/
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
