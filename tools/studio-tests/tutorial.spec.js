@@ -105,6 +105,30 @@ test('every game style walks through all its steps', async ({ page }) => {
   }
 });
 
+test('teacher settings turn on pair mode + hide hints; pupil can still go solo', async ({ page }) => {
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+  await page.locator('#btn-tutorial').click();
+  await page.locator('.modal-actions .btn', { hasText: 'Teacher settings' }).click();
+  const dlg = page.locator('.modal-backdrop.open');
+  await dlg.locator('.dock-note').nth(0).locator('.btn', { hasText: 'Pair' }).click();   // Pairing = Pair
+  await dlg.locator('.dock-note').nth(2).locator('.btn', { hasText: 'Off' }).click();     // Hints = Off
+  await page.locator('.modal-actions .btn', { hasText: 'Save' }).click();
+  // Picker reopens → pick a style.
+  await page.locator('.modal-actions .btn', { hasText: 'Platformer' }).click();
+  await page.waitForFunction(() => window.StudioTutorial && window.StudioTutorial.isActive());
+
+  await expect(page.locator('.tut-pair')).toHaveClass(/on/);              // pair banner on
+  await expect(page.locator('.tut-card [data-act="hint"]')).toHaveCount(0);   // hints hidden
+  await expect(page.locator('.tut-card [data-act="showme"]')).toHaveCount(0);
+
+  await page.locator('.tut-pair [data-act="pair"]').click();              // pupil opts out
+  await expect(page.locator('.tut-pair')).not.toHaveClass(/on/);
+
+  // Reset the class default so other tests aren't affected.
+  await page.evaluate(() => { const p = window.Storage.readPrefs() || {}; p.teacherConfig = { pairing: 'solo', celebration: 'visual', hints: true }; window.Storage.writePrefs(p); });
+});
+
 test('a normal project does not show the tutorial panel', async ({ page }) => {
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');

@@ -571,12 +571,57 @@
       ]);
     });
     var actions = styles.map(function (s, i) { return { label: s.emoji + ' ' + s.label, value: s.v, kind: i === 0 ? 'primary' : null }; });
+    actions.push({ label: '🧑‍🏫 Teacher settings', value: '__teacher' });
     actions.push({ label: 'Cancel', value: null });
     window.StudioUI.modal({
       title: 'Choose a kind of game to learn',
       sub: 'A ready-made game will walk you through it, one small step at a time.',
       bodyNodes: body, actions: actions,
-    }).then(function (v) { if (v) makeTutorial(v); });
+    }).then(function (v) {
+      if (v === '__teacher') { openTeacherSettings(function () { onTutorial(); }); }
+      else if (v) { makeTutorial(v); }
+    });
+  }
+
+  // Class-default settings for the guided tutorials (stored in prefs on this
+  // computer).  Honoured by studio-tutorial.js.
+  function openTeacherSettings(onClose) {
+    if (!(window.StudioUI && window.StudioUI.modal)) return;
+    var el = window.StudioUI.el;
+    var prefs = Storage.readPrefs() || {};
+    var cfg = Object.assign({ pairing: 'solo', celebration: 'visual', hints: true }, prefs.teacherConfig || {});
+    function group(label, key, options) {
+      var wrap = el('div', { class: 'dock-note', style: 'margin:10px 0' });
+      wrap.appendChild(el('strong', { text: label }));
+      var row = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:5px' });
+      options.forEach(function (o) {
+        var b = el('button', {
+          class: 'btn' + (cfg[key] === o.v ? ' primary' : ''), type: 'button', text: o.label,
+          onclick: function () { cfg[key] = o.v; Array.prototype.forEach.call(row.children, function (c) { c.className = 'btn'; }); b.className = 'btn primary'; },
+        });
+        row.appendChild(b);
+      });
+      wrap.appendChild(row);
+      return wrap;
+    }
+    var body = [
+      group('Pairing', 'pairing', [{ v: 'solo', label: 'Solo' }, { v: 'pair', label: 'Pair' }, { v: 'choose', label: 'Let pupil choose' }]),
+      group('Celebration', 'celebration', [{ v: 'visual', label: 'Visual' }, { v: 'sound', label: 'Visual + sound' }, { v: 'off', label: 'Off' }]),
+      group('Hints & Show me', 'hints', [{ v: true, label: 'On' }, { v: false, label: 'Off' }]),
+    ];
+    window.StudioUI.modal({
+      title: '🧑‍🏫 Teacher settings',
+      sub: 'Class defaults for the guided tutorials — saved on this computer. Pupils can always turn pairing off; accessibility is never limited.',
+      bodyNodes: body,
+      actions: [{ label: 'Save', value: 'save', kind: 'primary' }, { label: 'Cancel', value: null }],
+    }).then(function (v) {
+      if (v === 'save') {
+        var pr = Storage.readPrefs() || {};
+        pr.teacherConfig = cfg; Storage.writePrefs(pr);
+        if (window.StudioTutorial && typeof window.StudioTutorial.render === 'function') { try { window.StudioTutorial.render(); } catch (e) {} }
+      }
+      if (typeof onClose === 'function') onClose();
+    });
   }
 
   // Open the guided-tutorial panel when the loaded project carries an active

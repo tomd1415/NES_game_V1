@@ -161,6 +161,41 @@
     if (main) main.classList.toggle('quests-collapsed', !!on);
   }
 
+  // --- teacher settings (class defaults) + pair mode ------------------------
+  function teacherConfig() {
+    try {
+      var p = (global.Storage && global.Storage.readPrefs && global.Storage.readPrefs()) || {};
+      return p.teacherConfig || {};
+    } catch (e) { return {}; }
+  }
+  function hintsAllowed() { return teacherConfig().hints !== false; }
+  // Pair mode is NEVER forced: a pupil can always turn it off; with the class
+  // default set to "choose" it starts off until the pupil turns it on.
+  function pairMode() {
+    var cfg = teacherConfig();
+    var s = getState();
+    var pupil = s && s.tutorial ? s.tutorial.pair : undefined;   // pupil override
+    if (cfg.pairing === 'pair') return pupil !== false;
+    if (cfg.pairing === 'choose') return pupil === true;
+    return false;   // solo (default)
+  }
+  function pairOffered() { var p = teacherConfig().pairing; return p === 'pair' || p === 'choose'; }
+  function setPair(on) {
+    var s = getState();
+    if (s && s.tutorial) { s.tutorial.pair = !!on; markDirty(); }
+    render();
+  }
+  function beep() {
+    try {
+      var AC = global.AudioContext || global.webkitAudioContext;
+      if (!AC) return;
+      var ctx2 = new AC(), o = ctx2.createOscillator(), g = ctx2.createGain();
+      o.type = 'square'; o.frequency.value = 660; g.gain.value = 0.05;
+      o.connect(g); g.connect(ctx2.destination); o.start();
+      setTimeout(function () { o.stop(); ctx2.close(); }, 140);
+    } catch (e) {}
+  }
+
   var feedbackEl = null;
   function setFeedback(msg, kind) {
     if (!feedbackEl) return;
@@ -193,6 +228,19 @@
       return;
     }
 
+    // Optional pair-programming banner (never forced; always toggleable).
+    if (pairOffered()) {
+      var pm = pairMode();
+      var pair = el('div', 'tut-pair' + (pm ? ' on' : ''));
+      pair.appendChild(el('div', 'tut-pair-head', pm ? '👥 Pair mode on' : '👥 Pair mode off'));
+      if (pm) pair.appendChild(el('div', 'tut-pair-roles', 'Driver: mouse & keyboard · Navigator: read the step + press Check. Swap after each step.'));
+      var toggle = el('button', 'tut-btn', pm ? 'Work solo' : '👥 Work in a pair');
+      toggle.type = 'button'; toggle.dataset.act = 'pair';
+      toggle.addEventListener('click', function () { setPair(!pm); });
+      pair.appendChild(toggle);
+      host.appendChild(pair);
+    }
+
     var step = currentStep();
     var card = el('div', 'tut-card');
     card.appendChild(el('div', 'tut-chapter', step.chapter));
@@ -210,7 +258,7 @@
     check.addEventListener('click', doCheck);
     actions.appendChild(check);
     // Show me: jump to the mode AND flash the real button/icon the pupil needs.
-    if (step.mode || step.flashSelector) {
+    if (hintsAllowed() && (step.mode || step.flashSelector)) {
       var show = el('button', 'tut-btn', '👀 Show me');
       show.type = 'button'; show.dataset.act = 'showme';
       show.addEventListener('click', function () {
@@ -223,10 +271,12 @@
       });
       actions.appendChild(show);
     }
-    var hint = el('button', 'tut-btn', '💡 Hint');
-    hint.type = 'button'; hint.dataset.act = 'hint';
-    hint.addEventListener('click', function () { setFeedback(step.hint || 'Try the Show me button.', 'info'); });
-    actions.appendChild(hint);
+    if (hintsAllowed()) {
+      var hint = el('button', 'tut-btn', '💡 Hint');
+      hint.type = 'button'; hint.dataset.act = 'hint';
+      hint.addEventListener('click', function () { setFeedback(step.hint || 'Try the Show me button.', 'info'); });
+      actions.appendChild(hint);
+    }
     card.appendChild(actions);
 
     feedbackEl = el('div', 'tut-feedback');
@@ -275,9 +325,15 @@
     s.tutorial.base = snapshot(s);
     markDirty();
     render();
-    // Silent visual celebration (no sound) — a brief highlight of the panel.
-    var region = document.getElementById('tutorial-region');
-    if (region) { region.classList.add('tut-celebrate'); setTimeout(function () { region.classList.remove('tut-celebrate'); }, 700); }
+    // Celebration honours the teacher setting: visual (default) / sound / off.
+    var celebrate = teacherConfig().celebration || 'visual';
+    if (celebrate !== 'off') {
+      var region = document.getElementById('tutorial-region');
+      if (region) { region.classList.add('tut-celebrate'); setTimeout(function () { region.classList.remove('tut-celebrate'); }, 700); }
+      if (celebrate === 'sound') beep();
+    }
+    // Pair hand-off cue.
+    if (pairMode() && !isComplete()) setFeedback('🔄 Swap! Navigator becomes Driver for the next step.', 'info');
   }
 
   function hookPlay() {
