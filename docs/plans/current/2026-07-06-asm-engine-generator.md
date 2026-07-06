@@ -86,8 +86,18 @@ Six project-independent functions shipped on `/play`
 `scroll_apply_ppu`) behind `NES_ASM_LEAF`/`NES_ASM_SCROLL`, marker-gated
 (`NES_ASM_READY_V1`), `PLAYGROUND_NO_ASM` kill switch. Pure-C golden unchanged.
 
-### Phase 1 — `project.inc` + generalize the 4 specialized functions
-**Goal:** ship the functions that only failed because they baked constants.
+### Phase 1 — DONE (engine v20)
+Shipped `src/project.inc` (server `build_project_inc` → ca65 `.define`s) +
+`asm_macros.inc` (`MULC` shift-add). Generalised + shipped `behaviour_at`,
+`reaction_for`, `advance_animation`, `scroll_stream_prepare` (conditional-assembly
+row path) — 10 functions live on `/play`. Golden byte-identical, matched-progress
+A/B identical, full builder suite + E2E green. Learnings: ca65 needs `.define`
+(not `=`) for constants folded inside `.proc`; branch-over-`jmp` for the
+variable-size (MULC/`.if`) code paths; the `platformer.c` template gates basic
+anim via `NES_ASM_ANIM` (attack/racer keep inline C).
+
+**(original goal notes below):** ship the functions that only failed because they
+baked constants.
 - Server emits **`src/project.inc`** from `state`: every per-project constant
   the ASM needs (`WORLD_COLS`, `BG_WORLD_COLS/ROWS`, `PLAYER_W/H`,
   `PLAYER_TILES_PER_FRAME`, `NUM_BEHAVIOUR_SPRITES`, `NUM_STATIC_SPRITES`,
