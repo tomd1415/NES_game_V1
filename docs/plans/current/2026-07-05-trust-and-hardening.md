@@ -193,6 +193,25 @@ default nav to Studio. Surface FamiStudio `FAMISTUDIO_USE_*` config + warn on
 unsupported song features; treat SFX as Studio event bindings; ROM/RAM/audio
 budget meter before Play (not only after a failure).
 
+**Scoping (2026-07-06 audit — for an attended session).** Two sub-pieces have
+different risk profiles:
+- **Budget meter — partly done, PRG piece is build-pipeline risk.** The Studio
+  already shows CHR (bg/sprite tiles /256) + OAM (characters /64) meters with
+  warn(80%)/full(100%) states (`refreshBudgets` in `studio.js`,
+  `budget.spec.js`). A **PRG code-size** meter is the missing piece and is
+  higher-risk: it needs `ld65` to emit a **map file** (a change to the linker
+  invocation — a bad flag fails *every* build, not just one project), then the
+  server to parse PRG free bytes from the map and return them in the `/play`
+  JSON (which already carries `size`), then the Studio to render it. Do this
+  attended, behind the golden-ROM gate, verifying the linker command change on
+  a known-good build first. CHR-full is the far more common pupil failure and
+  is already covered, so this is lower urgency than it looks.
+- **Audio config — needs playtesting, not just code.** Audio is server-mediated
+  (FamiStudio song/SFX blobs linked into the fixed NROM by
+  `playground_server.py`). Surfacing `FAMISTUDIO_USE_*`, tempo, and SFX→event
+  bindings, and an *audio* budget, all want to be heard in the emulator to
+  confirm they sound right — an attended session, not unattended codegen.
+
 ### Later (existing backlog, unchanged)
 Larger scrolling worlds via compact metatile storage; **8×16 sprite mode** once
 the whole pipeline agrees (deferred deliberately in v9); CHR banking / mapper
