@@ -9,6 +9,26 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v13 — 2026-07-06
+
+### Added
+- **`scroll_follow` on hand-written ASM** (opt-in, extends `NES_ASM_SCROLL`).
+  The camera dead-zone follow is now in `scroll_asm.s`; the C body in `scroll.c`
+  is `#ifndef`-gated. The per-project edge clamp is exposed as two flag-gated
+  const globals (`scroll_max_cam_x/y = WORLD_*-SCREEN_*`) the ASM reads; the
+  deadzone (96/144) is a fixed engine default baked in; an axis whose max is 0
+  (single-screen) is skipped at runtime, matching the C's per-axis `#if`. Uses
+  a private BSS scratch (`sf_*`), not cc65's shared `ptr1..4`. Proven equivalent
+  in `asm-lab/` (20 cases incl. a dead-zone boundary sweep) **and** in-engine:
+  built all-C vs all-ASM on a 64-col world, OAM is identical at rest and while
+  scrolling once both settle. (A transient 1-frame offset appears only during
+  the startup VRAM-load window because the faster ASM finishes the load ~1 frame
+  sooner — the documented `-Os` load-timing sensitivity, not a logic difference.)
+
+### Changed / migration
+- **Default unchanged.** `NES_ASM_SCROLL` still defaults off ⇒ pure C ⇒ ROM
+  byte-identical to v12/v11 (golden-safe). Build-time flag, not a project setting.
+
 ## v12 — 2026-07-06
 
 ### Added

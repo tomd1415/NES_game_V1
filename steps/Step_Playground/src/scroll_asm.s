@@ -59,3 +59,170 @@
     lda #$FF
     rts
 .endproc
+
+.export _scroll_follow
+.import _scroll_max_cam_x, _scroll_max_cam_y
+.import incsp2
+.importzp sp
+.segment "BSS"
+sf_tx: .res 2
+sf_ty: .res 2
+sf_t:  .res 2
+.segment "CODE"
+.proc _scroll_follow            ; A/X = target_y ; (sp),0/1 = target_x
+    sta sf_ty                    ; target_y
+    stx sf_ty+1
+    ldy #0
+    lda (sp),y
+    sta sf_tx                    ; target_x
+    iny
+    lda (sp),y
+    sta sf_tx+1
+
+    ; ---- HORIZONTAL: cam_x, target_x=sf_tx, max=_scroll_max_cam_x ----
+    lda _scroll_max_cam_x
+    ora _scroll_max_cam_x+1
+    bne @h_active               ; max!=0 -> run horizontal
+    jmp @h_done                 ; max==0 -> axis inactive (jmp: no branch range)
+@h_active:
+    lda _cam_x
+    clc
+    adc #96
+    sta sf_t
+    lda _cam_x+1
+    adc #0
+    sta sf_t+1                  ; dz_left = cam_x+96
+    lda sf_tx
+    cmp sf_t
+    lda sf_tx+1
+    sbc sf_t+1
+    bcs @h_not_left             ; target_x >= dz_left
+    lda sf_tx+1
+    bne @h_tx96
+    lda sf_tx
+    cmp #96
+    bcs @h_tx96
+    lda #0                      ; target_x < 96 -> cam_x = 0
+    sta _cam_x
+    sta _cam_x+1
+    jmp @h_done
+@h_tx96:
+    lda sf_tx                    ; cam_x = target_x - 96
+    sec
+    sbc #96
+    sta _cam_x
+    lda sf_tx+1
+    sbc #0
+    sta _cam_x+1
+    jmp @h_done
+@h_not_left:
+    lda _cam_x
+    clc
+    adc #144
+    sta sf_t
+    lda _cam_x+1
+    adc #0
+    sta sf_t+1                  ; dz_right = cam_x+144
+    lda sf_t
+    cmp sf_tx
+    lda sf_t+1
+    sbc sf_tx+1
+    bcs @h_done                 ; target_x <= dz_right -> deadzone
+    lda sf_tx                    ; t = target_x - 144
+    sec
+    sbc #144
+    sta sf_t
+    lda sf_tx+1
+    sbc #0
+    sta sf_t+1
+    lda _scroll_max_cam_x       ; t > max ?  (max < t)
+    cmp sf_t
+    lda _scroll_max_cam_x+1
+    sbc sf_t+1
+    bcs @h_store                ; max >= t -> use t
+    lda _scroll_max_cam_x       ; clamp to max
+    sta _cam_x
+    lda _scroll_max_cam_x+1
+    sta _cam_x+1
+    jmp @h_done
+@h_store:
+    lda sf_t
+    sta _cam_x
+    lda sf_t+1
+    sta _cam_x+1
+@h_done:
+
+    ; ---- VERTICAL: cam_y, target_y=sf_ty, max=_scroll_max_cam_y ----
+    lda _scroll_max_cam_y
+    ora _scroll_max_cam_y+1
+    bne @v_active               ; max!=0 -> run vertical
+    jmp @v_done                 ; max==0 -> axis inactive (jmp: no branch range)
+@v_active:
+    lda _cam_y
+    clc
+    adc #96
+    sta sf_t
+    lda _cam_y+1
+    adc #0
+    sta sf_t+1
+    lda sf_ty
+    cmp sf_t
+    lda sf_ty+1
+    sbc sf_t+1
+    bcs @v_not_top
+    lda sf_ty+1
+    bne @v_ty96
+    lda sf_ty
+    cmp #96
+    bcs @v_ty96
+    lda #0
+    sta _cam_y
+    sta _cam_y+1
+    jmp @v_done
+@v_ty96:
+    lda sf_ty
+    sec
+    sbc #96
+    sta _cam_y
+    lda sf_ty+1
+    sbc #0
+    sta _cam_y+1
+    jmp @v_done
+@v_not_top:
+    lda _cam_y
+    clc
+    adc #144
+    sta sf_t
+    lda _cam_y+1
+    adc #0
+    sta sf_t+1
+    lda sf_t
+    cmp sf_ty
+    lda sf_t+1
+    sbc sf_ty+1
+    bcs @v_done
+    lda sf_ty
+    sec
+    sbc #144
+    sta sf_t
+    lda sf_ty+1
+    sbc #0
+    sta sf_t+1
+    lda _scroll_max_cam_y
+    cmp sf_t
+    lda _scroll_max_cam_y+1
+    sbc sf_t+1
+    bcs @v_store
+    lda _scroll_max_cam_y
+    sta _cam_y
+    lda _scroll_max_cam_y+1
+    sta _cam_y+1
+    jmp @v_done
+@v_store:
+    lda sf_t
+    sta _cam_y
+    lda sf_t+1
+    sta _cam_y+1
+@v_done:
+    jmp incsp2
+.endproc

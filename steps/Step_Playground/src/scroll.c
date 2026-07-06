@@ -30,6 +30,11 @@
 unsigned int cam_x;
 unsigned int cam_y;
 
+#ifdef NES_ASM_SCROLL
+const unsigned int scroll_max_cam_x = WORLD_W_PX - SCREEN_W_PX;
+const unsigned int scroll_max_cam_y = WORLD_H_PX - SCREEN_H_PX;
+#endif
+
 /* Camera position the last time we streamed a column / row.  Used to
    detect 8-px (tile) boundary crossings so we write exactly one
    column/row per boundary crossed. */
@@ -43,6 +48,7 @@ void scroll_init(void) {
     prev_cam_y = 0;
 }
 
+#ifndef NES_ASM_SCROLL
 void scroll_follow(unsigned int target_world_x, unsigned int target_world_y) {
     unsigned int dz_left;
     unsigned int dz_right;
@@ -81,6 +87,7 @@ void scroll_follow(unsigned int target_world_x, unsigned int target_world_y) {
         }
     }
 }
+#endif
 
 void scroll_apply_ppu(void) {
     /* PPU_CTRL nametable-select bits: bit 0 = horizontal nametable,
