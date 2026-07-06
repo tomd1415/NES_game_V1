@@ -133,12 +133,25 @@ in `scroll.c`. Default OFF ⇒ pure C ⇒ golden ROMs byte-identical. Verified
 in-engine: a 64-col world built both ways renders identical OAM across 160
 frames incl. 80 of scrolling.
 
-**Next to integrate (`scroll.c`, same flag):**
-- `scroll_follow` — generalise the lab ASM's hard-coded `max_cam_x=256` /
-  `max_cam_y=240` to the per-project `WORLD_W/H_PX - SCREEN_*` (pass as
-  constants the codegen bakes, or read a `max_cam_*` global).
-- `scroll_apply_ppu` — after generalising, prove via the ROM-level render suite
-  (the `$2005/$2006` latch is a rendered-frame property).
+**`scroll_follow` — lab-proven (generalised), in-engine integration DEFERRED.**
+The generalised ASM (reads `_scroll_max_cam_x/y` = `WORLD-SCREEN`, skips an axis
+whose max is 0, deadzone 96/144 fixed) passes the lab unit harness 20/20,
+including a cam=8 boundary sweep. But wiring it into the engine behind
+`NES_ASM_SCROLL` and A/B-testing the 64×30 ROM (all-C vs all-ASM) showed a
+**persistent divergence**: `cam_x` differs by 1 the instant the camera starts
+scrolling, cascading into a 1px scene-sprite shift. The camera *output* and
+*inputs* appear identical and the algorithm is lab-proven, and it is NOT a
+cc65-ZP clobber (giving `scroll_follow` private BSS scratch didn't fix it) — so
+there is a subtler engine-call interaction still to root-cause. **Reverted to
+keep the shipped engine on the clean, verified v12** (`world_to_screen` only,
+0-diff). Repro: build `steps/Step_Playground` with and without `NES_ASM_SCROLL=1`
+on a multi-screen world and diff OAM while scrolling. Next debugging step: read
+the exact `cam_x` (pre-call) and `target_x` handed to `scroll_follow` at the
+first diverging frame in both builds — if the inputs match, the lab and engine C
+disagree (check the per-axis `#if` gating / deadzone macros); if they differ,
+the root is upstream of `scroll_follow`.
+- `scroll_apply_ppu` — the `$2005/$2006` latch is a rendered-frame property;
+  prove via the ROM-level render suite once `scroll_follow` is unblocked.
 Then move to `behaviour.c` / `main.c` functions — those files are
 server-regenerated, so integrating them means teaching `playground_server.py`'s
 codegen to emit the `.s` + `#ifdef` the C (a bigger, separate change).

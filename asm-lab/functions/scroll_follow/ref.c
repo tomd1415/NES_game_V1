@@ -15,6 +15,11 @@
 unsigned int cam_x;
 unsigned int cam_y;
 
+/* Per-axis clamp the generalized ASM reads (= WORLD-SCREEN). Lab world 512x480
+   so both are non-zero (both axes active). */
+const unsigned int lab_max_x = WORLD_W_PX - SCREEN_W_PX;   /* 256 */
+const unsigned int lab_max_y = WORLD_H_PX - SCREEN_H_PX;   /* 240 */
+
 void sf_ref(unsigned int target_world_x, unsigned int target_world_y) {
     unsigned int dz_left, dz_right, dz_top, dz_bot, max_cam_x, max_cam_y;
 

@@ -5,10 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { boot, makeReporter } from '../../harness/nes.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const icx = [0, 0, 100, 100, 100, 200, 256, 10, 50, 150];
-const icy = [0, 0, 100, 100, 100, 200, 240, 10, 50, 150];
-const tx  = [50, 200, 150, 250, 200, 1000, 50, 5, 300, 150];
-const ty  = [50, 200, 150, 250, 200, 1000, 50, 5, 20, 150];
+const icx = [0, 0, 100, 100, 100, 200, 256, 10, 50, 150, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+const icy = [0, 0, 100, 100, 100, 200, 240, 10, 50, 150, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+const tx  = [50, 200, 150, 250, 200, 1000, 50, 5, 300, 150, 103, 104, 105, 151, 152, 153, 154, 160, 96, 95];
+const ty  = [50, 200, 150, 250, 200, 1000, 50, 5, 20, 150, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
 
 // Exact C algebra (not the ASM's simplification) as the independent oracle.
 function follow(camx, camy, X, Y) {

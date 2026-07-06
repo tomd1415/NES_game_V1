@@ -9,11 +9,16 @@ extern unsigned int cam_y;
 void sf_ref(unsigned int target_world_x, unsigned int target_world_y);
 void sf_asm(unsigned int target_world_x, unsigned int target_world_y);
 
-#define NCASES 10
-static const unsigned int icx[NCASES] = {0,  0,   100, 100, 100, 200, 256, 10, 50,  150};
-static const unsigned int icy[NCASES] = {0,  0,   100, 100, 100, 200, 240, 10, 50,  150};
-static const unsigned int tx[NCASES]  = {50, 200, 150, 250, 200, 1000, 50, 5,  300, 150};
-static const unsigned int ty[NCASES]  = {50, 200, 150, 250, 200, 1000, 50, 5,  20,  150};
+#define NCASES 20
+static const unsigned int icx[NCASES] = {0,  0,   100, 100, 100, 200, 256, 10, 50,  150,
+    8,   8,   8,   8,   8,   8,   8,   8,   8,   8};
+static const unsigned int icy[NCASES] = {0,  0,   100, 100, 100, 200, 240, 10, 50,  150,
+    8,   8,   8,   8,   8,   8,   8,   8,   8,   8};
+/* cam=8 boundary sweep: dz_left=104, dz_right=152. Straddle both edges. */
+static const unsigned int tx[NCASES]  = {50, 200, 150, 250, 200, 1000, 50, 5,  300, 150,
+    103, 104, 105, 151, 152, 153, 154, 160, 96,  95};
+static const unsigned int ty[NCASES]  = {50, 200, 150, 250, 200, 1000, 50, 5,  20,  150,
+    8,   8,   8,   8,   8,   8,   8,   8,   8,   8};
 
 void main(void) {
     volatile unsigned char *buf = (unsigned char *)0x0300;
