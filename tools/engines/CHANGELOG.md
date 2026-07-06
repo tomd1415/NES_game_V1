@@ -9,6 +9,33 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v15 — 2026-07-06
+
+### Added
+- **The last three lab-proven leaf helpers on ASM** (extends `NES_ASM_LEAF`):
+  `write_palettes`, `draw_text`, `clear_text_row` in `main_asm.s`, C bodies
+  gated. `draw_text`/`clear_text_row` are emitted in this build's `SCROLL_BUILD`
+  variant (they `jsr scroll_apply_ppu`, matching the C exactly). To let the ASM
+  reach the palette data, `palette_bytes` in `palettes.inc` is now non-`static`
+  (a linkage-only change — the emitted bytes are unchanged, so the ROM stays
+  byte-identical). Prototypes added for the three so their call sites compile
+  when the bodies are gated out.
+- **All 9 lab-proven engine functions are now integrated** (behind
+  `NES_ASM_SCROLL` + `NES_ASM_LEAF`): `world_to_screen_x/y`, `scroll_follow`,
+  `read_controller`, `behaviour_at`, `reaction_for`, `write_palettes`,
+  `draw_text`, `clear_text_row`. Verified pure-C vs all-ASM: palette RAM +
+  OAM identical at rest, scrolling, and jumping. (`draw_text`/`clear_text_row`
+  are lab-proven; they are present-but-uncalled in Step_Playground's main.c, so
+  the in-engine A/B exercises the other seven.)
+
+### Changed / migration
+- **Default unchanged.** Both flags default off ⇒ pure C ⇒ byte-identical to v14
+  (golden-safe). NOTE for turning the flags on via the server (`/play`): the
+  server's codegen (`playground_server.py` behaviour/palette emit + the
+  `platformer.c` template for main.c) would need the same `#ifndef` gates +
+  non-`static` `palette_bytes` so regenerated files match — a follow-up; today
+  the flags are exercised by building `steps/Step_Playground` directly.
+
 ## v14 — 2026-07-06
 
 ### Added

@@ -2,7 +2,7 @@
 #ifndef PALETTES_INC
 #define PALETTES_INC
 
-static const unsigned char palette_bytes[32] = {
+const unsigned char palette_bytes[32] = {   /* de-static: exported for main_asm.s write_palettes (NES_ASM_LEAF); byte-identical */
     0x21, 0x0F, 0x10, 0x30,
     0x21, 0x0F, 0x10, 0x30,
     0x21, 0x0F, 0x10, 0x30,

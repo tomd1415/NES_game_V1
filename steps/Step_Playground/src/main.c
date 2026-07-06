@@ -216,6 +216,12 @@ unsigned char read_controller(void) {
 }
 #endif
 
+/* write_palettes/draw_text/clear_text_row have ASM twins in main_asm.s
+   (NES_ASM_LEAF gates the C out). Prototypes stay so their call sites compile. */
+void write_palettes(void);
+void draw_text(unsigned char row, unsigned char col, const unsigned char *text);
+void clear_text_row(unsigned char row, unsigned char col, unsigned char width);
+#ifndef NES_ASM_LEAF
 void write_palettes(void) {
     PPU_ADDR = 0x3F;
     PPU_ADDR = 0x00;
@@ -275,6 +281,7 @@ void clear_text_row(unsigned char row, unsigned char col, unsigned char width) {
 #endif
     PPU_MASK = 0x1E;
 }
+#endif /* NES_ASM_LEAF */
 
 void main(void) {
     waitvsync();
