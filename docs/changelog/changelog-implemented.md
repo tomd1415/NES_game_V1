@@ -50,10 +50,18 @@ suite kept golden-byte-identical + Studio E2E green):
   recorded.
 - **Sprint 4 closed** — bug-reproduction-card template added; the audio-budget
   validator folded into Sprint 5's budget meter (audio size is server-computed).
-- **Bugs #15 / #22 triaged** — #22 (game-wide gravity/jump) already shipped as
-  the Globals module; #15 (defeat enemies) scoped as an attended-playtesting
-  follow-up (SMB stomp/fireballs already exist; the plain platformer needs a
-  feel-tuned stomp).
+- **Engine v11 — stomp to defeat enemies in the plain platformer (bug #15).**
+  A Damage-module option "Jump on enemies to defeat them" (+ tunable bounce):
+  falling onto an enemy from above defeats it (parks at `y=0xFF`) and bounces
+  the player; side/below touch still hurts. Platformer only, emitted
+  `#ifdef BW_STOMP_DEFEAT` (off → byte-identical). Guards the basic chaser AI
+  against reappearing once parked. `stomp-basic.mjs` proves ON defeats+bounces
+  and OFF leaves the enemy alive. Feel constants are tunable (attended playtest
+  to finalise). Shooting already exists in the SMB style.
+- **Top-down enemy coverage (bug #26).** `topdown-enemies.mjs` drives a chaser
+  (both-axis seek, unmasked without gravity) and a v10 patrol (paces in x, zero
+  Y drift) in a real top-down ROM.
+- **Bug #22 already shipped** — game-wide gravity/jump is the Globals module.
 
 ## Storage-load fix + from-scratch tutorial — 2026-07-06
 
