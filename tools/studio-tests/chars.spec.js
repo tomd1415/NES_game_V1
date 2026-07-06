@@ -85,35 +85,31 @@ test('flip H mirrors the character non-destructively (involution)', async ({ pag
   expect(afterTwo).toEqual(before);
 });
 
-test('painting a shared tile offers Duplicate-first, which forks the tile', async ({ page }) => {
-  // Duplicate the hero (selected first) so its tiles are shared with the copy.
+test('duplicating a character forks its tiles so the copy is independent (bug #18)', async ({ page }) => {
   const before = await page.evaluate(() => window.Studio.getState().sprites.length);
   await page.locator('.btn', { hasText: 'Duplicate' }).click();
   await expect(page.locator('.char-row')).toHaveCount(before + 1);
-  // The copy sits right after the hero; its top-left cell points at shared tile 1.
-  const cellTileBefore = await page.evaluate(() =>
-    window.Studio.getState().sprites[1].cells[0][0].tile);
-  expect(cellTileBefore).toBe(1);
 
-  await page.locator('.swatch-row .swatch').nth(3).click();
-  await page.locator('.stage-toolbar .tool[data-tool="pencil"]').click();
-  const box = await page.locator('#tv-canvas').boundingBox();
-  // Click into the top-left cell (just up-left of centre).
-  await page.mouse.click(box.x + box.width / 2 - 6, box.y + box.height / 2 - 6);
-
-  // The shared-tile dialog appears.
-  const dlg = page.locator('.modal-backdrop.open', { hasText: 'This tile is shared' });
-  await expect(dlg).toBeVisible();
-  await dlg.locator('.btn', { hasText: 'Duplicate first' }).click();
-
-  // The copy's cell now points at a fresh tile, not the shared one.
-  const cellTileAfter = await page.evaluate(() =>
-    window.Studio.getState().sprites[1].cells[0][0].tile);
-  expect(cellTileAfter).not.toBe(1);
-  // The hero's cell still points at the original shared tile.
-  const heroCell = await page.evaluate(() =>
-    window.Studio.getState().sprites[0].cells[0][0].tile);
-  expect(heroCell).toBe(1);
+  const r = await page.evaluate(() => {
+    const s = window.Studio.getState();
+    const heroTile = s.sprites[0].cells[0][0].tile;
+    const copyTile = s.sprites[1].cells[0][0].tile;
+    return {
+      heroTile, copyTile,
+      samePixels: JSON.stringify(s.sprite_tiles[heroTile].pixels)
+        === JSON.stringify(s.sprite_tiles[copyTile].pixels),
+      // no other sprite should reference the copy's fresh tile
+      copyTileUsers: s.sprites.filter((sp) => (sp.cells || []).some((row) =>
+        (row || []).some((c) => c && !c.empty && c.tile === copyTile))).length,
+    };
+  });
+  // Bug #18: the copy points at its OWN fresh tile slot (not the hero's shared
+  // tile), carrying the same artwork, and nobody else references that slot — so
+  // editing the copy can never change the original.
+  expect(r.heroTile).toBe(1);
+  expect(r.copyTile).not.toBe(r.heroTile);
+  expect(r.samePixels).toBe(true);
+  expect(r.copyTileUsers).toBe(1);
 });
 
 test('animation preview toggles play/stop', async ({ page }) => {

@@ -29,6 +29,12 @@ was a massive improvement.
 16. The pallets on the background and for the sprites sometimes do not match what they should be and the ones that are selected are not always represented.
 17. Make it clearer to the user that the sprite animation is being used and allow for enemies and pickups etc. to have animations.
 18. When the user selects to duplicate the sprite it should duplicate the sprite's tiles for the new sprite as well so that the duplicated sprite can be edited without affecting the original sprite.
+    *Resolved 2026-07-06:* the CHARS **Duplicate** button now allocates fresh
+    sprite-tile slots for the copy (one per distinct source tile, preserving the
+    sprite's internal tile reuse; the blank tile 0 stays shared, and it falls
+    back to sharing only if the 256-slot pool is full). Editing the copy no
+    longer touches the original. Covered by `chars.spec.js` ("duplicating a
+    character forks its tiles so the copy is independent").
 19. There should be an option to add a pixel grid to the top view of the sprite (just like the one on the individual tile of the sprite.)
 20. On the behaviour editor the Sprite reactions box needs to be wider so I think it should be below the background window and therefore have a bit more width to help make it easier to use.
 21. The triggers and doors on different places should be able to have different effects.

@@ -256,6 +256,28 @@
       el('button', { class: 'btn', text: 'Duplicate', onclick: function () {
         ctx.pushUndo();
         var copy = JSON.parse(JSON.stringify(sp)); copy.name = (sp.name || 'character') + ' copy';
+        // Bug #18 — give the copy its OWN tiles so editing it won't change the
+        // original. Map each distinct source tile to a fresh slot (preserving
+        // the sprite's internal tile reuse); the blank tile 0 stays shared, and
+        // if the 256-slot pool is full we fall back to sharing that tile (the
+        // paint-time shared-tile safeguard still protects it).
+        var remap = {};
+        (copy.cells || []).forEach(function (row) {
+          (row || []).forEach(function (cell) {
+            if (!cell || cell.empty) return;
+            var oldIdx = cell.tile | 0;
+            if (oldIdx === 0) return;
+            if (remap[oldIdx] == null) {
+              var src = state.sprite_tiles[oldIdx];
+              if (!src || !src.pixels) { remap[oldIdx] = oldIdx; return; }
+              var dst = freeSpriteTile(state);
+              if (dst < 0) { remap[oldIdx] = oldIdx; return; }
+              state.sprite_tiles[dst] = { pixels: clonePixels(src.pixels), name: src.name ? src.name + '_copy' : '' };
+              remap[oldIdx] = dst;
+            }
+            cell.tile = remap[oldIdx];
+          });
+        });
         arr.splice(selIdx + 1, 0, copy);
         // Keep behaviour_reactions index-aligned with the sprite list.
         if (Array.isArray(state.behaviour_reactions)) {
