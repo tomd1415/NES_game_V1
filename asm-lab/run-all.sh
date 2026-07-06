@@ -45,6 +45,12 @@ node functions/read_controller/test.mjs || fail=1
 run2 wp "functions/write_palettes/ref.c functions/write_palettes/test.c functions/write_palettes/asm.s"
 node functions/write_palettes/test.mjs || fail=1
 
+run2 dt "functions/draw_text/ref.c functions/draw_text/test.c functions/draw_text/asm.s"
+node functions/draw_text/test.mjs || fail=1
+
+run2 ctr "functions/clear_text_row/ref.c functions/clear_text_row/test.c functions/clear_text_row/asm.s"
+node functions/clear_text_row/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."

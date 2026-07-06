@@ -36,6 +36,12 @@ export function boot(romPath) {
     rdPPU(addr) { return nes.ppu.vramMem[addr] & 0xFF; },
     // OAM shadow byte (sprite table, $0200 -> $4014 DMA target).
     rdOAM(i) { return nes.ppu.spriteMem[i] & 0xFF; },
+    // Nametable n tile at flat index (row*32+col). jsnes decodes $2007 writes
+    // into nameTable[n].tile[], so this reads back draw_text/clear_text_row.
+    ntTile(n, idx) {
+      const nt = nes.ppu.nameTable && nes.ppu.nameTable[n];
+      return nt && nt.tile ? (nt.tile[idx] & 0xFF) : undefined;
+    },
   };
   return api;
 }

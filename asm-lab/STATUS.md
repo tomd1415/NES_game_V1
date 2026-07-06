@@ -25,6 +25,8 @@ Or everything: `./run-all.sh`.
 | 4 | `reaction_for` | behaviour.c | ✅ 10/10 cases | 64 → **35** | ~120+ → **~30** | ⬜ (flag pending) |
 | 5 | `read_controller` | main.c | ✅ 7/7 combos | 61 → **23** | ~300+ → **~150** | ⬜ (flag pending) |
 | 6 | `write_palettes` | main.c | ✅ PPU RAM ≡ | 42 → **24** | — | ⬜ (flag pending) |
+| 7 | `draw_text` | main.c | ✅ nametable ≡ (3 spots) | ~110 → **~85** | — | ⬜ (flag pending) |
+| 8 | `clear_text_row` | main.c | ✅ nametable ≡ | ~90 → **~70** | — | ⬜ (flag pending) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -89,9 +91,22 @@ selected by `-DASM_VARIANT` (`run2` in run-all.sh) — boot each, read
 backdrops, which both implementations hit the same way). ASM uses X as both the
 loop counter and the `palette_bytes,X` index: 24 bytes vs the C's 42.
 
+### 7-8. `draw_text` / `clear_text_row` — PPU nametable writes
+3 args. `addr = $2000 + row*32 + col` is a **full 16-bit add** (neither bounds
+`col`, so the OR shortcut would be wrong): `lo = ((row&7)<<5) + col` with the
+carry propagating to `hi = (row>>3) + $20`. Both call `waitvsync` and toggle
+`PPU_MASK` off/on; the value that must survive `waitvsync` (the text pointer for
+draw_text, the width for clear_text_row — cc65 lib calls clobber A/X + ZP temps)
+is stashed on the **hardware** stack, while row/col stay on the cc65 param stack.
+draw_text verified at 3 placements incl. `col=40` (exercises the add carry);
+clear_text_row fills a row with 0xAB then clears cols 4..9 and checks the cut +
+the untouched cells. Both read back via the new harness `ntTile()`.
+
 ## Up next
-- `draw_text`, `clear_text_row` — PPU nametable writes at a computed address
-  (same dual-build PPU-compare pattern; assert the nametable region).
+- `scroll_init`, `scroll_follow`, `load_world_bg` — camera math (RAM state) +
+  a big VRAM streamer. `scroll_apply_ppu` writes the `$2005/$2006` latch in a
+  timing-critical order — that one needs the ROM-level behaviour suite, so it's
+  a good point to start the flag-integration so the real render tests can run it.
 - `scroll_*` (`scroll_init`, `scroll_follow`, `world_to_screen_*` done, then
   `scroll_apply_ppu` which touches the `$2005/$2006` latch — needs the ROM-level
   behaviour test, the touchiest ones for timing).
