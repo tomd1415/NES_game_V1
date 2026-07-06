@@ -349,6 +349,11 @@ void load_world_bg(void) {
     prev_cam_y = 0;
 }
 
+/* world_to_screen_x/y have hand-written 6502 twins in scroll_asm.s. When the
+   build sets NES_ASM_SCROLL=1 the ASM provides these symbols and the C bodies
+   below are compiled out, so exactly one definition links. Flag off (default) =
+   pure C = byte-identical ROM. The ASM is proven equivalent in asm-lab/. */
+#ifndef NES_ASM_SCROLL
 unsigned char world_to_screen_x(unsigned int world_x) {
     if (world_x < cam_x) return 0xFF;
     {
@@ -366,5 +371,6 @@ unsigned char world_to_screen_y(unsigned int world_y) {
         return (unsigned char)off;
     }
 }
+#endif /* NES_ASM_SCROLL */
 
 #endif  /* BG_WORLD_COLS > 32 || BG_WORLD_ROWS > 30 */

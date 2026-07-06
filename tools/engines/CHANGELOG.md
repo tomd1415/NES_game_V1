@@ -9,6 +9,30 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v12 — 2026-07-06
+
+### Added
+- **Hand-written 6502 scroll helpers (opt-in)** — the first integration from the
+  `asm-lab/` ASM-engine effort. A new fixed engine file
+  `steps/Step_Playground/src/scroll_asm.s` provides ca65 versions of
+  `world_to_screen_x` / `world_to_screen_y`, and the Makefile flag
+  **`NES_ASM_SCROLL=1`** links them while `#ifdef`-ing out the matching C bodies
+  in `scroll.c` (so exactly one definition of each symbol links). Multi-screen
+  builds only (the ASM reads the `cam_x` global that a 1×1 ROM's empty
+  `scroll.c` never defines). The ASM is proven byte-for-byte-behaviour-equal to
+  the C in `asm-lab/` (unit harness: aligned / 255-256 & 239-240 boundaries /
+  underflow / max) **and** in-engine: a 64-col world built both ways renders
+  identical OAM across 160 frames incl. 80 of scrolling. Smaller + faster than
+  cc65 -Os (20/24 bytes vs 66, no `pushax`/`ldax0sp` runtime helpers).
+
+### Changed / migration
+- **Default is unchanged.** `NES_ASM_SCROLL` defaults to `0`; with it off the
+  build is pure C and the ROM is **byte-identical** to v11 (golden ROMs
+  unaffected). The flag is a build-time toggle, not a project setting, so
+  existing projects rebuild identically. Turning it on is the start of the
+  engine running on hand-written assembly; more functions follow the same
+  off-by-default pattern (see `asm-lab/STATUS.md`).
+
 ## v11 — 2026-07-06
 
 ### Added

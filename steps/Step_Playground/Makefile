@@ -55,6 +55,18 @@ AUDIO_OBJS = $(BUILD)/famistudio_crt0.o $(BUILD)/famistudio_engine.o $(BUILD)/au
 CFLAGS    += -DUSE_AUDIO=1
 endif
 
+# Hand-written 6502 scroll helpers (asm-lab integration).  Off by default so the
+# ROM is byte-identical to the pure-C engine.  NES_ASM_SCROLL=1 links
+# src/scroll_asm.s (world_to_screen_x/y) and -D's out the matching C bodies in
+# scroll.c, so exactly one definition of each symbol links.  Multi-screen builds
+# only: the ASM references cam_x, which a 1x1 ROM's (empty) scroll.c never
+# defines.  The ASM is proven equivalent to the C in asm-lab/.
+NES_ASM_SCROLL ?= 0
+ifeq ($(NES_ASM_SCROLL),1)
+CFLAGS  += -DNES_ASM_SCROLL=1
+ASM_SRC += src/scroll_asm.s
+endif
+
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
 OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS)
