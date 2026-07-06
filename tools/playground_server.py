@@ -596,11 +596,14 @@ AUTH_RATE = accounts.RateLimiter(
     window_seconds=int(os.environ.get("PLAYGROUND_AUTH_RATE_WINDOW", "60") or "60"),
 )
 
-# All filesystem writes + `make` invocations funnel through this lock, so
-# multiple pupils pressing Play at once serialise on the shared
-# steps/Step_Playground work dir instead of racing.  cc65 builds in ~1 s,
-# which is fine for a classroom queue.
-BUILD_LOCK = threading.Lock()
+# Every browser/native build now runs in its OWN throwaway temp dir (see
+# _build_in_tempdir), so builds no longer race on the shared steps/Step_Playground
+# tree and never leave "build-dirt".  Rather than serialise all of them (the old
+# BUILD_LOCK — a bottleneck when 30 pupils press Play at once) or let them run
+# fully unbounded (which would spawn 30 cc65 processes and thrash the box), cap
+# concurrent compiles with a semaphore sized to the machine.
+_BUILD_MAX = max(2, min(8, (os.cpu_count() or 2)))
+BUILD_SEM = threading.BoundedSemaphore(_BUILD_MAX)
 
 # fceux availability is probed once at startup (not per request).  Browser
 # mode is the default; only pupils on the offline workstation build need
@@ -2638,9 +2641,11 @@ def _build_rom(body):
             collision_h, behaviour_c, bg_world_h, bg_world_c,
             **audio_kwargs,
         ))
-    return _maybe_patch(_build_in_shared_dir(
-        chr_bytes, nam_bytes, pal_src, scene_src, collision_h, behaviour_c,
-        bg_world_h, bg_world_c, **audio_kwargs,
+    # Default (no custom source): build the stock main.c in its own temp dir
+    # too — byte-identical to the old shared build, but isolated + dirt-free.
+    return _maybe_patch(_build_in_tempdir(
+        None, chr_bytes, nam_bytes, pal_src, scene_src,
+        collision_h, behaviour_c, bg_world_h, bg_world_c, **audio_kwargs,
     ))
 
 
@@ -2701,10 +2706,11 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
         (tmp_root / "assets" / "backgrounds" / "level.nam").write_bytes(nam_bytes)
         (tmp_root / "Makefile").write_text(ASM_MAKEFILE)
 
-        build = subprocess.run(
-            ["make", "-C", str(tmp_root)],
-            capture_output=True, text=True,
-        )
+        with BUILD_SEM:
+            build = subprocess.run(
+                ["make", "-C", str(tmp_root)],
+                capture_output=True, text=True,
+            )
         build_log = (build.stdout or "") + (build.stderr or "")
         build_log = build_log.replace(str(tmp_root) + "/", "").replace(str(tmp_root), "")
         if build.returncode != 0:
@@ -2718,73 +2724,22 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
     return rom_bytes, build_log
 
 
-def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
-                         collision_h, behaviour_c, bg_world_h, bg_world_c,
-                         audio_songs_asm=None, audio_sfx_asm=None):
-    # Serialise the shared-directory writes + make.  Multiple pupils pressing
-    # Play at once queue here instead of corrupting each other's scene.inc.
-    with BUILD_LOCK:
-        CHR_PATH.parent.mkdir(parents=True, exist_ok=True)
-        NAM_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SCENE_INC.parent.mkdir(parents=True, exist_ok=True)
-
-        CHR_PATH.write_bytes(chr_bytes)
-        NAM_PATH.write_bytes(nam_bytes)
-        SCENE_INC.write_text(scene_src)
-        PAL_INC.write_text(pal_src)
-        COLLISION_H_PATH.write_text(collision_h)
-        BEHAVIOUR_C_PATH.write_text(behaviour_c)
-        BG_WORLD_H_PATH.write_text(bg_world_h)
-        BG_WORLD_C_PATH.write_text(bg_world_c)
-
-        # Phase 4.3 — audio.  When the project ships a song + sfx
-        # blob, write them into src/ and pass USE_AUDIO=1 to make so
-        # the FamiStudio engine + per-project blobs link in.  Default
-        # off keeps the byte-identical-baseline test honest.
-        audio_songs_path = STEP_DIR / "src" / "audio_songs.s"
-        audio_sfx_path   = STEP_DIR / "src" / "audio_sfx.s"
-        make_args = ["make", "-C", str(STEP_DIR)]
-        if audio_songs_asm and audio_sfx_asm:
-            audio_songs_path.write_text(_stage_audio_asm(audio_songs_asm))
-            audio_sfx_path.write_text(_stage_audio_asm(audio_sfx_asm))
-            make_args.append("USE_AUDIO=1")
-            make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
-        else:
-            # Belt-and-braces: clear any stale audio files from a
-            # previous request so the next no-audio build is clean.
-            for p in (audio_songs_path, audio_sfx_path):
-                try: p.unlink()
-                except FileNotFoundError: pass
-
-        build = subprocess.run(
-            make_args,
-            capture_output=True, text=True,
-        )
-        build_log = (build.stdout or "") + (build.stderr or "")
-        if build.returncode != 0:
-            raise BuildError(build_log)
-
-        rom_path = STEP_DIR / "game.nes"
-        if not rom_path.exists():
-            raise BuildError(build_log + "\ngame.nes missing after build")
-        rom_bytes = rom_path.read_bytes()
-
-    return rom_bytes, build_log
-
-
 def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       collision_h, behaviour_c, bg_world_h, bg_world_c,
                       audio_songs_asm=None, audio_sfx_asm=None):
-    # Clone STEP_DIR into a throwaway directory so the pupil's main.c and
-    # generated asset files don't touch the shared tree.  Concurrent custom
-    # builds can therefore proceed in parallel without the BUILD_LOCK.
+    # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
+    # asset files never touch the shared tree — used for EVERY build now (the
+    # pupil's `customMainC` and the default stock build alike), so concurrent
+    # Plays run in parallel (bounded by BUILD_SEM) and leave no build-dirt.
+    # `custom_main=None` keeps the stock main.c the copytree brought in.
     with tempfile.TemporaryDirectory(prefix="nesgame_build_") as td:
         tmp_root = pathlib.Path(td) / "Step_Playground"
         shutil.copytree(
             STEP_DIR, tmp_root,
             ignore=shutil.ignore_patterns("game.nes", "*.o", "*.map", "build"),
         )
-        (tmp_root / "src" / "main.c").write_text(custom_main)
+        if custom_main is not None:
+            (tmp_root / "src" / "main.c").write_text(custom_main)
 
         (tmp_root / "assets" / "sprites").mkdir(parents=True, exist_ok=True)
         (tmp_root / "assets" / "backgrounds").mkdir(parents=True, exist_ok=True)
@@ -2797,10 +2752,9 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
         (tmp_root / "src" / "bg_world.h").write_text(bg_world_h)
         (tmp_root / "src" / "bg_world.c").write_text(bg_world_c)
 
-        # Phase 4.3 — audio.  See the matching block in
-        # _build_in_shared_dir.  The custom-main build clones STEP_DIR
-        # so we always start with no audio files; only stage them
-        # when the project ships them.
+        # Phase 4.3 — audio.  The clone of STEP_DIR always starts with no audio
+        # files, so only stage them when the project ships a song + sfx blob;
+        # default-off keeps the byte-identical-baseline test honest.
         make_args = ["make", "-C", str(tmp_root)]
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
@@ -2811,10 +2765,13 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
             # has no `tools/` sibling, so the relative form would 404.
             make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
 
-        build = subprocess.run(
-            make_args,
-            capture_output=True, text=True,
-        )
+        # Cap concurrent compiles (each is CPU-heavy) so a class pressing Play
+        # together doesn't spawn dozens of cc65 processes at once.
+        with BUILD_SEM:
+            build = subprocess.run(
+                make_args,
+                capture_output=True, text=True,
+            )
         build_log = (build.stdout or "") + (build.stderr or "")
         # Strip the tempdir prefix out of diagnostics so clickable error
         # locations in the editor read as "src/main.c(42): Error ..." rather
