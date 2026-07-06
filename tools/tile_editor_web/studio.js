@@ -517,7 +517,16 @@
   // Register a freshly-built starter/tutorial project as active and switch the
   // whole Studio to it.  Shared by makeStarter + makeTutorial.
   function loadFreshState(fresh) {
-    Storage.createProject(fresh.name, fresh); // registers + sets active
+    try {
+      Storage.createProject(fresh.name, fresh); // registers + sets active
+    } catch (e) {
+      // Storage is full even after pruning old snapshots/backups.  Keep the
+      // current project rather than half-loading a broken editor, and tell the
+      // pupil how to make room (this is the case the "clear storage + reload"
+      // symptom came from — now it degrades gracefully instead of breaking).
+      try { alert('Your browser storage is full, so a new game could not be saved.\n\nOpen the projects menu and delete an old project, then try again.'); } catch (_) {}
+      return;
+    }
     state = Storage.loadCurrent() || fresh;
     undoStack.length = 0; redoStack.length = 0;
     $('project-name').value = state.name || '';
