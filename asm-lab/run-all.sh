@@ -51,6 +51,9 @@ node functions/draw_text/test.mjs || fail=1
 run2 ctr "functions/clear_text_row/ref.c functions/clear_text_row/test.c functions/clear_text_row/asm.s"
 node functions/clear_text_row/test.mjs || fail=1
 
+run sf "functions/scroll_follow/ref.c functions/scroll_follow/test.c functions/scroll_follow/asm.s"
+node functions/scroll_follow/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."

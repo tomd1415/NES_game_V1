@@ -27,6 +27,7 @@ Or everything: `./run-all.sh`.
 | 6 | `write_palettes` | main.c | ✅ PPU RAM ≡ | 42 → **24** | — | ⬜ (flag pending) |
 | 7 | `draw_text` | main.c | ✅ nametable ≡ (3 spots) | ~110 → **~85** | — | ⬜ (flag pending) |
 | 8 | `clear_text_row` | main.c | ✅ nametable ≡ | ~90 → **~70** | — | ⬜ (flag pending) |
+| 9 | `scroll_follow` | scroll.c | ✅ 10/10 cases | 435 → **289** | big → smaller | ⬜ (flag pending) |
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
@@ -102,11 +103,51 @@ draw_text verified at 3 placements incl. `col=40` (exercises the add carry);
 clear_text_row fills a row with 0xAB then clears cols 4..9 and checks the cut +
 the untouched cells. Both read back via the new harness `ntTile()`.
 
-## Up next
-- `scroll_init`, `scroll_follow`, `load_world_bg` — camera math (RAM state) +
-  a big VRAM streamer. `scroll_apply_ppu` writes the `$2005/$2006` latch in a
-  timing-critical order — that one needs the ROM-level behaviour suite, so it's
-  a good point to start the flag-integration so the real render tests can run it.
+### 9. `scroll_follow(unsigned int tx, unsigned int ty)` — camera dead-zone
+The biggest so far: two axes of branchy 16-bit math on the exported `cam_x/cam_y`.
+The C algebra collapses per axis to `target<cam+96 → cam=max(0,target-96)` and
+`target>cam+144 → cam=min(target-144, max_cam)`. Standard 16-bit compare idiom
+(`lda lo/cmp lo/lda hi/sbc hi` → `bcc`=less). 10/10 first try (deadzone hold,
+scroll-to-0, scroll-to-max clamp, both axes), verified against the exact C
+algebra in JS. **289 bytes vs the C ref's 435** (which spills all 6 locals to
+the software stack). Note: the lab pins a 512x480 world; the real per-project
+`WORLD_W/H_PX` + `DEADZONE_*` are constants the integration will bake in.
+
+---
+
+## Unit-conversion phase: COMPLETE (9 functions)
+
+Every function that is cleanly testable in isolation is converted and proven —
+covering all the ABI/idiom patterns: leaf 16-bit arithmetic, 2-arg param-stack,
+char args, an 8-bit table lookup, hardware `$4016` I/O, PPU palette + nametable
+writes (with `waitvsync` and value-across-call preservation on the HW stack),
+and complex branchy 16-bit camera math. The harness (unit + JS model + size) has
+caught 4 real defects along the way. `./run-all.sh` builds + runs all of them.
+
+## Remaining = integration phase (touches the shipped engine)
+These are **not** cleanly unit-testable in isolation — their behaviour is the
+whole-frame / whole-world result, so they get proven by the existing ROM-level
+render/behaviour suites once wired in:
+- `scroll_apply_ppu` — writes the `$2005/$2006` fine-scroll latch in a
+  timing-critical order + the 240-px band nametable select; correctness is a
+  rendered-frame property.
+- `scroll_stream_prepare` / `scroll_stream` / `load_world_bg` — VRAM streamers
+  over the full `bg_world_tiles` world; depend on world state + the vblank window.
+- `scroll_init` — trivial (zeroes `cam_*` + the file-static `prev_cam_*`); the
+  statics aren't externally linkable, so it's converted at integration, not in
+  the isolated lab.
+- `main()` / NMI — the orchestration; converted last, if at all (mostly calls).
+
+### Integration plan (the path to "finished")
+1. Add an off-by-default per-function build flag (`NES_ASM_<fn>=1`) — a new
+   engine version. The server/codegen emits the proven `.s` (from this lab) and
+   `#if NES_ASM_<fn>`-guards out the C body so exactly one definition links.
+2. Flag OFF ⇒ pure C ⇒ **golden ROMs byte-identical** (the existing invariant).
+3. Flag ON ⇒ the render/behaviour suites (`tools/builder-tests/*.mjs`) must still
+   pass (gate 2); because ASM ≠ byte-identical to C, flag-on builds get their own
+   golden hash or are validated behaviourally only.
+4. Turn flags on function-by-function, running the full suite each time, until
+   the engine runs on hand-written ASM for everything feasible.
 - `scroll_*` (`scroll_init`, `scroll_follow`, `world_to_screen_*` done, then
   `scroll_apply_ppu` which touches the `$2005/$2006` latch — needs the ROM-level
   behaviour test, the touchiest ones for timing).
