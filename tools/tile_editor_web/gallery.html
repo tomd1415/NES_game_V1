@@ -155,6 +155,8 @@ main { padding: 16px; }
     <a class="page-link" href="audio.html" title="Manage music and sound effects for your game">🎵 Audio</a>
     <a class="page-link active" href="gallery.html" title="You are here — published projects from across the class">🖼 Gallery</a>
   </nav>
+  <button id="teacher-mode" class="page-link" type="button"
+    title="Teachers: unlock Remove on every entry (needs the class admin secret)">🔑 Teacher mode</button>
 </header>
 
 <div id="status-bar">Loading gallery…</div>
@@ -193,6 +195,27 @@ main { padding: 16px; }
   const grid       = document.getElementById('gallery-grid');
   const emptyState = document.getElementById('gallery-empty');
   const statusBar  = document.getElementById('status-bar');
+  const teacherBtn = document.getElementById('teacher-mode');
+
+  // Teacher moderation: the admin secret is held only in this tab's memory
+  // (sessionStorage, cleared if the server rejects it) — never persisted to
+  // disk.  When set, Remove appears on every card and rides along with deletes.
+  function teacherSecret() {
+    return sessionStorage.getItem('galleryAdminSecret') || '';
+  }
+  function setTeacherSecret(v) {
+    if (v) sessionStorage.setItem('galleryAdminSecret', v);
+    else sessionStorage.removeItem('galleryAdminSecret');
+    teacherBtn.classList.toggle('active', !!v);
+    teacherBtn.textContent = v ? '🔑 Teacher mode ✓' : '🔑 Teacher mode';
+  }
+  teacherBtn.addEventListener('click', () => {
+    if (teacherSecret()) { setTeacherSecret(''); refresh(); return; }
+    const s = prompt('Enter the class admin secret to moderate the gallery:');
+    if (s == null) return;
+    setTeacherSecret(s.trim());
+    refresh();
+  });
 
   function setStatus(text, kind) {
     statusBar.textContent = text;
@@ -272,12 +295,19 @@ main { padding: 16px; }
     jsonLink.setAttribute('download', `${entry.slug}-project.json`);
     actions.appendChild(jsonLink);
 
-    const remove = document.createElement('button');
-    remove.className = 'danger';
-    remove.textContent = '🗑 Remove';
-    remove.title = 'Remove this entry from the gallery (no undo)';
-    remove.addEventListener('click', () => removeEntry(entry));
-    actions.appendChild(remove);
+    // Remove appears only on entries the viewer owns, or on every entry when
+    // teacher mode is on.  The server is the real gate (deny by default); this
+    // just avoids showing a button that would only ever 403.
+    if (entry.owned || teacherSecret()) {
+      const remove = document.createElement('button');
+      remove.className = 'danger';
+      remove.textContent = '🗑 Remove';
+      remove.title = entry.owned
+        ? 'Remove your entry from the gallery (no undo)'
+        : 'Teacher: remove this entry from the gallery (no undo)';
+      remove.addEventListener('click', () => removeEntry(entry));
+      actions.appendChild(remove);
+    }
 
     body.appendChild(actions);
     return card;
@@ -303,14 +333,23 @@ main { padding: 16px; }
   async function removeEntry(entry) {
     if (!confirm(`Remove "${entry.title}" from the gallery? This cannot be undone.`)) return;
     setStatus(`Removing ${entry.title}…`);
+    const body = { slug: entry.slug };
+    const secret = teacherSecret();
+    if (secret) body.admin_secret = secret;
     try {
       const res = await fetch('/gallery/remove', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: entry.slug }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'remove failed');
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error('you must be signed in to remove your own entries');
+      if (res.status === 403) {
+        if (secret) setTeacherSecret('');   // stale/wrong secret — drop it
+        throw new Error(secret ? 'the admin secret was rejected' : 'you can only remove your own entries');
+      }
+      if (!res.ok || !data.ok) throw new Error(data.error || 'remove failed');
       setStatus(`Removed ${entry.title}.`, 'ok');
       await refresh();
     } catch (e) {
@@ -339,6 +378,7 @@ main { padding: 16px; }
     }
   }
 
+  setTeacherSecret(teacherSecret());   // reflect any secret carried over in this tab
   refresh();
 })();
 </script>

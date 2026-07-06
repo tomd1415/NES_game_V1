@@ -66,6 +66,14 @@
       '  border: 1px solid var(--border, #3a3560);',
       '  border-radius: 50%; width: 28px; height: 28px; cursor: pointer;',
       '}',
+      // The download button carries a text label, so it is a pill (auto width)
+      // rather than a round fab; it keeps the margin-left:auto so it anchors the
+      // button group to the right of the header.
+      '.shared-emu-dialog #emu-download {',
+      '  border-radius: 14px; width: auto; height: 28px; padding: 0 12px;',
+      '  font-size: 0.85em; white-space: nowrap;',
+      '}',
+      '.shared-emu-dialog #emu-mute, .shared-emu-dialog #emu-close { margin-left: 0; }',
       '.shared-emu-dialog #emu-canvas {',
       '  display: block; margin: 0 auto;',
       '  image-rendering: pixelated; background: #000;',
@@ -93,6 +101,7 @@
     dlg.innerHTML =
       '<div class="emu-header">' +
       '  <h2>▶ Your game</h2>' +
+      '  <button type="button" class="close-fab" id="emu-download" title="Download this ROM as a .nes file you can run in any emulator">⬇ .nes</button>' +
       '  <button type="button" class="close-fab" id="emu-mute" title="Mute / unmute audio" aria-pressed="false">🔊</button>' +
       '  <button type="button" class="close-fab" id="emu-close" title="Close">×</button>' +
       '</div>' +
@@ -265,6 +274,23 @@
     }
     if (muteBtn) muteBtn.onclick = onMute;
 
+    // Download the running ROM as a .nes the pupil can keep + run in any
+    // emulator (Mesen, FCEUX, an actual cart flasher…).  The bytes are exactly
+    // what Play just built, so no rebuild is needed.
+    const dlBtn = document.getElementById('emu-download');
+    function onDownload() {
+      try {
+        const safe = String(opts.title || 'game').replace(/[^a-zA-Z0-9_-]+/g, '_') || 'game';
+        const blob = new Blob([rom], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = safe + '.nes';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      } catch (_) {}
+    }
+    if (dlBtn) dlBtn.onclick = onDownload;
+
     const kd = (e) => { const m = mapCode(e.code); if (m) nes.buttonDown(m.pad, m.button); };
     const ku = (e) => { const m = mapCode(e.code); if (m) nes.buttonUp(m.pad,   m.button); };
     window.addEventListener('keydown', kd);
@@ -319,6 +345,7 @@
           try { ac.suspend(); } catch (_) {}
         }
         if (muteBtn) muteBtn.onclick = null;
+        if (dlBtn) dlBtn.onclick = null;
         try { dlg.close(); } catch (_) {}
         if (typeof opts.onClose === 'function') {
           try { opts.onClose(); } catch (_) {}
@@ -330,8 +357,54 @@
     });
   }
 
+  // --------------------------------------------------------------------
+  // Gallery preview capture.  Shared by the Studio + Builder publish flows
+  // (they used to each carry a byte-identical copy of this).  Runs the ROM
+  // headless for a fixed warm-up and grabs the frame as a PNG.
+  //
+  // Idle warm-up ONLY — no simulated input.  A deterministic frame can never
+  // wander into a death / hazard / game-over state, and empirically the level
+  // start already renders the scene (background + player) well before this
+  // many frames.  A project with an unpainted background will still look
+  // sparse — that is a content issue, not a capture one.
+  // --------------------------------------------------------------------
+  var PREVIEW_FRAMES = 60;
+
+  // Pure: step an already-loaded jsnes `nes` forward `frames` frames.  No DOM,
+  // so it is unit-testable headlessly (see builder-tests/preview-capture.mjs).
+  function stepPreviewFrames(nes, frames) {
+    var n = (frames | 0) > 0 ? (frames | 0) : PREVIEW_FRAMES;
+    for (var i = 0; i < n; i++) nes.frame();
+  }
+
+  // Build a PNG data-URL preview of `rom` (a Uint8Array).  Browser-only
+  // (needs a canvas); returns a Promise<string>.
+  async function capturePreview(rom, opts) {
+    opts = opts || {};
+    await ensureJsnes();
+    if (!window.jsnes) throw new Error('jsnes did not load');
+    var canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 240;
+    var g = canvas.getContext('2d');
+    var img = g.createImageData(256, 240);
+    var fb = new Uint32Array(img.data.buffer);
+    var nes = new window.jsnes.NES({
+      onFrame: function (buf) { for (var i = 0; i < buf.length; i++) fb[i] = 0xff000000 | buf[i]; },
+      onAudioSample: function () {},
+    });
+    var romStr = '';
+    for (var j = 0; j < rom.length; j++) romStr += String.fromCharCode(rom[j]);
+    nes.loadROM(romStr);
+    stepPreviewFrames(nes, opts.frames || PREVIEW_FRAMES);
+    g.putImageData(img, 0, 0);
+    return canvas.toDataURL('image/png');
+  }
+
   window.NesEmulator = {
     open: open,
     ensureJsnes: ensureJsnes,
+    capturePreview: capturePreview,
+    stepPreviewFrames: stepPreviewFrames,
+    PREVIEW_FRAMES: PREVIEW_FRAMES,
   };
 })();

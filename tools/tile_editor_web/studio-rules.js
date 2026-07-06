@@ -17,8 +17,14 @@
   var el = UI.el;
 
   // Card order (top-level module ids). Submodules render nested.
-  var CARD_ORDER = ['game', 'globals', 'players', 'scene', 'pickups', 'spawn',
-    'damage', 'hud', 'doors', 'dialogue', 'behaviour_walls', 'win_condition'];
+  // Movement / physics numbers now live in the type-specific 🎮 Style tab (the
+  // old "Globals" menu is folded in there), so RULES drops the globals card and
+  // hides the player's movement fields — one home for those numbers, per type.
+  var CARD_ORDER = ['game', 'players', 'scene', 'pickups', 'spawn',
+    'damage', 'powerups', 'hud', 'doors', 'dialogue', 'behaviour_walls', 'win_condition'];
+  // Only player 1's movement is surfaced in the Style tab, so only hide player
+  // 1's fields here — player 2's speed/jump stay editable in its RULES card.
+  var MOVED_TO_STYLE = { 'players.player1': ['walkSpeed', 'jumpHeight'] };
   // Modules that are structural — no on/off toggle.
   var REQUIRED = { game: 1, players: 1, scene: 1 };
 
@@ -253,9 +259,12 @@
 
     var body = el('div', { class: 'body' });
     if (def.description) body.appendChild(el('div', { class: 'dock-note', text: def.description }));
+    var skip = MOVED_TO_STYLE[id] || [];
     (def.schema || []).forEach(function (field) {
+      if (skip.indexOf(field.key) >= 0) return;   // lives in the Style tab now
       body.appendChild(renderField(ctx, node, def, field));
     });
+    if (skip.length) body.appendChild(el('div', { class: 'dock-note', text: 'Speed & jump are in the 🎮 Style tab.' }));
     // Nested submodules (e.g. players.player1 / player2).
     if (node.submodules) {
       Object.keys(node.submodules).forEach(function (subId) {

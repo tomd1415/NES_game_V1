@@ -98,11 +98,12 @@ FEEDBACK_HANDLED_PATH = ROOT / "feedback-handled.json"
 
 # Phase 4.2 — published-project gallery.  Lives outside WEB_DIR so a
 # pupil running the editor can't accidentally clobber another pupil's
-# entry from a project's import/export.  No auth on /gallery/remove
-# today (single-machine classroom assumption); the plan is to gate it
-# on the teacher role once accounts ship — see
-# docs/plans/archive/2026-04-26-next-steps.md §4.6.
-GALLERY_DIR = ROOT / "tools" / "gallery"
+# entry from a project's import/export.  Removal is authorized (S1.2,
+# 2026-07-05): a signed-in pupil may delete only their own entries, and a
+# teacher (admin secret) may delete any — see
+# docs/plans/current/2026-07-05-trust-and-hardening.md.
+# PLAYGROUND_GALLERY_DIR overrides the location (used by tests to isolate).
+GALLERY_DIR = pathlib.Path(os.environ.get("PLAYGROUND_GALLERY_DIR") or (ROOT / "tools" / "gallery"))
 
 # Phase 4.3 — starter audio assets shipped under tools/audio/starter/.
 # Each .s is built from a .fmstxt project via the FamiStudio CLI
@@ -386,6 +387,13 @@ _FEEDBACK_VIEWER_JS = """
   applyFilter();
   toggle.addEventListener('change', applyFilter);
 
+  // Marking feedback handled is a teacher action — ask for the teacher secret
+  // once (kept only in this tab's sessionStorage) and send it with each change.
+  function teacherSecret() {
+    let s = sessionStorage.getItem('feedbackAdminSecret') || '';
+    if (!s) { s = prompt('Teacher secret (to change feedback state):') || ''; if (s) sessionStorage.setItem('feedbackAdminSecret', s); }
+    return s;
+  }
   document.querySelectorAll('.handled-toggle input').forEach(cb => {
     cb.addEventListener('change', async () => {
       const idx = parseInt(cb.dataset.index, 10);
@@ -396,13 +404,14 @@ _FEEDBACK_VIEWER_JS = """
         const r = await fetch('/feedback/handled', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ index: idx, handled }),
+          body: JSON.stringify({ index: idx, handled, admin_secret: teacherSecret() }),
         });
+        if (r.status === 403) { sessionStorage.removeItem('feedbackAdminSecret'); throw new Error('wrong teacher secret'); }
         if (!r.ok) throw new Error('HTTP ' + r.status);
       } catch (e) {
         cb.checked = !handled;
         card.classList.toggle('handled', !handled);
-        alert("Couldn't save — check the server: " + e.message);
+        alert("Couldn't save — " + e.message);
       }
       updateCounts();
       applyFilter();
@@ -561,6 +570,24 @@ ACCOUNTS = accounts.AccountStore(
     or accounts.SESSION_TTL_SECONDS,
 )
 COOKIE_FORCE_SECURE = os.environ.get("PLAYGROUND_FORCE_SECURE_COOKIES", "") == "1"
+
+# --- CSRF (Origin check) ---------------------------------------------------
+# The session cookie is SameSite=Lax, which already stops it riding along on a
+# cross-site POST — the primary CSRF vector.  As defence-in-depth we ALSO check
+# the Origin/Referer on the routes that perform a state change using the
+# ambient session cookie (publish, remove, /me/projects).  The hot /play path
+# and admin-secret routes are exempt (see _csrf_origin_ok).  Robust behind the
+# classroom's HTTPS reverse proxy: the expected host is drawn from Host AND
+# X-Forwarded-Host, plus an optional explicit allowlist; a kill-switch exists.
+CSRF_ALLOWED_ORIGINS = {
+    o.strip().lower()
+    for o in (os.environ.get("PLAYGROUND_ALLOWED_ORIGINS", "") or "").replace(",", " ").split()
+    if o.strip()
+}
+CSRF_ORIGIN_CHECK = os.environ.get("PLAYGROUND_DISABLE_CSRF_ORIGIN_CHECK", "") != "1"
+# State-changing routes authenticated by the session COOKIE (so a browser would
+# attach it automatically) — these want the Origin check.
+CSRF_PROTECTED_PATHS = {"/gallery/publish", "/gallery/remove", "/me/projects"}
 AUTH_MAX_BODY = 16 * 1024  # signup/login/reset bodies are tiny
 # Per-IP rate limit on auth attempts (signup + login + reset): 12 / minute by
 # default; both bounds overridable so tests can exercise the limiter cheaply.
@@ -569,11 +596,14 @@ AUTH_RATE = accounts.RateLimiter(
     window_seconds=int(os.environ.get("PLAYGROUND_AUTH_RATE_WINDOW", "60") or "60"),
 )
 
-# All filesystem writes + `make` invocations funnel through this lock, so
-# multiple pupils pressing Play at once serialise on the shared
-# steps/Step_Playground work dir instead of racing.  cc65 builds in ~1 s,
-# which is fine for a classroom queue.
-BUILD_LOCK = threading.Lock()
+# Every browser/native build now runs in its OWN throwaway temp dir (see
+# _build_in_tempdir), so builds no longer race on the shared steps/Step_Playground
+# tree and never leave "build-dirt".  Rather than serialise all of them (the old
+# BUILD_LOCK — a bottleneck when 30 pupils press Play at once) or let them run
+# fully unbounded (which would spawn 30 cc65 processes and thrash the box), cap
+# concurrent compiles with a semaphore sized to the machine.
+_BUILD_MAX = max(2, min(8, (os.cpu_count() or 2)))
+BUILD_SEM = threading.BoundedSemaphore(_BUILD_MAX)
 
 # fceux availability is probed once at startup (not per request).  Browser
 # mode is the default; only pupils on the offline workstation build need
@@ -773,6 +803,37 @@ def _seed_dialogue_font(state):
             tile["pixels"] = [row[:] for row in glyph]
 
 
+def _smbhud_enabled(state):
+    """True when the SMB HUD module is on (needs sprite digits seeded)."""
+    try:
+        m = state["builder"]["modules"]
+        if m.get("game", {}).get("config", {}).get("type") != "smb":
+            return False
+        return bool(m.get("smbhud", {}).get("enabled"))
+    except Exception:
+        return False
+
+
+def _seed_hud_digits(state):
+    """Seed the built-in 0-9 glyphs into blank SPRITE tiles at their ASCII
+    indices (48..57) when the SMB HUD is on, so the OAM digit read-out has art.
+    Mirrors _seed_dialogue_font but writes the sprite pool (the HUD draws OAM
+    sprites, which read the sprite pattern table, not the bg one).  A no-op when
+    the HUD is off, so non-HUD ROMs are unchanged."""
+    if not _smbhud_enabled(state):
+        return
+    sp = state.get("sprite_tiles")
+    if not isinstance(sp, list):
+        return
+    for d in "0123456789":
+        idx = ord(d)
+        if not (0 <= idx < len(sp)):
+            continue
+        tile = sp[idx]
+        if isinstance(tile, dict) and _pixels_blank(tile.get("pixels")):
+            tile["pixels"] = [row[:] for row in _DIALOGUE_FONT[d]]
+
+
 def build_chr(state):
     """Two independent 256-tile pools -> 8KB CHR.
 
@@ -786,6 +847,7 @@ def build_chr(state):
     letters without the pupil painting a font.
     """
     _seed_dialogue_font(state)
+    _seed_hud_digits(state)
     if "sprite_tiles" in state and "bg_tiles" in state:
         return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
              + _encode_pool(state["bg_tiles"], "bg_tiles")
@@ -2579,9 +2641,11 @@ def _build_rom(body):
             collision_h, behaviour_c, bg_world_h, bg_world_c,
             **audio_kwargs,
         ))
-    return _maybe_patch(_build_in_shared_dir(
-        chr_bytes, nam_bytes, pal_src, scene_src, collision_h, behaviour_c,
-        bg_world_h, bg_world_c, **audio_kwargs,
+    # Default (no custom source): build the stock main.c in its own temp dir
+    # too — byte-identical to the old shared build, but isolated + dirt-free.
+    return _maybe_patch(_build_in_tempdir(
+        None, chr_bytes, nam_bytes, pal_src, scene_src,
+        collision_h, behaviour_c, bg_world_h, bg_world_c, **audio_kwargs,
     ))
 
 
@@ -2642,10 +2706,11 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
         (tmp_root / "assets" / "backgrounds" / "level.nam").write_bytes(nam_bytes)
         (tmp_root / "Makefile").write_text(ASM_MAKEFILE)
 
-        build = subprocess.run(
-            ["make", "-C", str(tmp_root)],
-            capture_output=True, text=True,
-        )
+        with BUILD_SEM:
+            build = subprocess.run(
+                ["make", "-C", str(tmp_root)],
+                capture_output=True, text=True,
+            )
         build_log = (build.stdout or "") + (build.stderr or "")
         build_log = build_log.replace(str(tmp_root) + "/", "").replace(str(tmp_root), "")
         if build.returncode != 0:
@@ -2659,73 +2724,22 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
     return rom_bytes, build_log
 
 
-def _build_in_shared_dir(chr_bytes, nam_bytes, pal_src, scene_src,
-                         collision_h, behaviour_c, bg_world_h, bg_world_c,
-                         audio_songs_asm=None, audio_sfx_asm=None):
-    # Serialise the shared-directory writes + make.  Multiple pupils pressing
-    # Play at once queue here instead of corrupting each other's scene.inc.
-    with BUILD_LOCK:
-        CHR_PATH.parent.mkdir(parents=True, exist_ok=True)
-        NAM_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SCENE_INC.parent.mkdir(parents=True, exist_ok=True)
-
-        CHR_PATH.write_bytes(chr_bytes)
-        NAM_PATH.write_bytes(nam_bytes)
-        SCENE_INC.write_text(scene_src)
-        PAL_INC.write_text(pal_src)
-        COLLISION_H_PATH.write_text(collision_h)
-        BEHAVIOUR_C_PATH.write_text(behaviour_c)
-        BG_WORLD_H_PATH.write_text(bg_world_h)
-        BG_WORLD_C_PATH.write_text(bg_world_c)
-
-        # Phase 4.3 — audio.  When the project ships a song + sfx
-        # blob, write them into src/ and pass USE_AUDIO=1 to make so
-        # the FamiStudio engine + per-project blobs link in.  Default
-        # off keeps the byte-identical-baseline test honest.
-        audio_songs_path = STEP_DIR / "src" / "audio_songs.s"
-        audio_sfx_path   = STEP_DIR / "src" / "audio_sfx.s"
-        make_args = ["make", "-C", str(STEP_DIR)]
-        if audio_songs_asm and audio_sfx_asm:
-            audio_songs_path.write_text(_stage_audio_asm(audio_songs_asm))
-            audio_sfx_path.write_text(_stage_audio_asm(audio_sfx_asm))
-            make_args.append("USE_AUDIO=1")
-            make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
-        else:
-            # Belt-and-braces: clear any stale audio files from a
-            # previous request so the next no-audio build is clean.
-            for p in (audio_songs_path, audio_sfx_path):
-                try: p.unlink()
-                except FileNotFoundError: pass
-
-        build = subprocess.run(
-            make_args,
-            capture_output=True, text=True,
-        )
-        build_log = (build.stdout or "") + (build.stderr or "")
-        if build.returncode != 0:
-            raise BuildError(build_log)
-
-        rom_path = STEP_DIR / "game.nes"
-        if not rom_path.exists():
-            raise BuildError(build_log + "\ngame.nes missing after build")
-        rom_bytes = rom_path.read_bytes()
-
-    return rom_bytes, build_log
-
-
 def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       collision_h, behaviour_c, bg_world_h, bg_world_c,
                       audio_songs_asm=None, audio_sfx_asm=None):
-    # Clone STEP_DIR into a throwaway directory so the pupil's main.c and
-    # generated asset files don't touch the shared tree.  Concurrent custom
-    # builds can therefore proceed in parallel without the BUILD_LOCK.
+    # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
+    # asset files never touch the shared tree — used for EVERY build now (the
+    # pupil's `customMainC` and the default stock build alike), so concurrent
+    # Plays run in parallel (bounded by BUILD_SEM) and leave no build-dirt.
+    # `custom_main=None` keeps the stock main.c the copytree brought in.
     with tempfile.TemporaryDirectory(prefix="nesgame_build_") as td:
         tmp_root = pathlib.Path(td) / "Step_Playground"
         shutil.copytree(
             STEP_DIR, tmp_root,
             ignore=shutil.ignore_patterns("game.nes", "*.o", "*.map", "build"),
         )
-        (tmp_root / "src" / "main.c").write_text(custom_main)
+        if custom_main is not None:
+            (tmp_root / "src" / "main.c").write_text(custom_main)
 
         (tmp_root / "assets" / "sprites").mkdir(parents=True, exist_ok=True)
         (tmp_root / "assets" / "backgrounds").mkdir(parents=True, exist_ok=True)
@@ -2738,10 +2752,9 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
         (tmp_root / "src" / "bg_world.h").write_text(bg_world_h)
         (tmp_root / "src" / "bg_world.c").write_text(bg_world_c)
 
-        # Phase 4.3 — audio.  See the matching block in
-        # _build_in_shared_dir.  The custom-main build clones STEP_DIR
-        # so we always start with no audio files; only stage them
-        # when the project ships them.
+        # Phase 4.3 — audio.  The clone of STEP_DIR always starts with no audio
+        # files, so only stage them when the project ships a song + sfx blob;
+        # default-off keeps the byte-identical-baseline test honest.
         make_args = ["make", "-C", str(tmp_root)]
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
@@ -2752,10 +2765,13 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
             # has no `tools/` sibling, so the relative form would 404.
             make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
 
-        build = subprocess.run(
-            make_args,
-            capture_output=True, text=True,
-        )
+        # Cap concurrent compiles (each is CPU-heavy) so a class pressing Play
+        # together doesn't spawn dozens of cc65 processes at once.
+        with BUILD_SEM:
+            build = subprocess.run(
+                make_args,
+                capture_output=True, text=True,
+            )
         build_log = (build.stdout or "") + (build.stderr or "")
         # Strip the tempdir prefix out of diagnostics so clickable error
         # locations in the editor read as "src/main.c(42): Error ..." rather
@@ -3060,10 +3076,11 @@ def _gallery_decode_b64(s, max_bytes):
     return raw
 
 
-def _gallery_publish(body):
+def _gallery_publish(body, owner_id=None, owner_name=None):
     """Validate, slugify, and write a gallery entry to disk.  Caller
     holds GALLERY_LOCK so two near-simultaneous publishes don't collide
-    on the same slug."""
+    on the same slug.  `owner_id`/`owner_name` come from the publisher's
+    session (None for anonymous) and gate later removal (S1.2)."""
     title = (body.get("title") or "").strip()[:GALLERY_MAX_TITLE]
     if not title:
         raise ValueError("title required")
@@ -3101,10 +3118,11 @@ def _gallery_publish(body):
         "title": title,
         "description": description,
         "pupil_handle": handle,
-        # `owner` is reserved for the future-account feature
-        # (docs/plans/archive/2026-04-26-next-steps.md §4.6) — gallery removes will be gated on
-        # the owning account when this isn't None.
-        "owner": None,
+        # `owner` is the publisher's account id (None for anonymous posts);
+        # gallery removal is gated on it (S1.2 — a pupil can delete only their
+        # own; a teacher/admin can delete any; anonymous posts are teacher-only).
+        "owner": owner_id,
+        "owner_name": owner_name,
         "source_page": source,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "rom_size": len(rom),
@@ -3120,8 +3138,8 @@ def _gallery_publish(body):
 
 def _gallery_remove(slug):
     """Best-effort folder removal.  Returns True if the folder existed
-    and is gone afterwards.  No auth — see header comment on
-    GALLERY_DIR for the future-accounts plan."""
+    and is gone afterwards.  Authorization is the caller's job
+    (_gallery_remove_response gates on owner / teacher secret)."""
     target = GALLERY_DIR / slug
     if not target.exists():
         return False
@@ -3135,6 +3153,18 @@ def _gallery_remove(slug):
         return False
     shutil.rmtree(target, ignore_errors=True)
     return not target.exists()
+
+
+def _gallery_entry_owner(slug):
+    """Return the account id that owns gallery entry `slug` (int), or None for
+    an anonymous / missing entry.  Used to gate removal (S1.2)."""
+    meta_path = GALLERY_DIR / slug / "metadata.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    owner = meta.get("owner")
+    return owner if isinstance(owner, int) else None
 
 
 # ---------------------------------------------------------------------------
@@ -3408,6 +3438,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if self._csrf_blocked(parsed.path):
+            return
         if parsed.path == "/play":
             try:
                 length = int(self.headers.get("Content-Length", "0") or "0")
@@ -3449,12 +3481,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_PUT(self):
         parsed = urlparse(self.path)
+        if self._csrf_blocked(parsed.path):
+            return
         if parsed.path.startswith("/me/projects/"):
             return self._me_projects_put(parsed.path)
         return self.send_error(404)
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if self._csrf_blocked(parsed.path):
+            return
         if parsed.path.startswith("/me/projects/"):
             return self._me_projects_delete(parsed.path)
         return self.send_error(404)
@@ -3535,6 +3571,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body, err = self._read_json_body(4096)
         if err:
             return self._json(400, {"ok": False, "error": err})
+        # Teacher-only: marking feedback handled is moderation (S1.3, ADVICE #3).
+        if not ACCOUNTS.verify_admin(body.get("admin_secret")):
+            return self._json(403, {"ok": False, "code": "not_teacher",
+                                    "error": "The teacher secret is required to change feedback state."})
         try:
             idx = int(body.get("index"))
         except Exception:
@@ -3559,7 +3599,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             sys.stderr.write(f"[playground] gallery list failed: {e}\n")
             return self._json(500, {"ok": False, "error": "could not read gallery"})
-        return self._json(200, {"ok": True, "entries": entries})
+        # Never leak the raw numeric owner id to the client; instead compute an
+        # `owned` flag against the requesting session so the UI can show Remove
+        # only on entries the viewer owns.  `owner_name` stays for attribution.
+        user = ACCOUNTS.user_for_session(self._session_token())
+        uid = user["id"] if user else None
+        public = []
+        for meta in entries:
+            m = dict(meta)
+            owner = m.pop("owner", None)
+            m["owned"] = uid is not None and owner is not None and owner == uid
+            public.append(m)
+        return self._json(200, {"ok": True, "entries": public, "signed_in": user is not None})
 
     def _gallery_static(self, path):
         # path is /gallery/<slug>/<file>.  Anything else returns None
@@ -3601,9 +3652,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         body, err = self._read_json_body(GALLERY_MAX_BODY)
         if err:
             return self._json(400, {"ok": False, "error": err})
+        # Record the publisher so removal can be gated on ownership (S1.1/S1.2).
+        user = ACCOUNTS.user_for_session(self._session_token())
+        owner_id = user["id"] if user else None
+        owner_name = user["username"] if user else None
         try:
             with GALLERY_LOCK:
-                meta = _gallery_publish(body)
+                meta = _gallery_publish(body, owner_id, owner_name)
         except ValueError as e:
             return self._json(400, {"ok": False, "error": str(e)})
         except Exception as e:
@@ -3618,6 +3673,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         slug = _gallery_safe_slug(body.get("slug"))
         if slug is None:
             return self._json(400, {"ok": False, "error": "bad slug"})
+        # Deny by default (ADVICE #1).  A delete is allowed only for a valid
+        # teacher/admin secret (moderates anyone, incl. anonymous posts) OR the
+        # signed-in account that owns the entry.
+        owner = _gallery_entry_owner(slug)          # int owner id, or None (anon / missing)
+        is_admin = ACCOUNTS.verify_admin(body.get("admin_secret"))
+        if not is_admin:
+            user = ACCOUNTS.user_for_session(self._session_token())
+            if user is None:
+                return self._json(401, {"ok": False, "code": "not_logged_in",
+                                        "error": "Sign in (or use the teacher secret) to remove gallery entries."})
+            if owner is None or user["id"] != owner:
+                return self._json(403, {"ok": False, "code": "not_owner",
+                                        "error": "You can only remove your own gallery entries. A teacher can remove any."})
         with GALLERY_LOCK:
             removed = _gallery_remove(slug)
         if not removed:
@@ -3643,6 +3711,56 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if k == "session":
                 return v or None
         return None
+
+    def _csrf_origin_ok(self):
+        """Return False only when we can POSITIVELY tell a state-changing
+        request came from another site (a CSRF attempt).  Defence-in-depth on
+        top of the SameSite=Lax session cookie.
+
+        A browser always sends `Origin` on POST/PUT/DELETE.  If it's present and
+        its host is not one of ours, reject.  We accept the request's own `Host`
+        header and any `X-Forwarded-Host` the reverse proxy set (the classroom
+        instance is proxied), plus an explicit `PLAYGROUND_ALLOWED_ORIGINS`
+        allowlist.  If `Origin` is absent we fall back to `Referer`.  If BOTH
+        are absent (curl, the test harness, non-browser tools) there is no
+        ambient-cookie CSRF vector, so we allow it — fail-open on ambiguity so a
+        misconfigured proxy can never lock users out."""
+        if not CSRF_ORIGIN_CHECK:
+            return True
+        origin = self.headers.get("Origin")
+        source = origin if origin and origin.lower() != "null" else None
+        if source is None:
+            ref = self.headers.get("Referer")
+            source = ref or None
+        if source is None:
+            return True   # no Origin/Referer → not a browser CSRF vector
+        src_host = (urlparse(source).netloc or "").lower()
+        if not src_host:
+            return True   # unparseable → don't block legitimate traffic
+        expected = set(CSRF_ALLOWED_ORIGINS)
+        for h in (self.headers.get("Host"), self.headers.get("X-Forwarded-Host")):
+            if not h:
+                continue
+            for part in h.split(","):
+                part = part.strip().lower()
+                if part:
+                    expected.add(part)
+                    # Allowlist may be scheme-qualified; match on host too.
+                    expected.add(urlparse("//" + part).netloc or part)
+        # Allowlist entries may be full origins (https://host); reduce to host.
+        expected = {urlparse(e).netloc or e for e in expected} | expected
+        return src_host in expected
+
+    def _csrf_blocked(self, path):
+        """If `path` is a cookie-authed state-change route and the Origin looks
+        cross-site, emit a 403 and return True so the caller returns at once."""
+        protected = path in CSRF_PROTECTED_PATHS or path.startswith("/me/projects/")
+        if protected and not self._csrf_origin_ok():
+            self._json(403, {"ok": False, "code": "bad_origin",
+                             "error": "This request looks like it came from another "
+                                      "site and was blocked."})
+            return True
+        return False
 
     def _auth_cookie(self, token=None, clear=False):
         """Build a Set-Cookie value for the session cookie.  Secure only over

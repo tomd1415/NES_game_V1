@@ -35,8 +35,12 @@
   const PROJECTS_KEY          = 'nes_tile_editor.projects.v2';
   const PROJECT_PREFIX        = 'nes_tile_editor.project.';
 
-  const MAX_SNAPSHOTS = 8;
-  const MAX_BACKUPS   = 5;
+  // Each snapshot/backup is a FULL copy of the project state, and a state with
+  // a 2×2 level + the 256-tile pools is ~180 KB — so keeping many copies used to
+  // balloon one project to multiple MB.  Keep a small history (plenty for
+  // undo-across-reload / recovery) and dedupe identical consecutive saves.
+  const MAX_SNAPSHOTS = 4;
+  const MAX_BACKUPS   = 2;
 
   function projectKey(id, suffix) {
     return PROJECT_PREFIX + id + '.' + suffix;
@@ -49,6 +53,45 @@
   function uid() {
     return 'p_' + Date.now().toString(36) + '_' +
       Math.random().toString(36).slice(2, 8);
+  }
+
+  // localStorage is small (~5 MB) and full project states are large, so a few
+  // projects' snapshot/backup history can fill it.  A raw setItem then throws
+  // QuotaExceededError, which used to break saving AND loading a game/tutorial
+  // (createProject threw mid-load, leaving the editor half-updated — the reason
+  // a force-reload + clearing storage was needed).  This wrapper instead frees
+  // space by dropping the OLDEST snapshots/backups (the least-valuable data,
+  // across every project) and retrying, so a Save/Load never hard-fails.
+  function isQuotaError(e) {
+    return !!e && (e.name === 'QuotaExceededError' ||
+      e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
+  }
+  function transientKeysOldestFirst(exceptKey) {
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || k === exceptKey) continue;
+      if (k.indexOf('.snap.') >= 0 || k.indexOf('.backup.') >= 0) {
+        const m = /\.(?:snap|backup)\.(\d+)/.exec(k);
+        out.push({ k: k, ts: m ? +m[1] : 0 });
+      }
+    }
+    return out.sort((a, b) => a.ts - b.ts).map(function (x) { return x.k; });
+  }
+  // Returns true if the value was stored, false only if storage is full even
+  // after dropping every snapshot/backup.  Never throws on a quota error.
+  function safeSetItem(key, value) {
+    try { localStorage.setItem(key, value); return true; }
+    catch (e) {
+      if (!isQuotaError(e)) throw e;
+      const victims = transientKeysOldestFirst(key);
+      for (let i = 0; i < victims.length; i++) {
+        try { localStorage.removeItem(victims[i]); } catch (_) {}
+        try { localStorage.setItem(key, value); return true; }
+        catch (e2) { if (!isQuotaError(e2)) throw e2; }
+      }
+      return false;
+    }
   }
 
   function createStorage(deps) {
@@ -66,7 +109,7 @@
       } catch { return null; }
     }
     function writeCatalog(c) {
-      localStorage.setItem(PROJECTS_KEY, JSON.stringify(c));
+      safeSetItem(PROJECTS_KEY, JSON.stringify(c));
     }
     function freshCatalog(activeId) {
       return {
@@ -249,7 +292,7 @@
       } catch { return { snapshots: [], backups: [] }; }
     }
     function writeProjectMeta(id, m) {
-      localStorage.setItem(projectMetaKey(id), JSON.stringify(m));
+      safeSetItem(projectMetaKey(id), JSON.stringify(m));
     }
 
     function parseSlot(raw) {
@@ -289,7 +332,8 @@
       // Current state — operates on the active project.
       saveCurrent(state) {
         try {
-          localStorage.setItem(projectCurrentKey(activeId()), JSON.stringify(state));
+          const ok = safeSetItem(projectCurrentKey(activeId()), JSON.stringify(state));
+          if (!ok) return { ok: false, error: 'storage full' };
           touchProject(activeId());
           return { ok: true };
         } catch (e) { return { ok: false, error: e.message }; }
@@ -327,9 +371,15 @@
         try {
           const id = activeId();
           const meta = readProjectMeta(id);
+          const json = JSON.stringify(state);
+          // Dedupe: skip if identical to the most recent snapshot.  The 30s
+          // auto-snapshot fires even when the pupil is only reading, so without
+          // this a large level piles up near-identical copies.
+          const lastSnap = meta.snapshots[meta.snapshots.length - 1];
+          if (lastSnap && localStorage.getItem(lastSnap.key) === json) return { ok: true, deduped: true };
           const ts = Date.now();
           const key = projectSnapPrefix(id) + ts + '_' + Math.random().toString(36).slice(2, 6);
-          localStorage.setItem(key, JSON.stringify(state));
+          if (!safeSetItem(key, json)) return { ok: false, error: 'storage full' };
           meta.snapshots.push({ key, ts, reason, name: state.name });
           while (meta.snapshots.length > MAX_SNAPSHOTS) {
             const d = meta.snapshots.shift();
@@ -343,9 +393,12 @@
         try {
           const id = activeId();
           const meta = readProjectMeta(id);
+          const json = JSON.stringify(state);
+          const lastBk = meta.backups[meta.backups.length - 1];
+          if (lastBk && localStorage.getItem(lastBk.key) === json) return { ok: true, deduped: true };
           const ts = Date.now();
           const key = projectBackupPrefix(id) + ts + '_' + Math.random().toString(36).slice(2, 6);
-          localStorage.setItem(key, JSON.stringify(state));
+          if (!safeSetItem(key, json)) return { ok: false, error: 'storage full' };
           meta.backups.push({ key, ts, name: state.name });
           while (meta.backups.length > MAX_BACKUPS) {
             const d = meta.backups.shift();
@@ -355,11 +408,15 @@
           return { ok: true };
         } catch (e) { return { ok: false, error: e.message }; }
       },
+      // Filter out any entry whose blob was dropped to free space (safeSetItem),
+      // so the Time Machine never lists a snapshot/backup that can't load.
       listSnapshots() {
-        return readProjectMeta(activeId()).snapshots.slice().reverse();
+        return readProjectMeta(activeId()).snapshots
+          .filter(function (x) { return localStorage.getItem(x.key) != null; }).slice().reverse();
       },
       listBackups() {
-        return readProjectMeta(activeId()).backups.slice().reverse();
+        return readProjectMeta(activeId()).backups
+          .filter(function (x) { return localStorage.getItem(x.key) != null; }).slice().reverse();
       },
       loadSnapshot(key) {
         return parseSlot(localStorage.getItem(key));
@@ -380,6 +437,42 @@
       listProjects() {
         return syncList().projects.slice();
       },
+      // Storage-usage introspection (for the "storage used / manage projects"
+      // indicator).  Counts characters (~bytes) held in localStorage.
+      usageBytes() {
+        let n = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i); if (!k) continue;
+          const v = localStorage.getItem(k);
+          n += k.length + (v ? v.length : 0);
+        }
+        return n;
+      },
+      quotaBytes() { return 5 * 1024 * 1024; },   // typical localStorage budget (~5 MB)
+      projectBytes(id) {
+        const prefix = PROJECT_PREFIX + id + '.';
+        let n = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.indexOf(prefix) === 0) { const v = localStorage.getItem(k); n += k.length + (v ? v.length : 0); }
+        }
+        return n;
+      },
+      // Drop every snapshot + backup across all projects (keeps the current
+      // slots).  These full-state copies are the bulk of storage; clearing them
+      // reclaims most of a large project immediately.  Returns bytes freed.
+      pruneAllHistory() {
+        let freed = 0;
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.indexOf('.snap.') >= 0 || k.indexOf('.backup.') >= 0)) keys.push(k);
+        }
+        for (const k of keys) { const v = localStorage.getItem(k); freed += k.length + (v ? v.length : 0); try { localStorage.removeItem(k); } catch {} }
+        const projs = (readCatalog() || catalog()).projects;
+        for (const p of projs) { const m = readProjectMeta(p.id); m.snapshots = []; m.backups = []; writeProjectMeta(p.id, m); }
+        return freed;
+      },
       getActiveProjectId() { return activeId(); },
       getActiveProject() {
         return syncList().projects.find(p => p.id === activeId()) || null;
@@ -394,12 +487,19 @@
       createProject(name, initialState) {
         const id = uid();
         const now = Date.now();
-        // Atomicity: write the project's own slot + meta BEFORE registering it
-        // in the catalog.  If the slot write fails (e.g. localStorage full) we
-        // throw here, having registered nothing — no phantom catalog entry, and
-        // the previously-active project is untouched.
+        // Write the project's own slot + meta BEFORE registering it in the
+        // catalog.  safeSetItem first frees space by dropping old snapshots/
+        // backups and retrying, so the ordinary "storage filled with history"
+        // case (the one pupils hit) now succeeds instead of throwing.  Only if
+        // it STILL cannot fit do we abort atomically — throw here, having
+        // registered nothing, so no phantom project and the previously-active
+        // one is untouched (the caller catches this and keeps the old project).
         if (initialState) {
-          localStorage.setItem(projectCurrentKey(id), JSON.stringify(initialState));
+          if (!safeSetItem(projectCurrentKey(id), JSON.stringify(initialState))) {
+            const e = new Error('storage full: could not write project slot');
+            e.name = 'QuotaExceededError';
+            throw e;
+          }
         }
         writeProjectMeta(id, { snapshots: [], backups: [] });
         // Commit against the on-disk catalog so a concurrent tab's projects
@@ -436,7 +536,7 @@
         // Copy the slot + meta first (atomic, same reasoning as createProject).
         const curRaw = localStorage.getItem(projectCurrentKey(id));
         if (curRaw != null) {
-          localStorage.setItem(projectCurrentKey(newId), curRaw);
+          safeSetItem(projectCurrentKey(newId), curRaw);
         }
         writeProjectMeta(newId, { snapshots: [], backups: [] });
         commitCatalog(c => {

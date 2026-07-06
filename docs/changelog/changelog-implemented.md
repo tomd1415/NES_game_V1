@@ -21,6 +21,100 @@ deferred.
 
 ---
 
+## Storage-load fix + from-scratch tutorial — 2026-07-06
+
+- **Fixed a loading bug** where opening a saved game or tutorial needed clearing
+  localStorage/cookies and a force reload. Cause: localStorage filled with
+  full-state snapshots/backups, so a write threw QuotaExceededError mid-load.
+  Now every write frees the oldest snapshots/backups and retries
+  (`safeSetItem`), so saving/loading never hard-fails; `createProject` stays
+  atomic and the editor degrades gracefully if truly full.
+- **New "🧱 Build from scratch" tutorial** — 20 small steps from a **blank
+  screen** to a complete game: draw the hero, choose colours, draw + paint the
+  ground and make it solid, test it, build a platform, create + draw + place an
+  enemy, add hearts, add a coin, paint a goal + turn on winning, tune the jump,
+  and play. Also a "📄 Blank project" starter.
+- **Leave and come back** — a "⏸ Hide" button pauses any tutorial (progress
+  saved); the 🎓 Tutorial button then offers "▶ Resume your tutorial", and a
+  half-finished tutorial resumes automatically next time its project opens.
+
+## Tutorials deepened + teacher tools — 2026-07-06
+
+Built on the guided tutorials the same day:
+
+- **Deeper tutorials** — every style now has 7–9 teachy steps (platformer 9:
+  adds a platform, place an enemy, edit dialogue; top-down adds a 2nd room + an
+  enemy; runner adds a spike; racer adds a checkpoint). The runtime re-baselines
+  each step, so sequential "add/paint more" steps each need a fresh action, with
+  richer lenient checks (paint a specific tile type, place a character, add a
+  room, edit dialogue, toggle a module).
+- **Teacher settings** (🧑‍🏫, from the tutorial picker): class defaults for
+  Pairing, Celebration (visual / +sound / off), and Hints & Show me — honoured
+  by the runtime. Accessibility is never limited.
+- **Optional pair-programming mode** — never forced: a Driver/Navigator banner
+  + a "🔄 Swap!" cue; the pupil can always Work solo.
+- **In-Studio step editor** — a teacher can reorder / add / remove steps of any
+  tutorial (stored as a per-machine override; the base is never changed).
+
+## Guided tutorials + all five game styles selectable — 2026-07-06
+
+The Studio gained a working, in-app **guided tutorial** and every game style is
+now a first-class, selectable, fully-working starter. Design:
+[`docs/design/quest-tutorials.md`](../design/quest-tutorials.md).
+
+- **Guided tutorial** (`studio-tutorial.js` + `tutorial-first-game.js` /
+  `tutorial-styles.js`): a collapsible panel walks a pupil through one light
+  edit per section (name → colour → tile → world → rules → Play) on a ready-made
+  game — nothing drawn from scratch. Declarative, lenient checks (any light edit
+  passes); progress persists per project. Step **icons**, a **"Show me" that
+  flashes the real button**, and it **auto-unlocks** the Maker-level areas
+  (Tiles/Pals) it uses.
+- **All five styles work + selectable**: platformer, SMB, top-down, auto-runner,
+  and racer each ship a complete-tileset starter that compiles + plays
+  (`createTopdown`/`createRunner`/`createRacer` join `create`/`createSmb`), all
+  in the New-game picker. The 🎓 **Tutorial** button opens a style picker; each
+  style has its own guided tutorial (`StudioStarter.tutorialFor`).
+- **Quests column** is now minimisable and flashes only when a warning appears;
+  the basics starter no longer ships a dead win-condition (was a red error for
+  every pupil). Tests: `builder-tests/style-starters.mjs`,
+  `studio-tests/tutorial.spec.js`.
+
+## Full SMB engine (v3–v9) + trust & hardening — 2026-07-05
+
+On `feature/smb-engine`: the versioned engine grew a complete Super-Mario-style
+toolkit (engine **v3–v9**), and a follow-on **trust & hardening** pass locked
+down authorization, documented the project-state contract, and expanded the
+pupil-facing validators + tests. Every engine feature is gated off-by-default so
+the golden ROMs stay byte-identical. Plans:
+[`docs/plans/current/2026-07-05-smb-engine-roadmap.md`](../plans/current/2026-07-05-smb-engine-roadmap.md),
+[`docs/plans/current/2026-07-05-trust-and-hardening.md`](../plans/current/2026-07-05-trust-and-hardening.md).
+
+- **SMB engine v3–v9** — fixed-point run + variable-height jump (a tunable
+  Speed 1–5 preset), Goomba stomp + kickable Koopa shell, Mushroom / Fire
+  Flower / Star power-ups with B-button fireballs, ? / brick / coin 16×16
+  blocks (pick what each ? dispenses), a coins/time/score/lives HUD via a
+  sprite-0 split, pipes/warps + a flagpole finish + bonus room, and NROM
+  8×16 / OAM-flicker rendering polish. All surfaced in the Studio **🎮 Style**
+  tab (per-game-type options) with an SMB showcase starter. Decisions:
+  [`docs/design/decisions/2026-07-05-smb-engine-decisions.md`](../design/decisions/2026-07-05-smb-engine-decisions.md).
+- **Authorization (deny-by-default)** on the gallery + feedback routes: publish
+  stamps the owner from the session; remove needs the owning account **or** the
+  teacher admin secret (anonymous entries teacher-only); `/feedback/handled`
+  needs the teacher secret. The gallery lists an `owned` flag (never the raw
+  owner id) and shows 🗑 Remove only on owned entries, with a 🔑 Teacher-mode
+  toggle. **CSRF** defence-in-depth via an Origin/Referer check (zero client
+  changes, proxy-safe, kill-switch). SQLite gained `synchronous=NORMAL` +
+  `busy_timeout`.
+- **Docs truth** — [`docs/reference/project-state-schema.md`](../reference/project-state-schema.md)
+  (the state contract + the three-version-counters gotcha), a "Current editor
+  status" note (Studio primary / seven pages legacy), and a "when to bump +
+  snapshot" rule.
+- **Validators & tests** — new pupil warnings (? block gives a power-up with the
+  module off; flagpole needs Win condition / sits past the level; 8-sprites-per-
+  scanline) and new behavioural coverage (route-level gallery auth, CSRF Origin,
+  gallery preview is non-blank, **top-down four-way movement + wall collision**).
+  The gallery preview capture is now one shared, headlessly-tested helper.
+
 ## NES Studio redesign, engine versioning, per-door destinations — 2026-07-05
 
 The `redesign/ui-ux` work merged to `main` (the unified **Studio** at

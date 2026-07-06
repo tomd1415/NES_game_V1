@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="180" viewBox="0 0 360 180" role="img" aria-labelledby="title desc">
+  <title id="title">Paint ground under the player</title>
+  <desc id="desc">A simple pixel-art picture showing a hero above a row of ground blocks.</desc>
+  <rect width="360" height="180" fill="#001018"/>
+  <rect x="18" y="18" width="324" height="126" fill="#53AEFF" stroke="#FFFFFF" stroke-width="4"/>
+  <g shape-rendering="crispEdges">
+    <rect x="72" y="74" width="24" height="24" fill="#FA9E00"/>
+    <rect x="96" y="74" width="24" height="24" fill="#FA9E00"/>
+    <rect x="72" y="98" width="24" height="24" fill="#C72E00"/>
+    <rect x="96" y="98" width="24" height="24" fill="#C72E00"/>
+    <rect x="80" y="82" width="8" height="8" fill="#FFFFFF"/>
+    <rect x="104" y="82" width="8" height="8" fill="#FFFFFF"/>
+    <rect x="42" y="122" width="276" height="18" fill="#43F611"/>
+    <rect x="42" y="140" width="276" height="22" fill="#8B4A18"/>
+    <path d="M42 140h276M60 122v40M96 122v40M132 122v40M168 122v40M204 122v40M240 122v40M276 122v40" stroke="#001018" stroke-width="3"/>
+  </g>
+  <rect x="192" y="58" width="92" height="36" fill="#000000" stroke="#FFFFFF" stroke-width="3"/>
+  <text x="202" y="81" font-family="monospace" font-size="16" fill="#FFFFFF">ground</text>
+</svg>
+

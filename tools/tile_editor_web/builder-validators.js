@@ -81,6 +81,19 @@
   function countSpritesByRole(state, role) {
     return sprites(state).filter(function (s) { return s && s.role === role; }).length;
   }
+  // The Builder "game type" (platformer / topdown / runner / racer / smb …).
+  function gameType(state) {
+    const g = moduleNode(state, 'game');
+    return (g && g.config && g.config.type) || 'platformer';
+  }
+  // Active background's width in tiles (screens across × 32).  Used by SMB
+  // placement checks — the flagpole/pipe columns are tile coords.
+  function levelTileWidth(state) {
+    const bgs = (state && state.backgrounds) || [];
+    const bg = bgs[(state && state.selectedBgIdx) | 0] || bgs[0];
+    const sx = (bg && bg.dimensions && bg.dimensions.screens_x) | 0;
+    return (sx > 0 ? sx : 1) * 32;
+  }
 
   // --------------------------------------------------------------------
   // Validators — chunk 1 ships two.  More land as modules do.
@@ -231,6 +244,55 @@
       return null;
     },
 
+    // V22: too many sprites can line up on one scanline.  The NES shows at
+    // most 8 hardware sprites (8px-wide cells) per scanline; the 9th+ flicker
+    // or vanish.  Estimate statically from the Scene instances' initial
+    // placements: for each 8px row, count the cells whose vertical span covers
+    // it, but only within any single 256px-wide screen window (so enemies
+    // spread across a scrolling level — never on screen together — don't
+    // false-positive).  Warn only; the engine's OAM flicker (v9) softens it,
+    // and real positions move at runtime.
+    function tooManySpritesPerScanline(state) {
+      if (!moduleEnabled(state, 'scene')) return null;
+      const node = moduleNode(state, 'scene');
+      const instances = (node && node.config && node.config.instances) || [];
+      const sprs = sprites(state);
+      const actors = [];
+      for (const inst of instances) {
+        const sp = sprs[inst.spriteIdx];
+        if (!sp) continue;                       // dangling ref — a different validator flags it
+        const w = Math.max(1, sp.width | 0);     // hardware sprites per row (cells)
+        const h = Math.max(1, sp.height | 0);
+        const y = inst.y | 0;
+        actors.push({ x: inst.x | 0, y0: y, y1: y + h * 8, w });
+      }
+      if (actors.length < 2) return null;
+      let worst = 0;
+      for (let yy = 0; yy < 240; yy += 8) {
+        const here = actors.filter(a => yy >= a.y0 && yy < a.y1);
+        if (here.length < 2) continue;
+        here.sort((a, b) => a.x - b.x);
+        // Sliding 256px window: the most cells that can share this row on one screen.
+        let lo = 0, sum = 0;
+        for (let hi = 0; hi < here.length; hi++) {
+          sum += here[hi].w;
+          while (here[hi].x - here[lo].x >= 256) { sum -= here[lo].w; lo++; }
+          if (sum > worst) worst = sum;
+        }
+      }
+      if (worst <= 8) return null;
+      return {
+        id: 'too-many-sprites-per-scanline',
+        severity: 'warn',
+        message: 'Up to ' + worst + ' sprites can line up on one row here — the ' +
+          'NES only shows 8 per row, so some will flicker or disappear.',
+        fix: 'Spread enemies/pickups out vertically (different heights) or place ' +
+          'fewer on the same row. Sprite flicker (SMB rendering options) helps ' +
+          'share the slots but cannot show more than 8 at once.',
+        jumpTo: null,
+      };
+    },
+
     // V15: Player 2 on + damage on but P2 maxHp == 0.  Same shape
     // as V10 (hp-zero-with-damage) but for P2.  Warn only — the
     // game still plays, P2 just can't be hurt; pupils might
@@ -377,6 +439,75 @@
         fix: 'Stick to letters, numbers, spaces and . , ! ? \' - : — or paint ' +
           'your own tile for that character at its ASCII slot on the ' +
           'Backgrounds page.',
+        jumpTo: null,
+      };
+    },
+
+    // V19 (SMB blocks, engine v6): a ? block is set to dispense a
+    // power-up (mushroom / fire flower / star / 1-Up) but the
+    // Power-ups module is off.  The engine falls back to a coin
+    // (blocks emit `#else bw_coins++` at builder-modules.js ~1319),
+    // so the game still builds — the pupil just silently gets a coin
+    // instead of what they picked.  Warn so intent + result line up.
+    function questionBlockPowerupWithoutModule(state) {
+      if (!moduleEnabled(state, 'blocks')) return null;
+      if (moduleEnabled(state, 'powerups')) return null;   // module present → fine
+      const b = moduleNode(state, 'blocks');
+      const list = (b && b.config && b.config.blockList) || [];
+      const wantsPowerup = list.some(function (blk) {
+        return blk && (blk.kind || 'question') === 'question' &&
+          blk.contents && blk.contents !== 'coin';
+      });
+      if (!wantsPowerup) return null;
+      return {
+        id: 'question-block-powerup-no-module',
+        severity: 'warn',
+        message: 'A ? block is set to give a power-up (mushroom / fire ' +
+          'flower / star / 1-Up) but the Power-ups module is off — it ' +
+          'will give a coin instead.',
+        fix: 'Turn on the Power-ups module (Style tab) so the power-up ' +
+          'can pop out, or set the ? block’s contents to Coin so it ' +
+          'matches what will actually happen.',
+        jumpTo: null,
+      };
+    },
+
+    // V20 (SMB flagpole, engine v8): flagpole finish is on but the Win
+    // condition module is off.  The flag's win code is `#if BW_WIN_ENABLED`
+    // (builder-modules.js ~1487), so crossing the pole does nothing — the
+    // level can't be finished.  Error: the flag's whole purpose is broken.
+    function flagpoleNeedsWinCondition(state) {
+      if (gameType(state) !== 'smb') return null;
+      if (!moduleEnabled(state, 'flagpole')) return null;
+      if (moduleEnabled(state, 'win_condition')) return null;
+      return {
+        id: 'flagpole-needs-win',
+        severity: 'error',
+        message: 'Flagpole finish is on but the Win condition module is off — ' +
+          'crossing the flag will not finish the level.',
+        fix: 'Turn on the Win condition module (Rules tab) — the flagpole ' +
+          'needs it to run the level-complete celebration.',
+        jumpTo: null,
+      };
+    },
+
+    // V21 (SMB flagpole): the flagpole column sits past the end of the
+    // level, so the player can never reach it.  Warn (level-width across
+    // multi-screen backgrounds can be imperfect; don't hard-block Play).
+    function flagpoleBeyondLevel(state) {
+      if (gameType(state) !== 'smb') return null;
+      if (!moduleEnabled(state, 'flagpole')) return null;
+      const node = moduleNode(state, 'flagpole');
+      const x = (node && node.config && node.config.x) | 0;
+      const w = levelTileWidth(state);
+      if (x < w) return null;
+      return {
+        id: 'flagpole-beyond-level',
+        severity: 'warn',
+        message: 'The flagpole column (' + x + ') is past the end of your ' +
+          'level (' + w + ' tiles wide) — the player can never reach it.',
+        fix: 'Lower the Flagpole column in the Style tab, or make the level ' +
+          'wider on the Backgrounds page (add screens across).',
         jumpTo: null,
       };
     },

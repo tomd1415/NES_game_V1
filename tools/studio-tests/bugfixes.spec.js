@@ -43,10 +43,13 @@ test('CHARS has Line and Rect tools', async ({ page }) => {
   await expect(page.locator('.stage-toolbar .tool[data-tool="rect"]')).toBeVisible();
 });
 
-// Bug 3 / 5 — a starter game is always available.
+// Bug 3 / 5 — a starter game is always available.  With more than one starter
+// on offer, New game opens a picker modal; choose "Platformer basics".
 test('New game button creates a fresh playable starter', async ({ page }) => {
-  page.once('dialog', (d) => d.accept());
   await page.locator('#btn-new-game').click();
+  const picker = page.locator('.modal-backdrop.open', { hasText: 'Load a starter game' });
+  await expect(picker).toBeVisible();
+  await picker.locator('.btn', { hasText: 'Platformer basics' }).click();
   const s = await page.evaluate(() => {
     const st = window.Studio.getState();
     return { bgs: st.backgrounds.length, sprites: st.sprites.length, engine: st.engineVersion };
@@ -56,6 +59,45 @@ test('New game button creates a fresh playable starter', async ({ page }) => {
   // New projects are stamped with the engine they were authored for (current).
   const cur = await page.evaluate(() => window.NES_ENGINE_VERSION);
   expect(s.engine).toBe(cur);
+});
+
+// The picker can load the SMB showcase — the sample game wired for every
+// engine v3 + v4 feature (smb game style, Goomba + Koopa AIs).
+test('New game picker can load the SMB showcase starter', async ({ page }) => {
+  await page.locator('#btn-new-game').click();
+  const picker = page.locator('.modal-backdrop.open', { hasText: 'Load a starter game' });
+  await expect(picker).toBeVisible();
+  await picker.locator('.btn', { hasText: 'SMB showcase' }).click();
+  const info = await page.evaluate(() => {
+    const st = window.Studio.getState();
+    const ais = st.builder.modules.scene.config.instances.map((i) => i.ai);
+    return { type: st.builder.modules.game.config.type, ais };
+  });
+  expect(info.type).toBe('smb');
+  expect(info.ais).toContain('goomba');
+  expect(info.ais).toContain('koopa');
+});
+
+// Engine v6 — the Blocks editor (? / brick / coin) is reachable from the UI:
+// load the SMB showcase (smb + engine v6), go to WORLD at Maker, and the Blocks
+// section lets the user add a block that lands in state.
+test('WORLD exposes the v6 Blocks editor for an SMB project', async ({ page }) => {
+  await page.locator('#btn-new-game').click();
+  const picker = page.locator('.modal-backdrop.open', { hasText: 'Load a starter game' });
+  await expect(picker).toBeVisible();
+  await picker.locator('.btn', { hasText: 'SMB showcase' }).click();
+  await page.locator('#level-select').selectOption('maker');
+  // The Blocks editor renders in the WORLD dock — its "+ Add block" button is
+  // unique, so target it directly and confirm it adds a block to state (the
+  // showcase already ships with some blocks, so assert the count increments).
+  const before = await page.evaluate(() =>
+    window.Studio.getState().builder.modules.blocks.config.blockList.length);
+  const addBlock = page.locator('.btn', { hasText: '+ Add block' });
+  await expect(addBlock).toBeVisible();
+  await addBlock.click();
+  const after = await page.evaluate(() =>
+    window.Studio.getState().builder.modules.blocks.config.blockList.length);
+  expect(after).toBe(before + 1);
 });
 
 // Bug 4 — beginner mode is signposted (level hint + locked modes visible).

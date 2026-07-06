@@ -78,6 +78,28 @@ builders `mkCells` / `blankPool` / `flatBackground` / `BEHAVIOUR_TYPES`.
    ("some lit pixels appear / disappear", colour saturation), never on a
    fixed pixel box.
 
+## Behavioural game-mechanic + trust suites (2026-07-05)
+
+These boot the compiled ROM in jsnes and assert on **what the engine actually
+does**, not just what it emits — closing the gap that let codegen-green-but-
+broken mechanics reach pupils. Most use `lib/render-harness.mjs`; they set the
+spawn via `players.player1.config.startX/startY` (baked into the ROM — the
+payload `playerStart` is ignored on the customMainC path, see gotcha 2 above).
+
+| Suite | What it drives + asserts |
+| --- | --- |
+| `topdown-movement.mjs` | Top-down four-way motion: RIGHT/LEFT move X, UP/DOWN move Y, no gravity when idle, and a WALL column stops the player (bug #26 — top-down was codegen-only). |
+| `smb-speed.mjs` | The SMB Speed 1–5 preset changes **real** walk distance (Speed 5 ≫ Speed 1) and holding B runs faster than walking — locks the "walk speed does nothing" fix behaviourally. |
+| `smb-stomp.mjs` | Dropping on a Goomba (penned in walls for determinism) defeats it — its OAM cell parks off-screen (`ss_y=0xFF`). |
+| `smb-flagpole-validators.mjs` | Flagpole needs Win condition (error) + flagpole past the level width (warn). |
+| `smb-block-validators.mjs` | A ? block set to a power-up while Power-ups is off → warn (engine falls back to a coin). |
+| `sprites-per-scanline.mjs` | The 8-sprites-per-scanline validator (256px window so scrolling levels don't false-positive). |
+| `win-reach-tile.mjs` | Reaching a TRIGGER tile fires the win + freezes the player (stops early vs the no-trigger edge-clamp control). |
+| `pickup-collect.mjs` | Walking into a ROLE_PICKUP sprite collects it (parks off-screen); a Pickups-off control confirms no false collection. |
+| `preview-capture.mjs` | The shared `NesEmulator.stepPreviewFrames` renders a non-blank, deterministic gallery preview (bug #25). |
+| `gallery-auth.mjs` | Route-level gallery/feedback authorization matrix (owner/teacher/anon → 200/401/403). |
+| `csrf-origin.mjs` | The CSRF Origin check blocks cross-site state-changes on cookie-authed routes; exempts `/play` + no-Origin clients. |
+
 ## The invariants `run-all.mjs` enforces
 
 1. **JS / Python syntax** — every module + every inline

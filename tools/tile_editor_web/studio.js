@@ -29,6 +29,8 @@
       sub: 'The 8×8 tiles in the two pattern tables. Everything references what is made here.' },
     { id: 'pals', name: 'Pals', ico: '🎨', minLevel: 1,
       sub: 'Backdrop + 4 background + 4 sprite palettes of 3, from the 64-colour NES set.' },
+    { id: 'style', name: 'Style', ico: '🎮', minLevel: 0,
+      sub: 'Your game style and all of its style-specific options in one place.' },
     { id: 'rules', name: 'Rules', ico: '⚙', minLevel: 0,
       sub: 'How the game behaves — movement, damage, win condition, reactions.' },
     { id: 'sound', name: 'Sound', ico: '🎵', minLevel: 1,
@@ -179,6 +181,7 @@
     return (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0]; // ABGR little-endian
   }
   function renderLive() {
+    renderRulers();
     var canvas = $('tv-canvas');
     var g = canvas.getContext('2d');
     var mod = window.StudioModes && window.StudioModes[currentMode];
@@ -367,6 +370,40 @@
       inBounds: px >= 0 && py >= 0 && px < canvas.width && py < canvas.height,
     };
   }
+
+  // Live cursor read-out — the WORLD tile (x, y) under the pointer, shown in the
+  // box below the screen.  Blank outside WORLD mode (other modes edit a
+  // different coordinate space).
+  function updateCoords(evt) {
+    var el = $('tv-coords'); if (!el) return;
+    if (currentMode !== 'world') { el.textContent = ''; return; }
+    var cell = tvCellFromEvent(evt);
+    if (!cell.inBounds) { el.textContent = 'x –, y –'; return; }
+    var off = { cx: 0, cy: 0 };
+    try { off = ctx.viewOffset(); } catch (e) {}
+    el.textContent = 'x ' + (cell.cx + off.cx) + ', y ' + (cell.cy + off.cy);
+  }
+
+  // Faint tile-coordinate guides around the screen edges (WORLD only).  Numbers
+  // reflect the world column/row (the on-screen tile + the current view offset).
+  function renderRulers() {
+    var el = $('tv-rulers'); if (!el) return;
+    if (currentMode !== 'world') { el.innerHTML = ''; var c = $('tv-coords'); if (c) c.textContent = ''; return; }
+    var off = { cx: 0, cy: 0 };
+    try { off = ctx.viewOffset(); } catch (e) {}
+    var html = '';
+    [0, 8, 16, 24, 31].forEach(function (c) {
+      var pct = c / SCREEN_W * 100;
+      html += '<span class="rt col" style="left:' + pct + '%"></span>' +
+              '<span class="rk col" style="left:' + pct + '%">' + (c + off.cx) + '</span>';
+    });
+    [0, 8, 16, 24, 29].forEach(function (r) {
+      var pct = r / SCREEN_H * 100;
+      html += '<span class="rt row" style="top:' + pct + '%"></span>' +
+              '<span class="rk row" style="top:' + pct + '%">' + (r + off.cy) + '</span>';
+    });
+    el.innerHTML = html;
+  }
   function renderDock() {
     var dock = $('dock');
     var m = MODES.find(function (mm) { return mm.id === currentMode; });
@@ -450,6 +487,9 @@
     var prefs = Storage.readPrefs() || {};
     currentLevel = LEVELS[prefs.studioLevel] !== undefined ? prefs.studioLevel : 'beginner';
     $('level-select').value = currentLevel;
+    // Restore the minimised state of the quests column.
+    var main = document.querySelector('.studio-main');
+    if (main && prefs.questsCollapsed) main.classList.add('quests-collapsed');
   }
   function onLevelChange() {
     currentLevel = $('level-select').value;
@@ -471,12 +511,22 @@
   // Creates a fresh starter platformer as a NEW project (current work is
   // saved separately), so Beginner always has something playable to start
   // from — the fix for "there is no starting game".
-  function onNewGame() {
-    if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
-    Storage.flushPending();
-    var n = (Storage.listProjects() || []).length + 1;
-    var fresh = window.StudioStarter.create({ name: 'My Game ' + n });
-    Storage.createProject(fresh.name, fresh); // registers + sets active
+  // Build a fresh project from the starter with the given id (from
+  // StudioStarter.list()), register it, and switch to it.  Falls back to the
+  // default starter when the id is unknown or the registry is unavailable.
+  // Register a freshly-built starter/tutorial project as active and switch the
+  // whole Studio to it.  Shared by makeStarter + makeTutorial.
+  function loadFreshState(fresh) {
+    try {
+      Storage.createProject(fresh.name, fresh); // registers + sets active
+    } catch (e) {
+      // Storage is full even after pruning old snapshots/backups.  Keep the
+      // current project rather than half-loading a broken editor, and tell the
+      // pupil how to make room (this is the case the "clear storage + reload"
+      // symptom came from — now it degrades gracefully instead of breaking).
+      try { alert('Your browser storage is full, so a new game could not be saved.\n\nOpen the projects menu and delete an old project, then try again.'); } catch (_) {}
+      return;
+    }
     state = Storage.loadCurrent() || fresh;
     undoStack.length = 0; redoStack.length = 0;
     $('project-name').value = state.name || '';
@@ -484,6 +534,236 @@
     renderLive(); renderDock(); refreshQuestsAndAttention();
     setSaveState('saved');
     if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+    // A new project may target a newer engine than the last one — refresh the
+    // engine button / advisor affordance.
+    if (typeof refreshEngineButton === 'function') { try { refreshEngineButton(); } catch (e) {} }
+    maybeStartTutorial();
+    updateStorageIndicator();
+  }
+
+  function makeStarter(id) {
+    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
+    var chosen = null;
+    for (var i = 0; i < starters.length; i++) { if (starters[i].id === id) chosen = starters[i]; }
+    var n = (Storage.listProjects() || []).length + 1;
+    var fresh = chosen ? chosen.create({ name: chosen.label + ' ' + n })
+                       : window.StudioStarter.create({ name: 'My Game ' + n });
+    loadFreshState(fresh);
+  }
+
+  // Load the guided-tutorial variant of a game style (ready-made game + the
+  // step panel).  `style` ∈ platformer/smb/topdown/runner/racer.
+  var TUTORIAL_STYLE_LABEL = { platformer: 'Platformer', smb: 'SMB', topdown: 'Top-down', runner: 'Runner', racer: 'Racer' };
+  function makeTutorial(style) {
+    var n = (Storage.listProjects() || []).length + 1;
+    var name = (TUTORIAL_STYLE_LABEL[style] || 'Tutorial') + ' tutorial ' + n;
+    var fresh = window.StudioStarter.tutorialFor ? window.StudioStarter.tutorialFor(style, { name: name })
+                                                 : window.StudioStarter.createTutorial({ name: name });
+    loadFreshState(fresh);
+  }
+
+  // The 🎓 Tutorial button: pick which kind of game to learn, then load its
+  // guided tutorial.  Any style can be chosen — each fully works.
+  function onTutorial() {
+    Storage.flushPending();
+    var styles = [
+      { v: 'platformer', emoji: '🎮', label: 'Platformer', desc: 'Jump across platforms. The classic place to start.' },
+      { v: 'smb', emoji: '🍄', label: 'SMB-style', desc: 'Faster run + jump, blocks and coins.' },
+      { v: 'topdown', emoji: '🧭', label: 'Top-down adventure', desc: 'Walk around a room to explore. No jumping.' },
+      { v: 'runner', emoji: '🏃', label: 'Auto-runner', desc: 'The screen moves by itself — you jump.' },
+      { v: 'racer', emoji: '🏎️', label: 'Racing', desc: 'Steer a car around a track.' },
+      { v: 'scratch', emoji: '🧱', label: 'Build from scratch (long)', desc: 'Start with a blank screen and build a whole game yourself — draw the hero, the world, enemies and a goal. Many small steps; leave and come back any time.' },
+    ];
+    // If THIS project is mid-tutorial, offer to resume it (leave + come back).
+    var resumable = !!(state && state.tutorial && state.tutorial.active);
+    if (resumable && window.StudioTutorial && typeof window.StudioTutorial.start === 'function' && !(window.StudioUI && window.StudioUI.modal)) {
+      window.StudioTutorial.start(ctx); return;
+    }
+    if (!(window.StudioUI && window.StudioUI.modal)) { makeTutorial('platformer'); return; }
+    var el = window.StudioUI.el;
+    var body = styles.map(function (s) {
+      return el('div', { class: 'dock-note', style: 'margin:6px 0;line-height:1.35' }, [
+        el('strong', { text: s.emoji + '  ' + s.label }), el('div', { text: s.desc }),
+      ]);
+    });
+    var actions = styles.map(function (s, i) { return { label: s.emoji + ' ' + s.label, value: s.v, kind: (!resumable && i === 0) ? 'primary' : null }; });
+    if (resumable) actions.unshift({ label: '▶ Resume your tutorial', value: '__resume', kind: 'primary' });
+    actions.push({ label: '🧑‍🏫 Teacher settings', value: '__teacher' });
+    actions.push({ label: 'Cancel', value: null });
+    window.StudioUI.modal({
+      title: 'Choose a kind of game to learn',
+      sub: 'A ready-made game will walk you through it, one small step at a time.',
+      bodyNodes: body, actions: actions,
+    }).then(function (v) {
+      if (v === '__teacher') { openTeacherSettings(function () { onTutorial(); }); }
+      else if (v === '__resume') { if (window.StudioTutorial) window.StudioTutorial.start(ctx); }
+      else if (v) { makeTutorial(v); }
+    });
+  }
+
+  // Class-default settings for the guided tutorials (stored in prefs on this
+  // computer).  Honoured by studio-tutorial.js.
+  function openTeacherSettings(onClose) {
+    if (!(window.StudioUI && window.StudioUI.modal)) return;
+    var el = window.StudioUI.el;
+    var prefs = Storage.readPrefs() || {};
+    var cfg = Object.assign({ pairing: 'solo', celebration: 'visual', hints: true }, prefs.teacherConfig || {});
+    function group(label, key, options) {
+      var wrap = el('div', { class: 'dock-note', style: 'margin:10px 0' });
+      wrap.appendChild(el('strong', { text: label }));
+      var row = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:5px' });
+      options.forEach(function (o) {
+        var b = el('button', {
+          class: 'btn' + (cfg[key] === o.v ? ' primary' : ''), type: 'button', text: o.label,
+          onclick: function () { cfg[key] = o.v; Array.prototype.forEach.call(row.children, function (c) { c.className = 'btn'; }); b.className = 'btn primary'; },
+        });
+        row.appendChild(b);
+      });
+      wrap.appendChild(row);
+      return wrap;
+    }
+    var body = [
+      group('Pairing', 'pairing', [{ v: 'solo', label: 'Solo' }, { v: 'pair', label: 'Pair' }, { v: 'choose', label: 'Let pupil choose' }]),
+      group('Celebration', 'celebration', [{ v: 'visual', label: 'Visual' }, { v: 'sound', label: 'Visual + sound' }, { v: 'off', label: 'Off' }]),
+      group('Hints & Show me', 'hints', [{ v: true, label: 'On' }, { v: false, label: 'Off' }]),
+    ];
+    window.StudioUI.modal({
+      title: '🧑‍🏫 Teacher settings',
+      sub: 'Class defaults for the guided tutorials — saved on this computer. Pupils can always turn pairing off; accessibility is never limited.',
+      bodyNodes: body,
+      actions: [{ label: 'Save', value: 'save', kind: 'primary' }, { label: '✏ Edit steps', value: 'edit' }, { label: 'Cancel', value: null }],
+    }).then(function (v) {
+      if (v === 'save') {
+        var pr = Storage.readPrefs() || {};
+        pr.teacherConfig = cfg; Storage.writePrefs(pr);
+        if (window.StudioTutorial && typeof window.StudioTutorial.render === 'function') { try { window.StudioTutorial.render(); } catch (e) {} }
+      }
+      if (v === 'edit') { openStepEditor(function () { openTeacherSettings(onClose); }); return; }
+      if (typeof onClose === 'function') onClose();
+    });
+  }
+
+  // Teacher step editor: reorder / add / remove a tutorial's steps.  Saves an
+  // OVERRIDE in prefs (the base tutorial is never mutated); Reset restores it.
+  // Progress is index-based, so overrides are best set before pupils start.
+  function openStepEditor(onClose) {
+    if (!(window.StudioUI && window.StudioUI.modal)) return;
+    var el = window.StudioUI.el;
+    var tutorials = [
+      { id: 'first-game', label: '🎮 Platformer' }, { id: 'smb-first', label: '🍄 SMB' },
+      { id: 'topdown-first', label: '🧭 Top-down' }, { id: 'runner-first', label: '🏃 Runner' },
+      { id: 'racer-first', label: '🏎️ Racer' },
+    ];
+    var curId = tutorials[0].id;
+    function loadSteps(id) {
+      var prefs = Storage.readPrefs() || {};
+      var ov = (prefs.tutorialOverrides || {})[id];
+      if (ov && Array.isArray(ov.steps) && ov.steps.length) return JSON.parse(JSON.stringify(ov.steps));
+      var base = (window.STUDIO_TUTORIALS || {})[id];
+      return base ? JSON.parse(JSON.stringify(base.steps)) : [];
+    }
+    var working = loadSteps(curId);
+    var iconBtn = function (label, fn) { return el('button', { class: 'btn', type: 'button', text: label, style: 'padding:3px 7px', onclick: fn }); };
+    var listWrap = el('div', { style: 'margin:8px 0;max-height:230px;overflow:auto' });
+    function renderList() {
+      listWrap.innerHTML = '';
+      working.forEach(function (st, i) {
+        var row = el('div', { style: 'display:flex;align-items:center;gap:6px;margin:3px 0;border:1px solid var(--line);border-radius:6px;padding:4px 6px' }, [
+          el('span', { style: 'flex:1;font-size:13px', text: (st.icon ? st.icon + ' ' : '') + st.title + '  (' + st.check.type + ')' }),
+          iconBtn('▲', function () { if (i > 0) { var t = working[i - 1]; working[i - 1] = working[i]; working[i] = t; renderList(); } }),
+          iconBtn('▼', function () { if (i < working.length - 1) { var t = working[i + 1]; working[i + 1] = working[i]; working[i] = t; renderList(); } }),
+          iconBtn('✖', function () { working.splice(i, 1); renderList(); }),
+        ]);
+        listWrap.appendChild(row);
+      });
+      if (!working.length) listWrap.appendChild(el('div', { class: 'dock-note', text: 'No steps — add one below.' }));
+    }
+    var titleInput = el('input', { type: 'text', placeholder: 'New step title (e.g. Add a coin)', style: 'flex:1;min-width:130px' });
+    var CHECK_OPTS = [
+      { v: 'paletteChanged', label: 'Change a colour (Pals)', mode: 'pals', icon: '🎨' },
+      { v: 'tileChanged', label: 'Draw on a tile (Tiles)', mode: 'tiles', icon: '🧩' },
+      { v: 'behaviourAdded', label: 'Paint some blocks (World)', mode: 'world', icon: '🧱' },
+      { v: 'sceneInstanceAdded', label: 'Place a character (World)', mode: 'world', icon: '👾' },
+      { v: 'builderChanged', label: 'Change a rule (Rules)', mode: 'rules', icon: '⚙️' },
+      { v: 'played', label: 'Play the game', mode: null, icon: '🎮' },
+    ];
+    var checkSel = el('select', {});
+    CHECK_OPTS.forEach(function (o) { checkSel.appendChild(el('option', { value: o.v, text: o.label })); });
+    var addRow = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px' }, [
+      titleInput, checkSel,
+      el('button', {
+        class: 'btn', type: 'button', text: '➕ Add', onclick: function () {
+          var title = (titleInput.value || '').trim(); if (!title) return;
+          var opt = CHECK_OPTS.filter(function (o) { return o.v === checkSel.value; })[0] || CHECK_OPTS[0];
+          var step = { id: 'custom-' + Math.random().toString(36).slice(2, 7), chapter: 'Extra', mode: opt.mode, icon: opt.icon, title: title, instruction: title + '.', why: '', finishedEnough: '', hint: 'Try it, then press Check my work.', check: { type: opt.v } };
+          if (opt.v === 'behaviourAdded') step.check.params = { min: 3 };
+          if (opt.v === 'sceneInstanceAdded') step.check.params = { min: 1 };
+          if (opt.v === 'played') step.flashSelector = '#btn-play';
+          working.push(step); titleInput.value = ''; renderList();
+        },
+      }),
+    ]);
+    var tutSel = el('select', { onchange: function () { curId = tutSel.value; working = loadSteps(curId); renderList(); } });
+    tutorials.forEach(function (t) { tutSel.appendChild(el('option', { value: t.id, text: t.label })); });
+    renderList();
+    window.StudioUI.modal({
+      title: '✏ Edit tutorial steps',
+      sub: 'Reorder ▲▼, remove ✖ or add steps. Saved on this computer; the base tutorial is never changed. Reset restores the original.',
+      bodyNodes: [el('div', { class: 'dock-note', style: 'margin-bottom:6px' }, [el('strong', { text: 'Tutorial: ' }), tutSel]), listWrap, addRow],
+      actions: [{ label: 'Save', value: 'save', kind: 'primary' }, { label: 'Reset to default', value: 'reset' }, { label: 'Cancel', value: null }],
+    }).then(function (v) {
+      var prefs = Storage.readPrefs() || {};
+      prefs.tutorialOverrides = prefs.tutorialOverrides || {};
+      if (v === 'save') { prefs.tutorialOverrides[curId] = { steps: working }; Storage.writePrefs(prefs); }
+      else if (v === 'reset') { delete prefs.tutorialOverrides[curId]; Storage.writePrefs(prefs); }
+      if (typeof onClose === 'function') onClose();
+    });
+  }
+
+  // Open the guided-tutorial panel when the loaded project carries an active
+  // tutorial marker (set by the 'tutorial' starter, persisted per project so it
+  // resumes after a reload).  No-op otherwise, so normal projects are untouched.
+  function maybeStartTutorial() {
+    try {
+      if (state && state.tutorial && state.tutorial.active && !state.tutorial.paused &&
+          window.StudioTutorial && typeof window.StudioTutorial.start === 'function') {
+        window.StudioTutorial.start(ctx);
+      } else {
+        var main = document.querySelector('.studio-main');
+        if (main) main.classList.remove('tutorial-on');
+        var region = document.getElementById('tutorial-region');
+        if (region) region.hidden = true;
+      }
+    } catch (e) {}
+  }
+
+  function onNewGame() {
+    Storage.flushPending();
+    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
+    // One starter (or no modal helper) → keep the simple confirm flow.
+    if (starters.length <= 1 || !(window.StudioUI && window.StudioUI.modal)) {
+      if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
+      makeStarter(starters[0] && starters[0].id);
+      return;
+    }
+    // Multiple starters → a picker so the pupil can choose which sample to load.
+    var el = window.StudioUI.el;
+    var body = starters.map(function (s) {
+      return el('div', { class: 'dock-note', style: 'margin:6px 0;line-height:1.35' }, [
+        el('strong', { text: s.emoji + '  ' + s.label }),
+        el('div', { text: s.desc }),
+      ]);
+    });
+    var actions = starters.map(function (s, i) {
+      return { label: s.emoji + ' ' + s.label, value: s.id, kind: i === 0 ? 'primary' : null };
+    });
+    actions.push({ label: 'Cancel', value: null });
+    window.StudioUI.modal({
+      title: 'Load a starter game',
+      sub: 'Your current project stays saved — switch back anytime from the projects menu.',
+      bodyNodes: body,
+      actions: actions,
+    }).then(function (id) { if (id) makeStarter(id); });
   }
 
   // ---- Quests + Needs attention -----------------------------------------
@@ -574,6 +854,27 @@
     };
   }
 
+  // Minimise / restore the quests + needs-attention column.  Persisted so it
+  // stays how the pupil/teacher left it.  When minimised it flashes only if a
+  // warning appears (see updateQuestFlash).
+  function setQuestsCollapsed(on) {
+    var main = document.querySelector('.studio-main');
+    if (main) main.classList.toggle('quests-collapsed', !!on);
+    try { var prefs = Storage.readPrefs() || {}; prefs.questsCollapsed = !!on; Storage.writePrefs(prefs); } catch (e) {}
+    if (!on) updateQuestFlash(false);   // clear any alert once it's shown again
+  }
+  function questsCollapsed() {
+    var main = document.querySelector('.studio-main');
+    return !!(main && main.classList.contains('quests-collapsed'));
+  }
+  // Flash the collapsed column when there is something in Needs attention, so a
+  // warning is never silently hidden.  No-op while the column is expanded.
+  function updateQuestFlash(hasProblems) {
+    var region = document.getElementById('quest-region');
+    if (!region) return;
+    region.classList.toggle('attn-flash', !!hasProblems && questsCollapsed());
+  }
+
   function refreshQuestsAndAttention() {
     refreshBudgets();
     refreshEngineButton();
@@ -606,8 +907,10 @@
       ok.className = 'attn-empty';
       ok.textContent = '✓ Nothing needs attention — your game builds cleanly.';
       al.appendChild(ok);
+      updateQuestFlash(false);
       return;
     }
+    updateQuestFlash(true);
     problems.forEach(function (p) {
       var item = document.createElement('div');
       item.className = 'attn-item ' + (p.severity === 'error' ? 'error' : 'warn');
@@ -907,6 +1210,12 @@
     return btoa(out);
   }
   async function captureRomPreview(rom, frames) {
+    // Delegate to the shared NesEmulator helper (single source of truth,
+    // headlessly tested).  Fall back to an inline capture only if an older
+    // cached emulator.js lacks it.
+    if (window.NesEmulator && typeof window.NesEmulator.capturePreview === 'function') {
+      return window.NesEmulator.capturePreview(rom, { frames: frames });
+    }
     if (window.NesEmulator && window.NesEmulator.ensureJsnes) await window.NesEmulator.ensureJsnes();
     if (!window.jsnes) throw new Error('jsnes did not load');
     var canvas = document.createElement('canvas');
@@ -1059,6 +1368,80 @@
   }
 
   // ---- Boot --------------------------------------------------------------
+  // ---- Storage-used indicator + project manager --------------------------
+  function fmtBytes(n) {
+    if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    if (n >= 1024) return Math.round(n / 1024) + ' KB';
+    return (n | 0) + ' B';
+  }
+  function storagePct() {
+    try { return Math.min(100, Math.round(Storage.usageBytes() / Storage.quotaBytes() * 100)); }
+    catch (e) { return 0; }
+  }
+  function updateStorageIndicator() {
+    var b = document.getElementById('btn-storage'); if (!b) return;
+    var pct = storagePct();
+    b.textContent = '💾 ' + pct + '%';
+    b.classList.toggle('warn', pct >= 75 && pct < 90);
+    b.classList.toggle('full', pct >= 90);
+    b.title = 'Storage ' + pct + '% used — click to manage your saved projects' + (pct >= 90 ? ' (nearly full — delete an old project)' : '');
+  }
+  function openStorageManager() {
+    if (!(window.StudioUI && window.StudioUI.modal)) return;
+    var el = window.StudioUI.el;
+    var host = el('div', {});
+    function rerender() {
+      host.innerHTML = '';
+      var pct = storagePct();
+      host.appendChild(el('div', { class: 'dock-note', text: 'Storage ' + pct + '% used (' + fmtBytes(Storage.usageBytes()) + ' of about ' + fmtBytes(Storage.quotaBytes()) + '). Your games are saved in this browser — delete old ones to free space.' }));
+      host.appendChild(el('div', { class: 'sm-meter' }, [el('div', { class: 'sm-fill' + (pct >= 80 ? ' warn' : ''), style: 'width:' + pct + '%' })]));
+      // "Clear old versions" reclaims the Time-Machine history (the biggest use
+      // of space) across every project without deleting any game.
+      var clearRow = el('div', { style: 'display:flex;align-items:center;gap:8px;margin:6px 0 10px' }, [
+        el('button', {
+          class: 'btn', type: 'button', text: '🧹 Clear old versions', title: 'Delete every project’s undo/backup history to free space (your games are kept)',
+          onclick: function () {
+            if (!window.confirm('Clear the saved undo/backup history for all projects? Your games are kept — only the Time Machine history is cleared.')) return;
+            var freed = Storage.pruneAllHistory();
+            updateStorageIndicator();
+            rerender();
+            try { window.alert('Freed ' + fmtBytes(freed) + '.'); } catch (e) {}
+          },
+        }),
+        el('span', { class: 'dock-note', style: 'margin:0', text: 'Frees the Time Machine history (keeps your games).' }),
+      ]);
+      host.appendChild(clearRow);
+      var projs = (Storage.listProjects() || []).slice().sort(function (a, b) { return Storage.projectBytes(b.id) - Storage.projectBytes(a.id); });
+      var activeId = Storage.getActiveProjectId();
+      projs.forEach(function (p) {
+        var isCur = p.id === activeId;
+        var row = el('div', { class: 'sm-row' + (isCur ? ' sm-current' : '') }, [
+          el('span', { class: 'sm-name', text: (isCur ? '▶ ' : '') + (p.name || 'untitled') + (isCur ? '  (current)' : '') }),
+          el('span', { class: 'sm-size', text: fmtBytes(Storage.projectBytes(p.id)) }),
+        ]);
+        if (!isCur && projs.length > 1) {
+          row.appendChild(el('button', {
+            class: 'btn', type: 'button', text: '🗑 Delete', onclick: function () {
+              if (!window.confirm('Delete "' + (p.name || 'untitled') + '"? This cannot be undone.')) return;
+              Storage.deleteProject(p.id);
+              updateStorageIndicator();
+              if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+              rerender();
+            },
+          }));
+        }
+        host.appendChild(row);
+      });
+    }
+    rerender();
+    window.StudioUI.modal({
+      title: '💾 Storage & projects',
+      sub: 'How much browser storage your saved games use, and where to delete old ones. To switch projects, use the projects menu.',
+      bodyNodes: [host],
+      actions: [{ label: 'Done', value: null, kind: 'primary' }],
+    }).then(function () { updateStorageIndicator(); });
+  }
+
   function boot() {
     Storage = window.createTileEditorStorage({ migrateState: migrateState, validateState: validateState });
     window.Storage = Storage; // shared account-menu.js reads this
@@ -1160,8 +1543,18 @@
     });
     $('btn-help').addEventListener('click', openHelp);
     $('btn-engine').addEventListener('click', openEngineAdvisor);
+    // Open a project file from the computer (reuses the Time Machine importer).
+    $('btn-open-file').addEventListener('click', function () { $('tm-import-file').click(); });
+    // Browse the class gallery of published games.
+    $('btn-gallery').addEventListener('click', function () {
+      window.open('gallery.html', '_blank', 'noopener');
+    });
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
+    $('btn-tutorial').addEventListener('click', onTutorial);
+    $('quest-collapse').addEventListener('click', function () { setQuestsCollapsed(true); });
+    $('quest-expand').addEventListener('click', function () { setQuestsCollapsed(false); });
+    $('btn-storage').addEventListener('click', openStorageManager);
     // Let the shared account menu offer "Load a starter game" too (bug: the
     // starter/projects aren't loading) — available even when signed out.
     window.onLoadStarterGame = onNewGame;
@@ -1186,6 +1579,7 @@
       tvDispatch('onTvDown', evt);
     });
     tv.addEventListener('pointermove', function (evt) {
+      updateCoords(evt);
       tvDispatch('onTvHover', evt);
       if (painting) tvDispatch('onTvMove', evt);
     });
@@ -1197,8 +1591,40 @@
     tv.addEventListener('pointerup', endPaint);
     tv.addEventListener('pointercancel', endPaint);
     tv.addEventListener('pointerleave', function (evt) {
+      var cel = $('tv-coords'); if (cel) cel.textContent = (currentMode === 'world') ? 'x –, y –' : '';
       tvDispatch('onTvLeave', evt);
     });
+
+    // Resizable edit column — drag the dock's right edge; width persists.
+    (function () {
+      var resizer = $('dock-resizer'); if (!resizer) return;
+      try {
+        var saved = parseInt(localStorage.getItem('studio.dockWidth'), 10);
+        if (saved >= 220 && saved <= 640) document.documentElement.style.setProperty('--dock-w', saved + 'px');
+      } catch (e) {}
+      var dragging = false;
+      resizer.addEventListener('pointerdown', function (evt) {
+        evt.preventDefault(); dragging = true; resizer.classList.add('dragging');
+        try { resizer.setPointerCapture(evt.pointerId); } catch (e) {}
+      });
+      resizer.addEventListener('pointermove', function (evt) {
+        if (!dragging) return;
+        var left = resizer.parentNode.getBoundingClientRect().left;
+        var w = Math.max(220, Math.min(640, Math.round(evt.clientX - left)));
+        document.documentElement.style.setProperty('--dock-w', w + 'px');
+      });
+      function endResize() {
+        if (!dragging) return; dragging = false; resizer.classList.remove('dragging');
+        var w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dock-w'), 10);
+        try { if (w) localStorage.setItem('studio.dockWidth', w); } catch (e) {}
+      }
+      resizer.addEventListener('pointerup', endResize);
+      resizer.addEventListener('pointercancel', endResize);
+      resizer.addEventListener('dblclick', function () {
+        document.documentElement.style.setProperty('--dock-w', '310px');
+        try { localStorage.setItem('studio.dockWidth', '310'); } catch (e) {}
+      });
+    })();
     tv.addEventListener('contextmenu', function (evt) {
       // Right-click is the eyedropper in paint modes — never a browser menu.
       var mod = window.StudioModes && window.StudioModes[currentMode];
@@ -1223,7 +1649,7 @@
     try { if (window.CookieNotice) window.CookieNotice.mount(); } catch (e) {}
 
     // Snapshot / backup cadence (progress-safety guarantees).
-    setInterval(function () { Storage.saveSnapshot(state, 'auto_30s'); }, 30000);
+    setInterval(function () { Storage.saveSnapshot(state, 'auto_30s'); updateStorageIndicator(); }, 30000);
     setInterval(function () { Storage.saveBackup(state); }, 5 * 60000);
     window.addEventListener('beforeunload', function () {
       Storage.flushPending();
@@ -1259,6 +1685,9 @@
       importNamBytes: importNamBytes,
       _play: onPlay,
     };
+    // Resume a guided tutorial if the loaded project is mid-tutorial.
+    maybeStartTutorial();
+    updateStorageIndicator();
     document.body.dataset.studioReady = '1';
   }
 

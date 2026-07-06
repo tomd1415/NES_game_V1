@@ -24,4 +24,13 @@ test('▶ Play snapshots before_play, compiles, and launches the emulator', asyn
   // The real cc65 build finishes and the shared emulator dialog appears.
   await expect(page.locator('#emu-dialog')).toBeVisible({ timeout: 25000 });
   await expect(page.locator('#emu-canvas')).toBeVisible();
+
+  // The emulator offers a .nes download of the ROM it just built, and clicking
+  // it starts a download named after the project.
+  const dl = page.locator('#emu-download');
+  await expect(dl).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await dl.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.nes$/);
 });

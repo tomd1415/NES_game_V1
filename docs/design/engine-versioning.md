@@ -57,6 +57,42 @@ is created by a `scripts/snapshot-engine.mjs` that copies the live engine
 files into `v<N>/` and writes the manifest. Snapshots are immutable once
 released.
 
+### When to bump + snapshot (the rule)
+
+Bump the version and snapshot **whenever a change could alter ROM output or the
+project↔ROM contract** for *any* project. Concretely, do it when you touch:
+
+- a C template in `tools/tile_editor_web/builder-templates/`,
+- the assembler `tools/tile_editor_web/builder-assembler.js` or the module
+  emitters in `builder-modules.js` (anything that changes emitted C/asm text),
+- the cc65 project under `steps/Step_Playground/` or the server's codegen, or
+- the project→state fields that feed any of the above (a new state field the
+  engine reads, or a changed meaning for an existing one).
+
+You do **not** bump for editor-only changes (UI, validators that only warn,
+docs, tests) that cannot change a byte of any ROM.
+
+**The safety lever:** new engine behaviour must be gated behind an
+**off-by-default flag** (emitted only for the game type / target version that
+needs it) so the preprocessor + cc65 strip it from every other project and the
+golden ROMs stay **byte-identical**. If a change keeps all golden hashes
+identical *and* adds no new state contract, it usually doesn't need a bump; if
+you can't be sure, bump — snapshots are cheap, a broken rebuild-an-old-game
+promise is not.
+
+**Mechanics** (also in [`CLAUDE.md`](../../CLAUDE.md) and
+[`tools/engines/README.md`](../../tools/engines/README.md)):
+
+1. bump `tools/engines/ENGINE_VERSION` **and**
+   `tools/tile_editor_web/engine-version.js` (keep the integers equal),
+2. add a `tools/engines/CHANGELOG.md` entry (Added / Changed-migration /
+   Breaking),
+3. run `node scripts/snapshot-engine.mjs` to freeze `tools/engines/v<N>/`.
+
+`node tools/builder-tests/run-all.mjs` fails if the two constants disagree or
+the snapshot drifts from git HEAD — so `snapshot-engine.mjs --check` is
+effectively mandatory in CI.
+
 ## Which engine a page targets (`NES_TARGET_ENGINE`) — implemented
 
 Codegen (`builder-modules.js` / the template) gates every version-specific

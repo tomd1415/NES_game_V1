@@ -38,8 +38,9 @@
   --warn:var(--nes-red);
 
   --rail-w:74px;
-  --dock-w:230px;
+  --dock-w:310px;
   --quest-w:290px;
+  --tutorial-w:0px;   /* collapsed until a guided tutorial is active */
   --mono:ui-monospace,'Menlo','Consolas','Courier New',monospace;
 }
 *{box-sizing:border-box}
@@ -95,13 +96,76 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   padding:5px 6px;font-family:inherit;font-size:12px;text-transform:uppercase;
 }
 
-/* --- Main four-region layout -------------------------------------- */
+/* --- Main region layout (rail · dock · TV · quests · [tutorial]) --- */
 .studio-main{
   flex:1 1 auto;display:grid;min-height:0;
-  grid-template-columns:var(--rail-w) var(--dock-w) 1fr var(--quest-w);
+  grid-template-columns:var(--rail-w) var(--dock-w) 1fr var(--quest-w) var(--tutorial-w);
 }
+.studio-main.tutorial-on{--tutorial-w:320px}
 .region{min-height:0;min-width:0;overflow:auto;border-right:2px solid var(--line)}
 .region:last-child{border-right:none}
+
+/* --- Guided tutorial panel (right-most column) --------------------- */
+.tutorial-region{background:var(--panel);border-left:2px solid var(--line)}
+.tutorial-inner{padding:14px}
+.tut-kicker{font-weight:700;font-size:14px}
+.tut-toprow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.tut-hide{font:inherit;font-size:12px;padding:4px 8px;border:2px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;cursor:pointer}
+.tut-hide:hover{filter:brightness(1.12)}
+#btn-storage.warn{border-color:var(--warn);color:var(--warn)}
+#btn-storage.full{background:var(--warn);border-color:var(--warn);color:#000;font-weight:700}
+.sm-meter{height:14px;border:2px solid var(--line);border-radius:7px;overflow:hidden;background:var(--bg);margin:4px 0 2px}
+.sm-fill{height:100%;background:var(--nes-green);transition:width .2s ease}
+.sm-fill.warn{background:var(--warn)}
+.sm-row{display:flex;align-items:center;gap:8px;margin:4px 0;border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.sm-row .sm-name{flex:1;font-size:13px}
+.sm-row .sm-size{font-size:12px;opacity:.75;min-width:52px;text-align:right}
+.sm-row.sm-current{border-color:var(--sel)}
+.tut-progress{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.tut-progress-fill{height:100%;background:var(--nes-green);transition:width .25s ease}
+:root[data-theme="dark"] .tut-progress-fill,
+@media (prefers-color-scheme:dark){.tut-progress-fill{background:var(--nes-green)}}
+.tut-progress-text{font-size:12px;opacity:.75;margin:4px 0 12px}
+.tut-card{background:var(--bg);border:2px solid var(--line);border-radius:8px;padding:12px}
+.tut-chapter{font-size:11px;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
+.tut-title{margin:4px 0 8px;font-size:17px}
+.tut-instruction{margin:0 0 8px;font-size:15px;line-height:1.4}
+.tut-why{margin:0 0 8px;font-size:13px;opacity:.8}
+.tut-enough{margin:0 0 10px;font-size:12px;opacity:.7;font-style:italic}
+.tut-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tut-btn{font:inherit;font-size:13px;padding:7px 10px;border:2px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;cursor:pointer}
+.tut-btn.primary{background:var(--nes-green);border-color:var(--nes-green);color:#000;font-weight:700}
+.tut-btn:hover{filter:brightness(1.08)}
+.tut-feedback{margin-top:10px;font-size:13px;min-height:1.2em;line-height:1.35}
+.tut-feedback.ok{color:var(--good)}
+.tut-feedback.wait,.tut-feedback.info{color:var(--info)}
+.tut-complete{border-color:var(--nes-green)}
+.tutorial-region.tut-celebrate{animation:tutPulse .7s ease}
+@keyframes tutPulse{0%{background:var(--panel)}30%{background:var(--nes-green)}100%{background:var(--panel)}}
+.reduced-motion .tut-progress-fill,.reduced-motion .tutorial-region.tut-celebrate{transition:none;animation:none}
+.tut-titlerow{display:flex;align-items:center;gap:9px;margin:4px 0 8px}
+.tut-icon{font-size:26px;line-height:1;flex:0 0 auto}
+.tut-titlerow .tut-title{margin:0}
+/* "Show me" flashes the REAL button/icon the pupil should press */
+.tut-flash{animation:tutFlash 1.4s ease 2;border-radius:8px;position:relative;z-index:5}
+@keyframes tutFlash{0%,100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}50%{box-shadow:0 0 0 4px var(--nes-green),0 0 16px 5px var(--nes-green)}}
+.reduced-motion .tut-flash{animation:none;box-shadow:0 0 0 4px var(--nes-green)}
+.tut-pair{background:var(--bg);border:2px dashed var(--line);border-radius:8px;padding:8px 10px;margin-bottom:10px}
+.tut-pair.on{border-style:solid;border-color:var(--info)}
+.tut-pair-head{font-weight:700;font-size:13px}
+.tut-pair-roles{font-size:12px;opacity:.85;margin:4px 0 6px;line-height:1.35}
+.tut-pair .tut-btn{font-size:12px;padding:5px 8px}
+
+/* --- Quest column: minimise + flash-on-warning -------------------- */
+.quest-bar{display:flex;justify-content:flex-end;padding:6px 8px 0}
+.quest-collapse,.quest-expand{font:inherit;font-size:13px;line-height:1;padding:5px 8px;border:2px solid var(--line);border-radius:6px;background:var(--panel);color:inherit;cursor:pointer}
+.quest-expand{display:none}
+.studio-main.quests-collapsed{--quest-w:40px}
+.quests-collapsed #quest-inner,.quests-collapsed .quest-bar{display:none}
+.quests-collapsed .quest-expand{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;height:100%;border:none;border-radius:0;writing-mode:vertical-rl;padding:10px 0;font-weight:700}
+.quest-region.attn-flash{animation:questAlert 1s ease infinite}
+@keyframes questAlert{0%,100%{background:var(--panel)}50%{background:var(--warn)}}
+.reduced-motion .quest-region.attn-flash{animation:none;background:var(--warn)}
 
 /* Mode rail */
 .mode-rail{display:flex;flex-direction:column;gap:2px;padding:8px 6px;
@@ -123,8 +187,14 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .level-hint.flash{color:var(--accent);font-weight:700}
 
 /* Contextual dock */
-.dock{background:var(--panel)}
+.dock{background:var(--panel);position:relative}
 .dock-inner{padding:12px}
+/* Drag handle on the dock's right edge to resize the edit column. */
+.dock-resizer{position:absolute;top:0;right:0;width:8px;height:100%;
+  cursor:col-resize;z-index:20;touch-action:none}
+.dock-resizer::after{content:"";position:absolute;top:0;right:0;width:2px;height:100%;
+  background:transparent;transition:background .12s}
+.dock-resizer:hover::after,.dock-resizer.dragging::after{background:var(--accent)}
 .dock h2{color:var(--sel);font-size:13px;margin-bottom:6px}
 .dock .dock-sub{color:var(--muted);font-size:11px;margin-bottom:12px}
 .dock .placeholder{
@@ -177,6 +247,19 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .tv-state .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);
   box-shadow:0 0 6px var(--ok)}
 .tv-hint{color:var(--muted)}
+.tv-coords{color:var(--accent);font-family:Menlo,Consolas,monospace;font-size:11px;
+  min-width:110px;font-variant-numeric:tabular-nums}
+/* Edge rulers — faint tile-coordinate guides overlaid on the screen edges.
+   Positioned to match the canvas (the .crt has 16px padding around it). */
+.tv-rulers{position:absolute;inset:16px;pointer-events:none;overflow:hidden;
+  font-family:Menlo,Consolas,monospace;font-size:13px}
+.tv-rulers .rk{position:absolute;color:var(--accent);opacity:.9;font-weight:700;
+  text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000;line-height:1}
+.tv-rulers .rk.col{top:1px}
+.tv-rulers .rk.row{left:1px}
+.tv-rulers .rt{position:absolute;background:var(--accent);opacity:.4}
+.tv-rulers .rt.col{top:0;width:1px;height:5px}
+.tv-rulers .rt.row{left:0;height:1px;width:5px}
 
 /* Quest log + needs attention */
 .quest-region{background:var(--panel)}
@@ -213,7 +296,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 
 /* --- Dialog (Time Machine) ---------------------------------------- */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;
-  align-items:center;justify-content:center;z-index:50}
+  align-items:center;justify-content:center;z-index:10000}
 .modal-backdrop.open{display:flex}
 .modal{background:var(--panel);border:3px solid var(--accent);max-width:520px;
   width:92%;max-height:80vh;overflow:auto;padding:16px}
@@ -224,7 +307,7 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .snap-row .meta{flex:1 1 auto}
 .snap-row .when{color:var(--muted);font-size:11px}
 .snap-row .reason{color:var(--sel);font-size:10px;text-transform:uppercase}
-.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.modal-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:12px}
 .tm-section-title{color:var(--sel);font-size:12px;text-transform:uppercase;
   margin:14px 0 6px;letter-spacing:1px}
 
@@ -301,8 +384,30 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 
 @media (max-width:1100px){
   :root{--dock-w:190px;--quest-w:230px}
+  .studio-main.tutorial-on{--tutorial-w:250px}
   #tv-canvas{width:384px;height:360px}
 }
+/* STYLE mode — game-type picker grid (responsive; never overflows the column). */
+.style-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+  gap:6px;margin-top:6px}
+.style-card{display:flex;flex-direction:column;align-items:flex-start;text-align:left;
+  gap:3px;padding:9px;height:auto;line-height:1.25;box-sizing:border-box;min-width:0;
+  white-space:normal;overflow-wrap:anywhere}
+.style-card .dock-note{margin:0}
+
+/* STYLE mode — tidy, well-separated option fields. */
+.sfield{margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.sfield:last-child{border-bottom:none;margin-bottom:2px}
+.srow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.slabel{color:var(--text);font-size:12px;flex:1 1 auto;min-width:0}
+.sfield input[type=number],.sfield input[type=text],.sfield select{
+  flex:0 0 auto;background:var(--bg);color:var(--text);border:2px solid var(--line);
+  padding:6px 8px;font-family:inherit;font-size:13px;min-width:96px;width:96px;
+  box-sizing:border-box}
+.sfield select{width:auto;max-width:170px}
+.sfield input:focus,.sfield select:focus{outline:none;border-color:var(--sel)}
+.sfield .shelp{color:var(--muted);font-size:10px;margin-top:6px;line-height:1.5}
+.sfield .switch{font-size:12px}
 </style>
 <link rel="stylesheet" href="codemirror.min.css">
 <link rel="stylesheet" href="codemirror-theme-dracula.min.css">
@@ -320,7 +425,9 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   <div class="chrome-group">
     <label class="visually-hidden" for="project-name">Project name</label>
     <input id="project-name" type="text" aria-label="Project name" spellcheck="false">
+    <button id="btn-tutorial" class="btn" type="button" title="Start the guided tutorial — a ready-made game walks you through the editor one step at a time">🎓 Tutorial</button>
     <button id="btn-new-game" class="btn" type="button" title="Start a fresh starter platformer to learn with (keeps your other projects)">🎮 New game</button>
+    <button id="btn-open-file" class="btn" type="button" title="Open a project file (.json) you saved to your computer">📂 Open</button>
     <!-- AccountMenu anchors #account-control immediately after this. -->
     <span id="projects-menu"></span>
   </div>
@@ -330,9 +437,11 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   <div class="chrome-group">
     <button id="btn-play" class="btn primary" type="button">▶ Play</button>
     <button id="btn-publish" class="btn" type="button" title="Build your game and share it to the class gallery">📤 Publish</button>
+    <button id="btn-gallery" class="btn" type="button" title="Browse the class gallery of published games">🖼 Gallery</button>
     <div class="save-status"><span id="save-dot" title="Save status"></span>
       <span id="save-text">Saved</span></div>
     <button id="btn-time-machine" class="btn" type="button">⟲ Time Machine</button>
+    <button id="btn-storage" class="btn" type="button" title="Storage used — click to manage your saved projects">💾 …</button>
     <div class="level-switch">
       <label for="level-select">Level</label>
       <select id="level-select" aria-label="Expertise level">
@@ -353,8 +462,11 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
   <!-- Mode rail -->
   <nav class="region mode-rail" id="mode-rail" aria-label="Modes"></nav>
 
-  <!-- Contextual dock -->
-  <section class="region dock" aria-label="Tools"><div class="dock-inner" id="dock"></div></section>
+  <!-- Contextual dock (the edit column) — draggable right edge to resize -->
+  <section class="region dock" aria-label="Tools">
+    <div class="dock-inner" id="dock"></div>
+    <div class="dock-resizer" id="dock-resizer" title="Drag to make the edit column wider or narrower" role="separator" aria-label="Resize edit column"></div>
+  </section>
 
   <!-- The TV -->
   <section class="region tv-region" aria-label="Game screen">
@@ -367,17 +479,22 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
     <div class="tv-stage">
       <div class="crt">
         <canvas id="tv-canvas" width="256" height="240" aria-label="Live game screen"></canvas>
+        <div class="tv-rulers" id="tv-rulers" aria-hidden="true"></div>
       </div>
     </div>
     <div class="tv-footer">
       <span class="tv-state" id="tv-state"><span class="dot"></span><span id="tv-state-label">Live</span></span>
+      <span class="tv-coords" id="tv-coords" title="Tile the cursor is over (world x, y)">x –, y –</span>
       <span class="tv-hint" id="tv-hint">Editing the current screen live — press ▶ Play to run it.</span>
     </div>
   </section>
 
   <!-- Quest log + needs attention -->
-  <aside class="region quest-region" aria-label="Quests and needs attention">
-    <div class="quest-inner">
+  <aside class="region quest-region" id="quest-region" aria-label="Quests and needs attention">
+    <div class="quest-bar">
+      <button id="quest-collapse" class="quest-collapse" type="button" title="Minimise this panel" aria-label="Minimise quests panel">» Hide</button>
+    </div>
+    <div class="quest-inner" id="quest-inner">
       <h2>Cartridge</h2>
       <div id="budget-list"></div>
       <h2>Quests</h2>
@@ -385,6 +502,10 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
       <h2 class="attn">Needs attention</h2>
       <div id="attn-list"></div>
     </div>
+    <button id="quest-expand" class="quest-expand" type="button" title="Show quests / needs attention" aria-label="Show quests panel">« Quests</button>
+  </aside>
+  <aside class="region tutorial-region" id="tutorial-region" aria-label="Guided tutorial" hidden>
+    <div class="tutorial-inner" id="tutorial-inner"></div>
   </aside>
 </main>
 
@@ -463,12 +584,17 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 <script src="studio-chars.js"></script>
 <script src="studio-pals.js"></script>
 <script src="studio-rules.js"></script>
+<script src="studio-style.js"></script>
 <script src="studio-tiles.js"></script>
 <script src="studio-sound.js"></script>
 <script src="codemirror.min.js"></script>
 <script src="codemirror-clike.min.js"></script>
 <script src="codemirror-active-line.min.js"></script>
 <script src="studio-code.js"></script>
+<!-- Guided tutorial: content manifests + runtime, registered before the shell boots. -->
+<script src="tutorial-first-game.js"></script>
+<script src="tutorial-styles.js"></script>
+<script src="studio-tutorial.js"></script>
 <script src="studio.js"></script>
 </body>
 </html>

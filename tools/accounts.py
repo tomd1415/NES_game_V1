@@ -162,7 +162,16 @@ class AccountStore:
         self._lock = threading.Lock()
         self._db = sqlite3.connect(self.db_path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
+        # WAL lets readers not block the single writer; NORMAL is the
+        # recommended durability pairing with WAL (fewer fsyncs, still
+        # crash-safe — only a power loss mid-checkpoint can lose the last
+        # commits, acceptable for classroom project saves).  busy_timeout
+        # makes a write WAIT up to 5s for a lock instead of instantly raising
+        # "database is locked" — this matters if a teacher runs a backup or a
+        # second server process touches the same file.
         self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA synchronous=NORMAL")
+        self._db.execute("PRAGMA busy_timeout=5000")
         self._db.execute("PRAGMA foreign_keys=ON")
         self._init_schema()
 
@@ -322,6 +331,14 @@ class AccountStore:
             self._db.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
             self._db.commit()
         return new_code
+
+    def verify_admin(self, secret: str | None) -> bool:
+        """Constant-time check of the teacher/admin secret.  False when no admin
+        secret is configured (moderation disabled) or the secret is wrong.
+        Used to gate teacher-only actions (gallery moderation, feedback)."""
+        if not self.admin_secret:
+            return False
+        return hmac.compare_digest(secret or "", self.admin_secret)
 
     def admin_reset(self, username: str, new_password: str, admin_secret: str):
         """Teacher reset (decision D6).  Requires the server admin secret — NOT

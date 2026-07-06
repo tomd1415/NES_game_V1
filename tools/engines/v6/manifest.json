@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "files": [
+    {
+      "path": "steps/Step_Playground/Makefile",
+      "sha1": "b752b7ae55084f2dcdf2f035bf4b1f561ef2ff92"
+    },
+    {
+      "path": "steps/Step_Playground/assets/backgrounds/level.nam",
+      "sha1": "a95d77ee3cb381c5d1cd6c92512c4e4c22331df3"
+    },
+    {
+      "path": "steps/Step_Playground/assets/sprites/game.chr",
+      "sha1": "0631457264ff7f8d5fb1edc2c0211992a67c73e6"
+    },
+    {
+      "path": "steps/Step_Playground/cfg/nes.cfg",
+      "sha1": "be2b0e09154b0182bc60d2106240f103165a3bdb"
+    },
+    {
+      "path": "steps/Step_Playground/src/behaviour.c",
+      "sha1": "c52f5fbf0a36ccc85c4f31a7c2f89344c7321c7f"
+    },
+    {
+      "path": "steps/Step_Playground/src/bg_world.c",
+      "sha1": "70ae8b25bf5fad5a61bcdf01734d5740008cd16a"
+    },
+    {
+      "path": "steps/Step_Playground/src/bg_world.h",
+      "sha1": "f0dca63f094b5c2a76a5179bda1226a7b013118f"
+    },
+    {
+      "path": "steps/Step_Playground/src/collision.h",
+      "sha1": "06df3b4352fc28b642d891c6ec09a80f469cb32e"
+    },
+    {
+      "path": "steps/Step_Playground/src/graphics.s",
+      "sha1": "b972615346f866d6c0fe450a054ed5ce3df65de9"
+    },
+    {
+      "path": "steps/Step_Playground/src/main.c",
+      "sha1": "ce6dcb66b02659bd317fa189c5ace542f147fffc"
+    },
+    {
+      "path": "steps/Step_Playground/src/main.s.starter",
+      "sha1": "e498435903be360a5460aea8599961ad6282a3d0"
+    },
+    {
+      "path": "steps/Step_Playground/src/palettes.inc",
+      "sha1": "ee1b03b7fac8572f38bb236d013148d64768c2f7"
+    },
+    {
+      "path": "steps/Step_Playground/src/scene.inc",
+      "sha1": "84a83addba28df1c10713f4717a2b73ef31f23b7"
+    },
+    {
+      "path": "steps/Step_Playground/src/scroll.c",
+      "sha1": "f928530f1bf1a17fb649b461381f66384b5def16"
+    },
+    {
+      "path": "steps/Step_Playground/src/scroll.h",
+      "sha1": "c1218a90d7fbd314766664beae785df7925f225f"
+    },
+    {
+      "path": "tools/tile_editor_web/builder-assembler.js",
+      "sha1": "5af4618120fda582f2ef5570c17fdbe38a31c030"
+    },
+    {
+      "path": "tools/tile_editor_web/builder-modules.js",
+      "sha1": "de682ddd168673d9d2feaec181e505a330ac7ae9"
+    },
+    {
+      "path": "tools/tile_editor_web/builder-templates/platformer.c",
+      "sha1": "11bc0ee45e2c175584487cd8b97dd4df9c26d210"
+    },
+    {
+      "path": "tools/tile_editor_web/engine-version.js",
+      "sha1": "67fa46b1b276858eaf17ba817976da7feb48aa11"
+    }
+  ]
+}

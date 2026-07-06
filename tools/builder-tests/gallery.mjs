@@ -63,16 +63,20 @@ async function getBytes(url) {
   return new Uint8Array(await res.arrayBuffer());
 }
 
+// Removing a gallery entry now needs authorization (deny by default); an
+// anonymously-published entry is teacher-only, so this smoke test acts as the
+// teacher via the admin secret.  Full ownership matrix lives in gallery-auth.mjs.
+const ADMIN = 'gallery-smoke-admin';
 const srv = spawn('python3',
   [path.join(ROOT, 'tools', 'playground_server.py')],
-  { env: { ...process.env, PLAYGROUND_PORT: String(PORT) },
+  { env: { ...process.env, PLAYGROUND_PORT: String(PORT), PLAYGROUND_ADMIN_SECRET: ADMIN },
     stdio: ['ignore', 'pipe', 'pipe'] });
 await sleep(1500);
 
 const publishedSlugs = [];
 async function cleanup() {
   for (const slug of publishedSlugs) {
-    try { await postJson(`${BASE}/gallery/remove`, { slug }); } catch (_) {}
+    try { await postJson(`${BASE}/gallery/remove`, { slug, admin_secret: ADMIN }); } catch (_) {}
   }
 }
 
@@ -125,8 +129,12 @@ try {
   if (!entry) fail('published slug missing from list');
   if (entry.title !== payload.title) fail('list returned wrong title');
   if (entry.pupil_handle !== payload.pupil_handle) fail('list dropped handle');
-  if (entry.owner !== null) fail('owner should be null pre-accounts (got ' + JSON.stringify(entry.owner) + ')');
-  console.log('✓ list shows the new entry with pupil_handle + null owner slot');
+  // The list never exposes the raw numeric owner id; it exposes an `owned`
+  // flag relative to the requesting session (see gallery-auth.mjs for the
+  // full ownership matrix).  An anonymous publish viewed anonymously → false.
+  if ('owner' in entry) fail('list must not leak the raw owner id (got ' + JSON.stringify(entry.owner) + ')');
+  if (entry.owned !== false) fail('anonymous entry should be owned:false for an anonymous viewer (got ' + JSON.stringify(entry.owned) + ')');
+  console.log('✓ list shows the new entry with pupil_handle + owned:false slot');
 
   // ROM bytes round-trip.
   const fetchedRom = await getBytes(`${BASE}/gallery/${slug}/rom.nes`);
@@ -146,14 +154,14 @@ try {
   console.log('✓ path-traversal blocked');
 
   // Remove the entry.
-  ({ status, data } = await postJson(`${BASE}/gallery/remove`, { slug }));
+  ({ status, data } = await postJson(`${BASE}/gallery/remove`, { slug, admin_secret: ADMIN }));
   if (status !== 200 || !data.ok) fail('remove failed');
   publishedSlugs.length = 0;
   if (fs.existsSync(path.join(GALLERY_DIR, slug))) fail('folder still on disk after remove');
   console.log('✓ remove deletes the entry');
 
   // Removing a non-existent slug returns 404.
-  ({ status, data } = await postJson(`${BASE}/gallery/remove`, { slug: 'never-existed-aaaa' }));
+  ({ status, data } = await postJson(`${BASE}/gallery/remove`, { slug: 'never-existed-aaaa', admin_secret: ADMIN }));
   if (status !== 404) fail('expected 404 on non-existent remove (got ' + status + ')');
   console.log('✓ remove of unknown slug returns 404');
 
