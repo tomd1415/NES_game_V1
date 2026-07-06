@@ -21,6 +21,40 @@ deferred.
 
 ---
 
+## Engine v10 + bug-list sweep (autonomous) — 2026-07-06
+
+A focused pass over the pupil bug list, each unit test-gated (full builder
+suite kept golden-byte-identical + Studio E2E green):
+
+- **Engine v10 — two new enemy paths (bug #13).** A **flyer** (hovers ±20px
+  around its placed height and drifts toward the player, overriding scene
+  gravity by writing `ss_y` absolutely each frame — guarded so a defeated
+  actor stays parked) and a **patrol** (paces ±40px and turns on its own, no
+  wall needed) in the World-dock AI dropdown (v10+). Both reuse per-instance
+  speed and degrade to `walker` below v10, so golden ROMs are unchanged.
+  Behavioural test `flyer-patrol.mjs`; snapshot frozen at `tools/engines/v10`.
+- **Bug #14 — place entities on any screen.** The World place/move tool used
+  first-screen-clamped, view-offset-ignorant coordinates; now it works in
+  world space across the whole scrolling level (the engine already rendered
+  world-pixel scene sprites). Overlay culls entities off the shown screen.
+  Still open: per-background scene lists (one shared scene today). E2E in
+  `entities.spec.js`.
+- **Bug #18 — Duplicate forks a character's tiles.** Duplicating gave the copy
+  fresh sprite-tile slots (one per distinct source tile, blank tile 0 shared,
+  falls back to sharing only if the 256-pool is full), so editing the copy no
+  longer changes the original. E2E in `chars.spec.js`.
+- **Bug #16 — palette fidelity (investigated, not reproduced).** New
+  `palette-render.mjs` proves all 4 BG + 4 sprite palettes load into PPU RAM
+  (`$3F00-$3F1F`) byte-for-byte; the editor render path also keys off the
+  correct per-cell palette index. Downgraded from a correctness bug; diagnosis
+  recorded.
+- **Sprint 4 closed** — bug-reproduction-card template added; the audio-budget
+  validator folded into Sprint 5's budget meter (audio size is server-computed).
+- **Bugs #15 / #22 triaged** — #22 (game-wide gravity/jump) already shipped as
+  the Globals module; #15 (defeat enemies) scoped as an attended-playtesting
+  follow-up (SMB stomp/fireballs already exist; the plain platformer needs a
+  feel-tuned stomp).
+
 ## Storage-load fix + from-scratch tutorial — 2026-07-06
 
 - **Fixed a loading bug** where opening a saved game or tutorial needed clearing
