@@ -1,5 +1,17 @@
 # ASM conversion — status tracker
 
+> **Generator progress (engine v21, 2026-07-06).** The per-project ASM generator
+> plan (`docs/plans/current/2026-07-06-asm-engine-generator.md`) reached
+> **Phase 1 + minimal Phase 5**. The server emits `src/project.inc` (ca65
+> `.define` constants) and the four dimension-baked functions (`behaviour_at`,
+> `reaction_for`, `advance_animation`, `scroll_stream_prepare`) are **generalised
+> via `project.inc` + the `MULC` macro and SHIP** — 10 hand-written functions now
+> run on `/play` (v20). `scroll_init` + a `MULC` unit test landed in v21.
+> `asm-ab.mjs` (builder-tests) is the permanent C-vs-ASM matched-progress guard.
+> Next: finish scroll.c (`scroll_stream`/`load_world_bg`), then the scene-sprite
+> loops (Phase 2, blocked on de-`static`ing variable-width scene arrays).
+
+
 Lab for rewriting the playground engine's C functions as hand-written 6502
 (see [`RESEARCH.md`](RESEARCH.md) for the how/why). Each function passes three
 gates: **(1) correctness** — per-function unit harness in a real ROM, ASM vs the

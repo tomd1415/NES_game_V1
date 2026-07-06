@@ -13,6 +13,46 @@
 > must **generate** the per-project engine, and prove it behaviourally
 > equivalent to the C engine without hand-checking every pupil project.
 
+## Current status — 2026-07-06 (engine v21)
+
+**Done and shipped on `/play`:**
+- **Phase 1 (v20):** `project.inc` generator (`build_project_inc`) + `asm_macros.inc`
+  (`MULC`). Generalised + shipped `behaviour_at`, `reaction_for`,
+  `advance_animation`, `scroll_stream_prepare`. **10 hand-written functions now
+  ship**, incl. the hot `behaviour_at`.
+- **v21:** `scroll_init` on ASM; `asm-lab/functions/mulc` unit test (MULC exact
+  for world widths 32/64/96/128).
+- **Phase 5 (minimal):** `tools/builder-tests/asm-ab.mjs` — permanent dual-build
+  A/B guard (C vs ASM, matched-progress), run by the suite.
+
+**Verification in place:** flag-off golden byte-identical (`1730448e`);
+matched-progress A/B identical; full builder suite green across every world shape;
+E2E 111 passed; asm-lab 13 tests.
+
+**What's next if continuing (in priority order):**
+1. **Finish `scroll.c`:** `scroll_stream` (must stay unrolled — vblank-timing
+   sensitive; use `.repeat` unroll + measure) and `load_world_bg` (boot-only;
+   nested nametable/attr fill — the `(sy*30+rr)*BG_WORLD_COLS + sx*32 + cc`
+   index needs MULC). Then scroll.c is 100% ASM.
+2. **Phase 2 proper — the scene-sprite hot loops** (the real perf target). BLOCKED
+   on de-`static`ing the server-generated scene arrays (`ss_x/ss_y/…`) **and**
+   their **variable element width** (u8↔u16 by sprite position): add `SS_POS_WIDE`
+   + widths to `project.inc` and conditionally assemble. Then a generic loop over
+   `NUM_STATIC_SPRITES` with AI dispatch on a type byte (walker/flyer/patrol/
+   chaser). Note the AI is spread across several template loops + module-injected
+   blocks, and `BW_APPLY_GRAVITY` is module-overridable — gate carefully.
+3. **Phase 3 — subsystems** (dialogue, doors, pickups, damage, HUD, SMB) one
+   opt-in `.s` each + the glue main loop.
+4. **Phase 4 — full-ASM mode** (`NES_ASM_FULL`, drop cc65 C, ASM crt0).
+5. **Phase 5 growth:** a real per-game-type project corpus + cycle/size benchmark.
+
+**Key ca65 learnings (save future-you time):** use `.define` not `SYM = value`
+for constants folded inside a `.proc` (`.if`/macros); MULC/`.if`-sized code paths
+need branch-over-`jmp` not `beq far`; the template gates basic anim via
+`NES_ASM_ANIM` (attack/racer keep inline C); kill orphaned test servers with
+`pkill python3` (a `-f playground_server`/`nesgame` pattern self-matches the
+shell wrapper).
+
 ## Companion docs & prior art
 
 - [`docs/design/engine-versioning.md`](../../design/engine-versioning.md) — the
