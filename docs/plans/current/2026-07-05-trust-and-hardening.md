@@ -119,9 +119,15 @@ the main CSRF vector for these routes. A full per-session CSRF token
   v3–v9).
 
 ### Sprint 3 — Robustness & classroom scale  *(ADVICE #8, #9, SQLite)*
-- **Per-request temp build dirs** for browser-mode builds (keep `BUILD_LOCK`
-  for shared assets); removes the Play-queue bottleneck + the build-dirt that
-  complicates the harness (ADVICE #8).
+- **Per-request temp build dirs** for browser-mode builds — ✅ **done
+  2026-07-06.** Every `/play` build now runs in its own throwaway temp dir (the
+  mechanism that already existed for `customMainC`, extended to the default
+  no-custom-main case with an optional stock `main.c`). Removes the Play-queue
+  bottleneck (`BUILD_LOCK` → `BUILD_SEM`, a bounded semaphore so builds run in
+  parallel up to CPU-count, not serialised and not unbounded) **and** the
+  build-dirt (`steps/Step_Playground/src/` is never written now). Byte-identical
+  golden ROMs; `build-concurrency.mjs` proves no cross-contamination under 12
+  simultaneous builds; the working tree stays clean after a full test run.
 - **SQLite WAL + busy timeout + checkpoint/backup**; keep `accounts.db` on local
   disk (ADVICE SQLite). *(WAL was already on; added `synchronous=NORMAL` (the
   recommended WAL pairing) + `busy_timeout=5000` so a lock held by a backup /
