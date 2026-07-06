@@ -20,9 +20,13 @@ import * as H from './lib/render-harness.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
-//   42a45ca8… is the -Os value (current; Makefile CFLAGS = -Os).
+//   8172e353… is the value with the universal hand-written 6502 engine shipped
+//     by default (engine v19: NES_ASM_LEAF always + NES_ASM_SCROLL for scroll
+//     builds).  Behaviourally identical to the C engine at matched game-logic
+//     progress (asm-lab settle-to-rest A/B) — the byte change is the ASM.
+//   42a45ca8… was the pure-C -Os value (set PLAYGROUND_NO_ASM=1 to rebuild it).
 //   ce62ec47b35cf7111e2ae5ea9c8a64f5cd43c316 was the no-opt value.
-const EXPECT = '42a45ca8349bd04480a03110271748fc0251391b';
+const EXPECT = '8172e353c34e5804d4f496be8fb328c574514517';
 
 const PORT = 18834;
 

@@ -9,6 +9,42 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v19 — 2026-07-06 — universal hand-written 6502 engine SHIPS by default
+
+### Changed / migration (ROM output changes — deliberate)
+- **The `/play` server now builds the universal hand-written 6502 engine by
+  default** for every platformer-derived project. Pupils' ROMs are no longer pure
+  cc65 C: `read_controller`, `write_palettes` (`NES_ASM_LEAF`, any build) and —
+  on scroll (multi-screen) builds — `world_to_screen_x/y`, `scroll_follow`,
+  `scroll_apply_ppu` (`NES_ASM_SCROLL`) are hand-written 6502. Behaviourally
+  identical to the C engine at matched game-logic progress (asm-lab settle-to-rest
+  A/B); the win is headroom — the engine holds 60fps where pure C dropped frames.
+- **Only the six project-INDEPENDENT functions ship.** The dimension-baked ones
+  (`behaviour_at`→WORLD_COLS, `scroll_stream_prepare`→BG_WORLD_COLS,
+  `advance_animation`→PLAYER_TILES_PER_FRAME, `reaction_for`→sprite count) plus
+  `draw_text`/`clear_text_row` moved behind a new **`NES_ASM_SPECIALIZED`** flag
+  (direct/lab builds only) — the server never ships them, so a project of any
+  world/player size is safe.
+- **Server gating.** `_build_in_tempdir` passes `NES_ASM_LEAF=1` (and
+  `NES_ASM_SCROLL=1` for scroll builds) only when the `main.c` is ASM-ready — the
+  stock main.c or a template-derived `customMainC` carrying the
+  `NES_ASM_READY_V1` marker. A bespoke `customMainC` (e.g. the audio.html
+  preview) lacks the marker and is built as pure C, so it can define those
+  helpers itself without a clash. `palette_bytes` is emitted non-`static` so the
+  ASM `write_palettes` can import it (linkage-only).
+- **Kill switch:** set `PLAYGROUND_NO_ASM=1` in the server env to fall back to the
+  pure-C engine for every build.
+- **Golden invariant intact.** The byte-identity test builds via `make` with no
+  flags (pure C) and is UNCHANGED (`1730448e…`); the flag-off ROM is still
+  byte-identical. The shipped (ASM) everything-on ROM is re-pinned in
+  `_rom-equiv.mjs` (`8172e353…`).
+
+### Note
+- The engine snapshot captures sources, not the server's build invocation, so a
+  snapshot rebuild with `make` (no flags) reproduces the pure-C ROM — an
+  acceptable behaviourally-identical fallback (byte-identity across engine
+  versions was never guaranteed).
+
 ## v18 — 2026-07-06
 
 ### Added

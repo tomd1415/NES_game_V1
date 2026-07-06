@@ -67,14 +67,27 @@ CFLAGS  += -DNES_ASM_SCROLL=1
 ASM_SRC += src/scroll_asm.s
 endif
 
-# Leaf helpers in main.c / behaviour.c on hand-written 6502 (asm-lab).  Same
-# off-by-default, byte-identical-when-off contract as NES_ASM_SCROLL.  Links
-# main_asm.s (read_controller) + behaviour_asm.s (behaviour_at, reaction_for)
-# and -D's out the matching C bodies.
+# UNIVERSAL leaf helpers on hand-written 6502 (asm-lab).  Project-independent
+# (bake only NES-fixed constants), so the server ships these for every build.
+# Same off-by-default, byte-identical-when-off contract as NES_ASM_SCROLL.  Links
+# main_asm.s (read_controller, write_palettes) and -D's out the matching C bodies.
 NES_ASM_LEAF ?= 0
 ifeq ($(NES_ASM_LEAF),1)
 CFLAGS  += -DNES_ASM_LEAF=1
-ASM_SRC += src/main_asm.s src/behaviour_asm.s
+ASM_SRC += src/main_asm.s
+endif
+
+# Dimension-SPECIALISED hand-written 6502 (asm-lab).  These bake this build's
+# world/player dimensions (behaviour_at -> WORLD_COLS, scroll_stream_prepare ->
+# BG_WORLD_COLS + horizontal-only, advance_animation -> PLAYER_TILES_PER_FRAME),
+# so unlike NES_ASM_SCROLL / NES_ASM_LEAF they are NOT project-independent and the
+# server never ships them — they're for direct/lab builds on a matching fixture.
+# Requires NES_ASM_SCROLL (scroll_stream_prepare needs cam_x et al).  Same
+# off-by-default, byte-identical-when-off contract.
+NES_ASM_SPECIALIZED ?= 0
+ifeq ($(NES_ASM_SPECIALIZED),1)
+CFLAGS  += -DNES_ASM_SPECIALIZED=1
+ASM_SRC += src/scroll_special_asm.s src/behaviour_special_asm.s src/main_special_asm.s
 endif
 
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))

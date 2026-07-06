@@ -1,6 +1,11 @@
 // =============================================================================
 // NES PLAYGROUND - auto-generated scene driver
 // =============================================================================
+// NES_ASM_READY_V1 — this main.c gates read_controller/write_palettes behind
+// NES_ASM_LEAF and relies on an exported (non-static) palette_bytes, so the
+// server may build it with the universal hand-written 6502 engine. A bespoke
+// main.c WITHOUT this marker is built as pure C (see playground_server.py).
+//
 // This file is part of the one-click "Play in NES" pipeline.  Everything it
 // needs -- palettes, player tile layout, static sprite table -- is injected
 // through the two generated headers written by tools/playground_server.py.
@@ -508,6 +513,13 @@ unsigned int  anim_base;
 const unsigned char *anim_tiles;
 const unsigned char *anim_attrs;
 
+/* read_controller / write_palettes have hand-written 6502 twins in main_asm.s.
+   The server ships them via NES_ASM_LEAF (they are project-independent); the
+   #ifndef gates the C body out so exactly one definition links. Flag off
+   (default) = pure C = byte-identical. Prototypes keep call sites compiling. */
+unsigned char read_controller(void);
+void write_palettes(void);
+#ifndef NES_ASM_LEAF
 unsigned char read_controller(void) {
     unsigned char result = 0;
     unsigned char j;
@@ -519,6 +531,7 @@ unsigned char read_controller(void) {
     }
     return result;
 }
+#endif
 
 #if PLAYER2_ENABLED
 /* Read both controllers in a single strobe.  Writing 1→0 to JOYPAD1
@@ -539,6 +552,7 @@ void read_both_controllers(void) {
 }
 #endif
 
+#ifndef NES_ASM_LEAF
 void write_palettes(void) {
     PPU_ADDR = 0x3F;
     PPU_ADDR = 0x00;
@@ -546,6 +560,7 @@ void write_palettes(void) {
         PPU_DATA = palette_bytes[i];
     }
 }
+#endif
 
 // Write a zero-terminated string of tile indices to the nametable at
 // (row, col). Briefly turns rendering off and back on so the PPU write

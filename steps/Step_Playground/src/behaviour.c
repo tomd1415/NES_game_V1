@@ -269,10 +269,12 @@ const unsigned char sprite_reactions[16] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
-/* behaviour_at + reaction_for have hand-written 6502 twins in behaviour_asm.s;
-   NES_ASM_LEAF gates the C out so exactly one definition of each links. Flag off
-   (default) = pure C = byte-identical ROM. */
-#ifndef NES_ASM_LEAF
+/* behaviour_at and reaction_for both bake per-project constants in their ASM
+   twins (behaviour_special_asm.s): behaviour_at -> WORLD_COLS, reaction_for ->
+   the sprite-type count in its bound check. So both ride NES_ASM_SPECIALIZED, NOT
+   the universal flags the server ships. Flag off (default) = pure C = byte
+   identical. */
+#ifndef NES_ASM_SPECIALIZED
 unsigned char behaviour_at(unsigned int world_col, unsigned int world_row) {
   if (world_col >= WORLD_COLS) return BEHAVIOUR_NONE;
   if (world_row >= WORLD_ROWS) return BEHAVIOUR_NONE;

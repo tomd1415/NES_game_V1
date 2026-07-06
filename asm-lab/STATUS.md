@@ -31,7 +31,26 @@ Or everything: `./run-all.sh`.
 | 9 | `scroll_follow` | scroll.c | ✅ 20/20 cases | 435 → **289** | big → smaller | ✅ **v13** (`NES_ASM_SCROLL`) |
 | 10 | `scroll_apply_ppu` | scroll.c | ✅ 16/16 cases | — | — | ✅ **v16** (`NES_ASM_SCROLL`) |
 | 11 | `scroll_stream_prepare` | scroll.c | ✅ 8/8 cases | — | index-loop → +64-stride walk | ✅ **v17** (`NES_ASM_SCROLL`) |
-| 12 | `advance_animation` | main.c (main loop) | ✅ 9/9 cases | — | — | ✅ **v18** (`NES_ASM_LEAF`) |
+| 12 | `advance_animation` | main.c (main loop) | ✅ 9/9 cases | — | — | ✅ **v18** (`NES_ASM_SPECIALIZED`) |
+
+### 🚢 v19 — the universal subset SHIPS on the live site
+
+The server now builds the hand-written engine by default. The 12 functions split
+into two flags by whether they bake per-project constants:
+
+- **UNIVERSAL (shipped, `NES_ASM_LEAF` + `NES_ASM_SCROLL`)** — bake only NES-fixed
+  constants (256/240/32), safe for any project: `read_controller`,
+  `write_palettes`, `world_to_screen_x/y`, `scroll_follow`, `scroll_apply_ppu`.
+- **SPECIALIZED (`NES_ASM_SPECIALIZED`, direct/lab only)** — bake per-project
+  dimensions, so NOT shipped: `behaviour_at` (WORLD_COLS), `scroll_stream_prepare`
+  (BG_WORLD_COLS), `advance_animation` (PLAYER_TILES_PER_FRAME), `reaction_for`
+  (sprite count), `draw_text`/`clear_text_row` (SCROLL_BUILD-coupled dead code).
+
+Shipping the specialized set to every project needs the server to *generate* the
+ASM with each project's constants (codegen generation) — the full-ASM-engine
+route (task #30). The universal set delivering the per-frame hot path (input +
+the scroll math) is live now, behind the `NES_ASM_READY_V1` marker + a
+`PLAYGROUND_NO_ASM` kill switch.
 
 ### Main-loop conversion boundary (v18)
 

@@ -201,13 +201,13 @@ unsigned int  anim_base;
 const unsigned char *anim_tiles;
 const unsigned char *anim_attrs;
 
-/* advance_animation has a hand-written 6502 twin in main_asm.s (NES_ASM_LEAF).
-   The ASM bakes anim_base = anim_frame * PLAYER_TILES_PER_FRAME as a <<2, so it
-   is only valid when PLAYER_TILES_PER_FRAME == 4 — guard it rather than bake
-   silently. */
+/* advance_animation has a hand-written 6502 twin in main_special_asm.s. The ASM
+   bakes anim_base = anim_frame * PLAYER_TILES_PER_FRAME as a <<2 (per-project),
+   so it rides the dimension-specialised NES_ASM_SPECIALIZED flag — not the
+   server-shipped NES_ASM_LEAF — and a mismatched player size fails loudly. */
 void advance_animation(void);
-#if defined(NES_ASM_LEAF) && (PLAYER_TILES_PER_FRAME != 4)
-#error "NES_ASM_LEAF advance_animation bakes PLAYER_TILES_PER_FRAME==4; regenerate the ASM shift for this project's player size."
+#if defined(NES_ASM_SPECIALIZED) && (PLAYER_TILES_PER_FRAME != 4)
+#error "NES_ASM_SPECIALIZED advance_animation bakes PLAYER_TILES_PER_FRAME==4; regenerate the ASM shift for this project's player size."
 #endif
 
 unsigned char read_controller(void);   /* prototype: definition below or in main_asm.s */
@@ -238,7 +238,12 @@ void write_palettes(void) {
         PPU_DATA = palette_bytes[i];
     }
 }
+#endif /* NES_ASM_LEAF (write_palettes — universal) */
 
+/* draw_text/clear_text_row bake the SCROLL_BUILD framing and are dead code, so
+   their ASM twins live in main_special_asm.s under NES_ASM_SPECIALIZED (not the
+   server-shipped NES_ASM_LEAF). */
+#ifndef NES_ASM_SPECIALIZED
 // Write a zero-terminated string of tile indices to the nametable at
 // (row, col). Briefly turns rendering off and back on so the PPU write
 // does not corrupt the active frame. Used by the NPC-dialogue snippet.
@@ -290,7 +295,7 @@ void clear_text_row(unsigned char row, unsigned char col, unsigned char width) {
 #endif
     PPU_MASK = 0x1E;
 }
-#endif /* NES_ASM_LEAF */
+#endif /* NES_ASM_SPECIALIZED (draw_text/clear_text_row) */
 
 void main(void) {
     waitvsync();
@@ -582,7 +587,7 @@ void main(void) {
             anim_frame_ticks = 1;
         }
 
-#ifdef NES_ASM_LEAF   /* hand-written 6502 twin in main_asm.s (proven in asm-lab) */
+#ifdef NES_ASM_SPECIALIZED   /* twin in main_special_asm.s (proven in asm-lab) */
         advance_animation();
 #else
         if (anim_mode != anim_prev_mode) {

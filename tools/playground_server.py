@@ -1027,7 +1027,10 @@ def build_palettes_inc(state):
         "#ifndef PALETTES_INC",
         "#define PALETTES_INC",
         "",
-        "static const unsigned char palette_bytes[32] = {",
+        # Non-`static` so main_asm.s write_palettes (NES_ASM_LEAF) can .import it.
+        # Linkage-only — the 32 emitted bytes are unchanged, so a flag-off ROM is
+        # byte-identical.
+        "const unsigned char palette_bytes[32] = {",
     ]
     for row in _palette_rows(state):
         lines.append("    " + ", ".join(f"0x{b:02X}" for b in row) + ",")
@@ -2635,17 +2638,33 @@ def _build_rom(body):
     bg_world_h = build_bg_world_h(state)
     bg_world_c = build_bg_world_c(state)
 
+    # The universal hand-written 6502 engine is only linked when the main.c is
+    # KNOWN ASM-ready: the stock main.c (custom_main_c is None) or a
+    # template-derived one carrying the NES_ASM_READY_V1 marker (read_controller/
+    # write_palettes gated behind NES_ASM_LEAF + exported palette_bytes).  A
+    # bespoke customMainC (e.g. the audio.html preview) lacks the marker and is
+    # built as pure C, so it can define those helpers itself without a clash.
+    asm_ready = custom_main_c is None or ("NES_ASM_READY_V1" in custom_main_c)
+    # A build is "scroll" (multi-screen) when the painted world exceeds one
+    # nametable — matches scroll.c's `BG_WORLD_COLS > 32 || BG_WORLD_ROWS > 30`
+    # gate.  Only then is it safe to link the NES_ASM_SCROLL functions.
+    _, _, _world_cols, _world_rows, _, _ = _world_nametable(state)
+    is_scroll = _world_cols > 32 or _world_rows > 30
+
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
             custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
             collision_h, behaviour_c, bg_world_h, bg_world_c,
+            nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
             **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
-    # too — byte-identical to the old shared build, but isolated + dirt-free.
+    # too — isolated + dirt-free.
     return _maybe_patch(_build_in_tempdir(
         None, chr_bytes, nam_bytes, pal_src, scene_src,
-        collision_h, behaviour_c, bg_world_h, bg_world_c, **audio_kwargs,
+        collision_h, behaviour_c, bg_world_h, bg_world_c,
+        nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
+        **audio_kwargs,
     ))
 
 
@@ -2726,7 +2745,8 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
 
 def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       collision_h, behaviour_c, bg_world_h, bg_world_c,
-                      audio_songs_asm=None, audio_sfx_asm=None):
+                      audio_songs_asm=None, audio_sfx_asm=None,
+                      nes_asm_leaf=False, nes_asm_scroll=False):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
     # pupil's `customMainC` and the default stock build alike), so concurrent
@@ -2756,6 +2776,19 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
         # files, so only stage them when the project ships a song + sfx blob;
         # default-off keeps the byte-identical-baseline test honest.
         make_args = ["make", "-C", str(tmp_root)]
+        # Universal hand-written 6502 engine (asm-lab).  NES_ASM_LEAF
+        # (read_controller, write_palettes) is project-independent, so it ships
+        # for every build; NES_ASM_SCROLL (world_to_screen_x/y, scroll_follow,
+        # scroll_apply_ppu) only for multi-screen builds — a 1x1 ROM's empty
+        # scroll.c defines no cam_x for scroll_asm.s to link against.  These are
+        # proven behaviourally identical to the C in asm-lab/ and let the engine
+        # hold 60fps where pure C dropped frames.  Set PLAYGROUND_NO_ASM=1 to fall
+        # back to the pure-C engine (kill switch).
+        if not os.environ.get("PLAYGROUND_NO_ASM"):
+            if nes_asm_leaf:
+                make_args.append("NES_ASM_LEAF=1")
+            if nes_asm_scroll:
+                make_args.append("NES_ASM_SCROLL=1")
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
             (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))

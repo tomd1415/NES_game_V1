@@ -157,13 +157,12 @@ static unsigned int  row_addr;
 static unsigned char row_pending;
 #endif
 
-/* scroll_stream_prepare has a hand-written 6502 twin in scroll_asm.s (proven in
-   asm-lab/functions/scroll_stream_prepare). The ASM covers the horizontal column
-   path for this build's BG_WORLD_COLS=64 / horizontal-only world; a vertical
-   world (BG_WORLD_ROWS>30) still needs this C body, so the twin is only valid for
-   horizontal 64-wide worlds under NES_ASM_SCROLL. Flag off = pure C = byte
-   identical. */
-#ifndef NES_ASM_SCROLL
+/* scroll_stream_prepare has a hand-written 6502 twin in scroll_special_asm.s
+   (proven in asm-lab/functions/scroll_stream_prepare). It bakes this build's
+   BG_WORLD_COLS=64 / horizontal-only world shape, so it is gated by the
+   dimension-specialised NES_ASM_SPECIALIZED flag — NOT the universal
+   NES_ASM_SCROLL the server ships — and stays C for any other world shape. */
+#ifndef NES_ASM_SPECIALIZED
 void scroll_stream_prepare(void) {
 #if (BG_WORLD_COLS > 32)
     col_pending = 0;
@@ -233,7 +232,7 @@ void scroll_stream_prepare(void) {
     }
 #endif
 }
-#endif /* NES_ASM_SCROLL */
+#endif /* NES_ASM_SPECIALIZED */
 
 /* Fully unrolled column / row burst.  cc65 is invoked without `-O`, so
    a `for (i = 0; i < N; i++) PPU_DATA = buf[i];` loop costs roughly
