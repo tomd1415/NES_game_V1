@@ -21,6 +21,24 @@ deferred.
 
 ---
 
+## Tutorials deepened + teacher tools — 2026-07-06
+
+Built on the guided tutorials the same day:
+
+- **Deeper tutorials** — every style now has 7–9 teachy steps (platformer 9:
+  adds a platform, place an enemy, edit dialogue; top-down adds a 2nd room + an
+  enemy; runner adds a spike; racer adds a checkpoint). The runtime re-baselines
+  each step, so sequential "add/paint more" steps each need a fresh action, with
+  richer lenient checks (paint a specific tile type, place a character, add a
+  room, edit dialogue, toggle a module).
+- **Teacher settings** (🧑‍🏫, from the tutorial picker): class defaults for
+  Pairing, Celebration (visual / +sound / off), and Hints & Show me — honoured
+  by the runtime. Accessibility is never limited.
+- **Optional pair-programming mode** — never forced: a Driver/Navigator banner
+  + a "🔄 Swap!" cue; the pupil can always Work solo.
+- **In-Studio step editor** — a teacher can reorder / add / remove steps of any
+  tutorial (stored as a per-machine override; the base is never changed).
+
 ## Guided tutorials + all five game styles selectable — 2026-07-06
 
 The Studio gained a working, in-app **guided tutorial** and every game style is
