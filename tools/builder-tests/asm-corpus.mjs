@@ -30,11 +30,13 @@ const tpl = H.readTemplate();
 
 // A parameterised project. gameType drives BW_GAME_STYLE; screens sets the world
 // size; enemy adds N static scene sprites (N=1 by default when truthy).
-function makeState(gameType, screensX, screensY, enemy) {
+function makeState(gameType, screensX, screensY, enemy, full) {
   const nEnemies = enemy === true ? 1 : (enemy | 0);
   const sprites = [
     { role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) },
     { role: 'enemy', name: 'goomba', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'npc', name: 'oldman', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'pickup', name: 'coin', width: 1, height: 1, cells: H.mkCells(1, 1) },
   ];
   const s = {
     name: 'corpus', version: 1, universal_bg: 0x21, sprites,
@@ -56,6 +58,17 @@ function makeState(gameType, screensX, screensY, enemy) {
       id: 'e' + i, spriteIdx: 1, x: 40 + i * 24, y: 120, ai: 'static',
     }));
   }
+  if (full) {
+    // Enable the common gameplay modules so the shipped ASM (read_controller,
+    // behaviour_at, reaction_for, write_palettes, scroll set) runs alongside far
+    // more active C code (dialogue engine, doors, pickups, damage/HP, HUD).
+    const m = s.builder.modules;
+    m.pickups.enabled = true; m.damage.enabled = true; m.hud.enabled = true;
+    m.doors.enabled = true; m.dialogue.enabled = true;
+    const inst = s.builder.modules.scene.config.instances || (s.builder.modules.scene.config.instances = []);
+    inst.push({ id: 'npc', spriteIdx: 2, x: 140, y: 120, ai: 'static', text: 'HELLO THERE' });
+    inst.push({ id: 'coin', spriteIdx: 3, x: 168, y: 120, ai: 'static' });
+  }
   return s;
 }
 
@@ -72,6 +85,8 @@ const FIXTURES = [
   { label: 'racer 2x2', gt: 'racer', sx: 2, sy: 2, enemy: false },
   { label: 'runner 2x1', gt: 'runner', sx: 2, sy: 1, enemy: false },
   { label: 'platformer 1x1 (no scroll)', gt: 'platformer', sx: 1, sy: 1, enemy: true },
+  { label: 'platformer 2x1 ALL MODULES (dialogue/doors/pickups/damage/hud)', gt: 'platformer', sx: 2, sy: 1, enemy: true, full: true },
+  { label: 'topdown 2x2 ALL MODULES', gt: 'topdown', sx: 2, sy: 2, enemy: true, full: true },
 ];
 
 function boot(bytes) {
@@ -88,7 +103,7 @@ const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A);
 try {
   for (const fx of FIXTURES) {
-    const s = makeState(fx.gt, fx.sx, fx.sy, fx.enemy);
+    const s = makeState(fx.gt, fx.sx, fx.sy, fx.enemy, fx.full);
     const instances = (s.builder.modules.scene.config.instances) || [];
     const payload = {
       state: s, playerSpriteIdx: 0, playerStart: { x: 60, y: 120 }, mode: 'browser',
