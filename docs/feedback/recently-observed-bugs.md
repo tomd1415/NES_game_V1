@@ -26,6 +26,19 @@ was a massive improvement.
     list across all `backgrounds[]`), so "different enemies per room" needs a
     per-bg scene model + codegen change — tracked as a follow-up.
 15. There is currently no way for a player to kill an enemy, we should add some options like jumping on top of enemy or shooting etc.
+    *Status 2026-07-06:* the **SMB style already has both** — stomp (goomba/koopa
+    `ai`, engine v4) and fireballs (shooting). What's missing is a **stomp for
+    the plain platformer** (walker/chaser/flyer/patrol enemies). Design sketch
+    for that (a future engine bump): gate a "jump on enemies to defeat them"
+    flag; in the scene-AI per-instance block, after moving enemy `i`, if the
+    player's AABB overlaps it AND the player is descending (`jumping` &&
+    `jmp_up == 0`) with its feet above the enemy's top + a small margin, set
+    `ss_y[i] = 0xFF` (defeat) and give a short upward bounce via the basic jump
+    vars (`jumping = 1; jmp_up = BOUNCE_FRAMES`); otherwise leave it for the
+    Damage module to hurt. Runs before the damage block so a stomped enemy
+    (parked at 0xFF) is skipped there. **Deferred from unattended work on
+    purpose:** bounce height / stomp margin are feel-sensitive and need
+    in-emulator playtesting to tune, so this wants an attended session.
 16. The pallets on the background and for the sprites sometimes do not match what they should be and the ones that are selected are not always represented.
 17. Make it clearer to the user that the sprite animation is being used and allow for enemies and pickups etc. to have animations.
 18. When the user selects to duplicate the sprite it should duplicate the sprite's tiles for the new sprite as well so that the duplicated sprite can be edited without affecting the original sprite.
