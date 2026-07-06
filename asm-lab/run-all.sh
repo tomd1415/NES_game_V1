@@ -54,6 +54,9 @@ node functions/clear_text_row/test.mjs || fail=1
 run sf "functions/scroll_follow/ref.c functions/scroll_follow/test.c functions/scroll_follow/asm.s"
 node functions/scroll_follow/test.mjs || fail=1
 
+run sap "functions/scroll_apply_ppu/ref.c functions/scroll_apply_ppu/test.c functions/scroll_apply_ppu/asm.s"
+node functions/scroll_apply_ppu/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."

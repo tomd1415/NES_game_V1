@@ -9,6 +9,34 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v16 — 2026-07-06
+
+### Added
+- **`scroll_apply_ppu` on hand-written 6502** (extends `NES_ASM_SCROLL`) in
+  `scroll_asm.s`; the C body in `scroll.c` is gated with `#ifndef NES_ASM_SCROLL`.
+  Folds `cam_y` into a 0..239 scroll value + vertical-band parity, derives the
+  nametable-select bits (`cam_x` bit 8 → horizontal, band parity → vertical), and
+  streams `$2000`/`$2005`/`$2005`, resetting the auto-increment stride to +1.
+  Proven equivalent to the C in `asm-lab/functions/scroll_apply_ppu` (16 cases:
+  the 256-px NT boundary, the 240-px band fold, the illegal 240..255 region, a
+  full 0..479 range). The lab redirects the three PPU stores to a RAM capture
+  buffer so ref-vs-asm is comparable; the engine version hits the real registers.
+
+### Changed / migration
+- **Default unchanged.** `NES_ASM_SCROLL` still defaults off ⇒ pure C ⇒
+  byte-identical to v15 (golden hash `d0a0fa7ad715`, golden-safe).
+- **A/B methodology corrected (finding, not a code change).** The settle-to-rest
+  A/B was extended to sustained scrolling and surfaced a stable 6-px X offset on
+  static sprites in the all-ASM build. Root-caused (not a bug): with RIGHT held
+  and no walls, `px` advances once per main-loop iteration, so it doubles as an
+  iteration counter — over 130 vblanks the all-ASM build ran 130 iterations while
+  pure-C ran only 124. **The pure-C engine drops one frame per 30-tile
+  column-stream burst (it overruns the NTSC vblank budget); the ASM engine is
+  fast enough to hold 60 fps.** At *matched game-logic progress* (equal `px`) the
+  two builds are byte-identical (cam_x, OAM, palette, nametables all equal). So
+  the correct equivalence lens for a faster engine is matched-progress, not
+  matched-vblank; the streamer conversion (next) should remove the drops outright.
+
 ## v15 — 2026-07-06
 
 ### Added

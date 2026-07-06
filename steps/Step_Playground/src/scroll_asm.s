@@ -12,14 +12,14 @@
 ; read the exported 16-bit globals cam_x / cam_y. cc65 fastcall: the single
 ; 16-bit arg arrives in A(lo)/X(hi); the unsigned char result returns in A.
 ;
-; Only the two constant-screen-size leaf helpers live here; scroll_follow (needs
-; the per-project WORLD_W/H clamps generalised) and scroll_apply_ppu / the VRAM
-; streamers (whole-frame behaviours) stay in C for now — see asm-lab/STATUS.md.
+; world_to_screen_x/y, scroll_follow and scroll_apply_ppu are hand-written here;
+; the VRAM streamers (scroll_stream_prepare/scroll_stream/load_world_bg) are
+; being converted next — see asm-lab/STATUS.md.
 
 .export _world_to_screen_x
 .export _world_to_screen_y
 .import _cam_x, _cam_y
-.importzp tmp1
+.importzp tmp1, tmp2, tmp3, tmp4
 
 .segment "CODE"
 
@@ -225,4 +225,66 @@ sf_t:  .res 2
     sta _cam_y+1
 @v_done:
     jmp incsp2
+.endproc
+
+; void scroll_apply_ppu(void)
+;   Fold cam_y into a 0..239 scroll_y + vertical-band parity, pick the nametable
+;   bits (cam_x bit 8 -> horizontal, band parity -> vertical), and stream the
+;   three PPU registers. Also resets the auto-increment stride to +1 (bit 2 = 0
+;   in PPU_CTRL_BASE) in case scroll_stream left it at +32. Proven equivalent to
+;   the C in asm-lab/functions/scroll_apply_ppu (the lab redirects the three
+;   stores to a RAM capture buffer; here they hit $2000/$2005/$2005).
+.export _scroll_apply_ppu
+.segment "CODE"
+PPU_CTRL   = $2000
+PPU_SCROLL = $2005
+.proc _scroll_apply_ppu
+    lda _cam_y
+    sta tmp1                    ; cy lo
+    lda _cam_y+1
+    sta tmp2                    ; cy hi
+    lda #0
+    sta tmp3                    ; band parity (bit 0)
+@bandloop:
+    lda tmp2
+    bne @sub                    ; hi != 0 -> cy >= 256 >= 240
+    lda tmp1
+    cmp #240
+    bcc @banddone               ; cy < 240 -> reduced
+@sub:
+    lda tmp1
+    sec
+    sbc #240
+    sta tmp1
+    lda tmp2
+    sbc #0
+    sta tmp2
+    lda tmp3
+    eor #$01
+    sta tmp3
+    jmp @bandloop
+@banddone:
+    lda #$10                    ; PPU_CTRL_BASE (BG pattern table 1, +1 stride)
+    sta tmp4
+    lda _cam_x+1
+    and #$01                    ; cam_x bit 8 -> horizontal nametable
+    beq @noh
+    lda tmp4
+    ora #$01
+    sta tmp4
+@noh:
+    lda tmp3
+    and #$01                    ; band parity -> vertical nametable
+    beq @nov
+    lda tmp4
+    ora #$02
+    sta tmp4
+@nov:
+    lda tmp4
+    sta PPU_CTRL
+    lda _cam_x
+    sta PPU_SCROLL              ; scroll_x = cam_x & 0xFF
+    lda tmp1
+    sta PPU_SCROLL             ; scroll_y = reduced cy (0..239, never 240..255)
+    rts
 .endproc

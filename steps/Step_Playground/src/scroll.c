@@ -89,6 +89,11 @@ void scroll_follow(unsigned int target_world_x, unsigned int target_world_y) {
 }
 #endif
 
+/* scroll_apply_ppu has a hand-written 6502 twin in scroll_asm.s (proven
+   equivalent in asm-lab/functions/scroll_apply_ppu). NES_ASM_SCROLL=1 compiles
+   this body out so the ASM provides the symbol; flag off = pure C = byte
+   identical. */
+#ifndef NES_ASM_SCROLL
 void scroll_apply_ppu(void) {
     /* PPU_CTRL nametable-select bits: bit 0 = horizontal nametable,
        bit 1 = vertical.  Picked from cam_x/y bit 8 — when the camera
@@ -110,6 +115,7 @@ void scroll_apply_ppu(void) {
     PPU_SCROLL = (unsigned char)(cam_x & 0xFF);
     PPU_SCROLL = (unsigned char)cy;    /* always 0..239 — never the illegal 240..255 */
 }
+#endif /* NES_ASM_SCROLL */
 
 /* Column / row streaming — split into a prepare phase (runs outside
    vblank, where slow array indexing is fine) and a write phase (runs

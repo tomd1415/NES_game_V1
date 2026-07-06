@@ -28,13 +28,27 @@ Or everything: `./run-all.sh`.
 | 7 | `draw_text` | main.c | ✅ nametable ≡ (3 spots) | ~110 → **~85** | — | ✅ **v15** (`NES_ASM_LEAF`) |
 | 8 | `clear_text_row` | main.c | ✅ nametable ≡ | ~90 → **~70** | — | ✅ **v15** (`NES_ASM_LEAF`) |
 
-**🎯 GOAL MET: all 9 lab-proven functions are integrated into the engine** behind
-off-by-default flags (`NES_ASM_SCROLL` + `NES_ASM_LEAF`), golden-safe. Verified
-pure-C vs all-ASM (settle-to-rest A/B): palette RAM + OAM identical at rest,
-scrolling, and jumping. The two nametable writers (`draw_text`/`clear_text_row`)
-are present-but-uncalled in Step_Playground's main.c, so their in-engine proof is
-the lab harness; the other seven are exercised live every frame.
 | 9 | `scroll_follow` | scroll.c | ✅ 20/20 cases | 435 → **289** | big → smaller | ✅ **v13** (`NES_ASM_SCROLL`) |
+| 10 | `scroll_apply_ppu` | scroll.c | ✅ 16/16 cases | — | — | ✅ **v16** (`NES_ASM_SCROLL`) |
+
+**Phase 2 (leaf-first) goal met at v15**; **Phase 3 (harder integration
+functions) in progress.** All integrated behind off-by-default flags
+(`NES_ASM_SCROLL` + `NES_ASM_LEAF`), golden-safe (flag-off byte-identical
+`d0a0fa7ad715`).
+
+### Frame-pacing finding (v16) — the right A/B lens for a *faster* engine
+
+Extending the settle-to-rest A/B to sustained scrolling showed a stable 6-px X
+offset on static sprites in the all-ASM build. It is **not a divergence bug**:
+with RIGHT held and no walls, `px` advances once per main-loop iteration, so it
+doubles as an iteration counter. Over 130 vblanks the all-ASM build completed
+**130** iterations; pure-C completed only **124** — pure-C **drops one frame per
+30-tile column-stream burst** because that burst pushes the frame over the NTSC
+vblank budget, while the faster ASM build makes it. At **matched game-logic
+progress** (equal `px`) the two builds are byte-identical (cam_x, OAM, palette,
+nametables). Lesson: for a faster engine the equivalence lens is *matched
+progress*, not *matched vblank*. Harness: `matched.mjs` in the session scratch;
+the streamer conversion should remove the drops entirely.
 
 ### 1. `world_to_screen_x(unsigned int) -> unsigned char`
 Camera transform: world pixel X → on-screen X, or `0xFF` if off-screen.
