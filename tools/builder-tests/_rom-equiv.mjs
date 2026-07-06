@@ -26,7 +26,7 @@ import * as H from './lib/render-harness.mjs';
 //     progress (asm-lab settle-to-rest A/B) — the byte change is the ASM.
 //   42a45ca8… was the pure-C -Os value (set PLAYGROUND_NO_ASM=1 to rebuild it).
 //   ce62ec47b35cf7111e2ae5ea9c8a64f5cd43c316 was the no-opt value.
-const EXPECT = '8172e353c34e5804d4f496be8fb328c574514517';
+const EXPECT = '27210a8f47891eb86180f11801e93198931af886';
 
 const PORT = 18834;
 

@@ -74,7 +74,7 @@ endif
 NES_ASM_LEAF ?= 0
 ifeq ($(NES_ASM_LEAF),1)
 CFLAGS  += -DNES_ASM_LEAF=1
-ASM_SRC += src/main_asm.s
+ASM_SRC += src/main_asm.s src/behaviour_asm.s
 endif
 
 # Dimension-SPECIALISED hand-written 6502 (asm-lab).  These bake this build's
@@ -87,7 +87,7 @@ endif
 NES_ASM_SPECIALIZED ?= 0
 ifeq ($(NES_ASM_SPECIALIZED),1)
 CFLAGS  += -DNES_ASM_SPECIALIZED=1
-ASM_SRC += src/scroll_special_asm.s src/behaviour_special_asm.s src/main_special_asm.s
+ASM_SRC += src/main_special_asm.s
 endif
 
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
@@ -136,8 +136,10 @@ $(BUILD)/scroll.o: src/scroll.c src/scroll.h src/bg_world.h | $(BUILD)
 	$(AS) -t $(TARGET) -o $@ $(BUILD)/scroll.s
 	rm -f $(BUILD)/scroll.s
 
+# -I src so the hand-written engine .s files can `.include "project.inc"` +
+# "asm_macros.inc" (Phase 1: per-project ASM constants + the MULC macro).
 $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(BUILD)
-	$(AS) -t $(TARGET) -o $@ $<
+	$(AS) -t $(TARGET) -I src -o $@ $<
 
 # Audio (Phase 4.3) — only built when USE_AUDIO=1.  Engine asm is
 # vendored under tools/audio/famistudio/ (see NOTICE.md there); we

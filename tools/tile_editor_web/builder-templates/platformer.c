@@ -519,6 +519,12 @@ const unsigned char *anim_attrs;
    (default) = pure C = byte-identical. Prototypes keep call sites compiling. */
 unsigned char read_controller(void);
 void write_palettes(void);
+void advance_animation(void);   /* main_asm.s twin (basic anim only — see below) */
+/* advance_animation's ASM twin covers the BASIC animation state machine only; a
+   project with an attack one-shot or racer rotation keeps the inline C. */
+#if defined(NES_ASM_LEAF) && !((ATTACK_FRAME_COUNT > 0) && BW_ATTACK_BUTTON) && !((BW_GAME_STYLE == 3) && BW_RACER_ROT)
+#define NES_ASM_ANIM 1
+#endif
 #ifndef NES_ASM_LEAF
 unsigned char read_controller(void) {
     unsigned char result = 0;
@@ -1467,6 +1473,9 @@ void main(void) {
             anim_frame_ticks = 1;
         }
 
+#ifdef NES_ASM_ANIM   /* basic anim only — hand-written 6502 twin in main_asm.s */
+        advance_animation();
+#else
         if (anim_mode != anim_prev_mode) {
             anim_frame = 0;
             anim_tick = 0;
@@ -1502,6 +1511,7 @@ void main(void) {
         anim_frame = (unsigned char)(racer_heading >> 1);
 #endif
         anim_base = (unsigned int)anim_frame * PLAYER_TILES_PER_FRAME;
+#endif /* NES_ASM_ANIM */
 
 #if BW_GAME_STYLE == 0
 //>> gravity: Scene sprites fall until they land on solid_ground or platform. Tick 🕊 Flying on the Sprites page to make a sprite hover instead.

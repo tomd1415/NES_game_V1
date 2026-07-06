@@ -9,6 +9,39 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v20 — 2026-07-06 — ASM engine generator Phase 1: project.inc + 4 more functions
+
+### Added
+- **`src/project.inc`** — the server (`build_project_inc`) now emits per-project
+  ASM constants (WORLD_COLS/ROWS, BG_WORLD_COLS/ROWS, PLAYER_*, sprite counts) as
+  ca65 `.define`s, mirroring collision.h/bg_world.h/scene.inc. The hand-written
+  modules `.include "project.inc"` (via `-I src`) so ONE fixed `.s` serves any
+  project — ca65 bakes the values per build. First step of the generator plan
+  (`docs/plans/current/2026-07-06-asm-engine-generator.md`).
+- **`src/asm_macros.inc`** — `MULC resBase, CONST`: a shift-add multiply by an
+  assemble-time constant (a shift for powers of two), used for the per-project
+  index/offset math.
+- **Four previously-`NES_ASM_SPECIALIZED` functions generalised and SHIPPED**
+  (now under `NES_ASM_LEAF` / `NES_ASM_SCROLL`): `behaviour_at` (WORLD_COLS
+  shift-add), `reaction_for` (NUM_BEHAVIOUR_SPRITES bound), `advance_animation`
+  (PLAYER_TILES_PER_FRAME), `scroll_stream_prepare` (BG_WORLD_COLS stride +
+  conditionally-assembled vertical row path for tall worlds). So `/play` now
+  ships **10** hand-written 6502 functions — including the hot enemy/collision
+  query `behaviour_at`.
+
+### Changed / migration
+- **Default unchanged.** Flags off ⇒ byte-identical to v19 (pure-C golden
+  `1730448e`). Matched-progress A/B identical; full builder suite green across
+  every world shape (1×1, 2×1, 1×2, 2×2, racer, SMB, topdown, runner). Shipped
+  everything-on ROM re-pinned in `_rom-equiv.mjs` (`27210a8f`).
+- The `behaviour.c` generator now gates `behaviour_at`/`reaction_for` behind
+  `#ifndef NES_ASM_LEAF`; the `platformer.c` template gates the basic animation
+  block behind `NES_ASM_ANIM` (the ASM `advance_animation` covers basic anim only
+  — attack one-shots / racer rotation keep the inline C). `advance_animation`
+  ships via `NES_ASM_LEAF` only when the project has no attack and isn't a racer.
+- **ca65 note:** constants use `.define` (textual), not `SYM = value`, because
+  ca65 won't fold an `=` constant inside a `.proc` scope for `.if` / macros.
+
 ## v19 — 2026-07-06 — universal hand-written 6502 engine SHIPS by default
 
 ### Changed / migration (ROM output changes — deliberate)

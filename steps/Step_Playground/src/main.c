@@ -201,14 +201,11 @@ unsigned int  anim_base;
 const unsigned char *anim_tiles;
 const unsigned char *anim_attrs;
 
-/* advance_animation has a hand-written 6502 twin in main_special_asm.s. The ASM
-   bakes anim_base = anim_frame * PLAYER_TILES_PER_FRAME as a <<2 (per-project),
-   so it rides the dimension-specialised NES_ASM_SPECIALIZED flag — not the
-   server-shipped NES_ASM_LEAF — and a mismatched player size fails loudly. */
+/* advance_animation has a hand-written 6502 twin in main_asm.s. Phase 1
+   generalised anim_base = anim_frame * PLAYER_TILES_PER_FRAME to a MULC shift-add
+   reading PLAYER_TILES_PER_FRAME from project.inc, so it ships under
+   NES_ASM_LEAF for any player size. */
 void advance_animation(void);
-#if defined(NES_ASM_SPECIALIZED) && (PLAYER_TILES_PER_FRAME != 4)
-#error "NES_ASM_SPECIALIZED advance_animation bakes PLAYER_TILES_PER_FRAME==4; regenerate the ASM shift for this project's player size."
-#endif
 
 unsigned char read_controller(void);   /* prototype: definition below or in main_asm.s */
 #ifndef NES_ASM_LEAF   /* ASM twin in main_asm.s */
@@ -587,7 +584,7 @@ void main(void) {
             anim_frame_ticks = 1;
         }
 
-#ifdef NES_ASM_SPECIALIZED   /* twin in main_special_asm.s (proven in asm-lab) */
+#ifdef NES_ASM_LEAF   /* twin in main_asm.s (Phase 1, proven in asm-lab) */
         advance_animation();
 #else
         if (anim_mode != anim_prev_mode) {
