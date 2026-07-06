@@ -17,6 +17,14 @@ was a massive improvement.
 12. Add an option for a top down racing game (like the classic Micro Machines game).
 13. More options for enemy paths.
 14. Currently the user can only place enemies and players on the first screen of the first background they should be able to do that for all screens in all backgrounds.
+    *Partially resolved 2026-07-06:* the World-dock **place/move tool now works
+    across every screen** of a scrolling background — entity coordinates are
+    world-space (screen-local click + view offset), clamped to the whole
+    `worldCols×worldRows`, and the overlay culls entities off the shown screen
+    (the engine already supported world-pixel scene sprites — `scene-multiscreen.mjs`).
+    Still open: scene instances are **not yet per-background** (one shared scene
+    list across all `backgrounds[]`), so "different enemies per room" needs a
+    per-bg scene model + codegen change — tracked as a follow-up.
 15. There is currently no way for a player to kill an enemy, we should add some options like jumping on top of enemy or shooting etc.
 16. The pallets on the background and for the sprites sometimes do not match what they should be and the ones that are selected are not always represented.
 17. Make it clearer to the user that the sprite animation is being used and allow for enemies and pickups etc. to have animations.

@@ -417,19 +417,29 @@
   }
 
   // ---- Entity placement --------------------------------------------------
+  // Screen-local click px/py → WORLD px/py (bug #14: entities can live on any
+  // screen of a scrolling level, not just the first).  The TV shows one screen;
+  // viewOffset() gives the tile offset of that screen, so add it back in pixels.
+  function worldPx(ctx, cell) {
+    var o = off(ctx);
+    return { x: cell.px + o.cx * 8, y: cell.py + o.cy * 8 };
+  }
   function placeDown(ctx, cell) {
     if (!cell.inBounds) return;
     var state = ctx.getState();
-    var hit = instanceAt(ctx, cell.px, cell.py);
+    var w = worldPx(ctx, cell);
+    var hit = instanceAt(ctx, w.x, w.y);
     if (hit) { selInst = hit.id; dragInst = true; ctx.renderDock(); ctx.renderLive(); return; }
     var idx = placeChar >= 0 ? placeChar : defaultPlaceChar(state);
     if (idx < 0) { alert('Make a character in CHARS first.'); return; }
     ctx.pushUndo();
     var list = sceneInstances(ctx);
+    var bg = activeBg(ctx);
     var sz = spriteSize(state, idx);
+    var maxX = worldCols(bg) * 8 - sz.w, maxY = worldRows(bg) * 8 - sz.h;
     var inst = { id: nextInstId(list), spriteIdx: idx,
-      x: Math.max(0, Math.min(256 - sz.w, Math.round(cell.px - sz.w / 2))),
-      y: Math.max(0, Math.min(240 - sz.h, Math.round(cell.py - sz.h / 2))),
+      x: Math.max(0, Math.min(maxX, Math.round(w.x - sz.w / 2))),
+      y: Math.max(0, Math.min(maxY, Math.round(w.y - sz.h / 2))),
       ai: 'static', speed: 1 };
     list.push(inst);
     selInst = inst.id;
@@ -440,9 +450,11 @@
     var list = sceneInstances(ctx);
     var inst = list.find(function (i) { return i.id === selInst; });
     if (!inst) return;
+    var bg = activeBg(ctx);
     var sz = spriteSize(state, inst.spriteIdx);
-    inst.x = Math.max(0, Math.min(256 - sz.w, Math.round(cell.px - sz.w / 2)));
-    inst.y = Math.max(0, Math.min(240 - sz.h, Math.round(cell.py - sz.h / 2)));
+    var w = worldPx(ctx, cell);
+    inst.x = Math.max(0, Math.min(worldCols(bg) * 8 - sz.w, Math.round(w.x - sz.w / 2)));
+    inst.y = Math.max(0, Math.min(worldRows(bg) * 8 - sz.h, Math.round(w.y - sz.h / 2)));
     ctx.renderLive();
   }
 
@@ -452,18 +464,24 @@
     if (!_octx) return;
     var state = _octx.getState();
     var list = sceneInstances(_octx);
+    // The overlay canvas is one screen; instances hold WORLD coords (bug #14),
+    // so shift by the current view offset and skip any that fall off this screen.
+    var o = off(_octx);
+    var ox = o.cx * 8, oy = o.cy * 8, scrW = SCREEN_W * 8, scrH = SCREEN_H * 8;
     list.forEach(function (inst) {
       var sp = (state.sprites || [])[inst.spriteIdx];
       if (!sp) return;
       var sz = spriteSize(state, inst.spriteIdx);
-      var off = document.createElement('canvas');
-      off.width = sz.w; off.height = sz.h;
-      global.NesRender.drawSpriteIntoCtx(off.getContext('2d'), sp, state, sz.w, sz.h);
+      var dx = inst.x - ox, dy = inst.y - oy;
+      if (dx + sz.w <= 0 || dx >= scrW || dy + sz.h <= 0 || dy >= scrH) return;
+      var spc = document.createElement('canvas');
+      spc.width = sz.w; spc.height = sz.h;
+      global.NesRender.drawSpriteIntoCtx(spc.getContext('2d'), sp, state, sz.w, sz.h);
       g.imageSmoothingEnabled = false;
-      g.drawImage(off, inst.x, inst.y);
+      g.drawImage(spc, dx, dy);
       if (inst.id === selInst) {
         g.strokeStyle = '#2CD5F6'; g.lineWidth = 1;
-        g.strokeRect(inst.x - 0.5, inst.y - 0.5, sz.w + 1, sz.h + 1);
+        g.strokeRect(dx - 0.5, dy - 0.5, sz.w + 1, sz.h + 1);
       }
     });
   }
