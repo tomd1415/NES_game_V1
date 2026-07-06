@@ -396,20 +396,33 @@
     var s = ensureAnim(ctx);
     var sec = UI.section('Animations', el('button', { class: 'btn', text: '+ New', onclick: function () {
       ctx.pushUndo();
-      var noWalk = s.animation_assignments.walk == null;
-      var an = { id: s.nextAnimationId++, name: (noWalk ? 'walk' : 'anim ' + s.animations.length),
-        frames: [selIdx], fps: 8, role: 'player', style: noWalk ? 'walk' : 'custom' };
+      // #17 — tag the new animation for the SELECTED character's role so
+      // enemies and pickups can animate too (the engine + server bake
+      // ANIM_ENEMY_WALK / ANIM_PICKUP_IDLE from role+style-tagged animations).
+      // Player is the default and keeps its walk auto-wire.
+      var selRole = (s.sprites[selIdx] && s.sprites[selIdx].role) || 'player';
+      var an;
+      if (selRole === 'enemy') {
+        an = { id: s.nextAnimationId++, name: 'enemy walk', frames: [selIdx], fps: 6, role: 'enemy', style: 'walk' };
+      } else if (selRole === 'pickup') {
+        an = { id: s.nextAnimationId++, name: 'pickup bob', frames: [selIdx], fps: 4, role: 'pickup', style: 'idle' };
+      } else {
+        var noWalk = s.animation_assignments.walk == null;
+        an = { id: s.nextAnimationId++, name: (noWalk ? 'walk' : 'anim ' + s.animations.length),
+          frames: [selIdx], fps: 8, role: 'player', style: noWalk ? 'walk' : 'custom' };
+        // Auto-wire the first walk animation so the player animates + the
+        // "no walk animation" warning clears immediately.
+        if (noWalk) s.animation_assignments.walk = an.id;
+      }
       s.animations.push(an);
       animSel = an.id;
-      // Auto-wire the first walk animation so the player animates + the
-      // "no walk animation" warning clears immediately.
-      if (noWalk) s.animation_assignments.walk = an.id;
       ctx.markDirty(); ctx.renderDock(); ctx.refresh();
     } }));
 
     s.animations.forEach(function (an) {
       var row = el('div', { class: 'entity-row anim-row' + (an.id === animSel ? ' sel' : '') }, [
         el('span', { class: 'grow', text: (an.name || 'anim') + ' — ' + an.frames.length + 'f @' + an.fps }),
+        el('span', { class: 'chip', style: 'font-size:10px;opacity:0.75', text: (an.role || 'player') + (an.style ? '·' + an.style : '') }),
         el('button', { class: 'icon-btn', title: 'Delete', text: '🗑', onclick: function (e) {
           e.stopPropagation();
           ctx.pushUndo();

@@ -112,6 +112,33 @@ test('duplicating a character forks its tiles so the copy is independent (bug #1
   expect(r.copyTileUsers).toBe(1);
 });
 
+test('new animation is tagged for the selected character role (bug #17)', async ({ page }) => {
+  await page.locator('#level-select').selectOption('maker'); // animations are Maker+
+  const animSection = page.locator('.dock-section')
+    .filter({ has: page.locator('.title', { hasText: 'Animations' }) });
+
+  // An enemy character's new animation is tagged enemy/walk (so the engine
+  // bakes ANIM_ENEMY_WALK and the enemy animates), not player.
+  await page.locator('#chars-new').click();
+  await page.locator('select[data-role]').selectOption('enemy');
+  await animSection.locator('.btn', { hasText: '+ New' }).click();
+  let last = await page.evaluate(() => {
+    const a = window.Studio.getState().animations; return a[a.length - 1];
+  });
+  expect(last.role).toBe('enemy');
+  expect(last.style).toBe('walk');
+
+  // A pickup character's new animation is tagged pickup/idle.
+  await page.locator('#chars-new').click();
+  await page.locator('select[data-role]').selectOption('pickup');
+  await animSection.locator('.btn', { hasText: '+ New' }).click();
+  last = await page.evaluate(() => {
+    const a = window.Studio.getState().animations; return a[a.length - 1];
+  });
+  expect(last.role).toBe('pickup');
+  expect(last.style).toBe('idle');
+});
+
 test('animation preview toggles play/stop', async ({ page }) => {
   await page.locator('#level-select').selectOption('maker'); // animations are Maker+
   // Create an animation (auto-wires walk with the current frame).

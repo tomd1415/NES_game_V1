@@ -48,6 +48,14 @@ was a massive improvement.
     suggestion) already exists in the SMB style (fireballs).
 16. The pallets on the background and for the sprites sometimes do not match what they should be and the ones that are selected are not always represented.
 17. Make it clearer to the user that the sprite animation is being used and allow for enemies and pickups etc. to have animations.
+    *Resolved 2026-07-06:* the engine + server already baked role-tagged scene
+    animations (`ANIM_ENEMY_WALK/IDLE`, `ANIM_PICKUP_IDLE` — see
+    `round1-polish.mjs`), but the CHARS "+ New" animation button always created
+    a **player** animation, so enemies/pickups could never get one. Now "+ New"
+    tags the animation for the **selected character's role** (enemy → enemy/walk,
+    pickup → pickup/idle, else player+auto-wired-walk), and each animation row
+    shows a `role·style` chip so it's clear which character an animation drives.
+    E2E in `chars.spec.js`.
 18. When the user selects to duplicate the sprite it should duplicate the sprite's tiles for the new sprite as well so that the duplicated sprite can be edited without affecting the original sprite.
     *Resolved 2026-07-06:* the CHARS **Duplicate** button now allocates fresh
     sprite-tile slots for the copy (one per distinct source tile, preserving the
