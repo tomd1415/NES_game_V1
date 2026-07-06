@@ -67,6 +67,16 @@ CFLAGS  += -DNES_ASM_SCROLL=1
 ASM_SRC += src/scroll_asm.s
 endif
 
+# Leaf helpers in main.c / behaviour.c on hand-written 6502 (asm-lab).  Same
+# off-by-default, byte-identical-when-off contract as NES_ASM_SCROLL.  Links
+# main_asm.s (read_controller) + behaviour_asm.s (behaviour_at, reaction_for)
+# and -D's out the matching C bodies.
+NES_ASM_LEAF ?= 0
+ifeq ($(NES_ASM_LEAF),1)
+CFLAGS  += -DNES_ASM_LEAF=1
+ASM_SRC += src/main_asm.s src/behaviour_asm.s
+endif
+
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
 OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS)

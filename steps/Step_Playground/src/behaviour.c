@@ -269,6 +269,10 @@ const unsigned char sprite_reactions[16] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
+/* behaviour_at + reaction_for have hand-written 6502 twins in behaviour_asm.s;
+   NES_ASM_LEAF gates the C out so exactly one definition of each links. Flag off
+   (default) = pure C = byte-identical ROM. */
+#ifndef NES_ASM_LEAF
 unsigned char behaviour_at(unsigned int world_col, unsigned int world_row) {
   if (world_col >= WORLD_COLS) return BEHAVIOUR_NONE;
   if (world_row >= WORLD_ROWS) return BEHAVIOUR_NONE;
@@ -280,3 +284,4 @@ unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id)
   if (sprite_idx >= 2) return REACT_IGNORE;
   return sprite_reactions[((unsigned int)sprite_idx << 3) | behaviour_id];
 }
+#endif

@@ -201,6 +201,8 @@ unsigned int  anim_base;
 const unsigned char *anim_tiles;
 const unsigned char *anim_attrs;
 
+unsigned char read_controller(void);   /* prototype: definition below or in main_asm.s */
+#ifndef NES_ASM_LEAF   /* ASM twin in main_asm.s */
 unsigned char read_controller(void) {
     unsigned char result = 0;
     unsigned char j;
@@ -212,6 +214,7 @@ unsigned char read_controller(void) {
     }
     return result;
 }
+#endif
 
 void write_palettes(void) {
     PPU_ADDR = 0x3F;

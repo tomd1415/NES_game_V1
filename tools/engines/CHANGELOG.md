@@ -9,6 +9,26 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v14 — 2026-07-06
+
+### Added
+- **Three more engine leaf helpers on hand-written ASM** (new opt-in flag
+  `NES_ASM_LEAF`): `read_controller` (main.c → `main_asm.s`) and `behaviour_at`
+  + `reaction_for` (behaviour.c → `behaviour_asm.s`). The C bodies are
+  `#ifndef NES_ASM_LEAF`-gated; `read_controller` gains a forward prototype so
+  the call still compiles when its body is gated out. Proven equivalent in
+  `asm-lab/` (per-function harness) **and** in-engine: built pure-C vs
+  all-ASM (leaf + scroll), OAM is identical at rest, while scrolling, and while
+  jumping — the last two exercise the ASM `behaviour_at` collision and
+  `read_controller` input every frame.
+- Note: `behaviour_at`'s index multiply is specialised to this build's
+  `WORLD_COLS=64` (a power of two → shifts). A general-`WORLD_COLS` variant is a
+  follow-up; the flag is only enabled for matching builds.
+
+### Changed / migration
+- **Default unchanged.** `NES_ASM_LEAF` defaults off ⇒ pure C ⇒ ROM
+  byte-identical to v13 (golden-safe). Build-time flag, not a project setting.
+
 ## v13 — 2026-07-06
 
 ### Added
