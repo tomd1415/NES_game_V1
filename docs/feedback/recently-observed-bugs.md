@@ -192,6 +192,33 @@ Until at least one step has been run, **do not start writing a
 fix.**  See plan §T1.8 for the rationale (avoids burning a
 session on a phantom case).
 
+**Findings 2026-07-06 (Steps B + C run):**
+
+- **Step C — ROM render: ✅ FAITHFUL, not reproduced.** A new headless
+  test (`tools/builder-tests/palette-render.mjs`) builds a project whose
+  4 BG + 4 sprite palettes each hold distinctive, all-different NES colour
+  indices and asserts the emulator's palette RAM (`$3F00-$3F1F`) matches
+  exactly — all 8 palettes load byte-for-byte, byte 0 of every group being
+  `universal_bg`. So the assembler emit + server `.inc` writer are correct;
+  a mismatch is **not** on the ROM path.
+- **Step B — editor render: ✅ code path is correct on inspection.**
+  `sprite-render.js` `spritePaletteFor(state, cell.palette)` /
+  `bgPaletteFor(...)` map `slots[0..2] → slot1..3` with `slot0 = universal_bg`
+  (bg) / transparent (sprite), keyed off the **cell's own** palette index —
+  i.e. it looks up the right palette, contradicting the card's "wrong index"
+  hypothesis. Not yet driven with a live pixel-compare in the browser.
+- **Remaining suspect — Step A (which palette is the *active selection*).**
+  The colour *values* persist (they live in `state.bg_palettes` /
+  `sprite_palettes`, saved with the whole project). What may not persist is
+  the *highlighted* palette index in the editor UI — a cosmetic
+  "selection not remembered" issue, not a colour-correctness one. Needs a
+  browser repro (select palette 2, reload, is it still active?).
+
+Net: this reads as **"cannot reproduce a colour mismatch"** (matrix row 4) at
+the data/ROM level — likely the reporter saw the active-selection reset (Step A)
+or the old shared-tile aliasing (now fixed, see item 18). Kept open pending a
+live Step-A/B pixel repro, but downgraded from a correctness bug.
+
 ### Item 28 — NPC dialogue (status: NEEDS DETAIL, 2026-04-27)
 
 User reported the dialogue is "still playing up" without a more
