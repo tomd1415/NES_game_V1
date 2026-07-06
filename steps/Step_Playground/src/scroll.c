@@ -257,6 +257,9 @@ void scroll_stream_prepare(void) {
 #define SCROLL_EMIT(N)  PPU_DATA = col_buf[N]
 #define SCROLL_EMIT_ROW(N)  PPU_DATA = row_buf[N]
 
+/* scroll_stream has a hand-written 6502 twin in scroll_asm.s (unrolled bursts).
+   NES_ASM_SCROLL gates the C body out. Flag off = byte-identical. */
+#ifndef NES_ASM_SCROLL
 void scroll_stream(void) {
 #if (BG_WORLD_COLS > 32)
     if (col_pending) {
@@ -300,6 +303,7 @@ void scroll_stream(void) {
        the wrong stride and corrupt rows further down the nametable. */
     PPU_CTRL = PPU_CTRL_BASE;
 }
+#endif /* NES_ASM_SCROLL */
 
 #undef SCROLL_EMIT
 #undef SCROLL_EMIT_ROW

@@ -9,6 +9,19 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v22 — 2026-07-06 — ASM generator: scroll_stream on ASM (scroll.c nearly all ASM)
+
+### Added
+- **scroll_stream on hand-written 6502** (NES_ASM_SCROLL) — the in-vblank
+  column/row burst, unrolled via ca65 `.repeat` to stay inside the NTSC vblank
+  budget (a loop would ghost-flash). scroll.c is now ASM except load_world_bg
+  (boot-only). Verified: golden byte-identical; matched-progress A/B identical;
+  asm-benchmark shows NO vblank-timing regression (still 0 dropped frames vs
+  pure-C's 5). Row burst exercised behaviourally via the four-screen corpus.
+
+### Changed / migration
+- Default unchanged (golden 1730448e).
+
 ## v21 — 2026-07-06 — ASM generator: scroll_init on ASM + MULC hardening
 
 ### Added

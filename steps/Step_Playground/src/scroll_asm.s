@@ -561,3 +561,55 @@ PPU_SCROLL = $2005
     sta _prev_cam_y+1
     rts
 .endproc
+
+; void scroll_stream(void) — the in-vblank column/row burst. Unrolled (.repeat)
+; to stay inside the NTSC vblank budget: a loop would spill past line 261's T->V
+; copy and ghost-flash. Column path +32 stride, row path +1 stride, then reset
+; stride to +1. Gated per axis like the C. col_buf/col_addr/col_pending +
+; row_buf/row_addr/row_pending are already .imported by scroll_stream_prepare.
+.export _scroll_stream
+PPU_ADDR2 = $2006
+PPU_DATA2 = $2007
+.proc _scroll_stream
+.if BG_WORLD_COLS > 32
+    lda _col_pending
+    bne @docol
+    jmp @nocol
+@docol:
+    lda #$14                    ; PPU_CTRL_BASE | +32 stride
+    sta PPU_CTRL
+    lda _col_addr+1
+    sta PPU_ADDR2
+    lda _col_addr
+    sta PPU_ADDR2
+    .repeat 30, i
+      lda _col_buf+i
+      sta PPU_DATA2
+    .endrepeat
+    lda #0
+    sta _col_pending
+@nocol:
+.endif
+.if BG_WORLD_ROWS > 30
+    lda _row_pending
+    bne @dorow
+    jmp @norow
+@dorow:
+    lda #$10                    ; PPU_CTRL_BASE | +1 stride
+    sta PPU_CTRL
+    lda _row_addr+1
+    sta PPU_ADDR2
+    lda _row_addr
+    sta PPU_ADDR2
+    .repeat 32, i
+      lda _row_buf+i
+      sta PPU_DATA2
+    .endrepeat
+    lda #0
+    sta _row_pending
+@norow:
+.endif
+    lda #$10                    ; leave stride at +1 for later PPU_DATA writers
+    sta PPU_CTRL
+    rts
+.endproc
