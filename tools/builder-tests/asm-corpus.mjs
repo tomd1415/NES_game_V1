@@ -29,8 +29,9 @@ const win = H.loadBuilderModules();
 const tpl = H.readTemplate();
 
 // A parameterised project. gameType drives BW_GAME_STYLE; screens sets the world
-// size; enemy adds a walker scene sprite.
+// size; enemy adds N static scene sprites (N=1 by default when truthy).
 function makeState(gameType, screensX, screensY, enemy) {
+  const nEnemies = enemy === true ? 1 : (enemy | 0);
   const sprites = [
     { role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) },
     { role: 'enemy', name: 'goomba', width: 2, height: 2, cells: H.mkCells(2, 2) },
@@ -45,15 +46,15 @@ function makeState(gameType, screensX, screensY, enemy) {
     behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
   };
   s.builder.modules.game.config.type = gameType;
-  if (enemy) {
-    // STATIC ai: the enemy is present (so behaviour_at runs its gravity/collision
-    // every frame — real coverage) but does not move, so the rest comparison is
-    // phase-independent. A walker's horizontal position drifts by the 1-frame
-    // load-timing phase (bigger on larger worlds) — that's a matched-progress
-    // concern, verified separately, NOT a divergence.
-    s.builder.modules.scene.config.instances = [
-      { id: 'e', spriteIdx: 1, x: 96, y: 120, ai: 'static' },
-    ];
+  if (nEnemies > 0) {
+    // STATIC ai: the enemies are present (so behaviour_at runs their gravity/
+    // collision every frame + reaction_for is exercised — real coverage) but do
+    // not move, so the rest comparison is phase-independent. A walker's position
+    // drifts by the 1-frame load-timing phase (bigger on larger worlds) — a
+    // matched-progress concern verified separately, NOT a divergence.
+    s.builder.modules.scene.config.instances = Array.from({ length: nEnemies }, (_, i) => ({
+      id: 'e' + i, spriteIdx: 1, x: 40 + i * 24, y: 120, ai: 'static',
+    }));
   }
   return s;
 }
@@ -62,7 +63,11 @@ const FIXTURES = [
   { label: 'platformer 2x1 + enemy', gt: 'platformer', sx: 2, sy: 1, enemy: true },
   { label: 'platformer 1x2 (vertical)', gt: 'platformer', sx: 1, sy: 2, enemy: false },
   { label: 'platformer 2x2 (four-screen)', gt: 'platformer', sx: 2, sy: 2, enemy: true },
+  { label: 'platformer 3x1 (WORLD_COLS=96, non-pow2 MULC)', gt: 'platformer', sx: 3, sy: 1, enemy: true },
+  { label: 'platformer 3x2 (96 wide + tall)', gt: 'platformer', sx: 3, sy: 2, enemy: true },
+  { label: 'platformer 2x1 + 5 enemies (reaction_for/scene loop)', gt: 'platformer', sx: 2, sy: 1, enemy: 5 },
   { label: 'topdown 2x2', gt: 'topdown', sx: 2, sy: 2, enemy: true },
+  { label: 'topdown 3x1 (96)', gt: 'topdown', sx: 3, sy: 1, enemy: true },
   { label: 'smb 2x1', gt: 'smb', sx: 2, sy: 1, enemy: true },
   { label: 'racer 2x2', gt: 'racer', sx: 2, sy: 2, enemy: false },
   { label: 'runner 2x1', gt: 'runner', sx: 2, sy: 1, enemy: false },
@@ -84,10 +89,11 @@ const srvA = await H.startServer(PORT_A);
 try {
   for (const fx of FIXTURES) {
     const s = makeState(fx.gt, fx.sx, fx.sy, fx.enemy);
+    const instances = (s.builder.modules.scene.config.instances) || [];
     const payload = {
       state: s, playerSpriteIdx: 0, playerStart: { x: 60, y: 120 }, mode: 'browser',
       customMainC: win.BuilderAssembler.assemble(s, tpl),
-      sceneSprites: fx.enemy ? [{ spriteIdx: 1, x: 96, y: 120 }] : [],
+      sceneSprites: instances.map((it) => ({ spriteIdx: it.spriteIdx, x: it.x, y: it.y })),
     };
     const rc = await H.buildRom(PORT_C, payload);
     const ra = await H.buildRom(PORT_A, payload);
