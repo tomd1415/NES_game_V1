@@ -64,8 +64,17 @@ was a massive improvement.
     longer touches the original. Covered by `chars.spec.js` ("duplicating a
     character forks its tiles so the copy is independent").
 19. There should be an option to add a pixel grid to the top view of the sprite (just like the one on the individual tile of the sprite.)
+    *Satisfied in the Studio (2026-07-06 audit):* the CHARS whole-sprite editor
+    (`studio-chars.js` `onRenderOverlay`) always draws a per-pixel grid **plus**
+    brighter cell/tile boundaries over the assembled metasprite — exactly the
+    "top view + pixel grid" asked for. This was a gap on the **legacy** Sprites
+    page only, which is now secondary to the Studio.
 20. On the behaviour editor the Sprite reactions box needs to be wider so I think it should be below the background window and therefore have a bit more width to help make it easier to use.
 21. The triggers and doors on different places should be able to have different effects.
+    *Satisfied (2026-07-06 audit):* the **per-door** module gives every door
+    (keyed by background + tile x/y) its own `spawnX`/`spawnY` and `targetBgIdx`,
+    so each door can send the player to a different spot and/or a different room.
+    Covered by `perdoor.mjs` (two doors, different destinations).
 22. There should be the ability to change variables that affect the whole game, like gravity and similar in the builder section.
 23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
 24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
