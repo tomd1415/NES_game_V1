@@ -27,25 +27,29 @@
   left-scroll *and* an in-place jump arc verifying `world_to_screen_y`/gravity/
   jump-rise), `asm-corpus.mjs` (14-shape rest-equivalence incl. WORLD_COLS=96,
   four-screen row-stream, multi-enemy, all-modules), `asm-vscroll.mjs` (vertical +
-  diagonal scroll *in motion* at matched progress — row streamer + both streamers
-  at once), `asm-benchmark.mjs` (ASM 70B smaller + 5 fewer dropped frames,
-  asserted). All four auto-run by `run-all.mjs` (it globs every `*.mjs`) and green.
+  diagonal scroll *in motion* at matched progress — row streamer, both streamers
+  at once, the PPU vertical wrap, and the bottom-edge camera clamp),
+  `asm-enemy.mjs` (the hot `behaviour_at`/`reaction_for` path verified under 300
+  frames of walker MOTION, phase-aligned via an injected tick counter),
+  `asm-benchmark.mjs` (ASM 70B smaller + 5 fewer dropped frames, asserted). All
+  five auto-run by `run-all.mjs` (it globs every `*.mjs`) and are green.
 
 **Verification in place:** flag-off golden byte-identical (`1730448e`);
 matched-progress A/B identical; full builder suite green across every world shape;
 E2E 111 passed; asm-lab 13 tests.
 
 **What's next if continuing (in priority order):**
-1. **Scroll A/B is now comprehensive** — `asm-ab.mjs` (horizontal both dirs +
-   in-place jump), `asm-vscroll.mjs` (vertical, diagonal, PPU vertical wrap at
-   cam_y=304, bottom-edge camera clamp at cam_y=720), `asm-corpus.mjs` (14 shapes
-   at rest). Remaining *small* unattended-safe filler: (a) the horizontal
-   right-edge clamp (walk into the world's right boundary in `asm-ab`, analogous
-   to the vertical clamp just added); (b) extend `asm-benchmark.mjs` to also
-   scroll *vertically* and assert the row-stream ASM drops ≤ C frames (perf win
-   proven for the column path only so far); (c) a MULC power-of-two width corpus
-   shape (4x1 → WORLD_COLS=128, the pure-shift MULC path, distinct from 96's
-   shift-add). After these the A/B surface is saturated and real progress needs #2.
+1. **The A/B surface is now SATURATED for unattended work.** Covered: player
+   motion (horizontal both dirs, in-place jump, right-edge clamp), scroll
+   (vertical, diagonal, PPU vertical wrap, both camera clamps, 14 world shapes at
+   rest), and the hot enemy path (`behaviour_at`/`reaction_for` under 300 frames
+   of motion). Size + horizontal-speed benchmarks assert no regression. Ideas that
+   were considered and *rejected as low-value*: a vertical-scroll frame-drop
+   benchmark (the topdown row stream drops 0 frames — null signal), and a
+   WORLD_COLS=128 corpus shape (single-bit MULC, structurally identical to the 64
+   case already covered). Adding more enemy AI *types* (patrol/flyer/chaser) would
+   re-exercise the same shipped ASM — marginal. **Further real coverage now
+   requires converting more C to ASM (#2), which is blocked + not unattended-safe.**
 2. **Phase 2 proper — the scene-sprite hot loops** (the real perf target). BLOCKED
    on de-`static`ing the server-generated scene arrays (`ss_x/ss_y/…`) **and**
    their **variable element width** (u8↔u16 by sprite position): add `SS_POS_WIDE`
