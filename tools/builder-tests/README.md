@@ -100,6 +100,46 @@ payload `playerStart` is ignored on the customMainC path, see gotcha 2 above).
 | `gallery-auth.mjs` | Route-level gallery/feedback authorization matrix (owner/teacher/anon → 200/401/403). |
 | `csrf-origin.mjs` | The CSRF Origin check blocks cross-site state-changes on cookie-authed routes; exempts `/play` + no-Origin clients. |
 
+## ASM-engine equivalence suites (`asm-*.mjs`)
+
+The shipped engine now runs several subsystems as **hand-written 6502** (see
+`docs/plans/current/2026-07-06-asm-engine-generator.md`). The ASM ROM is
+*deliberately not* byte-identical to the pure-C ROM, so the byte-golden baseline
+(invariant 2 below) can't guard it. These suites do instead — each dual-builds a
+project **two ways** (pure C via `PLAYGROUND_NO_ASM=1` vs the shipped ASM) and
+asserts the two are behaviourally identical.
+
+| Suite | What it dual-builds + compares |
+| --- | --- |
+| `asm-ab.mjs` | Stock fixture, built directly with `make` (C) vs `make NES_ASM_LEAF=1 NES_ASM_SCROLL=1`. Walks RIGHT then LEFT (both scroll directions), an in-place JUMP (world_to_screen_y + gravity), and into the RIGHT world edge (camera clamp) — identical at matched progress each time. |
+| `asm-corpus.mjs` | 14 project *shapes* (platformer/topdown/smb/racer/runner × world sizes incl. WORLD_COLS=96, four-screen, multi-enemy, all-modules) compared **at rest** (OAM+palette+nametables). |
+| `asm-vscroll.mjs` | Open top-down worlds walked DOWN (1x3) and DOWN+RIGHT (2x2) — the row streamer, `world_to_screen_y`, both streamers at once, the PPU vertical wrap (cam_y > 240) and the bottom-edge camera clamp. |
+| `asm-enemy.mjs` | The hot `behaviour_at`/`reaction_for` path under 300 frames of walker MOTION in a 1x1 (non-scrolling) world. |
+| `asm-benchmark.mjs` | Size (CODE segment via `ld65 -m`) and speed (dropped frames over a standard scroll): asserts ASM ≤ C on both (a perf/size-regression guard). |
+| `asm-play.mjs` | Older raw-6502 `/play` smoke (the `customMainAsm` single-player starter) — unrelated to the generator; just keeps that assemble+link path alive. |
+
+**Two methodology facts these encode — read before touching them:**
+
+1. **Matched *progress*, not matched vblank.** The C engine overruns the NTSC
+   vblank budget on a stream burst and drops a frame; the ASM holds 60fps. So at
+   the *same absolute frame* the C build is physically behind. The correct
+   equivalence lens is to advance each build until a mirrored progress variable
+   (px / py) reaches the **same value**, then compare — never to compare at the
+   same frame count. `asm-benchmark` measures exactly that gap (C needs ~5 more
+   vblanks to reach px=184).
+2. **Constant phase offset ⇒ align once.** Even a non-scrolling world's one-screen
+   boot blit finishes a frame sooner on the faster ASM, leaving the two builds a
+   *constant* phase apart forever. Where there's no scroll (so the offset never
+   grows — `asm-enemy`), inject a per-frame tick counter and step only the lagging
+   build until the counters match; after that they run in lockstep and OAM can be
+   compared frame-by-frame. To read a build's internal state, inject a scratch-RAM
+   mirror of `px`/`py`/`cam_x`/`cam_y` into `customMainC` (it works for both builds
+   because those stay C globals the ASM shares).
+
+`asm-ab` and `asm-benchmark` build the stock fixture directly with `make` (no
+server); the server-based suites use ports 18790–18795 (asm-play: 18835). Like
+every suite they're picked up automatically by `run-all.mjs`.
+
 ## The invariants `run-all.mjs` enforces
 
 1. **JS / Python syntax** — every module + every inline
