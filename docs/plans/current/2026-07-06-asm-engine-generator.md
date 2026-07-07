@@ -36,13 +36,16 @@ matched-progress A/B identical; full builder suite green across every world shap
 E2E 111 passed; asm-lab 13 tests.
 
 **What's next if continuing (in priority order):**
-1. **Remaining A/B micro-edges** (unattended-safe filler): `asm-vscroll.mjs` now
-   covers vertical (1x3, DOWN) + diagonal (2x2, DOWN+RIGHT) scroll at matched
-   progress — row streamer, `world_to_screen_y`, both streamers at once (cam
-   reaches (84,144)). Still untested: the PPU vertical wrap (drive `cam_y` past
-   240 in a tall world) and the camera **clamp** at a world edge (walk into the
-   bottom/right boundary and confirm C and ASM clamp identically). Horizontal
-   (both dirs) + in-place jump are in `asm-ab.mjs`.
+1. **Scroll A/B is now comprehensive** — `asm-ab.mjs` (horizontal both dirs +
+   in-place jump), `asm-vscroll.mjs` (vertical, diagonal, PPU vertical wrap at
+   cam_y=304, bottom-edge camera clamp at cam_y=720), `asm-corpus.mjs` (14 shapes
+   at rest). Remaining *small* unattended-safe filler: (a) the horizontal
+   right-edge clamp (walk into the world's right boundary in `asm-ab`, analogous
+   to the vertical clamp just added); (b) extend `asm-benchmark.mjs` to also
+   scroll *vertically* and assert the row-stream ASM drops ≤ C frames (perf win
+   proven for the column path only so far); (c) a MULC power-of-two width corpus
+   shape (4x1 → WORLD_COLS=128, the pure-shift MULC path, distinct from 96's
+   shift-add). After these the A/B surface is saturated and real progress needs #2.
 2. **Phase 2 proper — the scene-sprite hot loops** (the real perf target). BLOCKED
    on de-`static`ing the server-generated scene arrays (`ss_x/ss_y/…`) **and**
    their **variable element width** (u8↔u16 by sprite position): add `SS_POS_WIDE`
