@@ -20,10 +20,13 @@
   (`MULC`). Generalised + shipped `behaviour_at`, `reaction_for`,
   `advance_animation`, `scroll_stream_prepare`. **10 hand-written functions now
   ship**, incl. the hot `behaviour_at`.
-- **v21:** `scroll_init` on ASM; `asm-lab/functions/mulc` unit test (MULC exact
-  for world widths 32/64/96/128).
-- **Phase 5 (minimal):** `tools/builder-tests/asm-ab.mjs` — permanent dual-build
-  A/B guard (C vs ASM, matched-progress), run by the suite.
+- **v21–v23:** `scroll_init`, `scroll_stream` (unrolled), `load_world_bg` on ASM —
+  **`scroll.c` is now 100% hand-written 6502** (no C bodies when NES_ASM_SCROLL=1).
+  `MULC` unit test (`asm-lab/functions/mulc`, widths 32/64/96/128).
+- **Phase 5 (growing):** `asm-ab.mjs` (matched-progress A/B), `asm-corpus.mjs`
+  (14-shape rest-equivalence incl. WORLD_COLS=96, four-screen row-stream,
+  multi-enemy, all-modules), `asm-benchmark.mjs` (ASM 70B smaller + 5 fewer
+  dropped frames, asserted). All auto-run by the suite.
 
 **Verification in place:** flag-off golden byte-identical (`1730448e`);
 matched-progress A/B identical; full builder suite green across every world shape;
