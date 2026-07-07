@@ -49,6 +49,16 @@ function advanceToPx(n, target, cap = 400) {
   while (rd16(n, PX) < target && f < cap) { n.buttonDown(1, B.BUTTON_RIGHT); n.frame(); n.buttonUp(1, B.BUTTON_RIGHT); f++; }
   return f;
 }
+function advanceToPxLeft(n, target, cap = 400) {
+  let f = 0;
+  while (rd16(n, PX) > target && f < cap) { n.buttonDown(1, B.BUTTON_LEFT); n.frame(); n.buttonUp(1, B.BUTTON_LEFT); f++; }
+  return f;
+}
+function renderDiff(c, a) {
+  let dnt = 0;
+  for (let n = 0; n < 4; n++) { const cn = c.ppu.nameTable[n], an = a.ppu.nameTable[n]; if (cn && an) for (let t = 0; t < 960; t++) if ((cn.tile[t] & 0xFF) !== (an.tile[t] & 0xFF)) dnt++; }
+  return { pal: diff(pal(c), pal(a)), oam: diff(oam(c), oam(a)), nt: dnt, cam: rd16(c, CX) === rd16(a, CX) ? 0 : 1 };
+}
 
 let romC, romA;
 try {
@@ -74,12 +84,19 @@ if (romC && romA) {
   ok(`reached px=${TARGET}: C in ${fc} vblanks, ASM in ${fa} (C dropped ${fc - fa} more frames)`);
   if (fa > fc) bad(`ASM dropped MORE frames than C (${fa} > ${fc}) — perf regression`);
 
-  const dp = diff(pal(c), pal(a)), doam = diff(oam(c), oam(a));
-  let dnt = 0;
-  for (let n = 0; n < 4; n++) { const cn = c.ppu.nameTable[n], an = a.ppu.nameTable[n]; if (cn && an) for (let t = 0; t < 960; t++) if ((cn.tile[t] & 0xFF) !== (an.tile[t] & 0xFF)) dnt++; }
-  const dcam = rd16(c, CX) === rd16(a, CX) ? 0 : 1;
-  if (dp + doam + dnt + dcam === 0) ok('behaviourally IDENTICAL at matched progress (cam, palette, OAM, nametables)');
-  else bad(`divergence at matched progress: palette=${dp} OAM=${doam} nametable=${dnt} cam=${dcam}`);
+  const r = renderDiff(c, a);
+  if (r.pal + r.oam + r.nt + r.cam === 0) ok('right-scroll: IDENTICAL at matched progress (cam, palette, OAM, nametables)');
+  else bad(`right-scroll divergence at px=${TARGET}: palette=${r.pal} OAM=${r.oam} nametable=${r.nt} cam=${r.cam}`);
+
+  // Now scroll BACK LEFT — exercises scroll_follow's left deadzone, the @col_left
+  // left-column stream, and world_to_screen underflow (paths the right-only walk
+  // never hits). Compare at a matched px on the way back.
+  const LTARGET = 96;
+  const lc = advanceToPxLeft(c, LTARGET), la = advanceToPxLeft(a, LTARGET);
+  for (let i = 0; i < 8; i++) { c.frame(); a.frame(); }
+  const rl = renderDiff(c, a);
+  if (rl.pal + rl.oam + rl.nt + rl.cam === 0) ok(`left-scroll: IDENTICAL at matched progress (C ${lc} vblanks, ASM ${la})`);
+  else bad(`left-scroll divergence at px=${LTARGET}: palette=${rl.pal} OAM=${rl.oam} nametable=${rl.nt} cam=${rl.cam}`);
 }
 
 if (failed) process.exit(1);
