@@ -91,6 +91,24 @@ needs a shared constant; per-instance values live in the tables above.
 **All four generic AI types (walker, chaser, flyer, patrol) are now A/B-verified
 in both u8 and u16 position widths.** Only goomba/koopa (SMB) remain in C.
 
+### Benchmark (`asm-ai-bench.mjs`)
+
+Quantifies what the ASM buys on a deliberately heavy scene (28 walkers, each
+calling `bw_sprite_blocked` every frame, so the AI is the dominant per-frame
+cost). The injected game-loop tick counter measures how many iterations each
+build completes over 600 emulated frames — the build that overruns the vblank
+budget less often does more:
+
+- **Speed: 1.21× the C game-loop rate** (C 97 vs ASM 117 ticks / 600 frames,
+  deterministic). The benchmark's regression guard is simply *ASM must never be
+  slower than C*; the ratio is the reported win.
+- **Size: +2679 bytes MORE free PRG with the ASM** — the shared `ai_update`
+  loop + `bw_sprite_blocked` twin are smaller than the C per-instance AI blocks
+  they replace, so the hand-written path is both faster AND smaller.
+
+This is the case for eventually flipping `PLAYGROUND_ASM_AI` to shipped-default
+(broaden the corpus + re-pin the golden hash first).
+
 ### Verification methodology (learned the hard way at the patrol milestone)
 
 The A/B **must** compare **RAM enemy state at matched tick**, not OAM in
