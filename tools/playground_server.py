@@ -1612,6 +1612,16 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         "// ss_role[i] is the role of scene sprite i (see below).",
         *_role_defs("#define"),   # T7.6a: shared ROLE_TABLE source
         "",
+        # Linkage for the scene-sprite arrays the draw loop reads. Normally
+        # `static` (byte-identical as always); when the scene-draw ASM module
+        # is built (NES_ASM_SCENE) they must be linker-visible so scene_asm.s
+        # can import them. Flag-off is byte-for-byte unchanged.
+        "#ifdef NES_ASM_SCENE",
+        "#define SS_LINKAGE",
+        "#else",
+        "#define SS_LINKAGE static",
+        "#endif",
+        "",
     ]
 
     # --- Player -----------------------------------------------------------
@@ -1855,13 +1865,13 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         # never accessed because NUM_STATIC_SPRITES gates the loop.
         # ss_x / ss_y are non-const so movement snippets can write to them.
         stub = (
-            "static unsigned char ss_x[1]            = { 0 };\n"
-            "static unsigned char ss_y[1]            = { 0 };\n"
-            "static const unsigned char ss_w[1]      = { 0 };\n"
-            "static const unsigned char ss_h[1]      = { 0 };\n"
-            "static const unsigned char ss_offset[1] = { 0 };\n"
-            "static const unsigned char ss_tiles[1]  = { 0 };\n"
-            "static const unsigned char ss_attrs[1]  = { 0 };\n"
+            "SS_LINKAGE unsigned char ss_x[1]            = { 0 };\n"
+            "SS_LINKAGE unsigned char ss_y[1]            = { 0 };\n"
+            "SS_LINKAGE const unsigned char ss_w[1]      = { 0 };\n"
+            "SS_LINKAGE const unsigned char ss_h[1]      = { 0 };\n"
+            "SS_LINKAGE const unsigned char ss_offset[1] = { 0 };\n"
+            "SS_LINKAGE const unsigned char ss_tiles[1]  = { 0 };\n"
+            "SS_LINKAGE const unsigned char ss_attrs[1]  = { 0 };\n"
             "static const unsigned char ss_role[1]   = { 0 };\n"
             "static const unsigned char ss_flying[1] = { 0 };\n"
             "static unsigned char ss_anim_frame[1]   = { 0 };\n"
@@ -1899,9 +1909,12 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
                     tiles_flat.append(cell_tile(cell))
                     attrs_flat.append(cell_attr(cell))
 
-        def arr(name, values, as_hex=False, mutable=False, wide=False):
+        def arr(name, values, as_hex=False, mutable=False, wide=False, link=False):
             fmt = (lambda v: f"0x{v:02X}") if as_hex else (lambda v: str(v))
-            qualifier = "static" if mutable else "static const"
+            # `link=True` arrays are read by the scene-draw ASM module, so they
+            # carry SS_LINKAGE (static normally, linker-visible under NES_ASM_SCENE).
+            base = "SS_LINKAGE" if link else "static"
+            qualifier = base if mutable else base + " const"
             ctype = "unsigned int" if wide else "unsigned char"
             return (f"{qualifier} {ctype} {name}[{len(values)}] = {{ "
                     + ", ".join(fmt(v) for v in values) + " };")
@@ -1918,13 +1931,13 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         # exists (Phase B finale chunk B).
         anim_zero = [0] * n
         lines += [
-            arr("ss_x", xs, mutable=True, wide=wide_pos),
-            arr("ss_y", ys, mutable=True, wide=wide_pos),
-            arr("ss_w", ws),
-            arr("ss_h", hs),
-            arr("ss_offset", offsets),
-            arr("ss_tiles", tiles_flat, as_hex=True),
-            arr("ss_attrs", attrs_flat, as_hex=True),
+            arr("ss_x", xs, mutable=True, wide=wide_pos, link=True),
+            arr("ss_y", ys, mutable=True, wide=wide_pos, link=True),
+            arr("ss_w", ws, link=True),
+            arr("ss_h", hs, link=True),
+            arr("ss_offset", offsets, link=True),
+            arr("ss_tiles", tiles_flat, as_hex=True, link=True),
+            arr("ss_attrs", attrs_flat, as_hex=True, link=True),
             arr("ss_role", roles),
             arr("ss_flying", flying),
             arr("ss_anim_frame", anim_zero, mutable=True),
@@ -2305,6 +2318,17 @@ def build_project_inc(state, player_idx, scene_sprites):
         ps = sprites[player_idx] or {}
         pw = int(ps.get("width") or 2)
         ph = int(ps.get("height") or 2)
+    # SS_POS_WIDE mirrors build_scene_inc's wide_pos: 1 when any scene sprite
+    # sits past the first screen (x or y > 255), so ss_x/ss_y are u16 in the C —
+    # the scene-draw ASM must read them at the same width.
+    ss_pos_wide = 0
+    if num_static:
+        world_w, world_h = _scene_world_bounds(state)
+        for item in (scene_sprites or []):
+            sx, sy = _scene_sprite_xy(item, world_w, world_h)
+            if sx > 255 or sy > 255:
+                ss_pos_wide = 1
+                break
     lines = [
         "; project.inc — generated by tools/playground_server.py. Per-project ASM",
         "; constants for the hand-written 6502 engine. `.define` (textual) so ca65",
@@ -2319,6 +2343,7 @@ def build_project_inc(state, player_idx, scene_sprites):
         f".define PLAYER_TILES_PER_FRAME {pw * ph}",
         f".define NUM_BEHAVIOUR_SPRITES  {max(num_beh, 1)}",
         f".define NUM_STATIC_SPRITES     {num_static}",
+        f".define SS_POS_WIDE            {ss_pos_wide}",
         ".define SCREEN_W_PX            256",
         ".define SCREEN_H_PX            240",
         "",

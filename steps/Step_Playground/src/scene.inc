@@ -2,6 +2,16 @@
 #ifndef SCENE_INC
 #define SCENE_INC
 
+// Linkage for the scene-sprite arrays the draw loop reads. Normally `static`
+// (file-local, byte-identical as always); when the scene-draw ASM module is
+// built (NES_ASM_SCENE) they must be linker-visible so scene_asm.s can import
+// them (`_ss_x` …). Nothing else changes — flag-off stays byte-for-byte.
+#ifdef NES_ASM_SCENE
+#define SS_LINKAGE
+#else
+#define SS_LINKAGE static
+#endif
+
 // Role codes — match enemy/npc/tool/... logic in your snippets.
 // ss_role[i] is the role of scene sprite i (see below).
 #define ROLE_PLAYER     0
@@ -53,13 +63,13 @@ static const unsigned char jump_attrs[1] = { 0 };
 #define ANIM_PLAYER2_JUMP_COUNT 0
 
 #define NUM_STATIC_SPRITES 1
-static unsigned char ss_x[1] = { 96 };
-static unsigned char ss_y[1] = { 120 };
-static const unsigned char ss_w[1] = { 2 };
-static const unsigned char ss_h[1] = { 2 };
-static const unsigned char ss_offset[1] = { 0 };
-static const unsigned char ss_tiles[4] = { 0x01, 0x01, 0x01, 0x01 };
-static const unsigned char ss_attrs[4] = { 0x00, 0x00, 0x00, 0x00 };
+SS_LINKAGE unsigned char ss_x[1] = { 96 };
+SS_LINKAGE unsigned char ss_y[1] = { 120 };
+SS_LINKAGE const unsigned char ss_w[1] = { 2 };
+SS_LINKAGE const unsigned char ss_h[1] = { 2 };
+SS_LINKAGE const unsigned char ss_offset[1] = { 0 };
+SS_LINKAGE const unsigned char ss_tiles[4] = { 0x01, 0x01, 0x01, 0x01 };
+SS_LINKAGE const unsigned char ss_attrs[4] = { 0x00, 0x00, 0x00, 0x00 };
 static const unsigned char ss_role[1] = { 2 };
 static const unsigned char ss_flying[1] = { 0 };
 static unsigned char ss_anim_frame[1] = { 0 };

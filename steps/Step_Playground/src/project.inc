@@ -26,6 +26,10 @@
 ; --- Scene sprites (reaction_for bound) ---
 .define NUM_BEHAVIOUR_SPRITES  2
 .define NUM_STATIC_SPRITES     1
+; SS_POS_WIDE=1 when any scene sprite sits past the first screen (x or y > 255),
+; so ss_x/ss_y are u16 (unsigned int) not u8 — the scene-draw ASM reads them at
+; the right width. Matches build_scene_inc's `wide_pos`.
+.define SS_POS_WIDE            0
 ; --- Fixed NES / engine constants (here so the modules need no other include) ---
 .define SCREEN_W_PX            256
 .define SCREEN_H_PX            240
