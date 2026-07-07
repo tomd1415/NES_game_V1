@@ -48,13 +48,18 @@ needs a shared constant; per-instance values live in the tables above.
    `jmp ret1/ret0 → incsp4`. Gated `NES_ASM_AI` (server `PLAYGROUND_ASM_AI` toggle),
    flag-off byte-identical. A/B: `asm-ai.mjs` (walled pen, phase-aligned, OAM
    identical over 400 frames incl. wall + edge turns).
-2. **`ai_update` generic loop** — `for i in 0..NUM_STATIC_SPRITES: dispatch on
-   ss_ai_type[i]`. Start with **walker only** (type 1), other types fall through to
-   a no-op (their C blocks stay when the loop doesn't handle them — mixed mode is
-   fine as long as each type is handled by exactly one of C/ASM). Walker logic is a
-   direct transcription of the C above, reading `ss_ai_speed`/`ss_ai_state`.
+2. **`ai_update` generic loop (walker)** — ✅ **DONE (engine v26, `_ai_update` in
+   `ai_asm.s`).** Loops NUM_STATIC_SPRITES, dispatches on `ss_ai_type[i]`, drives
+   walkers (reverse at a `bw_sprite_blocked` edge else step by `ss_ai_speed[i]`,
+   dir in `ss_ai_state[i]`). builder-modules.js emits the uniform tables + the
+   `ai_update()` call under NES_ASM_AI and `#ifndef`s out the C walker blocks;
+   non-walker AIs keep their C (order-equivalent). A/B: `asm-ai.mjs`.
+   - **Gap:** the SS_POS_WIDE (u16-position) walker path isn't A/B'd yet — needs a
+     scrolling moving-enemy harness (phase alignment under stream drops). The
+     non-wide walker (the common case) is proven.
 3. Extend the dispatch to chaser (needs `px`/`py`), flyer (`ss_ai_aux` hover),
-   patrol (`ss_ai_aux` bounce), one type per milestone, each A/B-verified.
+   patrol (`ss_ai_aux` bounce), one type per milestone, each A/B-verified. **←
+   next.**
 
 ### Gating
 
