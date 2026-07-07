@@ -26,22 +26,23 @@
 - **Phase 5 (DONE — CI-wired):** `asm-ab.mjs` (matched-progress A/B: right-scroll,
   left-scroll *and* an in-place jump arc verifying `world_to_screen_y`/gravity/
   jump-rise), `asm-corpus.mjs` (14-shape rest-equivalence incl. WORLD_COLS=96,
-  four-screen row-stream, multi-enemy, all-modules), `asm-benchmark.mjs` (ASM 70B
-  smaller + 5 fewer dropped frames, asserted). All three auto-run by `run-all.mjs`
-  (it globs every `*.mjs`) and are green.
+  four-screen row-stream, multi-enemy, all-modules), `asm-vscroll.mjs` (vertical +
+  diagonal scroll *in motion* at matched progress — row streamer + both streamers
+  at once), `asm-benchmark.mjs` (ASM 70B smaller + 5 fewer dropped frames,
+  asserted). All four auto-run by `run-all.mjs` (it globs every `*.mjs`) and green.
 
 **Verification in place:** flag-off golden byte-identical (`1730448e`);
 matched-progress A/B identical; full builder suite green across every world shape;
 E2E 111 passed; asm-lab 13 tests.
 
 **What's next if continuing (in priority order):**
-1. **Close remaining A/B coverage gaps** (unattended-safe filler): matched-progress
-   A/B for **vertical/diagonal scroll in motion** — the row-streamer during actual
-   camera-Y movement (corpus only checks tall worlds *at rest*), and a topdown
-   diagonal walk exercising `world_to_screen_x`+`_y`+both streamers at once. Lives
-   best in the corpus harness (server-generated tall/topdown projects) extended to
-   walk-to-matched-progress rather than settle-at-rest. Horizontal (both dirs) and
-   the in-place jump arc are already covered by `asm-ab.mjs`.
+1. **Remaining A/B micro-edges** (unattended-safe filler): `asm-vscroll.mjs` now
+   covers vertical (1x3, DOWN) + diagonal (2x2, DOWN+RIGHT) scroll at matched
+   progress — row streamer, `world_to_screen_y`, both streamers at once (cam
+   reaches (84,144)). Still untested: the PPU vertical wrap (drive `cam_y` past
+   240 in a tall world) and the camera **clamp** at a world edge (walk into the
+   bottom/right boundary and confirm C and ASM clamp identically). Horizontal
+   (both dirs) + in-place jump are in `asm-ab.mjs`.
 2. **Phase 2 proper — the scene-sprite hot loops** (the real perf target). BLOCKED
    on de-`static`ing the server-generated scene arrays (`ss_x/ss_y/…`) **and**
    their **variable element width** (u8↔u16 by sprite position): add `SS_POS_WIDE`
