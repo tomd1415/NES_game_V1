@@ -9,6 +9,36 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v29 — 2026-07-07 — scene-AI update loop: flyer on ASM (Phase 2b, off by default)
+
+### Added
+- **ai_update flyer dispatch on hand-written 6502** (`src/ai_asm.s`, NES_ASM_AI) —
+  the generic `ai_update` loop now also owns the `flyer` AI (type 3): hovers ±20px
+  in Y around a fixed home (direction in `ss_ai_state[i]`, signed offset in
+  `ss_ai_aux[i]`, flip at ±20), writing `ss_y` ABSOLUTELY from `home+foff` each
+  frame (overrides scene gravity), and drifts toward `px` in X with NO wall probe
+  (flyers pass through) — the exact twin of the C flyer block, incl. the defeated
+  guard (`ss_y[i] >= 0xEF`). The `home+foff` write reproduces the C `int`→ss_y
+  wrap when the sum dips below 0 (8-bit add non-wide; 16-bit signed add with foff
+  sign-extended when SS_POS_WIDE). Reuses the chaser's `ch_load_x`/`ch_le`/`ch_ge`
+  + `add_speed`/`sub_speed` for the X drift.
+- **New `ss_ai_home[]` uniform table** — the flyer needs a per-instance hover
+  centre-Y constant (`clamp(inst.y,20,210)`); emitted alongside the other AI
+  tables under NES_ASM_AI, 0 for non-flyers.
+
+### Changed / migration
+- **Default unchanged / not shipped to pupils.** Linked only under PLAYGROUND_ASM_AI.
+  Flag off = byte-identical to v28 (golden 1730448e; _rom-equiv 27210a8f). Every
+  existing enemy suite still green.
+- **asm-ai.mjs** now also pens a flyer far LEFT of the player (home Y = 80, speed 1)
+  so its Y-hover band and its RIGHT drift are both exercised in the compare window.
+  Verified: C ≡ ASM `ss_x`/`ss_y` at every matched tick over 300 ticks incl.
+  wall/edge turns, patrol bounce, chaser X+Y seek, and flyer Y-hover + X-drift.
+- With flyer done, walker + chaser + flyer + patrol all run in ASM; only goomba/
+  koopa (SMB) keep their C. Known gap (next): the SS_POS_WIDE (u16-position) path
+  still isn't A/B'd (needs a scrolling moving-enemy harness); the wide paths for
+  all four types are written but unverified.
+
 ## v28 — 2026-07-07 — scene-AI update loop: chaser on ASM (Phase 2b, off by default)
 
 ### Added

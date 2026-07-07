@@ -68,8 +68,17 @@ needs a shared constant; per-instance values live in the tables above.
    (hi=0 when not wide) — twin of the C for both position widths. builder-modules.js
    sets type 2 + `#ifndef`s out the C chaser block. A/B: `asm-ai.mjs` (chaser
    seeking the player, LEFT+DOWN, wall + floor stops).
-5. Extend the dispatch to flyer (`ss_ai_aux` hover oscillation + drift toward the
-   player), one type per milestone, each A/B-verified. **← next.**
+5. **`ai_update` flyer dispatch** — ✅ **DONE (engine v29, `_ai_update` in
+   `ai_asm.s`).** Adds the `flyer` type (3): hovers ±20px in Y around a new
+   per-instance `ss_ai_home[i]` constant (dir in `ss_ai_state[i]`, signed offset
+   in `ss_ai_aux[i]`), writing `ss_y` absolutely from `home+foff` (reproduces the
+   C sign-wrap), and drifts toward `px` in X with no probe. builder-modules.js
+   emits `ss_ai_home` + `#ifndef`s out the C flyer block. A/B: `asm-ai.mjs`.
+   With this, walker + chaser + flyer + patrol all run in ASM (only goomba/koopa
+   keep C).
+6. **Close the SS_POS_WIDE (u16-position) A/B gap** — a scrolling moving-enemy
+   harness that phase-aligns under stream drops and verifies all four ASM types
+   in wide mode (their wide paths are written but unverified). **← next.**
 
 ### Verification methodology (learned the hard way at the patrol milestone)
 

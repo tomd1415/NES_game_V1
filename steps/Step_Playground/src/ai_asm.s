@@ -18,7 +18,7 @@
 .export _ai_update
 .import _behaviour_at
 .import _ss_x, _ss_y, _ss_w, _ss_h
-.import _ss_ai_type, _ss_ai_state, _ss_ai_speed, _ss_ai_aux
+.import _ss_ai_type, _ss_ai_state, _ss_ai_speed, _ss_ai_aux, _ss_ai_home
 .import _px, _py
 .import pushax, pusha, incsp4
 .importzp sp, tmp1, tmp2
@@ -27,6 +27,7 @@ BEH_SOLID = 1
 BEH_WALL  = 2
 AI_WALKER = 1
 AI_CHASER = 2
+AI_FLYER  = 3
 AI_PATROL = 4
 
 .segment "BSS"
@@ -258,10 +259,12 @@ ret0:
 ;     1 walker  — dir in ss_ai_state[i]; reverse at a bw_sprite_blocked edge,
 ;                 else step by ss_ai_speed[i].
 ;     2 chaser  — seek px/py on X then Y, probing 1px ahead each axis.
+;     3 flyer   — hover ±20px around ss_ai_home[i] in Y (dir in ss_ai_state[i],
+;                 offset in ss_ai_aux[i]), drift toward px in X (no wall probe).
 ;     4 patrol  — back-and-forth over ±40px; dir in ss_ai_state[i], signed
 ;                 offset in ss_ai_aux[i].
 ; Each is the exact twin of its per-instance C block. Types the ASM does NOT own
-; (0/none, flyer, goomba/koopa) keep their still-emitted C — no cross-sprite AI
+; (0/none, goomba/koopa) keep their still-emitted C — no cross-sprite AI
 ; dependency, so ASM-handled-then-C-others == the interleaved all-C order.
 ; ---------------------------------------------------------------------------
 
@@ -293,6 +296,10 @@ loop:
     bne @not_chaser             ; chaser body is far -> reach it via jmp
     jmp chaser
 @not_chaser:
+    cmp #AI_FLYER
+    bne @not_flyer              ; flyer body is far -> reach it via jmp
+    jmp flyer
+@not_flyer:
     cmp #AI_PATROL
     beq patrol
     jmp next
@@ -419,6 +426,72 @@ ch_y_up:
     bne ch_skip
     jsr sub_speed_y
 ch_skip:
+    jmp next
+; flyer: hover ±20px around a fixed home-Y (state = fdir ±1, aux = foff signed),
+; writing ss_y ABSOLUTELY from home+foff each frame (overrides scene gravity),
+; and drift toward px in X with NO wall probe (flyers pass through). A defeated
+; actor parked off-screen (ss_y >= 0xEF) is skipped so it stays parked. Exact
+; twin of the C flyer block.
+flyer:
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_y+1,y
+    bne fly_skip                ; ss_y >= 256 -> >= 0xEF -> defeated -> skip
+    lda _ss_y,y
+    cmp #$EF
+    bcs fly_skip
+.else
+    ldx au_i
+    lda _ss_y,x
+    cmp #$EF
+    bcs fly_skip
+.endif
+    ; hover: update fdir (state) + foff (aux), flip at ±20
+    ldx au_i
+    lda _ss_ai_state,x
+    bmi fly_down
+    ; fdir > 0: foff += speed; if foff >= 20 fdir = -1
+    lda _ss_ai_aux,x
+    clc
+    adc _ss_ai_speed,x
+    sta _ss_ai_aux,x
+    sec
+    sbc #20                     ; foff - 20 (signed, no overflow); <0 -> keep
+    bmi fly_apply
+    ldx au_i
+    lda #$FF
+    sta _ss_ai_state,x
+    jmp fly_apply
+fly_down:
+    ; fdir < 0: foff -= speed; if foff <= -20 fdir = 1
+    lda _ss_ai_aux,x
+    sec
+    sbc _ss_ai_speed,x
+    sta _ss_ai_aux,x
+    clc
+    adc #20                     ; foff + 20; <= 0 -> flip
+    beq fly_flip
+    bmi fly_flip
+    jmp fly_apply
+fly_flip:
+    ldx au_i
+    lda #1
+    sta _ss_ai_state,x
+fly_apply:
+    jsr fly_set_y               ; ss_y[i] = home + foff (absolute, signed)
+    ; X drift toward px — no probe (flyers pass through walls)
+    jsr ch_load_x
+    jsr ch_le                   ; C=1 iff ss_x+spd <= px
+    bcc fly_x_left
+    jsr add_speed
+    jmp fly_skip
+fly_x_left:
+    jsr ch_ge                   ; C=1 iff ss_x >= px+spd
+    bcc fly_skip
+    jsr sub_speed
+fly_skip:
     jmp next
 next:
     inc au_i
@@ -655,5 +728,40 @@ next:
     cmp tmp1
     lda ch_p_hi
     sbc tmp2                    ; C=1 iff ch_p >= sum
+    rts
+.endproc
+
+; fly_set_y: ss_y[i] = ss_ai_home[i] + ss_ai_aux[i]  (foff), written absolutely.
+; home is 0..210 (unsigned); foff is a signed offset. The C computes this as int
+; and assigns to ss_y, so a home+foff that dips below 0 wraps to (unsigned char)
+; / (unsigned int) — reproduced here by an 8-bit add (non-wide) or a 16-bit
+; signed add with foff sign-extended (wide).
+.proc fly_set_y
+    ldx au_i
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    clc
+    lda _ss_ai_home,x
+    adc _ss_ai_aux,x            ; lo = home + foff ; C = carry out
+    sta _ss_y,y
+    lda _ss_ai_aux,x
+    bpl @pos
+    lda #$FF                    ; foff hi = 0xFF (sign-extend)
+    adc #0                     ; hi = 0 (home) + 0xFF + carry
+    sta _ss_y+1,y
+    jmp @done
+@pos:
+    lda #0                      ; foff hi = 0
+    adc #0                     ; hi = 0 (home) + 0 + carry
+    sta _ss_y+1,y
+@done:
+.else
+    lda _ss_ai_home,x
+    clc
+    adc _ss_ai_aux,x            ; (unsigned char)(home + foff)
+    sta _ss_y,x
+.endif
     rts
 .endproc

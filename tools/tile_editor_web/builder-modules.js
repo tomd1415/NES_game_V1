@@ -536,10 +536,10 @@
       // Phase 2b — uniform per-scene-sprite AI tables the ai_update ASM loop reads
       // (NES_ASM_AI). type 0 = handled by C (or none); 1 = walker. state/speed are
       // meaningful only for ASM-handled types. Index i tracks ss_x[i] exactly.
-      const aiType = [], aiState = [], aiSpeed = [], aiAux = [];
+      const aiType = [], aiState = [], aiSpeed = [], aiAux = [], aiHome = [];
       let asmAiHandled = 0;   // how many instances the ai_update loop owns
       for (let i = 0; i < instances.length; i++) {
-        aiType[i] = 0; aiState[i] = 0; aiSpeed[i] = 0; aiAux[i] = 0;
+        aiType[i] = 0; aiState[i] = 0; aiSpeed[i] = 0; aiAux[i] = 0; aiHome[i] = 0;
         const inst = instances[i] || {};
         const sp = sprites[inst.spriteIdx];
         if (!sp) continue;
@@ -612,6 +612,12 @@
           // parked at y=0xFF and must stay there, so guard on ss_y < 0xEF).
           emitted++;
           var flyHome = Math.max(20, Math.min(210, A.clampInt(inst.y, 0, 255, 0)));
+          // Phase 2b — ai_update owns flyers too (type 3; state=fdir seed 1,
+          // aux=foff seed 0, home=flyHome constant). The C block below is
+          // byte-identical to before, but #ifndef'd out under NES_ASM_AI.
+          aiType[i] = 3; aiState[i] = 1; aiSpeed[i] = speed; aiAux[i] = 0;
+          aiHome[i] = flyHome; asmAiHandled++;
+          parts.push('#ifndef NES_ASM_AI');
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' flies: hovers around its start height and drifts toward the player');
@@ -624,6 +630,7 @@
           parts.push('            if (ss_x[' + i + '] + ' + speed + ' <= px) ss_x[' + i + '] += ' + speed + ';');
           parts.push('            else if (ss_x[' + i + '] >= px + ' + speed + ') ss_x[' + i + '] -= ' + speed + ';');
           parts.push('        }');
+          parts.push('#endif');
         } else if (sp.role === 'enemy' && ai === 'patrol') {
           // Engine v10 — patrol: walks back and forth a fixed distance and
           // turns on its own (no wall needed), so it works on an open platform
@@ -928,20 +935,22 @@
           '#ifdef NES_ASM_AI',
           '/* [builder] Phase 2b — uniform scene-AI tables for the ai_update ASM',
           ' * loop. type: 0 = handled by the C blocks above (or none), 1 = walker,',
-          ' * 2 = chaser, 4 = patrol. state is the mutable AI byte (walker/patrol',
-          ' * direction, seeded 1; chaser unused); aux is the patrol offset; speed',
-          ' * is per-instance px/frame. ai_update() dispatches on type, skipping 0. */',
+          ' * 2 = chaser, 3 = flyer, 4 = patrol. state is the mutable AI byte',
+          ' * (walker/patrol/flyer direction, seeded 1; chaser unused); aux is the',
+          ' * patrol/flyer offset; home is the flyer hover centre-Y; speed is',
+          ' * per-instance px/frame. ai_update() dispatches on type, skipping 0. */',
           'void ai_update(void);',
           'const unsigned char ss_ai_type[' + n + ']  = { ' + aiType.join(', ') + ' };',
           'signed char        ss_ai_state[' + n + '] = { ' + aiState.map((v) => v | 0).join(', ') + ' };',
           'const unsigned char ss_ai_speed[' + n + '] = { ' + aiSpeed.join(', ') + ' };',
           'signed char        ss_ai_aux[' + n + ']   = { ' + aiAux.map((v) => v | 0).join(', ') + ' };',
+          'const unsigned char ss_ai_home[' + n + ']  = { ' + aiHome.join(', ') + ' };',
           '#endif',
         ].join('\n');
         withHelper = A.appendToSlot(withHelper, 'declarations', tbl);
         parts.unshift(
           '#ifdef NES_ASM_AI',
-          '        ai_update();   /* Phase 2b — hand-written 6502 AI dispatch (walker/chaser/patrol) */',
+          '        ai_update();   /* Phase 2b — hand-written 6502 AI dispatch (walker/chaser/flyer/patrol) */',
           '#endif');
       }
       return A.appendToSlot(withHelper, 'per_frame', parts.join('\n'));

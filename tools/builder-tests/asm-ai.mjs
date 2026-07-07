@@ -8,10 +8,12 @@
 // out so flag-off is byte-identical.
 //
 // This builds a walled pen with two WALKERs (turning at an interior WALL and at
-// the world edge), a PATROL (bouncing on its own ±40px counter), and a CHASER
-// (seeking the player on X+Y, blocked by the floor on its descent), and
-// dual-builds it pure C (PLAYGROUND_NO_ASM=1) vs the ASM engine + AI helper
-// (PLAYGROUND_ASM_AI=1), then asserts the enemies move IDENTICALLY.
+// the world edge), a PATROL (bouncing on its own ±40px counter), a CHASER
+// (seeking the player on X+Y, blocked by the floor on its descent), and a FLYER
+// (hovering ±20px in Y around its home while drifting toward the player in X,
+// passing through walls), then dual-builds it pure C (PLAYGROUND_NO_ASM=1) vs
+// the ASM engine + AI helper (PLAYGROUND_ASM_AI=1) and asserts they move
+// IDENTICALLY.
 //
 // == Why we compare RAM ss_x, not OAM, and by matched-tick, not by frame ==
 // The two builds have different per-frame CPU cost, so once the scene is heavy
@@ -68,6 +70,9 @@ const INSTANCES = [
   { id: 'w1', spriteIdx: 1, x: 150, y: 200, ai: 'walker', speed: 1 },
   { id: 'p0', spriteIdx: 1, x: 200, y: 200, ai: 'patrol', speed: 2 },
   { id: 'c0', spriteIdx: 1, x: 240, y: 40, ai: 'chaser', speed: 2 },
+  // Flyer: home Y = 80, hovers 60..100; placed far LEFT (x=20, speed 1) so its
+  // RIGHT drift toward the player (px=110) is still in flight past the boot.
+  { id: 'f0', spriteIdx: 1, x: 20, y: 80, ai: 'flyer', speed: 1 },
 ];
 
 function makeState() {
@@ -137,6 +142,8 @@ try {
     let w0min = 255, w0turned = false;   // a walker turned = its X reversed off a peak/trough
     let pMin = 255, pMax = 0, pBounced = false; // patrol swings both ways
     let cChasedX = false, cChasedY = false;     // chaser closed on the player in X and Y
+    let fyMin = 255, fyMax = 0, fHovered = false; // flyer swung through its Y band
+    let fDriftedX = false;                        // flyer drifted toward the player in X
     let moved = false;
     for (let step = 0; step < 12000 && compared < 300; step++) {
       const tc = rd16(c, TICK), ta = rd16(a, TICK);
@@ -155,6 +162,10 @@ try {
       if (pMax - pMin > 60) pBounced = true;  // patrol swept a wide arc (both directions)
       if (cx[3] < start[3] - 8) cChasedX = true;   // chaser moved LEFT toward px
       if (cy[3] > startY[3] + 8) cChasedY = true;   // chaser moved DOWN toward py
+      if (cy[4] < fyMin) fyMin = cy[4];             // flyer Y hover band
+      if (cy[4] > fyMax) fyMax = cy[4];
+      if (fyMax - fyMin >= 20) fHovered = true;     // swung through the ±? band
+      if (cx[4] > start[4] + 8) fDriftedX = true;   // flyer drifted RIGHT toward px
       compared++;
       c.frame(); a.frame();
     }
@@ -165,9 +176,12 @@ try {
     else if (!pBounced) bad('patrol never swung both ways — the patrol path was not exercised');
     else if (!cChasedX) bad('chaser never closed on the player in X — the chaser X path was not exercised');
     else if (!cChasedY) bad('chaser never closed on the player in Y — the chaser Y path was not exercised');
+    else if (!fHovered) bad('flyer never swung through its Y band — the flyer hover path was not exercised');
+    else if (!fDriftedX) bad('flyer never drifted toward the player in X — the flyer drift path was not exercised');
     else if (diffs === 0)
-      ok('ai_update (walker + chaser + patrol) + bw_sprite_blocked: C ≡ ASM ss_x/ss_y at every matched '
-        + `tick over ${compared} ticks of motion (incl. wall/edge turns, patrol bounce, chaser X+Y seek)`);
+      ok('ai_update (walker + chaser + flyer + patrol) + bw_sprite_blocked: C ≡ ASM ss_x/ss_y at every '
+        + `matched tick over ${compared} ticks of motion (incl. wall/edge turns, patrol bounce, chaser `
+        + 'X+Y seek, flyer Y-hover + X-drift)');
     else bad(`divergence — ${diffs} position byte-diffs (first at tick ${firstDiff}) over ${compared} matched ticks`);
   }
 } catch (e) {
@@ -178,4 +192,4 @@ try {
 }
 
 if (failed) process.exit(1);
-console.log('\nasm-ai: the ASM ai_update (walker + chaser + patrol) drives enemy positions identically to the C AI.');
+console.log('\nasm-ai: the ASM ai_update (walker + chaser + flyer + patrol) drives enemy positions identically to the C AI.');
