@@ -57,9 +57,29 @@ needs a shared constant; per-instance values live in the tables above.
    - **Gap:** the SS_POS_WIDE (u16-position) walker path isn't A/B'd yet — needs a
      scrolling moving-enemy harness (phase alignment under stream drops). The
      non-wide walker (the common case) is proven.
-3. Extend the dispatch to chaser (needs `px`/`py`), flyer (`ss_ai_aux` hover),
-   patrol (`ss_ai_aux` bounce), one type per milestone, each A/B-verified. **←
-   next.**
+3. **`ai_update` patrol dispatch** — ✅ **DONE (engine v27, `_ai_update` in
+   `ai_asm.s`).** Adds the `patrol` type (4): back-and-forth over ±40px, dir in
+   `ss_ai_state[i]`, signed offset in a new `ss_ai_aux[i]` byte. builder-modules.js
+   emits the `ss_ai_aux` table + `#ifndef`s out the C patrol block. A/B: `asm-ai.mjs`.
+4. Extend the dispatch to chaser (needs `px`/`py`), then flyer (`ss_ai_aux` hover),
+   one type per milestone, each A/B-verified. **← next.**
+
+### Verification methodology (learned the hard way at the patrol milestone)
+
+The A/B **must** compare **RAM enemy state at matched tick**, not OAM in
+lockstep-by-frame. The two builds have different per-frame CPU cost, so once a
+scene is heavy enough that one drops a frame the other doesn't, their game-loop
+tick counters advance at **different rates** — a lockstep frame diff then either
+mis-aligns the phase or reports the one-frame sprite-DMA lag as a phantom
+divergence (this is exactly what "phase slipped at frame 0" was when the patrol
+was added — the ASM was *correct*). The robust harness (now in `asm-ai.mjs`):
+mirror each enemy's real `ss_x`/`ss_y` into known RAM at the tick point (written
+synchronously with the AI update — no DMA lag), then walk the two builds by
+matched tick (advance whichever is behind on the tick counter) and compare the
+mirrored positions only when both sit on the same tick. At equal tick both builds
+have run the AI the same number of times, so identical AI ⇒ identical positions.
+Rate- and DMA-independent; validated to report 0 diffs on the known-good
+walker-only case and to catch a real per-tick position divergence.
 
 ### Gating
 

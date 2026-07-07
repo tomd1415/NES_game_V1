@@ -1,20 +1,30 @@
 #!/usr/bin/env node
-// ASM engine generator — Phase 2b: bw_sprite_blocked (scene-AI collision probe) on ASM.
+// ASM engine generator — Phase 2b: the scene-sprite AI-UPDATE loop on ASM.
 //
-// The per-enemy collision probe every walker/chaser/flyer/patrol calls each frame
-// now has a hand-written 6502 twin (ai_asm.s). It is NOT shipped to pupils — the
-// server links it only under PLAYGROUND_ASM_AI (a test toggle); the C helper is
-// #ifdef-gated so flag-off is byte-identical.
+// The per-enemy AI update (walker/patrol/… movement) and its collision probe
+// bw_sprite_blocked now have a hand-written 6502 twin: ai_update + the probe in
+// ai_asm.s. They are NOT shipped to pupils — the server links them only under
+// PLAYGROUND_ASM_AI (a test toggle); the C per-instance AI blocks are #ifndef'd
+// out so flag-off is byte-identical.
 //
-// This builds a walled pen with a WALKER and dual-builds it pure C
-// (PLAYGROUND_NO_ASM=1) vs the ASM engine + AI helper (PLAYGROUND_ASM_AI=1), then
-// asserts the walker moves IDENTICALLY. The walker turns at BOTH an interior WALL
-// (exercises bw_sprite_blocked's behaviour_at leading-edge probe) and the world
-// edge (its edge-return paths). A 1x1 world never scrolls, so nothing streams and
-// the two builds run in lockstep once the constant boot-phase offset is aligned
-// via an injected per-frame tick counter (the asm-enemy method) — then the
-// walker's OAM must match byte-for-byte on every frame. Any diff is a real bug in
-// the ASM bw_sprite_blocked.
+// This builds a walled pen with two WALKERs (turning at an interior WALL and at
+// the world edge) plus a PATROL (bouncing on its own ±40px counter), and
+// dual-builds it pure C (PLAYGROUND_NO_ASM=1) vs the ASM engine + AI helper
+// (PLAYGROUND_ASM_AI=1), then asserts the enemies move IDENTICALLY.
+//
+// == Why we compare RAM ss_x, not OAM, and by matched-tick, not by frame ==
+// The two builds have different per-frame CPU cost, so once the scene is heavy
+// enough one of them drops frames the other doesn't — their game-loop "tick"
+// counters then advance at DIFFERENT RATES. A lockstep frame-by-frame OAM diff
+// (the old approach) breaks the moment that happens: it either mis-aligns the
+// phase, or catches the one-frame sprite-DMA lag and reports a phantom
+// divergence. So instead we (1) mirror each enemy's real ss_x/ss_y into known
+// RAM at the tick point — RAM is written synchronously with the AI update, with
+// no DMA lag — and (2) walk the two builds by MATCHED TICK (advance whichever is
+// behind), comparing the mirrored positions only when both sit on the same tick.
+// That is rate-independent and DMA-independent: at equal tick both builds have
+// run the AI the same number of times, so identical AI ⇒ identical ss_x/ss_y.
+// Any diff is a real bug in the ASM ai_update.
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +56,14 @@ function walledBackground(wallCols) {
   };
 }
 
+// Two walkers penned between the walls / edges (turn at a wall + the world
+// edge), plus a patrol that turns on its own ±40px counter (no collision).
+const INSTANCES = [
+  { id: 'w0', spriteIdx: 1, x: 64, y: 200, ai: 'walker', speed: 2 },
+  { id: 'w1', spriteIdx: 1, x: 150, y: 200, ai: 'walker', speed: 1 },
+  { id: 'p0', spriteIdx: 1, x: 200, y: 200, ai: 'patrol', speed: 2 },
+];
+
 function makeState() {
   const sprites = [
     { role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) },
@@ -61,36 +79,40 @@ function makeState() {
     behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
   };
   s.builder.modules.game.config.type = 'platformer';
-  // Two walkers penned between the walls / edges, offset so they turn out of phase.
-  s.builder.modules.scene.config.instances = [
-    { id: 'w0', spriteIdx: 1, x: 64, y: 200, ai: 'walker', speed: 2 },
-    { id: 'w1', spriteIdx: 1, x: 150, y: 200, ai: 'walker', speed: 1 },
-  ];
+  s.builder.modules.scene.config.instances = INSTANCES.map((it) => ({ ...it }));
   return s;
 }
 
-function withTick(mainC) {
-  return mainC.replace('while (oam_idx < 256) {',
-    '{static unsigned int _tk; ++_tk; (*(unsigned char*)0x0710)=(unsigned char)(_tk&0xFF);' +
-    '(*(unsigned char*)0x0711)=(unsigned char)(_tk>>8);} while (oam_idx < 256) {');
+// Mirror the frame tick (u16 @ 0x0710) + each enemy's ss_x (@ 0x0712+i) and
+// ss_y (@ 0x0712+N+i) into known RAM at the tick point. ss_x/ss_y exist in BOTH
+// builds (they are the scene position arrays), so the SAME injected C compiles
+// either way — no flag-gated symbols referenced here.
+const N = INSTANCES.length;
+const XBASE = 0x0712, YBASE = XBASE + N;
+function withProbe(mainC) {
+  let inj = '{static unsigned int _tk; ++_tk;'
+    + '(*(unsigned char*)0x0710)=(unsigned char)(_tk&0xFF);(*(unsigned char*)0x0711)=(unsigned char)(_tk>>8);';
+  for (let i = 0; i < N; i++) inj += `(*(unsigned char*)${XBASE + i})=(unsigned char)ss_x[${i}];`;
+  for (let i = 0; i < N; i++) inj += `(*(unsigned char*)${YBASE + i})=(unsigned char)ss_y[${i}];`;
+  inj += '} ';
+  return mainC.replace('while (oam_idx < 256) {', inj + 'while (oam_idx < 256) {');
 }
 
 const boot = (b) => { const n = new jsnes.NES({ onFrame() {}, onAudioSample() {} }); n.loadROM(b.toString('binary')); return n; };
+const rd = (n, a) => n.cpu.mem[a] & 0xFF;
 const rd16 = (n, a) => (n.cpu.mem[a] & 0xFF) | ((n.cpu.mem[a + 1] & 0xFF) << 8);
 const TICK = 0x0710;
-const oam = (n) => { const a = []; for (let i = 0; i < 256; i++) a.push(n.ppu.spriteMem[i] & 0xFF); return a; };
-const pal = (n) => { const a = []; for (let i = 0x3F00; i <= 0x3F1F; i++) a.push(n.ppu.vramMem[i] & 0xFF); return a; };
-const diff = (a, b) => { let d = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d; };
+const xs = (n) => { const a = []; for (let i = 0; i < N; i++) a.push(rd(n, XBASE + i)); return a; };
+const ys = (n) => { const a = []; for (let i = 0; i < N; i++) a.push(rd(n, YBASE + i)); return a; };
 
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_AI: '1' });
 try {
   const s = makeState();
-  const instances = s.builder.modules.scene.config.instances;
   const payload = {
     state: s, playerSpriteIdx: 0, playerStart: { x: 110, y: 200 }, mode: 'browser',
-    customMainC: withTick(win.BuilderAssembler.assemble(s, tpl)),
-    sceneSprites: instances.map((it) => ({ spriteIdx: it.spriteIdx, x: it.x, y: it.y })),
+    customMainC: withProbe(win.BuilderAssembler.assemble(s, tpl)),
+    sceneSprites: INSTANCES.map((it) => ({ spriteIdx: it.spriteIdx, x: it.x, y: it.y })),
   };
   const rc = await H.buildRom(PORT_C, payload);
   const ra = await H.buildRom(PORT_A, payload);
@@ -99,36 +121,42 @@ try {
   else if (rc.romBytes.equals(ra.romBytes)) bad('ASM ROM == C ROM (NES_ASM_AI did not engage)');
   else {
     const c = boot(rc.romBytes), a = boot(ra.romBytes);
-    for (let i = 0; i < 120; i++) { c.frame(); a.frame(); }
-    // Align the constant boot-phase offset via the tick counters.
-    let tc = rd16(c, TICK), ta = rd16(a, TICK), guard = 0;
-    while (tc !== ta && guard < 60) { if (tc < ta) { c.frame(); tc = rd16(c, TICK); } else { a.frame(); ta = rd16(a, TICK); } guard++; }
-    if (tc !== ta) bad(`could not align phase (C ${tc}, ASM ${ta})`);
-    else {
-      // Walker w0 is drawn right after the 2x2 player (OAM slots 0..15); its
-      // top-left sub-sprite X sits at OAM byte 19. Track its peak so we can prove
-      // it actually reversed (a turn = a blocked probe returned 1).
-      const startOam = oam(c).slice(0, 24);
-      let oamDiff = 0, worst = -1, sawMotion = false, turned = false;
-      let maxX = -1;
-      for (let i = 0; i < 400; i++) {
-        c.frame(); a.frame();
-        if (rd16(c, TICK) !== rd16(a, TICK)) { bad(`phase slipped at frame ${i}`); break; }
-        oamDiff += diff(oam(c), oam(a));
-        if (oamDiff && worst < 0) worst = i;
-        const o = oam(c);
-        if (!sawMotion && diff(o.slice(0, 24), startOam)) sawMotion = true;
-        const wx = o[19];
-        if (wx > maxX) maxX = wx;
-        else if (wx < maxX - 6) turned = true;   // dropped well below its peak -> reversed
+    for (let i = 0; i < 40; i++) { c.frame(); a.frame(); }   // boot past reset/BSS clear
+
+    // Matched-tick walk: step whichever build is behind on the tick counter, and
+    // compare the mirrored ss_x/ss_y only when both sit on the same tick.
+    let diffs = 0, firstDiff = -1, compared = 0;
+    const start = xs(c);                 // w0/w1/p0 X at first compare
+    let w0min = 255, w0turned = false;   // a walker turned = its X reversed off a peak/trough
+    let pMin = 255, pMax = 0, pBounced = false; // patrol swings both ways
+    let moved = false;
+    for (let step = 0; step < 12000 && compared < 300; step++) {
+      const tc = rd16(c, TICK), ta = rd16(a, TICK);
+      if (tc > 60000 || ta > 60000) { bad('tick counter overflowed before enough samples'); break; }
+      if (tc !== ta) { if (tc < ta) c.frame(); else a.frame(); continue; }
+      // both on the same tick -> compare AI output
+      const cx = xs(c), ax = xs(a), cy = ys(c), ay = ys(a);
+      for (let i = 0; i < N; i++) {
+        if (cx[i] !== ax[i] || cy[i] !== ay[i]) { diffs++; if (firstDiff < 0) firstDiff = tc; }
       }
-      const still = diff(pal(c), pal(a));
-      if (!sawMotion) bad('walkers never moved — test exercised nothing');
-      else if (!turned) bad('walker never turned — the blocked-probe path was not exercised');
-      else if (oamDiff === 0 && still === 0)
-        ok('ai_update (walker) + bw_sprite_blocked: C ≡ ASM every frame over 400 frames of motion (incl. wall/edge turns)');
-      else bad(`divergence — OAM byte-diffs ${oamDiff} (first at frame ${worst}), palette ${still}`);
+      // motion / turn / bounce evidence, tracked on the C build's positions
+      if (cx.some((v, i) => v !== start[i])) moved = true;
+      if (cx[0] < w0min) w0min = cx[0]; else if (cx[0] > w0min + 6) w0turned = true; // w0 went left then came back right
+      if (cx[2] < pMin) pMin = cx[2];
+      if (cx[2] > pMax) pMax = cx[2];
+      if (pMax - pMin > 60) pBounced = true;  // patrol swept a wide arc (both directions)
+      compared++;
+      c.frame(); a.frame();
     }
+
+    if (compared < 250) bad(`too few matched-tick samples (${compared}) — harness did not run`);
+    else if (!moved) bad('enemies never moved — test exercised nothing');
+    else if (!w0turned) bad('walker never turned — the bw_sprite_blocked path was not exercised');
+    else if (!pBounced) bad('patrol never swung both ways — the patrol path was not exercised');
+    else if (diffs === 0)
+      ok('ai_update (walker + patrol) + bw_sprite_blocked: C ≡ ASM ss_x/ss_y at every matched tick '
+        + `over ${compared} ticks of motion (incl. wall/edge turns + patrol bounce)`);
+    else bad(`divergence — ${diffs} position byte-diffs (first at tick ${firstDiff}) over ${compared} matched ticks`);
   }
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
@@ -138,4 +166,4 @@ try {
 }
 
 if (failed) process.exit(1);
-console.log('\nasm-ai: the ASM bw_sprite_blocked matches the C collision probe under enemy motion.');
+console.log('\nasm-ai: the ASM ai_update (walker + patrol) drives enemy positions identically to the C AI.');

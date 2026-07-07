@@ -9,6 +9,33 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v27 — 2026-07-07 — scene-AI update loop: patrol on ASM (Phase 2b, off by default)
+
+### Added
+- **ai_update patrol dispatch on hand-written 6502** (`src/ai_asm.s`, NES_ASM_AI) —
+  the generic `ai_update` loop now also owns the `patrol` AI (type 4): back-and-
+  forth over ±40px, direction in `ss_ai_state[i]`, signed offset in a new
+  `ss_ai_aux[i]` byte (add/sub speed, flip at ±40) — the exact twin of the C
+  patrol block. builder-modules.js emits the `ss_ai_aux` table + sets
+  type/state/aux for patrols under NES_ASM_AI and `#ifndef`s out the C patrol
+  block; walkers + patrols now both run in ASM, other AIs keep their C.
+
+### Changed / migration
+- **Default unchanged / not shipped to pupils.** Linked only under PLAYGROUND_ASM_AI.
+  Flag off = byte-identical to v26 (golden 1730448e; _rom-equiv 27210a8f). Every
+  existing enemy suite (walker-wall-stop, smb-enemies, topdown-enemies) still green.
+- **asm-ai.mjs rewritten to a matched-tick / RAM-state comparison.** The old
+  lockstep-frame OAM diff silently assumed both builds advance their game-loop
+  tick at the same RATE; once a scene is heavy enough that one build drops frames
+  the other doesn't, that breaks (it caught the 1-frame sprite-DMA lag as a phantom
+  divergence — surfaced the moment the patrol was added). The new harness mirrors
+  each enemy's real `ss_x`/`ss_y` into RAM at the tick point (no DMA lag) and walks
+  the two builds by matched tick (advance whichever is behind), comparing positions
+  only at equal tick — rate- and DMA-independent. Verified: C ≡ ASM at every matched
+  tick over 300 ticks incl. wall/edge turns + patrol bounce.
+- Known gap (next): chaser/flyer still C; the SS_POS_WIDE (u16-position) path
+  isn't A/B'd yet (needs a scrolling moving-enemy harness).
+
 ## v26 — 2026-07-07 — scene-AI update loop (walker) on ASM (Phase 2b, off by default)
 
 ### Added

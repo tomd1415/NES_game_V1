@@ -18,13 +18,14 @@
 .export _ai_update
 .import _behaviour_at
 .import _ss_x, _ss_y, _ss_w, _ss_h
-.import _ss_ai_type, _ss_ai_state, _ss_ai_speed
+.import _ss_ai_type, _ss_ai_state, _ss_ai_speed, _ss_ai_aux
 .import pushax, pusha, incsp4
 .importzp sp, tmp1, tmp2
 
 BEH_SOLID = 1
 BEH_WALL  = 2
 AI_WALKER = 1
+AI_PATROL = 4
 
 .segment "BSS"
 bb_sx:   .res 1
@@ -276,6 +277,8 @@ loop:
     lda _ss_ai_type,x
     cmp #AI_WALKER
     beq walker
+    cmp #AI_PATROL
+    beq patrol
     jmp next
 walker:
     lda _ss_ai_state,x
@@ -301,6 +304,42 @@ moving_left:
     jmp next
 step_left:
     jsr sub_speed
+    jmp next
+; patrol: back-and-forth over ±40px. state = pdir (±1), aux = poff (signed).
+;   pdir>0: ss_x += speed; poff += speed; if poff >= 40 pdir = -1
+;   pdir<0: ss_x -= speed; poff -= speed; if poff <= -40 pdir = 1
+patrol:
+    lda _ss_ai_state,x
+    bmi patrol_left
+    jsr add_speed
+    ldx au_i
+    lda _ss_ai_aux,x
+    clc
+    adc _ss_ai_speed,x
+    sta _ss_ai_aux,x
+    sec
+    sbc #40                     ; poff - 40 (signed); >= 0 -> flip
+    bmi next                    ; poff < 40 -> keep going
+    ldx au_i
+    lda #$FF
+    sta _ss_ai_state,x
+    jmp next
+patrol_left:
+    jsr sub_speed
+    ldx au_i
+    lda _ss_ai_aux,x
+    sec
+    sbc _ss_ai_speed,x
+    sta _ss_ai_aux,x
+    clc
+    adc #40                     ; poff + 40 (signed); <= 0 -> flip
+    beq patrol_flip
+    bmi patrol_flip
+    jmp next
+patrol_flip:
+    ldx au_i
+    lda #1
+    sta _ss_ai_state,x
 next:
     inc au_i
     jmp loop

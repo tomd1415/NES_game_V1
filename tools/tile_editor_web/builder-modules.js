@@ -536,10 +536,10 @@
       // Phase 2b — uniform per-scene-sprite AI tables the ai_update ASM loop reads
       // (NES_ASM_AI). type 0 = handled by C (or none); 1 = walker. state/speed are
       // meaningful only for ASM-handled types. Index i tracks ss_x[i] exactly.
-      const aiType = [], aiState = [], aiSpeed = [];
+      const aiType = [], aiState = [], aiSpeed = [], aiAux = [];
       let asmAiHandled = 0;   // how many instances the ai_update loop owns
       for (let i = 0; i < instances.length; i++) {
-        aiType[i] = 0; aiState[i] = 0; aiSpeed[i] = 0;
+        aiType[i] = 0; aiState[i] = 0; aiSpeed[i] = 0; aiAux[i] = 0;
         const inst = instances[i] || {};
         const sp = sprites[inst.spriteIdx];
         if (!sp) continue;
@@ -623,6 +623,10 @@
           // turns on its own (no wall needed), so it works on an open platform
           // where a plain walker would march straight off the edge.
           emitted++;
+          // Phase 2b — ai_update owns patrols too (type 4; state=dir seed 1,
+          // aux=offset seed 0). The C block below is #ifndef'd out under NES_ASM_AI.
+          aiType[i] = 4; aiState[i] = 1; aiSpeed[i] = speed; aiAux[i] = 0; asmAiHandled++;
+          parts.push('#ifndef NES_ASM_AI');
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' patrols back and forth a set distance, turning on its own');
@@ -632,6 +636,7 @@
           parts.push('            if (bw_pdir_' + i + ' > 0) { ss_x[' + i + '] += ' + speed + '; bw_poff_' + i + ' += ' + speed + '; if (bw_poff_' + i + ' >= 40) bw_pdir_' + i + ' = -1; }');
           parts.push('            else { ss_x[' + i + '] -= ' + speed + '; bw_poff_' + i + ' -= ' + speed + '; if (bw_poff_' + i + ' <= -40) bw_pdir_' + i + ' = 1; }');
           parts.push('        }');
+          parts.push('#endif');
         } else if (sp.role === 'enemy' && ai === 'goomba') {
           // Engine v4 — Goomba: walks (and off ledges, no ledge sensing),
           // reverses at walls, STOMP from above defeats + bounces the player,
@@ -923,6 +928,7 @@
           'const unsigned char ss_ai_type[' + n + ']  = { ' + aiType.join(', ') + ' };',
           'signed char        ss_ai_state[' + n + '] = { ' + aiState.map((v) => v | 0).join(', ') + ' };',
           'const unsigned char ss_ai_speed[' + n + '] = { ' + aiSpeed.join(', ') + ' };',
+          'signed char        ss_ai_aux[' + n + ']   = { ' + aiAux.map((v) => v | 0).join(', ') + ' };',
           '#endif',
         ].join('\n');
         withHelper = A.appendToSlot(withHelper, 'declarations', tbl);
