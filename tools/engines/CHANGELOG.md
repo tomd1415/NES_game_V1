@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v31 — 2026-07-07 — scene-sprite DRAW loop on hand-written 6502, SHIPPED BY DEFAULT
+
+### Changed / migration
+- **The scene-sprite DRAW loop now ships by default too** (Phase 2a, `scene_asm.s`
+  `_draw_scene_sprites`), completing the "ASM by default" story alongside the v30
+  AI loop. The server sets `NES_ASM_SCENE` for the shapes it handles: a **scroll**
+  build (multi-screen, which pulls in NES_ASM_SCROLL) with **≥1 scene sprite** and
+  **no tagged scene animation** (the ASM only does the plain draw path). Projects
+  outside that envelope — 1×1/non-scroll, animated sprites, or no scene sprites —
+  keep the C draw loop. `PLAYGROUND_NO_ASM=1` reverts the whole engine to C.
+- **ROM output changes only for scroll + static-sprite + no-animation projects**
+  (their OAM build is now the ASM path). Proven pixel-identical to the C —
+  palette + OAM + nametables, including the SS_POS_WIDE u16 render — by
+  `asm-scene.mjs` across platformer/top-down shapes and mixed sprite sizes.
+- **Both pinned hashes are UNCHANGED** — `_rom-equiv` everything-on (`54a15150`)
+  and the golden stock/template (`1730448e`) are both 1×1/non-scroll projects, so
+  the scroll-gated draw-loop flip is a no-op for them.
+- `PLAYGROUND_ASM_SCENE` (the old opt-in toggle) is now redundant/ignored.
+
 ## v30 — 2026-07-07 — scene-sprite AI on hand-written 6502, SHIPPED BY DEFAULT
 
 ### Changed / migration

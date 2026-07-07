@@ -2720,19 +2720,22 @@ def _build_rom(body):
     _, _, _world_cols, _world_rows, _, _ = _world_nametable(state)
     is_scroll = _world_cols > 32 or _world_rows > 30
 
-    # Scene-sprite DRAW loop on hand-written 6502 (Phase 2a). NOT yet shipped to
-    # pupils: gated behind the PLAYGROUND_ASM_SCENE test toggle so the A/B suites
-    # can build it while real /play stays on the proven C loop. It only handles
-    # the PLAIN draw path, so require no tagged scene animation; and it calls
-    # world_to_screen_x/y, so require a scroll build (which pulls in NES_ASM_SCROLL).
+    # Scene-sprite DRAW loop on hand-written 6502 (Phase 2a). SHIPPED BY DEFAULT
+    # (engine v31) for the shapes it handles: it does only the PLAIN draw path, so
+    # it needs no tagged scene animation; it calls world_to_screen_x/y, so it needs
+    # a scroll build (which pulls in NES_ASM_SCROLL); and it needs >=1 scene sprite
+    # (scene_asm.s resolves the ss_* arrays only when scene.inc emits them).
+    # Projects outside that envelope (1x1/non-scroll, animated sprites, or no scene
+    # sprites) keep the C draw loop. Proven pixel-identical to the C by
+    # asm-scene.mjs (palette + OAM + nametables, incl. the SS_POS_WIDE u16 render).
+    # PLAYGROUND_NO_ASM=1 is the kill switch (below).
     num_static = len(scene_sprites or [])
     has_scene_anim = any(
         _resolve_tagged_animation(state, role, style) is not None
         for (role, style) in (("enemy", "walk"), ("enemy", "idle"), ("pickup", "idle"))
     )
     nes_asm_scene = bool(
-        os.environ.get("PLAYGROUND_ASM_SCENE")
-        and asm_ready and is_scroll and num_static > 0 and not has_scene_anim
+        asm_ready and is_scroll and num_static > 0 and not has_scene_anim
     )
     # Scene-sprite AI on hand-written 6502 (Phase 2b): the generic ai_update loop
     # (walker/chaser/flyer/patrol) + the bw_sprite_blocked probe. SHIPPED BY
