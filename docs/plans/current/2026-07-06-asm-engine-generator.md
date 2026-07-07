@@ -51,13 +51,27 @@ E2E 111 passed; asm-lab 13 tests.
    case already covered). Adding more enemy AI *types* (patrol/flyer/chaser) would
    re-exercise the same shipped ASM — marginal. **Further real coverage now
    requires converting more C to ASM (#2), which is blocked + not unattended-safe.**
-2. **Phase 2 proper — the scene-sprite hot loops** (the real perf target). BLOCKED
-   on de-`static`ing the server-generated scene arrays (`ss_x/ss_y/…`) **and**
-   their **variable element width** (u8↔u16 by sprite position): add `SS_POS_WIDE`
-   + widths to `project.inc` and conditionally assemble. Then a generic loop over
-   `NUM_STATIC_SPRITES` with AI dispatch on a type byte (walker/flyer/patrol/
-   chaser). Note the AI is spread across several template loops + module-injected
-   blocks, and `BW_APPLY_GRAVITY` is module-overridable — gate carefully.
+2. **Phase 2 — the scene-sprite hot loops** (the real perf target).
+   - **2a DONE (v24, off by default): the DRAW loop.** `src/scene_asm.s`
+     `draw_scene_sprites` — a generic loop over `NUM_STATIC_SPRITES` reading the
+     `ss_*` arrays (`SS_POS_WIDE` picks u8/u16 positions; `SS_LINKAGE` de-`static`s
+     them) and calling `world_to_screen_x/y`. Replaces the template's PLAIN draw
+     loop (animated scene projects keep the C animated loop). Gated `NES_ASM_SCENE`;
+     server links it only under the `PLAYGROUND_ASM_SCENE` test toggle (scroll +
+     scene sprites + no scene anim), so **not yet shipped to pupils** — flag-off is
+     byte-identical. A/B guard: `asm-scene.mjs` (multi-sprite / mixed sizes /
+     top-down / SS_POS_WIDE off- & on-screen).
+   - **2a-next:** the ANIMATED draw variant (`BW_HAS_SCENE_ANIM` — per-sprite anim
+     source selection), then flip `PLAYGROUND_ASM_SCENE` to shipped-default (re-pin
+     any affected `_rom-equiv` hash + bump engine).
+   - **2b: the AI-UPDATE loop** (bigger perf win, harder). Blocked on refactoring
+     the per-instance-unrolled C (`bw_dir_0`, `ss_x[0]`… emitted by
+     builder-modules.js) into a uniform data model — per-sprite state as arrays +
+     a per-sprite type/param table — so a generic ASM loop can dispatch AI on a
+     type byte (walker/flyer/patrol/chaser). `BW_APPLY_GRAVITY` is
+     module-overridable — gate carefully. To keep flag-off byte-identical, add the
+     ASM as a parallel path over a NEW uniform table rather than restructuring the
+     shipped C.
 3. **Phase 3 — subsystems** (dialogue, doors, pickups, damage, HUD, SMB) one
    opt-in `.s` each + the glue main loop.
 4. **Phase 4 — full-ASM mode** (`NES_ASM_FULL`, drop cc65 C, ASM crt0).
