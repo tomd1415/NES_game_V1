@@ -739,6 +739,13 @@
         ' * tile or the screen edge?  Probes the whole leading edge across',
         ' * the sprite body so a multi-tile enemy turns at a wall like the',
         ' * player does, mirroring the player walk-collision test. */',
+        '#ifdef NES_ASM_AI',
+        '/* Phase 2b: hand-written 6502 twin in ai_asm.s (same 5-arg fastcall',
+        ' * contract, loops the shipped behaviour_at). extern so callers bind it. */',
+        'unsigned char bw_sprite_blocked(unsigned char sx, unsigned char sy,',
+        '                                unsigned char sw, unsigned char sh,',
+        '                                unsigned char dir);',
+        '#else',
         'static unsigned char bw_sprite_blocked(unsigned char sx, unsigned char sy,',
         '                                       unsigned char sw, unsigned char sh,',
         '                                       unsigned char dir) {',
@@ -780,6 +787,7 @@
         '    }',
         '    return 0;',
         '}',
+        '#endif /* NES_ASM_AI */',
       ].join('\n');
       let withHelper = A.appendToSlot(template, 'declarations', blockedHelper);
       if (needSmb) {

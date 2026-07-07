@@ -2734,13 +2734,18 @@ def _build_rom(body):
         os.environ.get("PLAYGROUND_ASM_SCENE")
         and asm_ready and is_scroll and num_static > 0 and not has_scene_anim
     )
+    # Scene-sprite AI helper (bw_sprite_blocked) on ASM (Phase 2b). Also a test
+    # toggle (PLAYGROUND_ASM_AI), not shipped. The C helper is always #ifdef-gated
+    # by builder-modules.js, so this is safe whenever ASM-ready — if a project has
+    # no walker/chaser/flyer/patrol the ASM symbol is simply unused.
+    nes_asm_ai = bool(os.environ.get("PLAYGROUND_ASM_AI") and asm_ready)
 
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
             custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
             collision_h, behaviour_c, bg_world_h, bg_world_c,
             nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
-            nes_asm_scene=nes_asm_scene,
+            nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -2749,7 +2754,7 @@ def _build_rom(body):
         None, chr_bytes, nam_bytes, pal_src, scene_src,
         collision_h, behaviour_c, bg_world_h, bg_world_c,
         nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
-        nes_asm_scene=nes_asm_scene,
+        nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
         project_inc=project_inc, **audio_kwargs,
     ))
 
@@ -2833,7 +2838,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       collision_h, behaviour_c, bg_world_h, bg_world_c,
                       audio_songs_asm=None, audio_sfx_asm=None,
                       nes_asm_leaf=False, nes_asm_scroll=False,
-                      nes_asm_scene=False,
+                      nes_asm_scene=False, nes_asm_ai=False,
                       project_inc=None):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
@@ -2882,6 +2887,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                 make_args.append("NES_ASM_SCROLL=1")
             if nes_asm_scene:                       # Phase 2a — scene-draw loop
                 make_args.append("NES_ASM_SCENE=1")
+            if nes_asm_ai:                          # Phase 2b — scene AI helpers
+                make_args.append("NES_ASM_AI=1")
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
             (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))

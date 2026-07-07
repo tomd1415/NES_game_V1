@@ -103,6 +103,17 @@ CFLAGS  += -DNES_ASM_SCENE=1
 ASM_SRC += src/scene_asm.s
 endif
 
+# Scene-sprite AI helpers on hand-written 6502 (Phase 2b).  NES_ASM_AI=1 links
+# src/ai_asm.s (bw_sprite_blocked — the per-enemy collision probe, calls the
+# shipped behaviour_at) and -D's out the matching C helper emitted into main.c by
+# builder-modules.js.  Needs NES_ASM_LEAF (behaviour_at).  Same off-by-default,
+# byte-identical-when-off contract; not shipped to pupils yet (PLAYGROUND_ASM_AI).
+NES_ASM_AI ?= 0
+ifeq ($(NES_ASM_AI),1)
+CFLAGS  += -DNES_ASM_AI=1
+ASM_SRC += src/ai_asm.s
+endif
+
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
 OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS)

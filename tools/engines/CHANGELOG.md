@@ -9,6 +9,27 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v25 — 2026-07-07 — scene-AI collision probe (bw_sprite_blocked) on ASM (Phase 2b, off by default)
+
+### Added
+- **bw_sprite_blocked on hand-written 6502** (`src/ai_asm.s`, NES_ASM_AI) — the
+  per-enemy collision probe every walker/chaser/flyer/patrol calls each frame:
+  probes the sprite's whole leading edge (4 directions) against SOLID_GROUND/WALL
+  via the shipped `behaviour_at` (5-arg cc65 fastcall; args copied from the soft
+  stack, `behaviour_at` called through `pushax`, `incsp4` cleanup). The first
+  building block of the AI-update loop (design:
+  `docs/design/2026-07-07-asm-ai-update-loop.md`).
+- `builder-modules.js` now emits the C `bw_sprite_blocked` under `#ifndef
+  NES_ASM_AI` (+ an extern prototype under the flag) so exactly one definition
+  links. New A/B guard `tools/builder-tests/asm-ai.mjs`: a walled pen with walkers,
+  dual-built pure-C vs AI-ASM, phase-aligned, OAM identical every frame over 400
+  frames of motion incl. wall + world-edge turns.
+
+### Changed / migration
+- **Default unchanged / not shipped to pupils.** Linked only under the
+  `PLAYGROUND_ASM_AI` test toggle (ASM-ready builds). Flag off = byte-identical to
+  v24 (golden 1730448e; _rom-equiv 27210a8f).
+
 ## v24 — 2026-07-07 — scene-sprite DRAW loop on ASM (Phase 2a, off by default)
 
 ### Added
