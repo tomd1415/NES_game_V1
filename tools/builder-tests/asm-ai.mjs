@@ -8,7 +8,8 @@
 // out so flag-off is byte-identical.
 //
 // This builds a walled pen with two WALKERs (turning at an interior WALL and at
-// the world edge) plus a PATROL (bouncing on its own ±40px counter), and
+// the world edge), a PATROL (bouncing on its own ±40px counter), and a CHASER
+// (seeking the player on X+Y, blocked by the floor on its descent), and
 // dual-builds it pure C (PLAYGROUND_NO_ASM=1) vs the ASM engine + AI helper
 // (PLAYGROUND_ASM_AI=1), then asserts the enemies move IDENTICALLY.
 //
@@ -57,11 +58,16 @@ function walledBackground(wallCols) {
 }
 
 // Two walkers penned between the walls / edges (turn at a wall + the world
-// edge), plus a patrol that turns on its own ±40px counter (no collision).
+// edge), a patrol that turns on its own ±40px counter (no collision), and a
+// chaser placed far up-and-RIGHT of the player (110,200) so it seeks LEFT +
+// DOWN — a ~60/76-frame journey that is still in flight when sampling begins
+// (past the 40-frame boot), exercising the px/py compares, the Y-axis step, and
+// the blocked path (the wall stops its X, the floor stops its descent).
 const INSTANCES = [
   { id: 'w0', spriteIdx: 1, x: 64, y: 200, ai: 'walker', speed: 2 },
   { id: 'w1', spriteIdx: 1, x: 150, y: 200, ai: 'walker', speed: 1 },
   { id: 'p0', spriteIdx: 1, x: 200, y: 200, ai: 'patrol', speed: 2 },
+  { id: 'c0', spriteIdx: 1, x: 240, y: 40, ai: 'chaser', speed: 2 },
 ];
 
 function makeState() {
@@ -126,9 +132,11 @@ try {
     // Matched-tick walk: step whichever build is behind on the tick counter, and
     // compare the mirrored ss_x/ss_y only when both sit on the same tick.
     let diffs = 0, firstDiff = -1, compared = 0;
-    const start = xs(c);                 // w0/w1/p0 X at first compare
+    const start = xs(c);                 // w0/w1/p0/c0 X at first compare
+    const startY = ys(c);                // …and Y (for the chaser's descent)
     let w0min = 255, w0turned = false;   // a walker turned = its X reversed off a peak/trough
     let pMin = 255, pMax = 0, pBounced = false; // patrol swings both ways
+    let cChasedX = false, cChasedY = false;     // chaser closed on the player in X and Y
     let moved = false;
     for (let step = 0; step < 12000 && compared < 300; step++) {
       const tc = rd16(c, TICK), ta = rd16(a, TICK);
@@ -145,6 +153,8 @@ try {
       if (cx[2] < pMin) pMin = cx[2];
       if (cx[2] > pMax) pMax = cx[2];
       if (pMax - pMin > 60) pBounced = true;  // patrol swept a wide arc (both directions)
+      if (cx[3] < start[3] - 8) cChasedX = true;   // chaser moved LEFT toward px
+      if (cy[3] > startY[3] + 8) cChasedY = true;   // chaser moved DOWN toward py
       compared++;
       c.frame(); a.frame();
     }
@@ -153,9 +163,11 @@ try {
     else if (!moved) bad('enemies never moved — test exercised nothing');
     else if (!w0turned) bad('walker never turned — the bw_sprite_blocked path was not exercised');
     else if (!pBounced) bad('patrol never swung both ways — the patrol path was not exercised');
+    else if (!cChasedX) bad('chaser never closed on the player in X — the chaser X path was not exercised');
+    else if (!cChasedY) bad('chaser never closed on the player in Y — the chaser Y path was not exercised');
     else if (diffs === 0)
-      ok('ai_update (walker + patrol) + bw_sprite_blocked: C ≡ ASM ss_x/ss_y at every matched tick '
-        + `over ${compared} ticks of motion (incl. wall/edge turns + patrol bounce)`);
+      ok('ai_update (walker + chaser + patrol) + bw_sprite_blocked: C ≡ ASM ss_x/ss_y at every matched '
+        + `tick over ${compared} ticks of motion (incl. wall/edge turns, patrol bounce, chaser X+Y seek)`);
     else bad(`divergence — ${diffs} position byte-diffs (first at tick ${firstDiff}) over ${compared} matched ticks`);
   }
 } catch (e) {
@@ -166,4 +178,4 @@ try {
 }
 
 if (failed) process.exit(1);
-console.log('\nasm-ai: the ASM ai_update (walker + patrol) drives enemy positions identically to the C AI.');
+console.log('\nasm-ai: the ASM ai_update (walker + chaser + patrol) drives enemy positions identically to the C AI.');

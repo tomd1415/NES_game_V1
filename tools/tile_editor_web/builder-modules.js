@@ -578,6 +578,11 @@
           parts.push('#endif');
         } else if (sp.role === 'enemy' && ai === 'chaser') {
           emitted++;
+          // Phase 2b — the ai_update ASM loop owns chasers too (type 2; it reads
+          // px/py and has no persistent state byte). The C block below is
+          // byte-identical to before, but #ifndef'd out when NES_ASM_AI is set.
+          aiType[i] = 2; aiSpeed[i] = speed; asmAiHandled++;
+          parts.push('#ifndef NES_ASM_AI');
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' chases the player, stopping at solid tiles');
@@ -596,6 +601,7 @@
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 3)) ss_y[' + i + '] -= ' + speed + ';');
           parts.push('        }');
           parts.push('        }');
+          parts.push('#endif');
         } else if (sp.role === 'enemy' && ai === 'flyer') {
           // Engine v10 — flyer: a flying enemy for open air / ceilings. It
           // hovers in a ±20px band around the height it was placed at and
@@ -921,9 +927,10 @@
         const tbl = [
           '#ifdef NES_ASM_AI',
           '/* [builder] Phase 2b — uniform scene-AI tables for the ai_update ASM',
-          ' * loop. type 0 = handled by the C blocks above (or none); 1 = walker.',
-          ' * state is the mutable AI byte (walker direction, seeded 1); speed is',
-          ' * per-instance px/frame. ai_update() dispatches on type, skipping 0. */',
+          ' * loop. type: 0 = handled by the C blocks above (or none), 1 = walker,',
+          ' * 2 = chaser, 4 = patrol. state is the mutable AI byte (walker/patrol',
+          ' * direction, seeded 1; chaser unused); aux is the patrol offset; speed',
+          ' * is per-instance px/frame. ai_update() dispatches on type, skipping 0. */',
           'void ai_update(void);',
           'const unsigned char ss_ai_type[' + n + ']  = { ' + aiType.join(', ') + ' };',
           'signed char        ss_ai_state[' + n + '] = { ' + aiState.map((v) => v | 0).join(', ') + ' };',
@@ -934,7 +941,7 @@
         withHelper = A.appendToSlot(withHelper, 'declarations', tbl);
         parts.unshift(
           '#ifdef NES_ASM_AI',
-          '        ai_update();   /* Phase 2b — hand-written 6502 AI dispatch (walkers) */',
+          '        ai_update();   /* Phase 2b — hand-written 6502 AI dispatch (walker/chaser/patrol) */',
           '#endif');
       }
       return A.appendToSlot(withHelper, 'per_frame', parts.join('\n'));

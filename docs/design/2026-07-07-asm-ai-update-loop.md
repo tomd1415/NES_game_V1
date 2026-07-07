@@ -61,8 +61,15 @@ needs a shared constant; per-instance values live in the tables above.
    `ai_asm.s`).** Adds the `patrol` type (4): back-and-forth over ±40px, dir in
    `ss_ai_state[i]`, signed offset in a new `ss_ai_aux[i]` byte. builder-modules.js
    emits the `ss_ai_aux` table + `#ifndef`s out the C patrol block. A/B: `asm-ai.mjs`.
-4. Extend the dispatch to chaser (needs `px`/`py`), then flyer (`ss_ai_aux` hover),
-   one type per milestone, each A/B-verified. **← next.**
+4. **`ai_update` chaser dispatch** — ✅ **DONE (engine v28, `_ai_update` in
+   `ai_asm.s`).** Adds the `chaser` type (2): seeks `px`/`py` on X then Y, probing
+   1px ahead each axis, skipping a defeated actor (`ss_y[i] >= 0xEF`). The
+   toward-player compares are unsigned + can carry past 8 bits, so done 16-bit
+   (hi=0 when not wide) — twin of the C for both position widths. builder-modules.js
+   sets type 2 + `#ifndef`s out the C chaser block. A/B: `asm-ai.mjs` (chaser
+   seeking the player, LEFT+DOWN, wall + floor stops).
+5. Extend the dispatch to flyer (`ss_ai_aux` hover oscillation + drift toward the
+   player), one type per milestone, each A/B-verified. **← next.**
 
 ### Verification methodology (learned the hard way at the patrol milestone)
 

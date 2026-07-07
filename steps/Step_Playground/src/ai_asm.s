@@ -19,12 +19,14 @@
 .import _behaviour_at
 .import _ss_x, _ss_y, _ss_w, _ss_h
 .import _ss_ai_type, _ss_ai_state, _ss_ai_speed, _ss_ai_aux
+.import _px, _py
 .import pushax, pusha, incsp4
 .importzp sp, tmp1, tmp2
 
 BEH_SOLID = 1
 BEH_WALL  = 2
 AI_WALKER = 1
+AI_CHASER = 2
 AI_PATROL = 4
 
 .segment "BSS"
@@ -252,15 +254,25 @@ ret0:
 
 ; ---------------------------------------------------------------------------
 ; void ai_update(void) — Phase 2b generic AI dispatch loop.
-;   for (i=0; i<NUM_STATIC_SPRITES; i++) if (ss_ai_type[i]==WALKER) <walk i>
-; Walker == the exact per-instance C: dir in ss_ai_state[i] (seed 1); if moving
-; toward a bw_sprite_blocked leading edge, reverse, else step by ss_ai_speed[i].
-; Non-walker instances (type 0) are left to their still-emitted C blocks — no
-; cross-sprite AI dependency, so ASM-walkers-then-C-others == interleaved C.
+;   for (i=0; i<NUM_STATIC_SPRITES; i++) dispatch on ss_ai_type[i]:
+;     1 walker  — dir in ss_ai_state[i]; reverse at a bw_sprite_blocked edge,
+;                 else step by ss_ai_speed[i].
+;     2 chaser  — seek px/py on X then Y, probing 1px ahead each axis.
+;     4 patrol  — back-and-forth over ±40px; dir in ss_ai_state[i], signed
+;                 offset in ss_ai_aux[i].
+; Each is the exact twin of its per-instance C block. Types the ASM does NOT own
+; (0/none, flyer, goomba/koopa) keep their still-emitted C — no cross-sprite AI
+; dependency, so ASM-handled-then-C-others == the interleaved all-C order.
 ; ---------------------------------------------------------------------------
 
 .segment "BSS"
 au_i: .res 1
+; chaser working set (16-bit position/target; hi=0 when not SS_POS_WIDE)
+ch_p_lo: .res 1     ; ss_?[i]  low
+ch_p_hi: .res 1     ; ss_?[i]  high
+ch_t_lo: .res 1     ; px / py  low
+ch_t_hi: .res 1     ; px / py  high
+ch_s:    .res 1     ; ss_ai_speed[i]
 
 .segment "CODE"
 
@@ -277,6 +289,10 @@ loop:
     lda _ss_ai_type,x
     cmp #AI_WALKER
     beq walker
+    cmp #AI_CHASER
+    bne @not_chaser             ; chaser body is far -> reach it via jmp
+    jmp chaser
+@not_chaser:
     cmp #AI_PATROL
     beq patrol
     jmp next
@@ -319,7 +335,9 @@ patrol:
     sta _ss_ai_aux,x
     sec
     sbc #40                     ; poff - 40 (signed); >= 0 -> flip
-    bmi next                    ; poff < 40 -> keep going
+    bpl @flip                   ; poff >= 40 -> reverse (next is far -> jmp)
+    jmp next                    ; poff < 40 -> keep going
+@flip:
     ldx au_i
     lda #$FF
     sta _ss_ai_state,x
@@ -340,6 +358,68 @@ patrol_flip:
     ldx au_i
     lda #1
     sta _ss_ai_state,x
+    jmp next
+; chaser: seek the player on X then Y, probing 1px ahead before each step.
+;   if (ss_y[i] >= 0xEF) skip           ; defeated actor parked off-screen
+;   X: if (ss_x+spd <= px) { if(!blk(0)) ss_x+=spd }
+;      else if (ss_x >= px+spd) { if(!blk(1)) ss_x-=spd }
+;   Y: if (ss_y+spd <= py) { if(!blk(2)) ss_y+=spd }
+;      else if (ss_y >= py+spd) { if(!blk(3)) ss_y-=spd }
+; The compares are unsigned and can carry past 8 bits, so they run 16-bit (hi=0
+; when not SS_POS_WIDE) — the exact twin of the C, which promotes u8 to int.
+; X is resolved (and may store ss_x) before Y, so the Y probe reads the updated
+; ss_x, matching the C statement order.
+chaser:
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_y+1,y
+    bne ch_skip                 ; ss_y >= 256 -> >= 0xEF -> defeated -> skip
+    lda _ss_y,y
+    cmp #$EF
+    bcs ch_skip
+.else
+    ldx au_i
+    lda _ss_y,x
+    cmp #$EF
+    bcs ch_skip                 ; ss_y >= 0xEF -> defeated -> skip
+.endif
+    ; --- X axis (target px, dirs 0=right / 1=left) ---
+    jsr ch_load_x
+    jsr ch_le                   ; C=1 iff ss_x+spd <= px
+    bcc ch_x_left
+    lda #0
+    jsr probe
+    bne ch_y                    ; blocked -> no X move
+    jsr add_speed
+    jmp ch_y
+ch_x_left:
+    jsr ch_ge                   ; C=1 iff ss_x >= px+spd
+    bcc ch_y
+    lda #1
+    jsr probe
+    bne ch_y
+    jsr sub_speed
+ch_y:
+    ; --- Y axis (target py, dirs 2=down / 3=up) ---
+    jsr ch_load_y
+    jsr ch_le                   ; C=1 iff ss_y+spd <= py
+    bcc ch_y_up
+    lda #2
+    jsr probe
+    bne ch_skip
+    jsr add_speed_y
+    jmp ch_skip
+ch_y_up:
+    jsr ch_ge                   ; C=1 iff ss_y >= py+spd
+    bcc ch_skip
+    lda #3
+    jsr probe
+    bne ch_skip
+    jsr sub_speed_y
+ch_skip:
+    jmp next
 next:
     inc au_i
     jmp loop
@@ -428,5 +508,152 @@ next:
     sbc tmp1
     sta _ss_x,x
 .endif
+    rts
+.endproc
+
+; ss_y[i] += ss_ai_speed[i]  (u8, or u16 when SS_POS_WIDE) — chaser Y descent
+.proc add_speed_y
+    ldx au_i
+    lda _ss_ai_speed,x
+    sta tmp1
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_y,y
+    clc
+    adc tmp1
+    sta _ss_y,y
+    lda _ss_y+1,y
+    adc #0
+    sta _ss_y+1,y
+.else
+    lda _ss_y,x
+    clc
+    adc tmp1
+    sta _ss_y,x
+.endif
+    rts
+.endproc
+
+; ss_y[i] -= ss_ai_speed[i]  — chaser Y ascent
+.proc sub_speed_y
+    ldx au_i
+    lda _ss_ai_speed,x
+    sta tmp1
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_y,y
+    sec
+    sbc tmp1
+    sta _ss_y,y
+    lda _ss_y+1,y
+    sbc #0
+    sta _ss_y+1,y
+.else
+    lda _ss_y,x
+    sec
+    sbc tmp1
+    sta _ss_y,x
+.endif
+    rts
+.endproc
+
+; ch_load_x / ch_load_y: fill the chaser working set for one axis.
+;   ch_p = ss_x[i]/ss_y[i]  (16-bit, hi=0 when not wide)
+;   ch_t = px/py            (16-bit)
+;   ch_s = ss_ai_speed[i]
+.proc ch_load_x
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_x,y
+    sta ch_p_lo
+    lda _ss_x+1,y
+    sta ch_p_hi
+    lda _px
+    sta ch_t_lo
+    lda _px+1
+    sta ch_t_hi
+.else
+    ldx au_i
+    lda _ss_x,x
+    sta ch_p_lo
+    lda #0
+    sta ch_p_hi
+    lda _px
+    sta ch_t_lo
+    lda #0
+    sta ch_t_hi
+.endif
+    ldx au_i
+    lda _ss_ai_speed,x
+    sta ch_s
+    rts
+.endproc
+
+.proc ch_load_y
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_y,y
+    sta ch_p_lo
+    lda _ss_y+1,y
+    sta ch_p_hi
+    lda _py
+    sta ch_t_lo
+    lda _py+1
+    sta ch_t_hi
+.else
+    ldx au_i
+    lda _ss_y,x
+    sta ch_p_lo
+    lda #0
+    sta ch_p_hi
+    lda _py
+    sta ch_t_lo
+    lda #0
+    sta ch_t_hi
+.endif
+    ldx au_i
+    lda _ss_ai_speed,x
+    sta ch_s
+    rts
+.endproc
+
+; ch_le: C=1 iff (ch_p + ch_s) <= ch_t   (16-bit unsigned; ch_s hi = 0).
+; Wraps mod 65536 on the add, matching the C `unsigned int` arithmetic.
+.proc ch_le
+    clc
+    lda ch_p_lo
+    adc ch_s
+    sta tmp1
+    lda ch_p_hi
+    adc #0
+    sta tmp2                    ; (tmp2:tmp1) = ch_p + ch_s
+    lda ch_t_lo
+    cmp tmp1
+    lda ch_t_hi
+    sbc tmp2                    ; C=1 iff ch_t >= sum  <=>  sum <= ch_t
+    rts
+.endproc
+
+; ch_ge: C=1 iff ch_p >= (ch_t + ch_s)   (16-bit unsigned).
+.proc ch_ge
+    clc
+    lda ch_t_lo
+    adc ch_s
+    sta tmp1
+    lda ch_t_hi
+    adc #0
+    sta tmp2                    ; (tmp2:tmp1) = ch_t + ch_s
+    lda ch_p_lo
+    cmp tmp1
+    lda ch_p_hi
+    sbc tmp2                    ; C=1 iff ch_p >= sum
     rts
 .endproc

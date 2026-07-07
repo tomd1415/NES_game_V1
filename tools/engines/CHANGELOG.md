@@ -9,6 +9,33 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v28 — 2026-07-07 — scene-AI update loop: chaser on ASM (Phase 2b, off by default)
+
+### Added
+- **ai_update chaser dispatch on hand-written 6502** (`src/ai_asm.s`, NES_ASM_AI) —
+  the generic `ai_update` loop now also owns the `chaser` AI (type 2): seeks the
+  player on X then Y, probing 1px ahead (`bw_sprite_blocked`) before each step,
+  and skips a defeated actor parked off-screen (`ss_y[i] >= 0xEF`) — the exact
+  twin of the C chaser block. The `ss_x[i]+speed <= px` / `ss_x[i] >= px+speed`
+  compares are unsigned and can carry past 8 bits, so they run 16-bit (hi=0 when
+  not SS_POS_WIDE), matching the C `int`/`unsigned int` promotions for both the
+  u8 and the u16 (scroll) position widths. New `add_speed_y`/`sub_speed_y` step
+  ss_y; `ch_load_x`/`ch_load_y` + `ch_le`/`ch_ge` do the width-uniform compares.
+  builder-modules.js sets type 2 + speed for chasers under NES_ASM_AI and
+  `#ifndef`s out the C chaser block; walker + chaser + patrol now run in ASM.
+
+### Changed / migration
+- **Default unchanged / not shipped to pupils.** Linked only under PLAYGROUND_ASM_AI.
+  Flag off = byte-identical to v27 (golden 1730448e; _rom-equiv 27210a8f). Every
+  existing enemy suite still green.
+- **asm-ai.mjs** now also pens a chaser placed far up-and-right of the player so
+  its LEFT+DOWN seek is still in flight past the boot phase (wall stops its X, the
+  floor stops its descent). Verified: C ≡ ASM `ss_x`/`ss_y` at every matched tick
+  over 300 ticks incl. wall/edge turns, patrol bounce, and the chaser X+Y seek.
+- Known gap (next): flyer still C; the SS_POS_WIDE (u16-position) path isn't A/B'd
+  yet (needs a scrolling moving-enemy harness — the chaser wide path is written but
+  unverified, like walker/patrol).
+
 ## v27 — 2026-07-07 — scene-AI update loop: patrol on ASM (Phase 2b, off by default)
 
 ### Added
