@@ -520,6 +520,12 @@ const unsigned char *anim_attrs;
 unsigned char read_controller(void);
 void write_palettes(void);
 void advance_animation(void);   /* main_asm.s twin (basic anim only — see below) */
+#ifdef NES_ASM_SCENE
+/* Plain scene-sprite draw loop has a hand-written 6502 twin in scene_asm.s
+   (Phase 2a).  Linked + called only under NES_ASM_SCENE, which the server sets
+   only when the project has no tagged scene animations (BW_HAS_SCENE_ANIM==0). */
+void draw_scene_sprites(void);
+#endif
 /* advance_animation's ASM twin covers the BASIC animation state machine only; a
    project with an attack one-shot or racer rotation keeps the inline C. */
 #if defined(NES_ASM_LEAF) && !((ATTACK_FRAME_COUNT > 0) && BW_ATTACK_BUTTON) && !((BW_GAME_STYLE == 3) && BW_RACER_ROT)
@@ -2325,7 +2331,9 @@ void main(void) {
 #ifdef BW_OAM_FLICKER
         bw_scene_oam0 = oam_idx;   /* scene sprites start here (for flicker) */
 #endif
-#if BW_HAS_SCENE_ANIM
+#if defined(NES_ASM_SCENE) && !BW_HAS_SCENE_ANIM
+        draw_scene_sprites();   /* hand-written 6502 twin — scene_asm.s (plain path) */
+#elif BW_HAS_SCENE_ANIM
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             const unsigned char *src_tiles;
             const unsigned char *src_attrs;

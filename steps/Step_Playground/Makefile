@@ -90,6 +90,19 @@ CFLAGS  += -DNES_ASM_SPECIALIZED=1
 ASM_SRC += src/main_special_asm.s
 endif
 
+# Scene-sprite DRAW loop on hand-written 6502 (Phase 2a).  Generic: loops over
+# NUM_STATIC_SPRITES reading the ss_* arrays (project.inc SS_POS_WIDE picks the
+# u8/u16 position width) and calls world_to_screen_x/y — project-independent, so
+# shippable.  Links src/scene_asm.s and -D's out the PLAIN C draw loop in main.c.
+# Only valid when the project has no per-sprite tagged animations (the server
+# enables it only for BW_HAS_SCENE_ANIM==0).  Same off-by-default, byte-identical
+# -when-off contract.  Needs NES_ASM_SCROLL (calls world_to_screen_x/y).
+NES_ASM_SCENE ?= 0
+ifeq ($(NES_ASM_SCENE),1)
+CFLAGS  += -DNES_ASM_SCENE=1
+ASM_SRC += src/scene_asm.s
+endif
+
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
 OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS)

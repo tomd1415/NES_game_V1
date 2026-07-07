@@ -2720,11 +2720,27 @@ def _build_rom(body):
     _, _, _world_cols, _world_rows, _, _ = _world_nametable(state)
     is_scroll = _world_cols > 32 or _world_rows > 30
 
+    # Scene-sprite DRAW loop on hand-written 6502 (Phase 2a). NOT yet shipped to
+    # pupils: gated behind the PLAYGROUND_ASM_SCENE test toggle so the A/B suites
+    # can build it while real /play stays on the proven C loop. It only handles
+    # the PLAIN draw path, so require no tagged scene animation; and it calls
+    # world_to_screen_x/y, so require a scroll build (which pulls in NES_ASM_SCROLL).
+    num_static = len(scene_sprites or [])
+    has_scene_anim = any(
+        _resolve_tagged_animation(state, role, style) is not None
+        for (role, style) in (("enemy", "walk"), ("enemy", "idle"), ("pickup", "idle"))
+    )
+    nes_asm_scene = bool(
+        os.environ.get("PLAYGROUND_ASM_SCENE")
+        and asm_ready and is_scroll and num_static > 0 and not has_scene_anim
+    )
+
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
             custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
             collision_h, behaviour_c, bg_world_h, bg_world_c,
             nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
+            nes_asm_scene=nes_asm_scene,
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -2733,6 +2749,7 @@ def _build_rom(body):
         None, chr_bytes, nam_bytes, pal_src, scene_src,
         collision_h, behaviour_c, bg_world_h, bg_world_c,
         nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
+        nes_asm_scene=nes_asm_scene,
         project_inc=project_inc, **audio_kwargs,
     ))
 
@@ -2816,6 +2833,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       collision_h, behaviour_c, bg_world_h, bg_world_c,
                       audio_songs_asm=None, audio_sfx_asm=None,
                       nes_asm_leaf=False, nes_asm_scroll=False,
+                      nes_asm_scene=False,
                       project_inc=None):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
@@ -2862,6 +2880,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                 make_args.append("NES_ASM_LEAF=1")
             if nes_asm_scroll:
                 make_args.append("NES_ASM_SCROLL=1")
+            if nes_asm_scene:                       # Phase 2a — scene-draw loop
+                make_args.append("NES_ASM_SCENE=1")
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
             (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))

@@ -207,6 +207,15 @@ const unsigned char *anim_attrs;
    NES_ASM_LEAF for any player size. */
 void advance_animation(void);
 
+#ifdef NES_ASM_SCENE
+/* The plain scene-sprite draw loop has a hand-written 6502 version in
+   scene_asm.s (Phase 2a): a generic loop over NUM_STATIC_SPRITES that reads the
+   ss_* arrays and calls world_to_screen_x/y.  Linked + called only under
+   NES_ASM_SCENE (server enables it only when the project has no tagged scene
+   animations). */
+void draw_scene_sprites(void);
+#endif
+
 unsigned char read_controller(void);   /* prototype: definition below or in main_asm.s */
 #ifndef NES_ASM_LEAF   /* ASM twin in main_asm.s */
 unsigned char read_controller(void) {
@@ -680,6 +689,9 @@ void main(void) {
         // the world_to_screen helpers return 0xFF, which hides the
         // sprite by writing y = 0xFF (the NES OAM "off-screen" sentinel)
         // and the sprite simply scrolls out of view.
+#ifdef NES_ASM_SCENE
+        draw_scene_sprites();   /* hand-written 6502 twin — scene_asm.s */
+#else
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
             off = ss_offset[i];
             sw = ss_w[i];
@@ -708,6 +720,7 @@ void main(void) {
                 }
             }
         }
+#endif /* NES_ASM_SCENE */
 
         // Hide every slot we didn't touch this frame by parking its Y
         // byte at 0xFF — on NES that's off-screen, so a sprite whose

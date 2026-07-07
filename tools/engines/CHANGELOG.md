@@ -9,6 +9,28 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v24 — 2026-07-07 — scene-sprite DRAW loop on ASM (Phase 2a, off by default)
+
+### Added
+- **draw_scene_sprites on hand-written 6502** (`src/scene_asm.s`, NES_ASM_SCENE) —
+  a generic loop over NUM_STATIC_SPRITES that reads the ss_* arrays and calls
+  world_to_screen_x/y, replacing the template's PLAIN scene-draw loop (projects
+  with tagged scene animations keep the C animated loop). Uses a running tile/attr
+  pointer (row-major) and the project.inc SS_POS_WIDE flag to read ss_x/ss_y at the
+  right width (u8/u16).
+- project.inc gains **SS_POS_WIDE**; scene.inc's 7 draw-read arrays gain
+  **SS_LINKAGE** (static normally; linker-visible under NES_ASM_SCENE). Emitted by
+  the server (build_project_inc / build_scene_inc) + the checked-in fixture.
+- New A/B guard `tools/builder-tests/asm-scene.mjs`: dual-builds scene shapes
+  (multi-sprite, mixed sizes, top-down, SS_POS_WIDE off-screen + scrolled-on-screen)
+  pure-C vs scene-ASM and asserts rendered-identical.
+
+### Changed / migration
+- **Default unchanged / not shipped to pupils.** The server links scene_asm.s only
+  when `PLAYGROUND_ASM_SCENE=1` (a test toggle) AND the project scrolls, has scene
+  sprites, and has no tagged scene animation. With the toggle off (every real
+  /play) the ROM is byte-identical to v23 (golden 1730448e; _rom-equiv 27210a8f).
+
 ## v23 — 2026-07-06 — load_world_bg on ASM (scroll.c is now 100% hand-written 6502)
 
 ### Added
