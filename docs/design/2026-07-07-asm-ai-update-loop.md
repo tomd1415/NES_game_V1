@@ -41,12 +41,13 @@ needs a shared constant; per-instance values live in the tables above.
 
 ### The building blocks (leaf-first, each its own milestone)
 
-1. **`bw_sprite_blocked` → ASM** (`scene_asm.s` or a new `ai_asm.s`). 5-arg cc65
-   fastcall: `dir` in A, `sx/sy/sw/sh` at `(sp),0..3`; copy all to locals at entry
-   (the `behaviour_at` calls move `sp`), loop the leading edge calling the shipped
-   `_behaviour_at` via `pushax` (push col, row in A/X), return 0/1 in A, `jmp incsp4`.
-   Reusable by every AI type. Ship-safe on its own (C callers just bind the ASM
-   symbol; behaviour identical → A/B green). **← first milestone.**
+1. **`bw_sprite_blocked` → ASM** — ✅ **DONE (engine v25, `src/ai_asm.s`).** 5-arg
+   cc65 fastcall; NB cc65 pushes args L→R onto a downward stack so the LAST arg is
+   at `(sp),0` (`sh`@0, `sw`@1, `sy`@2, `sx`@3). Copies args to BSS locals, loops
+   the leading edge calling `_behaviour_at` via `pushax`, 16-bit `>>3` edge math,
+   `jmp ret1/ret0 → incsp4`. Gated `NES_ASM_AI` (server `PLAYGROUND_ASM_AI` toggle),
+   flag-off byte-identical. A/B: `asm-ai.mjs` (walled pen, phase-aligned, OAM
+   identical over 400 frames incl. wall + edge turns).
 2. **`ai_update` generic loop** — `for i in 0..NUM_STATIC_SPRITES: dispatch on
    ss_ai_type[i]`. Start with **walker only** (type 1), other types fall through to
    a no-op (their C blocks stay when the loop doesn't handle them — mixed mode is
