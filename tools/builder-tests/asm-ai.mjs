@@ -29,6 +29,7 @@
 // run the AI the same number of times, so identical AI ⇒ identical ss_x/ss_y.
 // Any diff is a real bug in the ASM ai_update.
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as H from './lib/render-harness.mjs';
@@ -43,6 +44,12 @@ const ok = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };
 
 const win = H.loadBuilderModules();
+// Target the CURRENT engine. builder-modules.js degrades patrol + flyer to a
+// plain walker when NES_TARGET_ENGINE < 10 (and loadBuilderModules doesn't set
+// it), so without this the patrol/flyer AI would silently never be emitted —
+// the ai_update type 3/4 dispatch would go untested. engine-version.js sets
+// NES_ENGINE_VERSION + NES_TARGET_ENGINE on the shared global.
+new Function(fs.readFileSync(path.join(H.WEB, 'engine-version.js'), 'utf8'))();
 const tpl = H.readTemplate();
 
 // A 1x1 world with a floor + solid WALL columns, so a floor-walking enemy turns
@@ -120,9 +127,17 @@ const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_AI: '1' });
 try {
   const s = makeState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  // Guard: assert the real patrol (4) + chaser (2) + flyer (3) types were emitted
+  // — not silently degraded to walker (1). A 0-diff pass alone would NOT catch a
+  // degrade (both builds run the same walker), so check the table directly.
+  const tm = mainC.match(/ss_ai_type\[\d+\][^;]*=\s*\{([^}]*)\}/);
+  const types = tm ? tm[1].split(',').map((v) => v.trim()) : [];
+  for (const [t, name] of [['4', 'patrol'], ['3', 'flyer'], ['2', 'chaser']])
+    if (!types.includes(t)) bad(`ss_ai_type has no ${name} (${t}) — instance degraded? types=[${types}]`);
   const payload = {
     state: s, playerSpriteIdx: 0, playerStart: { x: 110, y: 200 }, mode: 'browser',
-    customMainC: withProbe(win.BuilderAssembler.assemble(s, tpl)),
+    customMainC: withProbe(mainC),
     sceneSprites: INSTANCES.map((it) => ({ spriteIdx: it.spriteIdx, x: it.x, y: it.y })),
   };
   const rc = await H.buildRom(PORT_C, payload);

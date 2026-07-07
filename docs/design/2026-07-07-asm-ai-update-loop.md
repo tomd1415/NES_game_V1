@@ -76,9 +76,20 @@ needs a shared constant; per-instance values live in the tables above.
    emits `ss_ai_home` + `#ifndef`s out the C flyer block. A/B: `asm-ai.mjs`.
    With this, walker + chaser + flyer + patrol all run in ASM (only goomba/koopa
    keep C).
-6. **Close the SS_POS_WIDE (u16-position) A/B gap** — a scrolling moving-enemy
-   harness that phase-aligns under stream drops and verifies all four ASM types
-   in wide mode (their wide paths are written but unverified). **← next.**
+6. **Close the SS_POS_WIDE (u16-position) A/B gap** — ✅ **DONE (`asm-ai-wide.mjs`).**
+   A 2-screen world with enemies placed at world-X > 255 (forcing SS_POS_WIDE +
+   SCROLL_BUILD → u16 ss_x/ss_y/px/py). KEY: the scene AI runs in WORLD space,
+   independent of the camera, so no real scroll streaming/rendering is needed —
+   just mirror the full u16 ss_x/ss_y (2 bytes each) into RAM and matched-tick
+   compare, exactly like the u8 harness. The collision probe takes u8 args so it
+   truncates identically in C and ASM (width-independent), leaving only the 16-bit
+   position arithmetic under test: add/sub_speed(_y) hi-byte, ch_load reading u16
+   px/py, ch_le/ch_ge with real hi bytes, fly_set_y's signed home+foff, and the
+   guards. A patrol straddling x=256 exercises the carry (255→256) and borrow
+   (256→255) across the hi byte. Result: C ≡ ASM at every matched tick.
+
+**All four generic AI types (walker, chaser, flyer, patrol) are now A/B-verified
+in both u8 and u16 position widths.** Only goomba/koopa (SMB) remain in C.
 
 ### Verification methodology (learned the hard way at the patrol milestone)
 
@@ -96,6 +107,16 @@ mirrored positions only when both sit on the same tick. At equal tick both build
 have run the AI the same number of times, so identical AI ⇒ identical positions.
 Rate- and DMA-independent; validated to report 0 diffs on the known-good
 walker-only case and to catch a real per-tick position divergence.
+
+**Harness gotcha — target the current engine.** `builder-modules.js` degrades
+`patrol` and `flyer` to a plain `walker` when `NES_TARGET_ENGINE < 10`, and
+`render-harness.loadBuilderModules()` does NOT load `engine-version.js`, so the
+default target is 1. An AI A/B test must therefore run `engine-version.js` after
+`loadBuilderModules()` (sets `NES_TARGET_ENGINE` to the latest) — otherwise the
+patrol/flyer instances are silently emitted as walkers and the `ai_update` type
+3/4 dispatch is never exercised (the C≡ASM diff is still 0 because BOTH builds
+run the degraded walker). Confirm the real types with a one-off assertion on the
+emitted `ss_ai_type` table (e.g. `{…, 4, 2, 3}`), not just a 0-diff pass.
 
 ### Gating
 
