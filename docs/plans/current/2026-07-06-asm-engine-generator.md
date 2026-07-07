@@ -31,7 +31,8 @@
   at once, the PPU vertical wrap, and the bottom-edge camera clamp),
   `asm-enemy.mjs` (the hot `behaviour_at`/`reaction_for` path verified under 300
   frames of walker MOTION, phase-aligned via an injected tick counter),
-  `asm-benchmark.mjs` (ASM 70B smaller + 5 fewer dropped frames, asserted). All
+  `asm-benchmark.mjs` (ASM 259B smaller — with a per-subsystem CODE breakdown
+  showing −235B of it is scroll — + 5 fewer dropped frames, asserted). All
   five auto-run by `run-all.mjs` (it globs every `*.mjs`) and are green.
 
 **Verification in place:** flag-off golden byte-identical (`1730448e`);

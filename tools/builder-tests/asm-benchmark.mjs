@@ -26,7 +26,24 @@ let failed = false;
 const ok = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };
 
-// Build a config, relink with a map, return { rom, codeBytes }.
+// Per-project-module CODE bytes from the map's "Modules list" (lib objects end
+// in ".o):" so they never match the ".o:" module header — they're excluded).
+function parseModules(mapText) {
+  const out = {};
+  let cur = null, inList = false;
+  for (const l of mapText.split('\n')) {
+    if (/^Modules list:/.test(l)) { inList = true; continue; }
+    if (!inList) continue;
+    if (/^Segment list:/.test(l)) break;
+    const h = l.match(/^(\S+\.o):\s*$/);
+    if (h) { cur = h[1]; continue; }
+    const c = l.match(/^\s+CODE\s+Offs=\S+\s+Size=([0-9A-Fa-f]+)/);
+    if (c && cur) out[cur] = (out[cur] || 0) + parseInt(c[1], 16);
+  }
+  return out;
+}
+
+// Build a config, relink with a map, return { rom, codeBytes, mods }.
 function buildAndMeasure(flags) {
   execSync('make -s clean', { cwd: STEP, stdio: 'ignore' });
   execSync('make -s ' + flags, { cwd: STEP, stdio: ['ignore', 'ignore', 'pipe'] });
@@ -34,10 +51,20 @@ function buildAndMeasure(flags) {
   const map = path.join(STEP, 'build', 'bench.map');
   execSync(`ld65 -C cfg/nes.cfg -m ${map} -o build/bench.nes ${objs.join(' ')} /usr/share/cc65/lib/nes.lib`,
     { cwd: STEP, stdio: 'ignore' });
-  const line = fs.readFileSync(map, 'utf8').split('\n').find(l => /^CODE\s/.test(l));
+  const mapText = fs.readFileSync(map, 'utf8');
+  const line = mapText.split('\n').find(l => /^CODE\s/.test(l));
   const codeBytes = parseInt(line.trim().split(/\s+/)[3], 16);
   const rom = fs.readFileSync(path.join(STEP, 'game.nes'));
-  return { rom, codeBytes };
+  return { rom, codeBytes, mods: parseModules(mapText) };
+}
+// Group modules by subsystem: foo.o and foo_asm.o both fold to "foo".
+function bySubsystem(mods) {
+  const g = {};
+  for (const [name, sz] of Object.entries(mods)) {
+    const base = name.replace(/_asm\.o$/, '').replace(/\.o$/, '');
+    g[base] = (g[base] || 0) + sz;
+  }
+  return g;
 }
 function boot(bytes) { const n = new jsnes.NES({ onFrame() {}, onAudioSample() {} }); n.loadROM(bytes.toString('binary')); return n; }
 const rd16 = (n, a) => (n.cpu.mem[a] & 0xFF) | ((n.cpu.mem[a + 1] & 0xFF) << 8);
@@ -63,6 +90,19 @@ if (C && A) {
   console.log(`CODE segment: C=${C.codeBytes}B  ASM=${A.codeBytes}B  (ASM ${dSize >= 0 ? '-' : '+'}${Math.abs(dSize)}B)`);
   if (A.codeBytes <= C.codeBytes) ok(`ASM engine is no larger than C (${dSize}B smaller)`);
   else bad(`ASM engine CODE grew vs C by ${-dSize}B`);
+
+  // Per-subsystem CODE breakdown (C → ASM): shows WHERE the net delta comes from
+  // — the hand-written .s adds bytes but the C body it replaces shrinks (often to
+  // zero CODE). Report-only; the guard is the total assertion above.
+  const gc = bySubsystem(C.mods), ga = bySubsystem(A.mods);
+  const subs = [...new Set([...Object.keys(gc), ...Object.keys(ga)])].sort();
+  console.log('per-subsystem CODE (C → ASM):');
+  for (const s of subs) {
+    const cb = gc[s] || 0, ab = ga[s] || 0;
+    if (cb === ab) continue;                       // unchanged subsystems are noise
+    const d = ab - cb;
+    console.log(`  ${s.padEnd(11)} ${String(cb).padStart(5)} → ${String(ab).padStart(5)}  (${d >= 0 ? '+' : ''}${d})`);
+  }
 
   // --- SPEED (dropped frames over a standardised scroll to px=184) ---
   const c = boot(C.rom), a = boot(A.rom);
