@@ -9,6 +9,33 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v30 — 2026-07-07 — scene-sprite AI on hand-written 6502, SHIPPED BY DEFAULT
+
+### Changed / migration
+- **The scene-sprite AI loop now ships to pupils by default.** The generic
+  `ai_update` (walker/chaser/flyer/patrol) + the `bw_sprite_blocked` probe on
+  hand-written 6502 (built up over v25–v29 behind the `PLAYGROUND_ASM_AI` test
+  toggle) is now linked automatically: the server sets `NES_ASM_AI` whenever the
+  project has at least one walker/chaser/flyer/patrol (detected by the emitted
+  `ss_ai_type[...]` tables in the client main.c). Gating on the tables' PRESENCE
+  is required — `ai_asm.s` imports `_ss_ai_type/state/speed/aux/home`, so forcing
+  it on a table-less build would fail to link; a project with no AI enemies (or
+  the stock main.c) stays pure C. **`PLAYGROUND_NO_ASM=1` is the kill switch** —
+  it falls the whole engine, AI included, back to cc65 C.
+- **ROM output changes for any project with an AI enemy** (the enemy movement is
+  now the ASM path, not the cc65 C). Behaviourally identical to the C AI at every
+  matched tick — proven by the `asm-ai`, `asm-ai-wide` (u16/scroll positions) and
+  `asm-ai-corpus` (mixed sizes/speeds/types) A/B suites — and ~1.21× faster on a
+  heavy enemy scene while leaving ~2.7 KB more free PRG (`asm-ai-bench`).
+- **Re-pinned `_rom-equiv` everything-on hash** 27210a8f → **54a15150** (the byte
+  change is the ASM AI loop; the pre-v30 pure-C-AI ROM is still reproducible with
+  `PLAYGROUND_NO_ASM=1`). The **golden stock/template hash is unchanged**
+  (`1730448e`) — those ROMs have no AI enemy, so the table-gated flip is a no-op
+  for them.
+- Flag semantics: `PLAYGROUND_ASM_AI` (the old opt-in toggle) is now redundant
+  and ignored; the A/B suites still set it harmlessly. Only goomba/koopa (SMB)
+  enemy AI remains in C.
+
 ## v29 — 2026-07-07 — scene-AI update loop: flyer on ASM (Phase 2b, off by default)
 
 ### Added

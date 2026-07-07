@@ -106,8 +106,16 @@ budget less often does more:
   loop + `bw_sprite_blocked` twin are smaller than the C per-instance AI blocks
   they replace, so the hand-written path is both faster AND smaller.
 
-This is the case for eventually flipping `PLAYGROUND_ASM_AI` to shipped-default
-(broaden the corpus + re-pin the golden hash first).
+### Shipped by default — ✅ **DONE (engine v30)**
+
+The AI loop now ships to pupils automatically: the server sets `NES_ASM_AI`
+whenever the project has a walker/chaser/flyer/patrol (detected via the emitted
+`ss_ai_type[...]` tables — the gate must key on the tables' presence because
+`ai_asm.s` imports them, so a table-less build would fail to link). Re-pinned the
+`_rom-equiv` everything-on hash (27210a8f → 54a15150); the golden stock/template
+hash is unchanged (no AI enemy there, so the flip is a no-op for it).
+`PLAYGROUND_NO_ASM=1` remains the whole-engine kill switch. Only goomba/koopa
+(SMB) enemy AI is still in C.
 
 ### Verification methodology (learned the hard way at the patrol milestone)
 

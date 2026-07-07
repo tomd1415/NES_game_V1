@@ -20,13 +20,15 @@ import * as H from './lib/render-harness.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
-//   8172e353… is the value with the universal hand-written 6502 engine shipped
-//     by default (engine v19: NES_ASM_LEAF always + NES_ASM_SCROLL for scroll
-//     builds).  Behaviourally identical to the C engine at matched game-logic
-//     progress (asm-lab settle-to-rest A/B) — the byte change is the ASM.
-//   42a45ca8… was the pure-C -Os value (set PLAYGROUND_NO_ASM=1 to rebuild it).
-//   ce62ec47b35cf7111e2ae5ea9c8a64f5cd43c316 was the no-opt value.
-const EXPECT = '27210a8f47891eb86180f11801e93198931af886';
+//   54a15150… is the value with the scene-sprite AI on hand-written 6502 shipped
+//     by default (engine v30: NES_ASM_AI whenever the project has a walker/
+//     chaser/flyer/patrol). Behaviourally identical to the C AI at every matched
+//     tick (asm-ai{,-wide,-corpus} A/B) — the byte change is the ASM AI loop.
+//   27210a8f… was the pre-v30 value (universal engine + scroll ASM, but the enemy
+//     AI still in cc65 C; set PLAYGROUND_NO_ASM=1 to rebuild the pure-C engine).
+//   8172e353… was engine v19 (NES_ASM_LEAF always + NES_ASM_SCROLL for scroll).
+//   42a45ca8… was the pure-C -Os value; ce62ec47… the no-opt value.
+const EXPECT = '54a15150cc3290f2d880b7f5c4e9a2a3302bd256';
 
 const PORT = 18834;
 

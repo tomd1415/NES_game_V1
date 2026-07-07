@@ -2734,11 +2734,19 @@ def _build_rom(body):
         os.environ.get("PLAYGROUND_ASM_SCENE")
         and asm_ready and is_scroll and num_static > 0 and not has_scene_anim
     )
-    # Scene-sprite AI helper (bw_sprite_blocked) on ASM (Phase 2b). Also a test
-    # toggle (PLAYGROUND_ASM_AI), not shipped. The C helper is always #ifdef-gated
-    # by builder-modules.js, so this is safe whenever ASM-ready — if a project has
-    # no walker/chaser/flyer/patrol the ASM symbol is simply unused.
-    nes_asm_ai = bool(os.environ.get("PLAYGROUND_ASM_AI") and asm_ready)
+    # Scene-sprite AI on hand-written 6502 (Phase 2b): the generic ai_update loop
+    # (walker/chaser/flyer/patrol) + the bw_sprite_blocked probe. SHIPPED BY
+    # DEFAULT (engine v30) — enabled whenever the client emitted the AI tables
+    # (ss_ai_type[...]), which builder-modules.js does only when the project has
+    # at least one walker/chaser/flyer/patrol. Gating on the tables' PRESENCE is
+    # required, not optional: ai_asm.s `.import`s _ss_ai_type/state/speed/aux/home,
+    # so forcing NES_ASM_AI on a table-less build (no AI enemies, or the stock
+    # main.c) would fail to link. Proven byte-behaviour-identical to the C AI by
+    # the asm-ai{,-wide,-corpus} A/B suites (~1.2x faster + smaller — asm-ai-bench).
+    # PLAYGROUND_NO_ASM=1 falls back to the pure-C AI (kill switch, below).
+    nes_asm_ai = bool(
+        asm_ready and custom_main_c is not None and "ss_ai_type[" in custom_main_c
+    )
 
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
