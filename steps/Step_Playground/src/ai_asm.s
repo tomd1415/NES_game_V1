@@ -15,12 +15,16 @@
 .include "asm_macros.inc"
 
 .export _bw_sprite_blocked
+.export _ai_update
 .import _behaviour_at
-.import pushax, incsp4
+.import _ss_x, _ss_y, _ss_w, _ss_h
+.import _ss_ai_type, _ss_ai_state, _ss_ai_speed
+.import pushax, pusha, incsp4
 .importzp sp, tmp1, tmp2
 
 BEH_SOLID = 1
 BEH_WALL  = 2
+AI_WALKER = 1
 
 .segment "BSS"
 bb_sx:   .res 1
@@ -243,4 +247,147 @@ ret0:
     lda #0
     ldx #0
     jmp incsp4
+.endproc
+
+; ---------------------------------------------------------------------------
+; void ai_update(void) — Phase 2b generic AI dispatch loop.
+;   for (i=0; i<NUM_STATIC_SPRITES; i++) if (ss_ai_type[i]==WALKER) <walk i>
+; Walker == the exact per-instance C: dir in ss_ai_state[i] (seed 1); if moving
+; toward a bw_sprite_blocked leading edge, reverse, else step by ss_ai_speed[i].
+; Non-walker instances (type 0) are left to their still-emitted C blocks — no
+; cross-sprite AI dependency, so ASM-walkers-then-C-others == interleaved C.
+; ---------------------------------------------------------------------------
+
+.segment "BSS"
+au_i: .res 1
+
+.segment "CODE"
+
+.proc _ai_update
+    lda #0
+    sta au_i
+loop:
+    lda au_i
+    cmp #NUM_STATIC_SPRITES
+    bcc @go
+    rts
+@go:
+    tax
+    lda _ss_ai_type,x
+    cmp #AI_WALKER
+    beq walker
+    jmp next
+walker:
+    lda _ss_ai_state,x
+    bmi moving_left              ; dir < 0 -> moving left
+    ; moving right (dir > 0): probe the right leading edge (dir 0)
+    lda #0
+    jsr probe
+    beq step_right
+    ldx au_i                    ; blocked -> reverse
+    lda #$FF
+    sta _ss_ai_state,x
+    jmp next
+step_right:
+    jsr add_speed
+    jmp next
+moving_left:
+    lda #1                      ; probe the left leading edge (dir 1)
+    jsr probe
+    beq step_left
+    ldx au_i
+    lda #1
+    sta _ss_ai_state,x
+    jmp next
+step_left:
+    jsr sub_speed
+next:
+    inc au_i
+    jmp loop
+.endproc
+
+; probe: A = dir. Calls bw_sprite_blocked(ss_x[i]&0xFF, ss_y[i]&0xFF, ss_w[i],
+; ss_h[i], dir) — matching the C, which truncates the u16 positions to u8 for the
+; probe. Pushes the 4 stack args L->R with pusha; returns A = 0/1.
+.proc probe
+    pha                         ; save dir
+    ldx au_i
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_x,y                 ; low byte of ss_x[i]
+.else
+    lda _ss_x,x
+.endif
+    jsr pusha
+    ldx au_i
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_y,y
+.else
+    lda _ss_y,x
+.endif
+    jsr pusha
+    ldx au_i
+    lda _ss_w,x
+    jsr pusha
+    ldx au_i
+    lda _ss_h,x
+    jsr pusha
+    pla                         ; dir
+    jsr _bw_sprite_blocked      ; A = 0/1 ; pops the 4 pushed bytes
+    rts
+.endproc
+
+; ss_x[i] += ss_ai_speed[i]  (u8, or u16 when SS_POS_WIDE)
+.proc add_speed
+    ldx au_i
+    lda _ss_ai_speed,x
+    sta tmp1
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_x,y
+    clc
+    adc tmp1
+    sta _ss_x,y
+    lda _ss_x+1,y
+    adc #0
+    sta _ss_x+1,y
+.else
+    lda _ss_x,x
+    clc
+    adc tmp1
+    sta _ss_x,x
+.endif
+    rts
+.endproc
+
+; ss_x[i] -= ss_ai_speed[i]
+.proc sub_speed
+    ldx au_i
+    lda _ss_ai_speed,x
+    sta tmp1
+.if SS_POS_WIDE
+    lda au_i
+    asl
+    tay
+    lda _ss_x,y
+    sec
+    sbc tmp1
+    sta _ss_x,y
+    lda _ss_x+1,y
+    sbc #0
+    sta _ss_x+1,y
+.else
+    lda _ss_x,x
+    sec
+    sbc tmp1
+    sta _ss_x,x
+.endif
+    rts
 .endproc

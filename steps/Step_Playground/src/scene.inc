@@ -6,7 +6,7 @@
 // (file-local, byte-identical as always); when the scene-draw ASM module is
 // built (NES_ASM_SCENE) they must be linker-visible so scene_asm.s can import
 // them (`_ss_x` …). Nothing else changes — flag-off stays byte-for-byte.
-#ifdef NES_ASM_SCENE
+#if defined(NES_ASM_SCENE) || defined(NES_ASM_AI)
 #define SS_LINKAGE
 #else
 #define SS_LINKAGE static

@@ -1616,7 +1616,7 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         # `static` (byte-identical as always); when the scene-draw ASM module
         # is built (NES_ASM_SCENE) they must be linker-visible so scene_asm.s
         # can import them. Flag-off is byte-for-byte unchanged.
-        "#ifdef NES_ASM_SCENE",
+        "#if defined(NES_ASM_SCENE) || defined(NES_ASM_AI)",
         "#define SS_LINKAGE",
         "#else",
         "#define SS_LINKAGE static",

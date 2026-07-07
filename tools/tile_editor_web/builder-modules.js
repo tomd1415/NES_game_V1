@@ -533,7 +533,13 @@
       ];
       let emitted = 0;      // walker/chaser/goomba/koopa all need bw_sprite_blocked
       let needSmb = false;  // goomba/koopa need the shared SMB stomp/hurt helper
+      // Phase 2b — uniform per-scene-sprite AI tables the ai_update ASM loop reads
+      // (NES_ASM_AI). type 0 = handled by C (or none); 1 = walker. state/speed are
+      // meaningful only for ASM-handled types. Index i tracks ss_x[i] exactly.
+      const aiType = [], aiState = [], aiSpeed = [];
+      let asmAiHandled = 0;   // how many instances the ai_update loop owns
       for (let i = 0; i < instances.length; i++) {
+        aiType[i] = 0; aiState[i] = 0; aiSpeed[i] = 0;
         const inst = instances[i] || {};
         const sp = sprites[inst.spriteIdx];
         if (!sp) continue;
@@ -551,6 +557,11 @@
         const speed = A.clampInt(inst.speed, 1, 4, 1);
         if (sp.role === 'enemy' && ai === 'walker') {
           emitted++;
+          // Phase 2b — the ai_update ASM loop owns walkers (type 1, dir seed 1).
+          aiType[i] = 1; aiState[i] = 1; aiSpeed[i] = speed; asmAiHandled++;
+          // The C block below is byte-identical to before, but #ifndef'd out when
+          // NES_ASM_AI is set (ai_update() moves this walker instead).
+          parts.push('#ifndef NES_ASM_AI');
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' walks side to side, turning at walls and the screen edge');
@@ -564,6 +575,7 @@
           parts.push('                else ss_x[' + i + '] -= ' + speed + ';');
           parts.push('            }');
           parts.push('        }');
+          parts.push('#endif');
         } else if (sp.role === 'enemy' && ai === 'chaser') {
           emitted++;
           parts.push(
@@ -894,6 +906,30 @@
           '#define BW_SMB_BOUNCE() do { jumping = 1; jmp_up = 12; BW_SMB_GUARD(); } while (0)',
         ];
         parts.splice(1, 0, ...smbHelper);
+      }
+      // Phase 2b — when the ai_update ASM loop owns at least one instance (a
+      // walker), emit the uniform AI tables (declarations) + the dispatch call
+      // (per_frame), both gated behind NES_ASM_AI. Flag off: nothing here is
+      // emitted, so the ROM is byte-identical. Index i matches ss_x[i] exactly.
+      if (asmAiHandled > 0) {
+        const n = instances.length;
+        const tbl = [
+          '#ifdef NES_ASM_AI',
+          '/* [builder] Phase 2b — uniform scene-AI tables for the ai_update ASM',
+          ' * loop. type 0 = handled by the C blocks above (or none); 1 = walker.',
+          ' * state is the mutable AI byte (walker direction, seeded 1); speed is',
+          ' * per-instance px/frame. ai_update() dispatches on type, skipping 0. */',
+          'void ai_update(void);',
+          'const unsigned char ss_ai_type[' + n + ']  = { ' + aiType.join(', ') + ' };',
+          'signed char        ss_ai_state[' + n + '] = { ' + aiState.map((v) => v | 0).join(', ') + ' };',
+          'const unsigned char ss_ai_speed[' + n + '] = { ' + aiSpeed.join(', ') + ' };',
+          '#endif',
+        ].join('\n');
+        withHelper = A.appendToSlot(withHelper, 'declarations', tbl);
+        parts.unshift(
+          '#ifdef NES_ASM_AI',
+          '        ai_update();   /* Phase 2b — hand-written 6502 AI dispatch (walkers) */',
+          '#endif');
       }
       return A.appendToSlot(withHelper, 'per_frame', parts.join('\n'));
     },

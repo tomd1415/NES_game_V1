@@ -126,7 +126,7 @@ try {
       if (!sawMotion) bad('walkers never moved — test exercised nothing');
       else if (!turned) bad('walker never turned — the blocked-probe path was not exercised');
       else if (oamDiff === 0 && still === 0)
-        ok('bw_sprite_blocked: C ≡ ASM every frame over 400 frames of walker motion (incl. wall/edge turns)');
+        ok('ai_update (walker) + bw_sprite_blocked: C ≡ ASM every frame over 400 frames of motion (incl. wall/edge turns)');
       else bad(`divergence — OAM byte-diffs ${oamDiff} (first at frame ${worst}), palette ${still}`);
     }
   }

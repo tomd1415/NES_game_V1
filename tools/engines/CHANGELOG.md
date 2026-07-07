@@ -9,6 +9,27 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v26 — 2026-07-07 — scene-AI update loop (walker) on ASM (Phase 2b, off by default)
+
+### Added
+- **ai_update walker dispatch on hand-written 6502** (`src/ai_asm.s`, NES_ASM_AI) —
+  a generic loop over NUM_STATIC_SPRITES that dispatches on a per-instance type
+  byte and drives the walker AI (reverse at a bw_sprite_blocked leading edge, else
+  step by the per-instance speed), calling the v25 ASM bw_sprite_blocked. Reads
+  new uniform tables (`ss_ai_type`/`ss_ai_state`/`ss_ai_speed`) emitted by
+  builder-modules.js under NES_ASM_AI. Non-walker AIs keep their C blocks (no
+  cross-sprite dependency, so ASM-walkers-then-C-others is order-equivalent).
+- SS_LINKAGE now de-`static`s the ss_* arrays under NES_ASM_AI too (ai_update
+  imports ss_x/y/w/h). asm-ai.mjs now exercises the whole walker loop (the C
+  walker block is #ifndef'd out; ai_update runs) — still OAM-identical every frame.
+
+### Changed / migration
+- **Default unchanged / not shipped to pupils.** Linked only under PLAYGROUND_ASM_AI.
+  Flag off = byte-identical to v25 (golden 1730448e; _rom-equiv 27210a8f). Every
+  existing enemy suite (walker-wall-stop, smb-enemies, topdown-enemies) still green.
+- Known gap (next): the SS_POS_WIDE (u16-position) walker path isn't A/B'd yet
+  (needs a scrolling moving-enemy harness); chaser/flyer/patrol still C.
+
 ## v25 — 2026-07-07 — scene-AI collision probe (bw_sprite_blocked) on ASM (Phase 2b, off by default)
 
 ### Added
