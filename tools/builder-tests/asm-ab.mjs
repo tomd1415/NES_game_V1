@@ -54,6 +54,18 @@ function advanceToPxLeft(n, target, cap = 400) {
   while (rd16(n, PX) > target && f < cap) { n.buttonDown(1, B.BUTTON_LEFT); n.frame(); n.buttonUp(1, B.BUTTON_LEFT); f++; }
   return f;
 }
+// Hold RIGHT until px stops rising for 2 frames — the player has pinned against
+// the world's right edge (where cam_x clamps at world_width - screen_width).
+function walkToRestRight(n, cap = 800) {
+  let f = 0, stall = 0, prev = rd16(n, PX);
+  while (f < cap && stall < 2) {
+    n.buttonDown(1, B.BUTTON_RIGHT); n.frame(); n.buttonUp(1, B.BUTTON_RIGHT);
+    const now = rd16(n, PX);
+    stall = (now === prev) ? stall + 1 : 0;
+    prev = now; f++;
+  }
+  return f;
+}
 function renderDiff(c, a) {
   let dnt = 0;
   for (let n = 0; n < 4; n++) { const cn = c.ppu.nameTable[n], an = a.ppu.nameTable[n]; if (cn && an) for (let t = 0; t < 960; t++) if ((cn.tile[t] & 0xFF) !== (an.tile[t] & 0xFF)) dnt++; }
@@ -112,6 +124,20 @@ if (romC && romA) {
   }
   if (jumpDiff === 0) ok(`jump arc: player OAM IDENTICAL across ${jumpFrames} frames (world_to_screen_y, gravity, jump-rise)`);
   else bad(`jump arc: player OAM diverged (${jumpDiff} byte-diffs over the jump)`);
+
+  // Walk all the way to the world's RIGHT edge: px pins and cam_x clamps at
+  // world_width - screen_width. The horizontal analogue of asm-vscroll's bottom
+  // clamp — confirms C and ASM clamp to the identical px/cam_x (the scroll_follow
+  // right-deadzone + clamp path) and render byte-identically at the wall.
+  walkToRestRight(c); walkToRestRight(a);
+  for (let i = 0; i < 8; i++) { c.frame(); a.frame(); }
+  const clampOk = rd16(c, PX) === rd16(a, PX) && rd16(c, CX) === rd16(a, CX);
+  const re = renderDiff(c, a);
+  if (clampOk && re.pal + re.oam + re.nt + re.cam === 0)
+    ok(`right-edge clamp: C ≡ ASM pinned at px=${rd16(c, PX)}, cam_x clamped=${rd16(c, CX)}`);
+  else
+    bad(`right-edge clamp divergence: px C${rd16(c, PX)}/A${rd16(a, PX)} cam_x C${rd16(c, CX)}/A${rd16(a, CX)} ` +
+        `render(pal ${re.pal} OAM ${re.oam} nt ${re.nt} cam ${re.cam})`);
 }
 
 if (failed) process.exit(1);
