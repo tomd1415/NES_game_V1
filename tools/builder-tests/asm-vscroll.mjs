@@ -97,6 +97,19 @@ function advanceDown(n, target, right, cap = 800) {
   return f;
 }
 
+// Hold a direction until the mirrored world-Y stops changing for 2 frames (the
+// player has pinned against a world edge) — used to reach the camera clamp.
+function walkToRest(n, dir, cap = 1400) {
+  let f = 0, stall = 0, prev = rd16(n, PYA);
+  while (f < cap && stall < 2) {
+    n.buttonDown(1, dir); n.frame(); n.buttonUp(1, dir);
+    const now = rd16(n, PYA);
+    stall = (now === prev) ? stall + 1 : 0;
+    prev = now; f++;
+  }
+  return f;
+}
+
 // Inject the px/py/cam mirror into the assembled main.c (works for both builds:
 // px/py/cam_x/cam_y stay C globals the ASM shares).
 function withMirror(mainC) {
@@ -152,6 +165,58 @@ try {
     else
       bad(`${cs.label}: divergence at py=${rd16(c, PYA)} — palette ${r.pal} OAM ${r.oam} nametable ${r.nt}`);
   }
+
+  // Deep vertical: a TALLER world (1x4 = 120 rows / 960px) walked far enough to
+  // (a) push cam_y past 240 — the PPU vertical nametable wrap — and (b) pin the
+  // player against the world's bottom edge, where the camera CLAMPS. Both are
+  // scroll paths the shallow walks above never reach. One build, two checkpoints.
+  {
+    const s = makeState(1, 4);
+    const instances = s.builder.modules.scene.config.instances;
+    const payload = {
+      state: s, playerSpriteIdx: 0, playerStart: { x: 120, y: 120 }, mode: 'browser',
+      customMainC: withMirror(win.BuilderAssembler.assemble(s, tpl)),
+      sceneSprites: instances.map((it) => ({ spriteIdx: it.spriteIdx, x: it.x, y: it.y })),
+    };
+    const rc = await H.buildRom(PORT_C, payload);
+    const ra = await H.buildRom(PORT_A, payload);
+    if (!rc.ok || !ra.ok) {
+      bad(`deep vertical (1x4): build failed (C ${rc.stage || 'ok'} / ASM ${ra.stage || 'ok'})` +
+          (ra.ok ? '' : ': ' + String(ra.log || '').slice(-400)));
+    } else if (rc.romBytes.equals(ra.romBytes)) {
+      bad('deep vertical (1x4): ASM ROM == C ROM (flags did not engage)');
+    } else {
+      const c = boot(rc.romBytes), a = boot(ra.romBytes);
+      for (let i = 0; i < 150; i++) { c.frame(); a.frame(); }
+      const startPy = rd16(c, PYA);
+
+      // Checkpoint 1 — cross the PPU vertical wrap (cam_y > 240).
+      advanceDown(c, startPy + 320, false); advanceDown(a, startPy + 320, false);
+      for (let i = 0; i < 8; i++) { c.frame(); a.frame(); }
+      if (rd16(c, CAMY) <= 240) {
+        bad(`deep vertical: cam_y only ${rd16(c, CAMY)} — did not cross the 240 PPU wrap`);
+      } else if (rd16(c, PYA) !== rd16(a, PYA)) {
+        bad(`deep vertical: py mismatch at wrap (C ${rd16(c, PYA)} ASM ${rd16(a, PYA)})`);
+      } else {
+        const r1 = renderDiff(c, a);
+        if (r1.pal + r1.oam + r1.nt === 0)
+          ok(`deep vertical (1x4): C ≡ ASM across the PPU wrap (cam_y=${rd16(c, CAMY)} > 240)`);
+        else
+          bad(`deep vertical: divergence past PPU wrap — palette ${r1.pal} OAM ${r1.oam} nametable ${r1.nt}`);
+      }
+
+      // Checkpoint 2 — walk into the bottom edge; the camera must CLAMP identically.
+      walkToRest(c, B.BUTTON_DOWN); walkToRest(a, B.BUTTON_DOWN);
+      for (let i = 0; i < 8; i++) { c.frame(); a.frame(); }
+      const clampOk = rd16(c, PYA) === rd16(a, PYA) && rd16(c, CAMY) === rd16(a, CAMY);
+      const r2 = renderDiff(c, a);
+      if (clampOk && r2.pal + r2.oam + r2.nt === 0)
+        ok(`camera clamp (1x4 bottom): C ≡ ASM at the edge (py=${rd16(c, PYA)}, cam_y clamped=${rd16(c, CAMY)})`);
+      else
+        bad(`camera clamp: divergence at bottom edge — py C${rd16(c, PYA)}/A${rd16(a, PYA)} ` +
+            `cam_y C${rd16(c, CAMY)}/A${rd16(a, CAMY)} render(pal ${r2.pal} OAM ${r2.oam} nt ${r2.nt})`);
+    }
+  }
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {
@@ -160,4 +225,4 @@ try {
 }
 
 if (failed) process.exit(1);
-console.log('\nasm-vscroll: ASM matches C for vertical + diagonal scroll at matched progress.');
+console.log('\nasm-vscroll: ASM matches C for vertical + diagonal scroll, the PPU wrap, and the bottom-edge clamp.');
