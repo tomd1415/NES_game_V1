@@ -13,7 +13,7 @@
 > must **generate** the per-project engine, and prove it behaviourally
 > equivalent to the C engine without hand-checking every pupil project.
 
-## Current status — 2026-07-06 (engine v21)
+## Current status — 2026-07-07 (engine v23)
 
 **Done and shipped on `/play`:**
 - **Phase 1 (v20):** `project.inc` generator (`build_project_inc`) + `asm_macros.inc`
@@ -23,20 +23,25 @@
 - **v21–v23:** `scroll_init`, `scroll_stream` (unrolled), `load_world_bg` on ASM —
   **`scroll.c` is now 100% hand-written 6502** (no C bodies when NES_ASM_SCROLL=1).
   `MULC` unit test (`asm-lab/functions/mulc`, widths 32/64/96/128).
-- **Phase 5 (growing):** `asm-ab.mjs` (matched-progress A/B), `asm-corpus.mjs`
-  (14-shape rest-equivalence incl. WORLD_COLS=96, four-screen row-stream,
-  multi-enemy, all-modules), `asm-benchmark.mjs` (ASM 70B smaller + 5 fewer
-  dropped frames, asserted). All auto-run by the suite.
+- **Phase 5 (DONE — CI-wired):** `asm-ab.mjs` (matched-progress A/B: right-scroll,
+  left-scroll *and* an in-place jump arc verifying `world_to_screen_y`/gravity/
+  jump-rise), `asm-corpus.mjs` (14-shape rest-equivalence incl. WORLD_COLS=96,
+  four-screen row-stream, multi-enemy, all-modules), `asm-benchmark.mjs` (ASM 70B
+  smaller + 5 fewer dropped frames, asserted). All three auto-run by `run-all.mjs`
+  (it globs every `*.mjs`) and are green.
 
 **Verification in place:** flag-off golden byte-identical (`1730448e`);
 matched-progress A/B identical; full builder suite green across every world shape;
 E2E 111 passed; asm-lab 13 tests.
 
 **What's next if continuing (in priority order):**
-1. **Finish `scroll.c`:** `scroll_stream` (must stay unrolled — vblank-timing
-   sensitive; use `.repeat` unroll + measure) and `load_world_bg` (boot-only;
-   nested nametable/attr fill — the `(sy*30+rr)*BG_WORLD_COLS + sx*32 + cc`
-   index needs MULC). Then scroll.c is 100% ASM.
+1. **Close remaining A/B coverage gaps** (unattended-safe filler): matched-progress
+   A/B for **vertical/diagonal scroll in motion** — the row-streamer during actual
+   camera-Y movement (corpus only checks tall worlds *at rest*), and a topdown
+   diagonal walk exercising `world_to_screen_x`+`_y`+both streamers at once. Lives
+   best in the corpus harness (server-generated tall/topdown projects) extended to
+   walk-to-matched-progress rather than settle-at-rest. Horizontal (both dirs) and
+   the in-place jump arc are already covered by `asm-ab.mjs`.
 2. **Phase 2 proper — the scene-sprite hot loops** (the real perf target). BLOCKED
    on de-`static`ing the server-generated scene arrays (`ss_x/ss_y/…`) **and**
    their **variable element width** (u8↔u16 by sprite position): add `SS_POS_WIDE`
