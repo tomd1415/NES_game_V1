@@ -97,6 +97,21 @@ if (romC && romA) {
   const rl = renderDiff(c, a);
   if (rl.pal + rl.oam + rl.nt + rl.cam === 0) ok(`left-scroll: IDENTICAL at matched progress (C ${lc} vblanks, ASM ${la})`);
   else bad(`left-scroll divergence at px=${LTARGET}: palette=${rl.pal} OAM=${rl.oam} nametable=${rl.nt} cam=${rl.cam}`);
+
+  // Jump IN PLACE (no L/R input → no scroll → no streaming → no frame drops), so
+  // C and ASM stay in exact lockstep every frame. Compare the player's OAM (first
+  // 16 bytes = a 2x2 sprite) across the whole jump arc — verifies world_to_screen_y,
+  // gravity and jump-rise, which the horizontal walks never exercise.
+  let jumpDiff = 0, jumpFrames = 0;
+  for (let i = 0; i < 40; i++) {
+    if (i < 3) { c.buttonDown(1, B.BUTTON_UP); a.buttonDown(1, B.BUTTON_UP); }
+    c.frame(); a.frame();
+    c.buttonUp(1, B.BUTTON_UP); a.buttonUp(1, B.BUTTON_UP);
+    jumpDiff += diff(oam(c).slice(0, 16), oam(a).slice(0, 16));
+    jumpFrames++;
+  }
+  if (jumpDiff === 0) ok(`jump arc: player OAM IDENTICAL across ${jumpFrames} frames (world_to_screen_y, gravity, jump-rise)`);
+  else bad(`jump arc: player OAM diverged (${jumpDiff} byte-diffs over the jump)`);
 }
 
 if (failed) process.exit(1);
