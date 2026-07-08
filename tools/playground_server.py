@@ -2857,15 +2857,15 @@ def _build_rom(body):
         and "\n#define BW_GAME_STYLE 3" not in _cmc
         and not _asm_player_smb
     )
-    # Ship for single-player only (the P2 second actors aren't on ASM yet, so a 2P
-    # build must run entirely on the C). Mirror build_scene_inc's p2_active. The
-    # PLAYGROUND_ASM_PLAYER override force-enables even 2P (for the P2 A/B).
+    # 2-player detection (mirrors build_scene_inc's p2_active). As of engine v50 the
+    # P2 second actors ALSO ship on ASM by default (all four styles A/B-proven
+    # identical to the C), so a 2P build gets P1 on ASM here + P2 on ASM via the
+    # nes_asm_player2 gate below. (_p2_ok is retired — 2P is no longer excluded.)
     _p2_sprites = state.get("sprites") or []
     player2_enabled = (player_idx2 is not None and player_idx2 >= 0
                        and player_idx2 != player_idx and player_idx2 < len(_p2_sprites))
-    _p2_ok = (not player2_enabled) or bool(os.environ.get("PLAYGROUND_ASM_PLAYER"))
     nes_asm_player = bool(
-        asm_ready and custom_main_c is not None and _p2_ok
+        asm_ready and custom_main_c is not None
         and (_asm_player_topdown or _asm_player_platformer or _asm_player_runner)
     )
     # SMB (Phase 2c 5b): style 0 + BW_SMB_JUMP — smb_update (accel/skid + ladder/
@@ -2874,26 +2874,24 @@ def _build_rom(body):
     # in the Makefile (links player_asm.s + -D's out the C blocks) and additionally
     # passes `-D NES_ASM_SMB` to ca65 so player_asm.s compiles its SMB section.
     nes_asm_smb = bool(
-        asm_ready and custom_main_c is not None and _p2_ok
+        asm_ready and custom_main_c is not None
         and _asm_player_smb
     )
     # Racer (Phase 2c): style 3 — racer_update. NES_ASM_RACER=1 IMPLIES NES_ASM_PLAYER
     # in the Makefile and passes `-D NES_ASM_RACER` to ca65 so player_asm.s compiles
     # its racer section (racer_update + the racer-only globals it imports).
     nes_asm_racer = bool(
-        asm_ready and custom_main_c is not None and _p2_ok
+        asm_ready and custom_main_c is not None
         and _asm_player_racer
     )
     # Player-2 second actor (Phase 2c). NES_ASM_PLAYER2=1 IMPLIES NES_ASM_PLAYER and
     # passes `-D NES_ASM_PLAYER2` to ca65 so player_asm.s compiles its P2 section
-    # (p2_* procs + the P2-only globals). Only a 2-player build, and only the styles
-    # already converted (top-down = style 1 so far). GATED on PLAYGROUND_ASM_PLAYER
-    # for now — 2P builds ship pure-C by default until ALL P2 styles are done and the
-    # (re-pin-triggering) 2P-ship decision is taken, so _rom-equiv (a 2P fixture)
-    # stays byte-identical.
+    # (p2_* procs + the P2-only globals). SHIPPED BY DEFAULT (engine v50) for any
+    # 2-player build of a covered style (top-down/racer/platformer/runner) — all four
+    # P2 second actors are A/B-proven byte-behaviour-identical to the C. PLAYGROUND_
+    # NO_ASM=1 remains the whole-engine kill switch.
     nes_asm_player2 = bool(
-        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
-        and custom_main_c is not None and player2_enabled
+        asm_ready and custom_main_c is not None and player2_enabled
         and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer
              or _asm_player_runner)
     )

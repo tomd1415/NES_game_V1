@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v50 — 2026-07-08 — SHIP the 2-player ASM player physics by default
+
+### Changed / migration
+- **The hand-written 6502 player physics now ship BY DEFAULT for 2-PLAYER builds
+  too.** The server `nes_asm_player2` gate no longer requires the PLAYGROUND_ASM_PLAYER
+  toggle (engages for any 2-player build of a covered style: top-down/racer/
+  platformer/runner), and the 1-player gates no longer exclude 2-player builds
+  (`_p2_ok` retired). So a 2-player project now runs P1 AND P2 on ASM. All four P2
+  second actors are A/B-proven byte-behaviour-identical to the C (asm-player.mjs,
+  matched px/py + px2/py2).
+- **`_rom-equiv` re-pinned `54a15150` -> `0aed6e95`** — its everything-on fixture is a
+  2-player platformer, which now builds with P1 plat_update + P2 p2_plat_update on
+  ASM. The byte change is exactly that swap (both procs A/B-proven identical to the
+  C). Golden `1730448e` UNCHANGED (the stock build has no custom main.c, so the player
+  gate never fires). PLAYGROUND_NO_ASM=1 remains the whole-engine kill switch.
+- **Phase 2c COMPLETE.** Every player-physics model — all six single-player
+  (top-down, platformer, SMB, auto-runner, racer) + all four two-player second actors
+  — now runs on hand-written 6502, shipped by default, each A/B-verified against the C.
+
 ## v49 — 2026-07-08 — player-2 runner update WIRED + A/B-verified (Phase 2c, OFF by default)
 
 ### Changed / migration

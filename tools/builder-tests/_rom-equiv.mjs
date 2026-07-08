@@ -20,15 +20,19 @@ import * as H from './lib/render-harness.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
-//   54a15150… is the value with the scene-sprite AI on hand-written 6502 shipped
-//     by default (engine v30: NES_ASM_AI whenever the project has a walker/
-//     chaser/flyer/patrol). Behaviourally identical to the C AI at every matched
-//     tick (asm-ai{,-wide,-corpus} A/B) — the byte change is the ASM AI loop.
+//   0aed6e95… is the value with the 2-PLAYER ASM player physics shipped by default
+//     (engine v50). This fixture is a 2-player platformer, so P1 now runs the ASM
+//     plat_update and P2 the ASM p2_plat_update. Both are A/B-proven byte-behaviour-
+//     identical to the C (asm-player.mjs runPlatformer + runP2Platformer, matched
+//     px/py + px2/py2 over 400 ticks) — the byte change is the ASM P1+P2 physics.
+//   54a15150… was the value with single-player player physics shipped (v43) but 2P
+//     still on cc65 C. Behaviourally identical to the C — the byte change was the
+//     scene-sprite AI (v30) + single-player ASM player (v43).
 //   27210a8f… was the pre-v30 value (universal engine + scroll ASM, but the enemy
 //     AI still in cc65 C; set PLAYGROUND_NO_ASM=1 to rebuild the pure-C engine).
 //   8172e353… was engine v19 (NES_ASM_LEAF always + NES_ASM_SCROLL for scroll).
 //   42a45ca8… was the pure-C -Os value; ce62ec47… the no-opt value.
-const EXPECT = '54a15150cc3290f2d880b7f5c4e9a2a3302bd256';
+const EXPECT = '0aed6e95684bc3bbd665353759f2a003dad45bf6';
 
 const PORT = 18834;
 
