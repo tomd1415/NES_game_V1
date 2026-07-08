@@ -45,3 +45,4 @@ node_modules/
 test-results/
 playwright-report/
 .playwright/
+fceux-validation/
