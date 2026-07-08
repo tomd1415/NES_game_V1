@@ -2750,6 +2750,15 @@ def _build_rom(body):
     nes_asm_ai = bool(
         asm_ready and custom_main_c is not None and "ss_ai_type[" in custom_main_c
     )
+    # Player update on hand-written 6502 (Phase 2c). NOT shipped: gated behind the
+    # PLAYGROUND_ASM_PLAYER test toggle. player_asm.s (td_update) assumes u16 px/py,
+    # so require a SCROLL build, and it only implements the TOP-DOWN model, so
+    # require BW_GAME_STYLE == 1 (detected in the client main.c). The C player
+    # block is #if'd out only under NES_ASM_PLAYER, so flag off is byte-identical.
+    nes_asm_player = bool(
+        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready and is_scroll
+        and custom_main_c is not None and "#define BW_GAME_STYLE 1" in custom_main_c
+    )
 
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
@@ -2757,6 +2766,7 @@ def _build_rom(body):
             collision_h, behaviour_c, bg_world_h, bg_world_c,
             nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
             nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
+            nes_asm_player=nes_asm_player,
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -2766,6 +2776,7 @@ def _build_rom(body):
         collision_h, behaviour_c, bg_world_h, bg_world_c,
         nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
         nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
+        nes_asm_player=nes_asm_player,
         project_inc=project_inc, **audio_kwargs,
     ))
 
@@ -2850,6 +2861,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       audio_songs_asm=None, audio_sfx_asm=None,
                       nes_asm_leaf=False, nes_asm_scroll=False,
                       nes_asm_scene=False, nes_asm_ai=False,
+                      nes_asm_player=False,
                       project_inc=None):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
@@ -2900,6 +2912,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                 make_args.append("NES_ASM_SCENE=1")
             if nes_asm_ai:                          # Phase 2b — scene AI helpers
                 make_args.append("NES_ASM_AI=1")
+            if nes_asm_player:                      # Phase 2c — player update (top-down)
+                make_args.append("NES_ASM_PLAYER=1")
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
             (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))

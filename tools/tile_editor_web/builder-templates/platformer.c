@@ -133,6 +133,11 @@ unsigned char oam_buf[256];
 unsigned int oam_idx;
 
 extern void load_background(void);
+#ifdef NES_ASM_PLAYER
+/* Phase 2c — hand-written 6502 top-down player update (src/player_asm.s); linked
+   + called only under NES_ASM_PLAYER, so flag off is byte-identical. */
+void td_update(void);
+#endif
 
 /* Player position is u16 world-space under SCROLL_BUILD so the pupil can
    walk across every painted screen.  1x1 projects keep the u8 type so
@@ -1114,7 +1119,13 @@ void main(void) {
         }
 #endif
 
-#if (BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3) && !defined(BW_SMB_JUMP)
+#if BW_GAME_STYLE == 1 && defined(NES_ASM_PLAYER)
+        // Phase 2c — the whole top-down move (this horizontal block + the vertical
+        // block below) is the hand-written 6502 td_update; the C blocks are #if'd
+        // out here so exactly one runs. Flag off -> the C blocks run unchanged.
+        td_update();
+#endif
+#if (BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3) && !defined(BW_SMB_JUMP) && !(BW_GAME_STYLE == 1 && defined(NES_ASM_PLAYER))
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
         // tiles painted on the Behaviour page block the player from walking
         // through them — the column just ahead of the player's leading edge
@@ -1383,7 +1394,7 @@ void main(void) {
         }
 #endif  /* BW_GAME_STYLE == 0 || == 2 (platformer + runner vertical) */
 
-#if BW_GAME_STYLE == 1
+#if BW_GAME_STYLE == 1 && !defined(NES_ASM_PLAYER)
         // ----- Top-down vertical movement: 4-way step with collision -----
         // No gravity, no jump, no ladder.  UP/DOWN move the player by
         // walk_speed pixels per frame just like LEFT/RIGHT do above; the

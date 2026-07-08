@@ -114,6 +114,17 @@ CFLAGS  += -DNES_ASM_AI=1
 ASM_SRC += src/ai_asm.s
 endif
 
+# Player update on hand-written 6502 (Phase 2c).  NES_ASM_PLAYER=1 links
+# src/player_asm.s (td_update — the top-down 4-way move+collision) and -D's out
+# the matching C player block in main.c.  Requires a SCROLL build (px/py are u16)
+# + top-down game style; needs NES_ASM_LEAF (behaviour_at).  Same off-by-default,
+# byte-identical-when-off contract; not shipped to pupils yet (PLAYGROUND_ASM_PLAYER).
+NES_ASM_PLAYER ?= 0
+ifeq ($(NES_ASM_PLAYER),1)
+CFLAGS  += -DNES_ASM_PLAYER=1
+ASM_SRC += src/player_asm.s
+endif
+
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
 OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS)

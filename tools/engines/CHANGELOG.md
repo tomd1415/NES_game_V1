@@ -9,6 +9,35 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v32 — 2026-07-08 — top-down player update on hand-written 6502 (Phase 2c, OFF by default)
+
+### Added
+- **Top-down player update on hand-written 6502** (`src/player_asm.s`, `td_update`,
+  linked under `NES_ASM_PLAYER`) — the first player-physics loop on ASM. It is the
+  4-way top-down move+collision (BW_GAME_STYLE == 1): RIGHT/LEFT probe the ahead
+  column across every body row, UP/DOWN probe the two body columns at the ahead
+  row, step `walk_speed` px if clear, then `jumping/jmp_up/on_ladder = 0` — the
+  exact twin of the C. World bounds + player size come from the project.inc
+  constants; px/py are u16 (it requires a SCROLL build, so the ASM is 16-bit only —
+  the non-scroll u8 top-down path stays C). The leaf logic was proven in asm-lab
+  (`functions/td_update`, 16 cases) alongside two supporting leaves,
+  `px_integrate` (8.8 sub-pixel integrate) and `box_on_edge` (the box collision
+  predicate).
+
+### Changed / migration
+- **Off by default / not shipped to pupils.** Linked only under the
+  `PLAYGROUND_ASM_PLAYER` test toggle, and only for a scroll + top-down build.
+  The C top-down block (the shared horizontal walk + the vertical block) is `#if`'d
+  out only under `NES_ASM_PLAYER`, so **flag off is byte-identical**: golden
+  `1730448e` and `_rom-equiv` `54a15150` are UNCHANGED (both are platformer builds,
+  where the top-down gating is inert regardless). `PLAYGROUND_NO_ASM=1` is the kill
+  switch.
+- A/B: `asm-player.mjs` — a 2-screen top-down project, moving player (RIGHT+DOWN
+  across the scroll boundary, wall bumps), C vs `PLAYGROUND_ASM_PLAYER`: C ≡ ASM
+  player px/py at every matched tick over 300 ticks.
+- Next (Phase 2c): the u8 (non-scroll) top-down path, then platformer/SMB/racer
+  player updates, each behind the same flag; see the feasibility doc.
+
 ## v31 — 2026-07-07 — scene-sprite DRAW loop on hand-written 6502, SHIPPED BY DEFAULT
 
 ### Changed / migration

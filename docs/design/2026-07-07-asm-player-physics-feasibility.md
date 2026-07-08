@@ -52,10 +52,12 @@ Order chosen so every step is byte-behaviour-verifiable before the next:
    5 `behaviour_at` probes, short-circuit). 14-case unit test (corners, centre,
    straddle, floor, bx>=256 out-of-map) — asm == C == JS model. **← leaves done;
    next is the first wired-in update (3).**
-3. **top-down player update** — simplest full model (4-way, no gravity, no
-   fixed-point run accel). First end-to-end `NES_ASM_PLAYER` game type. A/B:
-   extend `asm-realproj.mjs` with a top-down variant + scripted 4-way input,
-   matched-tick on `px`/`py`.
+3. **top-down player update** — ✅ **DONE (engine v32, off by default)**.
+   `src/player_asm.s` `td_update` (4-way move+collision) linked under
+   `NES_ASM_PLAYER`; the C top-down block is `#if`'d out only under the flag, so
+   flag off is byte-identical (golden + `_rom-equiv` unchanged). Requires a scroll
+   build (u16 px/py) — the **u8 (non-scroll) top-down path is still C (next)**.
+   A/B: `asm-player.mjs` (moving player, 4-way scroll, C ≡ ASM px/py every tick).
 4. **platformer player update** — walk + jump + gravity + ladders. A/B with
    scripted LEFT/RIGHT/UP over a walled+laddered level.
 5. **SMB player update** — the 8.8 run/walk accel path (`smb_px_sub`). A/B must
