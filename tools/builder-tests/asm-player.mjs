@@ -661,6 +661,99 @@ async function runP2Racer() {
   else bad(`p2-racer: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- Player-2 platformer (2-player, BW_GAME_STYLE 0 + PLAYER2_ENABLED). P1 runs
+// the ASM plat_update, P2 runs the ASM p2_plat_update (simpler: walk + UP-jump +
+// gravity, no ladder/ceiling). Both walk+jump their own pad. Compares px/py + px2/py2.
+function makeP2PlatState() {
+  const cols = 64, rows = 30, floorRow = 26;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) beh[floorRow][c] = 1;               // SOLID floor
+  for (let r = floorRow - 1; r >= floorRow - 4; r--) { beh[r][20] = 2; beh[r][44] = 2; } // WALL columns
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [
+    { role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'player', name: 'hero2', width: 2, height: 2, cells: H.mkCells(2, 2) },
+  ];
+  const s = {
+    name: 'p2plat', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'platformer';
+  s.builder.modules.players.config.count = 2;
+  s.builder.modules.players.submodules.player1.enabled = true;
+  s.builder.modules.players.submodules.player2.enabled = true;
+  return s;
+}
+
+// P1 walks right + periodic UP-jump; P2 walks left + periodic UP-jump (offset phase).
+const stepP2P = (n) => {
+  const tk = rd16(n, TICK);
+  n.buttonDown(1, H.BTN.RIGHT); if (tk % 40 < 2) n.buttonDown(1, H.BTN.UP);
+  n.buttonDown(2, H.BTN.LEFT);  if (tk % 40 >= 20 && tk % 40 < 22) n.buttonDown(2, H.BTN.UP);
+  n.frame();
+  n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(1, H.BTN.UP);
+  n.buttonUp(2, H.BTN.LEFT);  n.buttonUp(2, H.BTN.UP);
+};
+
+async function runP2Platformer() {
+  const s = makeP2PlatState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (/^#define BW_GAME_STYLE [123]\b/m.test(mainC) || /^#define BW_SMB_JUMP\b/m.test(mainC)) { bad('p2-plat: not a plain platformer'); return; }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 40, y: 180 },
+    playerSpriteIdx2: 1, playerStart2: { x: 300, y: 180 }, mode: 'browser',
+    customMainC: withProbe2(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`p2-plat: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`p2-plat: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('p2-plat: ASM ROM == C ROM (NES_ASM_PLAYER2 did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepP2P(c); stepP2P(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('p2-plat: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  const p1x0 = rd16(c, PX), p2x0 = rd16(c, PX2);
+  let p1xMax = p1x0, p2xMin = p2x0;
+  let p1yMin = 255, p1yMax = 0, p2yMin = 255, p2yMax = 0;
+  for (let step = 0; step < 24000 && compared < 400; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('p2-plat: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepP2P(c); else stepP2P(a); continue; }
+    const c1x = rd16(c, PX), a1x = rd16(a, PX), c1y = rd16(c, PY), a1y = rd16(a, PY);
+    const c2x = rd16(c, PX2), a2x = rd16(a, PX2), c2y = rd16(c, PY2), a2y = rd16(a, PY2);
+    if (c1x !== a1x || c1y !== a1y || c2x !== a2x || c2y !== a2y) {
+      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C p1(${c1x},${c1y}) p2(${c2x},${c2y}) A p1(${a1x},${a1y}) p2(${a2x},${a2y})`;
+    }
+    if (c1x > p1xMax) p1xMax = c1x;
+    if (c2x < p2xMin) p2xMin = c2x;
+    if (c1y < p1yMin) p1yMin = c1y; if (c1y > p1yMax) p1yMax = c1y;
+    if (c2y < p2yMin) p2yMin = c2y; if (c2y > p2yMax) p2yMax = c2y;
+    compared++;
+    stepP2P(c); stepP2P(a);
+  }
+
+  if (compared < 300) { bad(`p2-plat: too few matched-tick samples (${compared})`); return; }
+  if (p1xMax <= p1x0 + 8) { bad(`p2-plat: P1 did not walk right (${p1x0}->${p1xMax})`); return; }
+  if (p2xMin >= p2x0 - 8) { bad(`p2-plat: P2 did not walk left (${p2x0}->${p2xMin})`); return; }
+  if (p1yMax - p1yMin < 8 || p2yMax - p2yMin < 8) { bad(`p2-plat: a player never jumped (P1 py range ${p1yMax - p1yMin}, P2 ${p2yMax - p2yMin})`); return; }
+  if (diffs === 0)
+    ok(`p2 platformer (NES_ASM_PLAYER2): C ≡ ASM P1 px/py AND P2 px2/py2 at every matched tick over `
+      + `${compared} ticks (P1 walk+jump ${p1x0}->${p1xMax}, P2 walk+jump ${p2x0}->${p2xMin}, gravity + wall bumps)`);
+  else bad(`p2-plat: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
@@ -672,6 +765,7 @@ try {
   await runRacer();        // top-down racer: steer + accelerate + COS16 velocity + slide collision
   await runP2Topdown();    // 2-player top-down: P1 td_update + P2 p2_td_update, both ASM
   await runP2Racer();      // 2-player racer: P1 racer_update + P2 p2_racer_update, both ASM
+  await runP2Platformer(); // 2-player platformer: P1 plat_update + P2 p2_plat_update, both ASM
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {

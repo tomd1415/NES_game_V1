@@ -2184,11 +2184,14 @@ rcos16:
 ; single-player build never defines. Sets jumping2/jmp_up2 = 0 (no jump in top-down).
 .ifdef NES_ASM_PLAYER2
 .export _p2_td_update
+.export _p2_plat_update
 .import _px2, _py2, _pad2, _walk_speed2, _plrdir2, _jumping2, _jmp_up2
+.import _prev_pad2
 
 PW8_2    = PLAYER2_W * 8
 PH8_2    = PLAYER2_H * 8
 RBOUND_2 = WORLD_W_PX - PW8_2
+P2_FALL_Y = WORLD_H_PX - 8
 
 .segment "CODE"
 
@@ -2427,6 +2430,230 @@ skip_down:
     lda #0
     sta _jumping2
     sta _jmp_up2
+    rts
+.endproc
+
+; ===========================================================================
+; p2_plat_update — the PLAYER-2 platformer move (BW_GAME_STYLE 0 + PLAYER2_ENABLED).
+; Simpler than plat_update (NO ladder, NO ceiling bonk, UP-only jump): the shared P2
+; horizontal walk (p2_hwalk) -> edge-UP jump (jmp_up2=20) -> prev_pad2=pad2 -> simple
+; gravity (rise 2 while jmp_up2>0 else foot-check land-or-fall +2). On the pxw/pyw
+; working copies + PLAYER2 dims. Reuses shr3/cell_solid/cell_solid_or_plat/hprobe +
+; the P2 p2_calc_cols/p2_rows_from_py.
+
+; p2_hwalk: RIGHT/LEFT leading-edge walk on pxw + plrdir2 (shared by plat + runner).
+.proc p2_hwalk
+    lda _pad2
+    and #$01
+    beq @nr
+    lda pxw
+    cmp #<RBOUND_2
+    lda pxw+1
+    sbc #>RBOUND_2
+    bcs @rd
+    lda #(PW8_2 - 1)
+    clc
+    adc _walk_speed2
+    clc
+    adc pxw
+    sta tmp1
+    lda pxw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta tdcol
+    jsr p2_rows_from_py
+    jsr hprobe
+    bne @rd
+    lda pxw
+    clc
+    adc _walk_speed2
+    sta pxw
+    lda pxw+1
+    adc #0
+    sta pxw+1
+@rd:
+    lda #$00
+    sta _plrdir2
+@nr:
+    lda _pad2
+    and #$02
+    beq @nl
+    lda pxw+1
+    bne @lg
+    lda pxw
+    cmp _walk_speed2
+    bcc @ld
+@lg:
+    lda pxw
+    sec
+    sbc _walk_speed2
+    sta tmp1
+    lda pxw+1
+    sbc #0
+    sta tmp2
+    jsr shr3
+    sta tdcol
+    jsr p2_rows_from_py
+    jsr hprobe
+    bne @ld
+    lda pxw
+    sec
+    sbc _walk_speed2
+    sta pxw
+    lda pxw+1
+    sbc #0
+    sta pxw+1
+@ld:
+    lda #$40
+    sta _plrdir2
+@nl:
+    rts
+.endproc
+
+.proc _p2_plat_update
+.if PX_WIDE
+    lda _px2
+    sta pxw
+    lda _px2+1
+    sta pxw+1
+    lda _py2
+    sta pyw
+    lda _py2+1
+    sta pyw+1
+.else
+    lda _px2
+    sta pxw
+    lda _py2
+    sta pyw
+    lda #0
+    sta pxw+1
+    sta pyw+1
+.endif
+    jsr p2_hwalk
+    ; --- jump trigger: (pad2 & 0x08 edge) && !jumping2 -> jumping2=1, jmp_up2=20 ---
+    lda _pad2
+    and #$08
+    beq @nojmp
+    lda _prev_pad2
+    and #$08
+    bne @nojmp
+    lda _jumping2
+    bne @nojmp
+    lda #1
+    sta _jumping2
+    lda #20
+    sta _jmp_up2
+@nojmp:
+    ; prev_pad2 = pad2 (before gravity, matching the C order)
+    lda _pad2
+    sta _prev_pad2
+    ; --- gravity ---
+    lda _jumping2
+    beq @fall
+    lda _jmp_up2
+    beq @fall
+    ; rising: if (py2 >= 18) py2 -= 2 else py2 = 16 ; jmp_up2--
+    lda pyw
+    cmp #18
+    lda pyw+1
+    sbc #0
+    bcc @clamp16
+    lda pyw
+    sec
+    sbc #2
+    sta pyw
+    lda pyw+1
+    sbc #0
+    sta pyw+1
+    jmp @decju
+@clamp16:
+    lda #16
+    sta pyw
+    lda #0
+    sta pyw+1
+@decju:
+    dec _jmp_up2
+    jmp @store
+@fall:
+    ; foot_row = (py2 + PH8_2) >> 3
+    lda #PH8_2
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta arow
+    ; fl = behaviour_at(lcol, foot_row) ; fr = behaviour_at(rcol, foot_row)
+    jsr p2_calc_cols
+    lda lcol
+    sta pcol
+    lda arow
+    sta prow
+    jsr cell_solid_or_plat
+    bne @land
+    lda rcol
+    sta pcol
+    lda arow
+    sta prow
+    jsr cell_solid_or_plat
+    bne @land
+    ; not landed: if (py2 < WORLD_H_PX-8) py2 += 2 ; jumping2 = 1
+    lda pyw
+    cmp #<P2_FALL_Y
+    lda pyw+1
+    sbc #>P2_FALL_Y
+    bcs @setair
+    lda pyw
+    clc
+    adc #2
+    sta pyw
+    lda pyw+1
+    adc #0
+    sta pyw+1
+@setair:
+    lda #1
+    sta _jumping2
+    jmp @store
+@land:
+    ; py2 = (foot_row << 3) - PH8_2 ; jumping2 = 0
+    lda arow
+    sta tmp1
+    lda #0
+    sta tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2
+    lda tmp1
+    sec
+    sbc #PH8_2
+    sta pyw
+    lda tmp2
+    sbc #0
+    sta pyw+1
+    lda #0
+    sta _jumping2
+@store:
+.if PX_WIDE
+    lda pxw
+    sta _px2
+    lda pxw+1
+    sta _px2+1
+    lda pyw
+    sta _py2
+    lda pyw+1
+    sta _py2+1
+.else
+    lda pxw
+    sta _px2
+    lda pyw
+    sta _py2
+.endif
     rts
 .endproc
 .endif  ; NES_ASM_PLAYER2

@@ -147,6 +147,7 @@ void racer_update(void);    /* top-down racer P1 (BW_GAME_STYLE == 3) */
 #if PLAYER2_ENABLED
 void p2_td_update(void);    /* player-2 top-down (BW_GAME_STYLE == 1) */
 void p2_racer_update(void); /* player-2 racer    (BW_GAME_STYLE == 3) */
+void p2_plat_update(void);  /* player-2 platformer (BW_GAME_STYLE == 0) */
 #endif
 #endif
 
@@ -1627,7 +1628,13 @@ void main(void) {
         // blocks are #if'd out under the flag. Flag off -> the C runs unchanged.
         p2_td_update();
 #endif
-#if !(BW_GAME_STYLE == 1 && defined(NES_ASM_PLAYER))   /* ASM p2_td_update owns style-1 P2 */
+#if BW_GAME_STYLE == 0 && defined(NES_ASM_PLAYER)
+        // Phase 2c — the P2 platformer move (this horizontal walk + the style-0
+        // jump/gravity block below) is the hand-written 6502 p2_plat_update; those C
+        // blocks are #if'd out under the flag. Flag off -> the C runs unchanged.
+        p2_plat_update();
+#endif
+#if !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0) && defined(NES_ASM_PLAYER))   /* ASM p2_td_update/p2_plat_update own styles 1/0 P2 */
         /* Horizontal walk with wall block. */
         if (pad2 & 0x01) {                    /* RIGHT */
             if (px2 < (WORLD_W_PX - PLAYER2_W * 8)) {
@@ -1665,7 +1672,7 @@ void main(void) {
         }
 #endif  /* !(P2 top-down + NES_ASM_PLAYER) — the shared P2 horizontal walk */
 
-#if BW_GAME_STYLE == 0
+#if BW_GAME_STYLE == 0 && !defined(NES_ASM_PLAYER)   /* ASM p2_plat_update owns this */
         /* Platformer P2: edge-triggered jump (no ceiling bonk in MVP). */
         if ((pad2 & 0x08) && !(prev_pad2 & 0x08) && !jumping2) {
             jumping2 = 1;

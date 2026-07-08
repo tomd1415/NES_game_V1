@@ -9,6 +9,26 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v48 — 2026-07-08 — player-2 platformer update WIRED + A/B-verified (Phase 2c, OFF by default)
+
+### Changed / migration
+- **The player-2 platformer second actor now runs on hand-written 6502 under the
+  flag, A/B-proven identical to the C.** p2_plat_update = the shared P2 horizontal
+  walk (p2_hwalk) + edge-UP jump (jmp_up2=20) + prev_pad2=pad2 + the SIMPLE gravity
+  (rise 2 while jmp_up2>0 else foot-check land-or-fall +2) — NO ladder, NO ceiling
+  bonk (matching the C P2 MVP). Reuses shr3/cell_solid/cell_solid_or_plat/hprobe +
+  the P2 p2_calc_cols/p2_rows_from_py; p2_hwalk is a shared proc (also for P2 runner).
+- platformer.c gates the C P2 style-0 blocks under NES_ASM_PLAYER (the shared P2
+  hwalk guard widened to exclude styles 1 AND 0; the style-0 vertical gets `&&
+  !defined(NES_ASM_PLAYER)`) and calls `p2_plat_update()`. The server nes_asm_player2
+  gate now also accepts a plain 2P platformer (`_asm_player_platformer`).
+- A/B (`asm-player.mjs`): a 2-player platformer (SOLID floor + WALL columns) both
+  walking + jumping — C ≡ ASM P1 `px/py` AND P2 `px2/py2` at every matched tick over
+  400 ticks (walk, gravity, jump arc, wall bumps). Matched the C from the first build.
+- Off by default (2P gated on PLAYGROUND_ASM_PLAYER); flag off = byte-identical
+  (golden `1730448e` + `_rom-equiv` `54a15150` UNCHANGED). Last P2 style: the runner
+  (walk-only, p2_hwalk); then the 2P-ship decision.
+
 ## v47 — 2026-07-08 — player-2 racer update WIRED + A/B-verified (Phase 2c, OFF by default)
 
 ### Changed / migration
