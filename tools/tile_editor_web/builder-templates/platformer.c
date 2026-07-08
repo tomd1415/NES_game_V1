@@ -146,6 +146,7 @@ void run_update(void);      /* auto-runner (BW_GAME_STYLE == 2) */
 void racer_update(void);    /* top-down racer P1 (BW_GAME_STYLE == 3) */
 #if PLAYER2_ENABLED
 void p2_td_update(void);    /* player-2 top-down (BW_GAME_STYLE == 1) */
+void p2_racer_update(void); /* player-2 racer    (BW_GAME_STYLE == 3) */
 #endif
 #endif
 
@@ -1069,7 +1070,7 @@ void main(void) {
         }
 #endif
 
-#if BW_GAME_STYLE == 3 && PLAYER2_ENABLED
+#if BW_GAME_STYLE == 3 && PLAYER2_ENABLED && !defined(NES_ASM_PLAYER)   /* ASM p2_racer_update owns this */
         // E3-5 2-player: the second car, identical physics driven by pad2.  The
         // camera follows P1, so P2 may scroll off-screen until it catches up.
         if (!RACER_RACE_OVER) {
@@ -1127,6 +1128,13 @@ void main(void) {
                 }
             }
         }
+#endif
+#if BW_GAME_STYLE == 3 && PLAYER2_ENABLED && defined(NES_ASM_PLAYER)
+        // Phase 2c — the P2 racer car (steer + accel + COS16 velocity + slide
+        // collision + lap FSM) is the hand-written 6502 p2_racer_update; the C P2
+        // racer block above is #if'd out under the flag. Flag off -> the C runs
+        // unchanged. (P1 is racer_update, dispatched further below.)
+        p2_racer_update();
 #endif
 
 #if BW_GAME_STYLE == 1 && defined(NES_ASM_PLAYER)

@@ -570,6 +570,97 @@ async function runP2Topdown() {
   else bad(`p2-td: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- Player-2 racer (2-player, BW_GAME_STYLE 3 + PLAYER2_ENABLED). P1 runs the ASM
+// racer_update, P2 runs the ASM p2_racer_update; both steer + accelerate their own
+// car. Matched-tick compares P1 px/py AND P2 px2/py2.
+function makeP2RacerState() {
+  const cols = 64, rows = 30;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) { beh[0][c] = 1; beh[1][c] = 1; beh[rows - 2][c] = 1; beh[rows - 1][c] = 1; }
+  for (let r = 0; r < rows; r++) { beh[r][0] = 1; beh[r][1] = 1; beh[r][cols - 2] = 1; beh[r][cols - 1] = 1; }
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [
+    { role: 'player', name: 'car1', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'player', name: 'car2', width: 2, height: 2, cells: H.mkCells(2, 2) },
+  ];
+  const s = {
+    name: 'p2racer', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'racer';
+  s.builder.modules.players.config.count = 2;
+  s.builder.modules.players.submodules.player1.enabled = true;
+  s.builder.modules.players.submodules.player2.enabled = true;
+  return s;
+}
+
+// Both cars accelerate (A on both pads); P1 sweeps its heading with RIGHT, P2 with
+// LEFT (so the two cars curve opposite ways). Tick-keyed.
+const stepP2R = (n) => {
+  const tk = rd16(n, TICK);
+  n.buttonDown(1, H.BTN.A); n.buttonDown(2, H.BTN.A);
+  if (tk % 8 === 0) { n.buttonDown(1, H.BTN.RIGHT); n.buttonDown(2, H.BTN.LEFT); }
+  n.frame();
+  n.buttonUp(1, H.BTN.A); n.buttonUp(2, H.BTN.A);
+  n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(2, H.BTN.LEFT);
+};
+
+async function runP2Racer() {
+  const s = makeP2RacerState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (!/^#define BW_GAME_STYLE 3\b/m.test(mainC)) { bad('p2-racer: not a racer build'); return; }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 200, y: 96 },
+    playerSpriteIdx2: 1, playerStart2: { x: 300, y: 160 }, mode: 'browser',
+    customMainC: withProbe2(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`p2-racer: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`p2-racer: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('p2-racer: ASM ROM == C ROM (NES_ASM_PLAYER2 did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepP2R(c); stepP2R(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('p2-racer: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  const b1x = rd16(c, PX), b1y = rd16(c, PY), b2x = rd16(c, PX2), b2y = rd16(c, PY2);
+  let r1x = [b1x, b1x], r1y = [b1y, b1y], r2x = [b2x, b2x], r2y = [b2y, b2y];
+  const upd = (r, v) => { if (v < r[0]) r[0] = v; if (v > r[1]) r[1] = v; };
+  for (let step = 0; step < 24000 && compared < 400; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('p2-racer: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepP2R(c); else stepP2R(a); continue; }
+    const c1x = rd16(c, PX), a1x = rd16(a, PX), c1y = rd16(c, PY), a1y = rd16(a, PY);
+    const c2x = rd16(c, PX2), a2x = rd16(a, PX2), c2y = rd16(c, PY2), a2y = rd16(a, PY2);
+    if (c1x !== a1x || c1y !== a1y || c2x !== a2x || c2y !== a2y) {
+      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C p1(${c1x},${c1y}) p2(${c2x},${c2y}) A p1(${a1x},${a1y}) p2(${a2x},${a2y})`;
+    }
+    upd(r1x, c1x); upd(r1y, c1y); upd(r2x, c2x); upd(r2y, c2y);
+    compared++;
+    stepP2R(c); stepP2R(a);
+  }
+
+  if (compared < 300) { bad(`p2-racer: too few matched-tick samples (${compared})`); return; }
+  const d1 = (r1x[1] - r1x[0]) + (r1y[1] - r1y[0]), d2 = (r2x[1] - r2x[0]) + (r2y[1] - r2y[0]);
+  if (d1 < 24) { bad(`p2-racer: P1 barely moved (spread ${d1})`); return; }
+  if (d2 < 24) { bad(`p2-racer: P2 barely moved (spread ${d2})`); return; }
+  if (diffs === 0)
+    ok(`p2 racer (NES_ASM_PLAYER2 + NES_ASM_RACER): C ≡ ASM P1 px/py AND P2 px2/py2 at every matched tick over `
+      + `${compared} ticks (both cars steer+accelerate, COS16 velocity + slide collision; P1 spread ${d1}, P2 spread ${d2})`);
+  else bad(`p2-racer: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
@@ -580,6 +671,7 @@ try {
   await runRunner();       // auto-runner: autoscroll + track-end wrap respawn + A-jump + gravity
   await runRacer();        // top-down racer: steer + accelerate + COS16 velocity + slide collision
   await runP2Topdown();    // 2-player top-down: P1 td_update + P2 p2_td_update, both ASM
+  await runP2Racer();      // 2-player racer: P1 racer_update + P2 p2_racer_update, both ASM
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {

@@ -2452,7 +2452,7 @@ RC_YMAX_2 = WORLD_H_PX - PLAYER2_H * 8
 
 .segment "CODE"
 .proc p2_rc_drive
-    lda _pad
+    lda _pad2
     and #$02
     beq @noL
     lda _racer_heading2
@@ -2461,7 +2461,7 @@ RC_YMAX_2 = WORLD_H_PX - PLAYER2_H * 8
     and #15
     sta _racer_heading2
 @noL:
-    lda _pad
+    lda _pad2
     and #$01
     beq @noR
     lda _racer_heading2
@@ -2470,10 +2470,10 @@ RC_YMAX_2 = WORLD_H_PX - PLAYER2_H * 8
     and #15
     sta _racer_heading2
 @noR:
-    lda _pad
+    lda _pad2
     and #$88
     bne @accel
-    lda _pad
+    lda _pad2
     and #$04
     bne @brake
     jmp @friction

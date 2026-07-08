@@ -9,6 +9,26 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v47 — 2026-07-08 — player-2 racer update WIRED + A/B-verified (Phase 2c, OFF by default)
+
+### Changed / migration
+- **The player-2 racer second car now runs on hand-written 6502 under the flag,
+  A/B-proven identical to the C.** platformer.c gates the C P2 racer block under
+  NES_ASM_PLAYER (`&& !defined(NES_ASM_PLAYER)`) and calls `p2_racer_update()` in its
+  place. The server `nes_asm_player2` gate now accepts a 2P racer
+  (`_asm_player_topdown or _asm_player_racer`); a 2P racer build compiles BOTH the
+  NES_ASM_RACER section (P1) and the P2-racer section (both flags).
+- **Bug caught by the wired A/B and fixed:** the mechanical sed that ported the P1
+  racer onto the *2 globals missed `_pad -> _pad2`, so `p2_rc_drive` steered/accel'd
+  the P2 car off P1's controller. The 2-player A/B's per-actor px2/py2 comparison
+  surfaced it (P2 Y diverged); fixed by substituting `_pad -> _pad2` in p2_rc_drive.
+- A/B (`asm-player.mjs`): a 2-player racer (2 cars, SOLID border) both steering +
+  accelerating — C ≡ ASM P1 `px/py` AND P2 `px2/py2` at every matched tick over 400
+  ticks (COS16 velocity + per-axis slide collision for both cars).
+- Off by default (2P still gated on PLAYGROUND_ASM_PLAYER); flag off = byte-identical
+  (golden `1730448e` + `_rom-equiv` `54a15150` UNCHANGED). Next: P2 platformer + P2
+  runner, then the 2P-ship decision.
+
 ## v46 — 2026-07-08 — player-2 racer update composed in ASM (Phase 2c, OFF/unwired)
 
 ### Added
