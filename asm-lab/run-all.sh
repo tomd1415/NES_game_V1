@@ -79,6 +79,9 @@ node functions/td_update/test.mjs || fail=1
 run pvm "functions/plat_vmove/ref.c functions/plat_vmove/test.c functions/plat_vmove/asm.s"
 node functions/plat_vmove/test.mjs || fail=1
 
+run plad "functions/plat_ladder/ref.c functions/plat_ladder/test.c functions/plat_ladder/asm.s"
+node functions/plat_ladder/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
