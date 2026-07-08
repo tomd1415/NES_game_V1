@@ -73,6 +73,9 @@ node functions/px_integrate/test.mjs || fail=1
 run boe "functions/box_on_edge/ref.c functions/box_on_edge/test.c functions/box_on_edge/asm.s"
 node functions/box_on_edge/test.mjs || fail=1
 
+run tdu "functions/td_update/ref.c functions/td_update/test.c functions/td_update/asm.s"
+node functions/td_update/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
