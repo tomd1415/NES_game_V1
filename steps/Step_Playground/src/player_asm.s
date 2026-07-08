@@ -1443,3 +1443,732 @@ su_pv:
 .endproc
 
 .endif  ; NES_ASM_SMB
+
+; ===========================================================================
+; racer_update — the TOP-DOWN RACER player update (BW_GAME_STYLE 3), composed from
+; the four asm-lab-proven leaves in the C's order: rc_drive (steer + accel/friction/
+; brake/reverse) -> rc_vel (vx/vy from COS16) -> rc_axis (per-axis integrate+clamp+
+; box_on_edge slide + dominant-axis speed bleed) -> rc_laps (checkpoint/finish FSM).
+; P1 car only; guarded by if(!racer_finished). Gated under NES_ASM_RACER (a ca65 -D
+; set only for racer builds) because it imports the racer-only globals
+; (racer_heading/speed/px_sub/py_sub/cp_stage/laps/finished) a non-racer build never
+; defines. All tunables from project.inc RACER_* so the ASM matches the C's values.
+.ifdef NES_ASM_RACER
+.export _racer_update
+.import _racer_heading, _racer_speed, _px_sub, _py_sub
+.import _racer_cp_stage, _racer_laps, _racer_finished
+.importzp tmp3
+
+RC_XMAX    = RBOUND                     ; WORLD_W_PX - PW8
+RC_YMAX    = WORLD_H_PX - PH8
+RC_NEG_REV = $10000 - RACER_REV_MAX     ; -REV_MAX (16-bit two's complement)
+RC_NEG_FRI = $10000 - RACER_FRICTION    ; -FRICTION
+RC_FINISH  = RACER_FINISH_ID
+RC_CP1     = RACER_CHECKPOINT_ID
+RC_CP2     = RACER_CHECKPOINT2_ID
+
+.segment "BSS"
+rvx:   .res 2
+rvy:   .res 2
+ralo:  .res 1
+rahi:  .res 1
+rmaga: .res 1
+rsgna: .res 1
+rmagc: .res 1
+rsgnp: .res 1
+rrlo:  .res 1
+rrhi:  .res 1
+rdhi:  .res 1
+rnlo:  .res 1
+rnhi:  .res 1
+rklo:  .res 1
+rkhi:  .res 1
+rksb:  .res 1
+rhitx: .res 1
+rhity: .res 1
+rbx:   .res 2      ; box_on_edge box (own scratch — C racer_box_on_edge takes args)
+rby:   .res 2
+rbw:   .res 1
+rbh:   .res 1
+raxb:  .res 2
+raxs:  .res 1
+rao0:  .res 1
+rao1:  .res 1
+raom:  .res 1
+rzc0:  .res 1
+rzc1:  .res 1
+rzcm:  .res 1
+rzr0:  .res 1
+rzr1:  .res 1
+rzrm:  .res 1
+rpc:   .res 1
+rpr:   .res 1
+rmid:  .res 1
+
+.segment "CODE"
+rcos16:
+    .byte 127,117,90,49,0,207,166,139,129,139,166,207,0,49,90,117
+
+; ---- rc_drive: steer + accel/friction/brake/reverse (signed-16, from racer_drive)
+.proc rc_drive
+    lda _pad
+    and #$02
+    beq @noL
+    lda _racer_heading
+    clc
+    adc #15
+    and #15
+    sta _racer_heading
+@noL:
+    lda _pad
+    and #$01
+    beq @noR
+    lda _racer_heading
+    clc
+    adc #1
+    and #15
+    sta _racer_heading
+@noR:
+    lda _pad
+    and #$88
+    bne @accel
+    lda _pad
+    and #$04
+    bne @brake
+    jmp @friction
+@accel:
+    clc
+    lda _racer_speed
+    adc #<RACER_ACCEL
+    sta _racer_speed
+    lda _racer_speed+1
+    adc #>RACER_ACCEL
+    sta _racer_speed+1
+    sec
+    lda #<RACER_MAX_SPEED
+    sbc _racer_speed
+    lda #>RACER_MAX_SPEED
+    sbc _racer_speed+1
+    bvc @ac1
+    eor #$80
+@ac1:
+    bpl @ret
+    lda #<RACER_MAX_SPEED
+    sta _racer_speed
+    lda #>RACER_MAX_SPEED
+    sta _racer_speed+1
+@ret:
+    rts
+@brake:
+    sec
+    lda _racer_speed
+    sbc #<RACER_BRAKE
+    sta _racer_speed
+    lda _racer_speed+1
+    sbc #>RACER_BRAKE
+    sta _racer_speed+1
+    sec
+    lda _racer_speed
+    sbc #<RC_NEG_REV
+    lda _racer_speed+1
+    sbc #>RC_NEG_REV
+    bvc @br1
+    eor #$80
+@br1:
+    bpl @ret2
+    lda #<RC_NEG_REV
+    sta _racer_speed
+    lda #>RC_NEG_REV
+    sta _racer_speed+1
+@ret2:
+    rts
+@friction:
+    sec
+    lda #<RACER_FRICTION
+    sbc _racer_speed
+    lda #>RACER_FRICTION
+    sbc _racer_speed+1
+    bvc @fr1
+    eor #$80
+@fr1:
+    bpl @frNP
+    sec
+    lda _racer_speed
+    sbc #<RACER_FRICTION
+    sta _racer_speed
+    lda _racer_speed+1
+    sbc #>RACER_FRICTION
+    sta _racer_speed+1
+    rts
+@frNP:
+    sec
+    lda _racer_speed
+    sbc #<RC_NEG_FRI
+    lda _racer_speed+1
+    sbc #>RC_NEG_FRI
+    bvc @fr2
+    eor #$80
+@fr2:
+    bpl @frZ
+    clc
+    lda _racer_speed
+    adc #<RACER_FRICTION
+    sta _racer_speed
+    lda _racer_speed+1
+    adc #>RACER_FRICTION
+    sta _racer_speed+1
+    rts
+@frZ:
+    lda #0
+    sta _racer_speed
+    sta _racer_speed+1
+    rts
+.endproc
+
+; ---- rc_velcomp: cos byte in A -> signed 16-bit vel component rrlo:rrhi ----
+.proc rc_velcomp
+    cmp #$80
+    bcc @cpos
+    eor #$FF
+    clc
+    adc #1
+    sta rmagc
+    lda rsgna
+    eor #$FF
+    sta rsgnp
+    jmp @mul
+@cpos:
+    sta rmagc
+    lda rsgna
+    sta rsgnp
+@mul:
+    lda #0
+    sta rrhi
+    ldx #8
+@ml:
+    lsr rmagc
+    bcc @na
+    clc
+    lda rrhi
+    adc rmaga
+    sta rrhi
+@na:
+    ror rrhi
+    ror rrlo
+    dex
+    bne @ml
+    lda rsgnp
+    beq @sh
+    sec
+    lda #0
+    sbc rrlo
+    sta rrlo
+    lda #0
+    sbc rrhi
+    sta rrhi
+@sh:
+    ldx #5
+@as:
+    lda rrhi
+    cmp #$80
+    ror rrhi
+    ror rrlo
+    dex
+    bne @as
+    rts
+.endproc
+
+; ---- rc_vel: vx/vy from racer_speed + COS16 (from racer_vel) ----
+.proc rc_vel
+    lda _racer_speed
+    sta ralo
+    lda _racer_speed+1
+    sta rahi
+    ldx #2
+@shr:
+    lda rahi
+    cmp #$80
+    ror rahi
+    ror ralo
+    dex
+    bne @shr
+    lda rahi
+    bpl @apos
+    sec
+    lda #0
+    sbc ralo
+    sta rmaga
+    lda #$FF
+    sta rsgna
+    jmp @vx
+@apos:
+    lda ralo
+    sta rmaga
+    lda #0
+    sta rsgna
+@vx:
+    ldx _racer_heading
+    lda rcos16,x
+    jsr rc_velcomp
+    lda rrlo
+    sta rvx
+    lda rrhi
+    sta rvx+1
+    lda _racer_heading
+    clc
+    adc #12
+    and #15
+    tax
+    lda rcos16,x
+    jsr rc_velcomp
+    lda rrlo
+    sta rvy
+    lda rrhi
+    sta rvy+1
+    rts
+.endproc
+
+; ---- box_on_edge: axis3 / probe / rbe (from racer_axis leaf's inlined copy) ----
+.proc rc_axis3
+    lda raxb
+    sta tmp1
+    lda raxb+1
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    sta rao0
+    lda raxs
+    asl
+    asl
+    asl
+    sta tmp3
+    clc
+    lda raxb
+    adc tmp3
+    sta tmp1
+    lda raxb+1
+    adc #0
+    sta tmp2
+    sec
+    lda tmp1
+    sbc #1
+    sta tmp1
+    lda tmp2
+    sbc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    sta rao1
+    lda raxs
+    asl
+    asl
+    sta tmp3
+    clc
+    lda raxb
+    adc tmp3
+    sta tmp1
+    lda raxb+1
+    adc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    sta raom
+    rts
+.endproc
+
+.proc rc_probe
+    lda rpc
+    ldx #0
+    jsr pushax
+    lda rpr
+    ldx #0
+    jsr _behaviour_at
+    cmp #BEH_SOLID
+    beq @yes
+    cmp #BEH_WALL
+    beq @yes
+    lda #0
+    rts
+@yes:
+    lda #1
+    rts
+.endproc
+
+.proc rc_rbe
+    lda rbx
+    sta raxb
+    lda rbx+1
+    sta raxb+1
+    lda rbw
+    sta raxs
+    jsr rc_axis3
+    lda rao0
+    sta rzc0
+    lda rao1
+    sta rzc1
+    lda raom
+    sta rzcm
+    lda rby
+    sta raxb
+    lda rby+1
+    sta raxb+1
+    lda rbh
+    sta raxs
+    jsr rc_axis3
+    lda rao0
+    sta rzr0
+    lda rao1
+    sta rzr1
+    lda raom
+    sta rzrm
+    lda rzc0
+    sta rpc
+    lda rzr0
+    sta rpr
+    jsr rc_probe
+    bne @hit
+    lda rzc1
+    sta rpc
+    lda rzr0
+    sta rpr
+    jsr rc_probe
+    bne @hit
+    lda rzc0
+    sta rpc
+    lda rzr1
+    sta rpr
+    jsr rc_probe
+    bne @hit
+    lda rzc1
+    sta rpc
+    lda rzr1
+    sta rpr
+    jsr rc_probe
+    bne @hit
+    lda rzcm
+    sta rpc
+    lda rzrm
+    sta rpr
+    jsr rc_probe
+    bne @hit
+    lda #0
+    rts
+@hit:
+    lda #1
+    rts
+.endproc
+
+; ---- rc_axis: per-axis move (X then Y) + dominant-axis speed bleed (racer_axis)
+.proc rc_axis
+    ; ===== X =====
+    lda _px
+    sta rklo
+    lda _px+1
+    sta rkhi
+    lda _px_sub
+    sta rksb
+    clc
+    lda _px_sub
+    adc rvx
+    sta _px_sub
+    lda rvx+1
+    adc #0
+    sta rdhi
+    clc
+    lda _px
+    adc rdhi
+    sta rnlo
+    lda rdhi
+    bpl @xp
+    lda #$FF
+    bne @xa
+@xp:
+    lda #0
+@xa:
+    adc _px+1
+    sta rnhi
+    lda rnhi
+    bpl @xnn
+    lda #0
+    sta rnlo
+    sta rnhi
+    sta _px_sub
+    jmp @xst
+@xnn:
+    lda #<RC_XMAX
+    cmp rnlo
+    lda #>RC_XMAX
+    sbc rnhi
+    bcs @xst
+    lda #<RC_XMAX
+    sta rnlo
+    lda #>RC_XMAX
+    sta rnhi
+    lda #0
+    sta _px_sub
+@xst:
+    lda rnlo
+    sta _px
+    lda rnhi
+    sta _px+1
+    lda _px
+    sta rbx
+    lda _px+1
+    sta rbx+1
+    lda _py
+    sta rby
+    lda _py+1
+    sta rby+1
+    lda #PLAYER_W
+    sta rbw
+    lda #PLAYER_H
+    sta rbh
+    jsr rc_rbe
+    beq @xok
+    lda rklo
+    sta _px
+    lda rkhi
+    sta _px+1
+    lda rksb
+    sta _px_sub
+    lda #1
+    sta rhitx
+    jmp @ybeg
+@xok:
+    lda #0
+    sta rhitx
+@ybeg:
+    ; ===== Y =====
+    lda _py
+    sta rklo
+    lda _py+1
+    sta rkhi
+    lda _py_sub
+    sta rksb
+    clc
+    lda _py_sub
+    adc rvy
+    sta _py_sub
+    lda rvy+1
+    adc #0
+    sta rdhi
+    clc
+    lda _py
+    adc rdhi
+    sta rnlo
+    lda rdhi
+    bpl @yp
+    lda #$FF
+    bne @ya
+@yp:
+    lda #0
+@ya:
+    adc _py+1
+    sta rnhi
+    lda rnhi
+    bpl @ynn
+    lda #0
+    sta rnlo
+    sta rnhi
+    sta _py_sub
+    jmp @yst
+@ynn:
+    lda #<RC_YMAX
+    cmp rnlo
+    lda #>RC_YMAX
+    sbc rnhi
+    bcs @yst
+    lda #<RC_YMAX
+    sta rnlo
+    lda #>RC_YMAX
+    sta rnhi
+    lda #0
+    sta _py_sub
+@yst:
+    lda rnlo
+    sta _py
+    lda rnhi
+    sta _py+1
+    lda _px
+    sta rbx
+    lda _px+1
+    sta rbx+1
+    lda _py
+    sta rby
+    lda _py+1
+    sta rby+1
+    lda #PLAYER_W
+    sta rbw
+    lda #PLAYER_H
+    sta rbh
+    jsr rc_rbe
+    beq @yok
+    lda rklo
+    sta _py
+    lda rkhi
+    sta _py+1
+    lda rksb
+    sta _py_sub
+    lda #1
+    sta rhity
+    jmp @bleed
+@yok:
+    lda #0
+    sta rhity
+@bleed:
+    ; avx -> rnlo:rnhi, avy -> rklo:rkhi
+    lda rvx+1
+    bpl @avxp
+    sec
+    lda #0
+    sbc rvx
+    sta rnlo
+    lda #0
+    sbc rvx+1
+    sta rnhi
+    jmp @avy
+@avxp:
+    lda rvx
+    sta rnlo
+    lda rvx+1
+    sta rnhi
+@avy:
+    lda rvy+1
+    bpl @avyp
+    sec
+    lda #0
+    sbc rvy
+    sta rklo
+    lda #0
+    sbc rvy+1
+    sta rkhi
+    jmp @cond
+@avyp:
+    lda rvy
+    sta rklo
+    lda rvy+1
+    sta rkhi
+@cond:
+    lda rhitx
+    beq @tryhy
+    lda rnlo
+    cmp rklo
+    lda rnhi
+    sbc rkhi
+    bcs @burn           ; avx >= avy
+@tryhy:
+    lda rhity
+    beq @done
+    lda rklo
+    cmp rnlo
+    lda rkhi
+    sbc rnhi
+    bcs @burn           ; avy >= avx
+    jmp @done
+@burn:
+    lda _racer_speed+1
+    cmp #$80
+    ror _racer_speed+1
+    ror _racer_speed
+@done:
+    rts
+.endproc
+
+; ---- rc_laps: centre-cell checkpoint/finish FSM (from racer_laps) ----
+.proc rc_laps
+    clc
+    lda _px
+    adc #(PLAYER_W * 4)
+    sta tmp1
+    lda _px+1
+    adc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    ldx #0
+    jsr pushax
+    clc
+    lda _py
+    adc #(PLAYER_H * 4)
+    sta tmp1
+    lda _py+1
+    adc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    ldx #0
+    jsr _behaviour_at
+    sta rmid
+    cmp #RC_CP1
+    bne @notcp1
+    lda _racer_cp_stage
+    bne @done
+    lda #1
+    sta _racer_cp_stage
+    jmp @done
+@notcp1:
+    lda rmid
+    cmp #RC_CP2
+    bne @notcp2
+    lda _racer_cp_stage
+    cmp #1
+    bne @done
+    lda #2
+    sta _racer_cp_stage
+    jmp @done
+@notcp2:
+    lda rmid
+    cmp #RC_FINISH
+    bne @done
+    lda _racer_cp_stage
+    cmp #RACER_CP_COUNT
+    bcc @done
+    lda #0
+    sta _racer_cp_stage
+    inc _racer_laps
+    lda _racer_laps
+    cmp #RACER_LAPS_TO_WIN
+    bcc @done
+    lda #1
+    sta _racer_finished
+@done:
+    rts
+.endproc
+
+; ---- _racer_update: compose in the C's order, guarded by if(!racer_finished) ----
+.proc _racer_update
+    lda _racer_finished
+    bne @done
+    jsr rc_drive
+    jsr rc_vel
+    jsr rc_axis
+    jsr rc_laps
+@done:
+    rts
+.endproc
+.endif  ; NES_ASM_RACER

@@ -9,6 +9,35 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v41 — 2026-07-08 — top-down racer player update composed in ASM (Phase 2c, OFF/unwired)
+
+### Added
+- **racer_update proc in src/player_asm.s** — the TOP-DOWN RACER player update
+  (BW_GAME_STYLE 3), composed from the four asm-lab-proven leaves in the C's order:
+  rc_drive (steer + accel/friction/brake/reverse, signed-16) → rc_vel (vx/vy from a
+  COS16 .byte table, signed product then arithmetic >>5) → rc_axis (per-axis
+  integrate + world-clamp + box_on_edge slide, X before Y, then the dominant-axis
+  speed >>1 bleed) → rc_laps (centre-cell checkpoint/finish FSM). box_on_edge is
+  inlined (rc_axis3/rc_probe/rc_rbe). Guarded by if(!racer_finished) (P1 car only).
+- **project.inc now emits RACER_*** (RACER_MAX_SPEED/ACCEL/FRICTION/BRAKE/REV_MAX/
+  LAPS_TO_WIN/CP_COUNT/FINISH_ID/CHECKPOINT_ID/CHECKPOINT2_ID) — server derives
+  MAX_SPEED/LAPS/CP_COUNT from the racerTopSpeed/racerLaps/racerCheckpoints knobs
+  (same as builder-modules.js), the rest from the template #ifndef defaults. Same
+  project-constants discipline as SMB_*/RUNNER_*.
+
+### Changed / migration
+- **Gated under a new ca65 NES_ASM_RACER symbol** (not just PX_WIDE): racer_update
+  imports the racer-ONLY globals (racer_heading/speed/px_sub/py_sub/cp_stage/laps/
+  finished), which a non-racer build never defines — so the whole section is
+  compiled ONLY for racer builds, exactly like the SMB section's NES_ASM_SMB gate.
+- **Not wired yet** (no C caller, no Makefile -D NES_ASM_RACER, server gate absent),
+  so this is dead code in current flag builds and absent flag-off. Flag off =
+  byte-identical (golden 1730448e + _rom-equiv 54a15150 UNCHANGED); the top-down +
+  platformer + SMB + runner A/B all still pass. Assemble-checked both widths ×
+  {plain, NES_ASM_RACER, NES_ASM_SMB, both}.
+- Next: Makefile NES_ASM_RACER plumbing + gate the C style-3 block + racer_update()
+  call + server _asm_player_racer gate, then A/B a racer project.
+
 ## v40 — 2026-07-08 — auto-runner player update WIRED + A/B-verified (Phase 2c, OFF by default)
 
 ### Changed / migration
