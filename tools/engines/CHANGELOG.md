@@ -9,6 +9,26 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v37 — 2026-07-08 — SMB player update composed in ASM (Phase 2c 5b-i, OFF/unwired)
+
+### Added
+- **smb_update proc in src/player_asm.s** — the SMB player update (BW_GAME_STYLE 0
+  + BW_SMB_JUMP) composed from the asm-lab-proven SMB leaves: SMB horizontal
+  (smb_accel signed-16 accel/skid -> smb_hstep integrate+world-clamp+collision) ->
+  pl_ladder (reuse) OR smb_jump (A/UP-edge take-off + run-boost + variable-cut) ->
+  pl_vmove with a +3 fall. pl_vmove's gravity step is now parameterised (a fall_amt
+  byte: 2 platformer, 3 SMB); plat_update sets 2 (verified identical).
+
+### Changed / migration
+- **Not wired yet, and GATED under a new ca65 NES_ASM_SMB symbol** so the SMB
+  section (which imports the SMB-only globals _smb_vx/_smb_px_sub) is compiled
+  ONLY for SMB builds — a top-down/platformer build skips it and links fine.
+  Assemble-verified both PX_WIDE for both the SMB and non-SMB paths. Flag off =
+  byte-identical (golden 1730448e + _rom-equiv 54a15150 UNCHANGED); the top-down +
+  platformer A/B still pass (pl_vmove fall_amt=2 keeps them identical).
+- Next (5b-ii..iv): Makefile NES_ASM_SMB plumbing + gate the C SMB blocks + server
+  gate for SMB + A/B a SMB project.
+
 ## v36 — 2026-07-08 — platformer player update WIRED + A/B-verified (Phase 2c 4b done, OFF by default)
 
 ### Changed / migration

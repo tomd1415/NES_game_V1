@@ -61,6 +61,8 @@ ntlo:  .res 1     ; plat_update: new_top / new_foot lo
 nthi:  .res 1
 ul:    .res 1     ; plat_update: up_l / dn_l / head_l behaviour
 ur:    .res 1     ; plat_update: up_r / dn_r / head_r behaviour
+fall_amt: .res 1  ; pl_vmove gravity step: 2 (platformer) or 3 (SMB)
+sedge: .res 1     ; smb_hstep: leading-edge column
 
 .segment "CODE"
 
@@ -787,7 +789,7 @@ h_sl:
     bcs @air
     lda pyw
     clc
-    adc #2
+    adc fall_amt              ; 2 (platformer) or 3 (SMB), set by the caller
     sta pyw
     lda pyw+1
     adc #0
@@ -824,6 +826,8 @@ h_sl:
     bne pu_pv
     jsr pl_jump
 pu_pv:
+    lda #2
+    sta fall_amt
     jsr pl_vmove
 .if PX_WIDE
     lda pxw
@@ -842,3 +846,403 @@ pu_pv:
 .endif
     rts
 .endproc
+
+; ===========================================================================
+; smb_update — the SMB player update (BW_GAME_STYLE 0 + BW_SMB_JUMP). Same order
+; as the C: SMB horizontal (smb_accel -> smb_hstep) -> ladder(detect+climb) OR
+; smb_jump(trigger + variable-cut) -> pl_vmove with a +3 fall. Reuses shr3/
+; cell_solid/calc_cols/pl_ladder/pl_vmove; smb_accel/smb_hstep/smb_jump are the
+; asm-lab-proven leaves. _smb_vx / _smb_px_sub are real main.c globals — defined
+; only for SMB builds, so the whole SMB section is gated under NES_ASM_SMB (a ca65
+; -D set by the Makefile only for SMB projects); a non-SMB build never references
+; them and links fine.
+; ===========================================================================
+.ifdef NES_ASM_SMB
+.export _smb_update
+.import _smb_vx, _smb_px_sub
+
+.segment "BSS"
+smaxs:   .res 2
+starget: .res 2
+saccel:  .res 2
+newsub:  .res 1
+sdhi:    .res 1
+snplo:   .res 1
+snphi:   .res 1
+strow:   .res 1
+sbrow:   .res 1
+
+.segment "CODE"
+
+SMB_RUN  = 640
+SMB_WALK = 384
+SMB_ACC  = 24
+
+; smb_accel — signed 16-bit accelerate smb_vx toward the run/walk target (2x
+; skid on reversal); plrdir from target sign. (asm-lab functions/smb_accel)
+.proc smb_accel
+    lda _pad
+    and #$40
+    beq @wmax
+    lda #<SMB_RUN
+    sta smaxs
+    lda #>SMB_RUN
+    sta smaxs+1
+    jmp @tgt
+@wmax:
+    lda #<SMB_WALK
+    sta smaxs
+    lda #>SMB_WALK
+    sta smaxs+1
+@tgt:
+    lda _pad
+    and #$01
+    beq @nr
+    lda smaxs
+    sta starget
+    lda smaxs+1
+    sta starget+1
+    jmp @accl
+@nr:
+    lda _pad
+    and #$02
+    beq @tz
+    sec
+    lda #0
+    sbc smaxs
+    sta starget
+    lda #0
+    sbc smaxs+1
+    sta starget+1
+    jmp @accl
+@tz:
+    lda #0
+    sta starget
+    sta starget+1
+@accl:
+    lda _smb_vx
+    cmp starget
+    bne @cmpvt
+    lda _smb_vx+1
+    cmp starget+1
+    bne @cmpvt
+    jmp @setdir
+@cmpvt:
+    sec
+    lda _smb_vx
+    sbc starget
+    lda _smb_vx+1
+    sbc starget+1
+    bvc @s1
+    eor #$80
+@s1:
+    bpl @gtr
+    jmp @vless
+@gtr:
+    lda _smb_vx+1
+    bmi @ga1
+    lda _smb_vx+1
+    ora _smb_vx
+    beq @ga1
+    lda #<(SMB_ACC * 2)
+    sta saccel
+    lda #>(SMB_ACC * 2)
+    sta saccel+1
+    jmp @gsub
+@ga1:
+    lda #<SMB_ACC
+    sta saccel
+    lda #>SMB_ACC
+    sta saccel+1
+@gsub:
+    sec
+    lda _smb_vx
+    sbc saccel
+    sta _smb_vx
+    lda _smb_vx+1
+    sbc saccel+1
+    sta _smb_vx+1
+    sec
+    lda _smb_vx
+    sbc starget
+    lda _smb_vx+1
+    sbc starget+1
+    bvc @s2
+    eor #$80
+@s2:
+    bpl @setdir
+    lda starget
+    sta _smb_vx
+    lda starget+1
+    sta _smb_vx+1
+    jmp @setdir
+@vless:
+    lda _smb_vx+1
+    bmi @la2
+    lda #<SMB_ACC
+    sta saccel
+    lda #>SMB_ACC
+    sta saccel+1
+    jmp @ladd
+@la2:
+    lda #<(SMB_ACC * 2)
+    sta saccel
+    lda #>(SMB_ACC * 2)
+    sta saccel+1
+@ladd:
+    clc
+    lda _smb_vx
+    adc saccel
+    sta _smb_vx
+    lda _smb_vx+1
+    adc saccel+1
+    sta _smb_vx+1
+    sec
+    lda starget
+    sbc _smb_vx
+    lda starget+1
+    sbc _smb_vx+1
+    bvc @s3
+    eor #$80
+@s3:
+    bpl @setdir
+    lda starget
+    sta _smb_vx
+    lda starget+1
+    sta _smb_vx+1
+@setdir:
+    lda starget+1
+    bmi @tneg
+    lda starget
+    ora starget+1
+    beq @done
+    lda #$00
+    sta _plrdir
+    rts
+@tneg:
+    lda #$40
+    sta _plrdir
+@done:
+    rts
+.endproc
+
+; smb_hstep — 8.8 integrate + world clamp (16-bit, RBOUND may exceed 255 under
+; scroll) + leading-edge collision, on the pxw working copy. (asm-lab smb_hstep)
+.proc smb_hstep
+    clc
+    lda _smb_px_sub
+    adc _smb_vx
+    sta newsub
+    lda _smb_vx+1
+    adc #0
+    sta sdhi
+    lda pxw
+    clc
+    adc sdhi
+    sta snplo
+    lda sdhi
+    bpl @pos
+    lda #$FF
+    bne @adhi
+@pos:
+    lda #$00
+@adhi:
+    adc pxw+1
+    sta snphi
+    ; clamp np to [0, RBOUND] (16-bit)
+    lda snphi
+    bmi @clamp0
+    lda #<RBOUND
+    cmp snplo
+    lda #>RBOUND
+    sbc snphi
+    bcc @clampmax        ; RBOUND < np -> np > RBOUND
+    jmp @setsub
+@clamp0:
+    lda #0
+    sta snplo
+    sta snphi
+    jmp @clampreset
+@clampmax:
+    lda #<RBOUND
+    sta snplo
+    lda #>RBOUND
+    sta snphi
+@clampreset:
+    lda #0
+    sta _smb_vx
+    sta _smb_vx+1
+    sta newsub
+@setsub:
+    lda newsub
+    sta _smb_px_sub
+    ; if (np != px) collide
+    lda snplo
+    cmp pxw
+    bne @moved
+    lda snphi
+    cmp pxw+1
+    bne @moved
+    rts
+@moved:
+    lda pxw
+    cmp snplo
+    lda pxw+1
+    sbc snphi
+    bcc @right           ; px < np -> moving right
+    lda snplo
+    sta tmp1
+    lda snphi
+    sta tmp2
+    jsr shr3
+    sta sedge
+    jmp @rows
+@right:
+    lda #(PW8 - 1)
+    clc
+    adc snplo
+    sta tmp1
+    lda snphi
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta sedge
+@rows:
+    lda pyw
+    sta tmp1
+    lda pyw+1
+    sta tmp2
+    jsr shr3
+    sta strow
+    lda #(PH8 - 1)
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta sbrow
+    lda strow
+    sta prow
+@ploop:
+    lda prow
+    cmp sbrow
+    bcc @pdo
+    beq @pdo
+    jmp @move
+@pdo:
+    lda sedge
+    sta pcol
+    jsr cell_solid
+    bne @blocked
+    inc prow
+    jmp @ploop
+@blocked:
+    lda #0
+    sta _smb_vx
+    sta _smb_vx+1
+    sta _smb_px_sub
+    rts
+@move:
+    lda snplo
+    sta pxw
+    lda snphi
+    sta pxw+1
+    rts
+.endproc
+
+; smb_jump — UP-edge OR A-edge take-off (+8 if B), then the variable-height cut.
+; (asm-lab functions/smb_jump)
+.proc smb_jump
+    lda _pad
+    and #$08
+    beq @chkA
+    lda _prev_pad
+    and #$08
+    beq @edge
+@chkA:
+    lda _pad
+    and #$80
+    beq @cut
+    lda _prev_pad
+    and #$80
+    bne @cut
+@edge:
+    lda _jumping
+    bne @cut
+    lda #1
+    sta _jumping
+    lda #20
+    sta _jmp_up
+    lda _pad
+    and #$40
+    beq @cut
+    lda _jmp_up
+    clc
+    adc #8
+    sta _jmp_up
+@cut:
+    lda _jumping
+    beq @done
+    lda _jmp_up
+    cmp #5
+    bcc @done
+    lda _pad
+    and #$88
+    bne @done
+    lda #4
+    sta _jmp_up
+@done:
+    rts
+.endproc
+
+; _smb_update — compose in the C's order.
+.proc _smb_update
+.if PX_WIDE
+    lda _px
+    sta pxw
+    lda _px+1
+    sta pxw+1
+    lda _py
+    sta pyw
+    lda _py+1
+    sta pyw+1
+.else
+    lda _px
+    sta pxw
+    lda _py
+    sta pyw
+    lda #0
+    sta pxw+1
+    sta pyw+1
+.endif
+    jsr smb_accel
+    jsr smb_hstep
+    jsr pl_ladder
+    lda _on_ladder
+    bne su_pv
+    jsr smb_jump
+su_pv:
+    lda #3
+    sta fall_amt
+    jsr pl_vmove
+.if PX_WIDE
+    lda pxw
+    sta _px
+    lda pxw+1
+    sta _px+1
+    lda pyw
+    sta _py
+    lda pyw+1
+    sta _py+1
+.else
+    lda pxw
+    sta _px
+    lda pyw
+    sta _py
+.endif
+    rts
+.endproc
+
+.endif  ; NES_ASM_SMB
