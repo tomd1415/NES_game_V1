@@ -2751,14 +2751,29 @@ def _build_rom(body):
         asm_ready and custom_main_c is not None and "ss_ai_type[" in custom_main_c
     )
     # Player update on hand-written 6502 (Phase 2c). NOT shipped: gated behind the
-    # PLAYGROUND_ASM_PLAYER test toggle. player_asm.s (td_update) implements only
-    # the TOP-DOWN model, so require BW_GAME_STYLE == 1 (detected in the client
-    # main.c); it handles both px/py widths (a PX_WIDE .if picks u8 vs u16 from the
-    # project.inc BG_WORLD_COLS/ROWS), so no scroll requirement. The C player block
-    # is #if'd out only under NES_ASM_PLAYER, so flag off is byte-identical.
+    # PLAYGROUND_ASM_PLAYER test toggle. player_asm.s implements the TOP-DOWN
+    # (td_update) and the non-SMB PLATFORMER (plat_update) models, so accept those
+    # two BW_GAME_STYLEs, detected in the client main.c: top-down emits
+    # `#define BW_GAME_STYLE 1`; a plain platformer emits NO BW_GAME_STYLE define
+    # (it defaults to 0) and NO BW_SMB_JUMP; runner/racer are 2/3 and SMB carries
+    # BW_SMB_JUMP (plat_update does NOT cover SMB physics). Both px/py widths are
+    # handled (a PX_WIDE .if picks u8 vs u16). The C player blocks are #if'd out
+    # only under NES_ASM_PLAYER, so flag off is byte-identical.
+    # Match REAL defines (line-anchored via the leading newline) — the template
+    # carries an explanatory comment containing the text `#define BW_GAME_STYLE 1`
+    # in every build, so a bare substring test would false-match for platformer/SMB.
+    _cmc = custom_main_c or ""
+    _asm_player_topdown = "\n#define BW_GAME_STYLE 1" in _cmc
+    _asm_player_platformer = (
+        "\n#define BW_GAME_STYLE 1" not in _cmc
+        and "\n#define BW_GAME_STYLE 2" not in _cmc
+        and "\n#define BW_GAME_STYLE 3" not in _cmc
+        and "\n#define BW_SMB_JUMP" not in _cmc
+    )
     nes_asm_player = bool(
         os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
-        and custom_main_c is not None and "#define BW_GAME_STYLE 1" in custom_main_c
+        and custom_main_c is not None
+        and (_asm_player_topdown or _asm_player_platformer)
     )
 
     if custom_main_c is not None:

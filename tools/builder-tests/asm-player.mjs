@@ -54,12 +54,13 @@ function makeState(screensX) {
   return s;
 }
 
-const TICK = 0x0710, PX = 0x0712, PY = 0x0714;
+const TICK = 0x0710, PX = 0x0712, PY = 0x0714, JU = 0x0716;
 function withProbe(mainC) {
   const inj = '{static unsigned int _tk; ++_tk;'
     + `(*(unsigned char*)${TICK})=(unsigned char)(_tk&0xFF);(*(unsigned char*)${TICK + 1})=(unsigned char)(_tk>>8);`
     + `(*(unsigned char*)${PX})=(unsigned char)px;(*(unsigned char*)${PX + 1})=(unsigned char)(px>>8);`
-    + `(*(unsigned char*)${PY})=(unsigned char)py;(*(unsigned char*)${PY + 1})=(unsigned char)(py>>8);} `;
+    + `(*(unsigned char*)${PY})=(unsigned char)py;(*(unsigned char*)${PY + 1})=(unsigned char)(py>>8);`
+    + `(*(unsigned char*)${JU})=(unsigned char)jumping;} `;
   return mainC.replace('while (oam_idx < 256) {', inj + 'while (oam_idx < 256) {');
 }
 
@@ -118,11 +119,98 @@ async function runCase(screensX) {
   else bad(`${label}: divergence — ${diffs} px/py diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// --- Platformer (BW_GAME_STYLE 0): the ASM plat_update vs the C, with jumps ---
+function makePlatformerState() {
+  const cols = 64, rows = 30, floorRow = 26;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) beh[floorRow][c] = 1;              // SOLID floor
+  for (let r = floorRow - 1; r >= floorRow - 5; r--) beh[r][20] = 2; // WALL column (bump)
+  for (let r = floorRow - 1; r >= 8; r--) beh[r][44] = 6;           // LADDER column (climb)
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [{ role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) }];
+  const s = {
+    name: 'platplayer', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'platformer';
+  return s;
+}
+
+// Input is a function of the injected TICK (not the frame) so both builds get the
+// same pad at the same game-tick: hold RIGHT, tap UP for 2 ticks every 40 (an edge
+// -> a jump). Reading each build's own tick before stepping keeps them in step.
+const stepPlat = (n) => {
+  const tk = rd16(n, TICK);
+  n.buttonDown(1, H.BTN.RIGHT);
+  if (tk % 40 < 2) n.buttonDown(1, H.BTN.UP);
+  n.frame();
+  n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(1, H.BTN.UP);
+};
+
+async function runPlatformer() {
+  const s = makePlatformerState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  // line-anchored so the template's explanatory comment (which contains the text
+  // `#define BW_GAME_STYLE 1`) doesn't false-match — only a REAL define counts.
+  if (/^#define BW_GAME_STYLE [123]\b/m.test(mainC) || /^#define BW_SMB_JUMP\b/m.test(mainC)) {
+    bad('platformer: not a plain non-SMB platformer — server gate would not engage'); return;
+  }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 180 }, mode: 'browser',
+    customMainC: withProbe(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`platformer: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`platformer: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('platformer: ASM ROM == C ROM (NES_ASM_PLAYER did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepPlat(c); stepPlat(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('platformer: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  const pxStart = rd16(c, PX);
+  let pxMax = pxStart, jumpedC = false;
+  for (let step = 0; step < 24000 && compared < 400; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('platformer: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepPlat(c); else stepPlat(a); continue; }
+    const cpx = rd16(c, PX), apx = rd16(a, PX), cpy = rd16(c, PY), apy = rd16(a, PY);
+    const cj = c.cpu.mem[JU] & 0xFF, aj = a.cpu.mem[JU] & 0xFF;
+    if (cpx !== apx || cpy !== apy || cj !== aj) {
+      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C(${cpx},${cpy},j${cj}) A(${apx},${apy},j${aj})`;
+    }
+    if (cpx > pxMax) pxMax = cpx;
+    if (cj) jumpedC = true;
+    compared++;
+    stepPlat(c); stepPlat(a);
+  }
+
+  if (compared < 300) { bad(`platformer: too few matched-tick samples (${compared})`); return; }
+  if (pxMax <= pxStart + 8) { bad(`platformer: player did not walk right (px ${pxStart}->${pxMax})`); return; }
+  if (!jumpedC) { bad('platformer: player never jumped (jumping stayed 0) — jump path not exercised'); return; }
+  if (diffs === 0)
+    ok(`platformer player update (NES_ASM_PLAYER): C ≡ ASM px/py/jumping at every matched tick over `
+      + `${compared} ticks (walk RIGHT ${pxStart}->${pxMax}, periodic jumps, wall + ladder)`);
+  else bad(`platformer: divergence — ${diffs} px/py/jumping diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
-  await runCase(1);   // non-scroll: u8 px/py
-  await runCase(2);   // scroll: u16 px/py
+  await runCase(1);        // top-down non-scroll: u8 px/py
+  await runCase(2);        // top-down scroll: u16 px/py
+  await runPlatformer();   // platformer: walk + jump + gravity + ladder
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {
@@ -131,4 +219,4 @@ try {
 }
 
 if (failed) process.exit(1);
-console.log('\nasm-player: the ASM td_update drives the top-down player identically to the C, in both px/py widths.');
+console.log('\nasm-player: the ASM td_update + plat_update drive the top-down + platformer player identically to the C.');

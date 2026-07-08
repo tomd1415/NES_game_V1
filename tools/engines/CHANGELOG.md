@@ -9,6 +9,29 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v36 — 2026-07-08 — platformer player update WIRED + A/B-verified (Phase 2c 4b done, OFF by default)
+
+### Changed / migration
+- **The platformer player update now runs on hand-written 6502 under the flag,
+  A/B-proven identical to the C.** The server `nes_asm_player` gate accepts a
+  plain non-SMB platformer too (not just top-down): top-down emits a real
+  `#define BW_GAME_STYLE 1`; a plain platformer emits none (defaults 0) and no
+  `BW_SMB_JUMP`; SMB/runner/racer are excluded (plat_update covers only the
+  non-SMB platformer). Detection is **line-anchored** — the template carries an
+  explanatory comment containing the text `#define BW_GAME_STYLE 1` in every
+  build, so a bare substring test false-matched; fixed in both the server gate
+  and the A/B harness.
+- A/B (`asm-player.mjs`): a 2-screen platformer (SOLID floor + WALL column +
+  LADDER column), player walking RIGHT with periodic tick-keyed UP jumps — C ≡
+  ASM **px/py/jumping** at every matched tick over 400 ticks (walk, gravity,
+  jump arc, wall bump, ladder). This exercises the whole `plat_update`
+  composition (hwalk + pl_ladder/pl_jump + pl_vmove) together.
+- **Still off by default / not shipped.** Linked only under PLAYGROUND_ASM_PLAYER.
+  Flag off = byte-identical (golden `1730448e` + `_rom-equiv` `54a15150`
+  UNCHANGED). PLAYGROUND_NO_ASM=1 is the kill switch. Both top-down and platformer
+  player physics are now on 6502 behind the flag; SMB/racer/runner + player 2 are
+  the remaining Phase-2c models.
+
 ## v35 — 2026-07-08 — platformer player: gate the C blocks under the flag (Phase 2c 4b-ii, OFF by default)
 
 ### Changed / migration
