@@ -9,6 +9,26 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v43 — 2026-07-08 — SHIP the ASM player physics by default (single-player)
+
+### Changed / migration
+- **The hand-written 6502 player physics now ship BY DEFAULT for single-player
+  builds.** The server `nes_asm_player`/`nes_asm_smb`/`nes_asm_racer` gates no longer
+  require the `PLAYGROUND_ASM_PLAYER` env toggle — they engage whenever the build is
+  a single-player project of a covered style (top-down, platformer, SMB, auto-runner,
+  racer). All six single-player models are A/B-proven byte-behaviour-identical to the
+  C (asm-player.mjs) and flag-off byte-identical.
+- **Two-player builds stay on the C for now** (the P2 second actors aren't on ASM
+  yet): the gate excludes `player2_enabled` (mirrors build_scene_inc's p2_active).
+  `PLAYGROUND_ASM_PLAYER=1` force-enables even 2P (for the forthcoming P2 A/B), and
+  `PLAYGROUND_NO_ASM=1` remains the whole-engine kill switch.
+- **Pinned hashes UNCHANGED** — golden `1730448e` (stock build has no custom main.c,
+  so the player gate never fires) and `_rom-equiv` `54a15150` (its everything-on
+  fixture is a 2-player project, now excluded). Server-only change (playground_
+  server.py is git-versioned, not snapshotted); this bump documents the project↔ROM
+  contract change (which builds get ASM), mirroring how scene-AI shipped at v30.
+- Next: convert the P2 second actors to ASM (then 2P builds can ship ASM too).
+
 ## v42 — 2026-07-08 — top-down racer player update WIRED + A/B-verified (Phase 2c, OFF by default)
 
 ### Changed / migration

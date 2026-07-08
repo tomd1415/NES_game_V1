@@ -2812,10 +2812,14 @@ def _build_rom(body):
     nes_asm_ai = bool(
         asm_ready and custom_main_c is not None and "ss_ai_type[" in custom_main_c
     )
-    # Player update on hand-written 6502 (Phase 2c). NOT shipped: gated behind the
-    # PLAYGROUND_ASM_PLAYER test toggle. player_asm.s implements the TOP-DOWN
-    # (td_update) and the non-SMB PLATFORMER (plat_update) models, so accept those
-    # two BW_GAME_STYLEs, detected in the client main.c: top-down emits
+    # Player update on hand-written 6502 (Phase 2c). SHIPPED BY DEFAULT (engine v43)
+    # for SINGLE-PLAYER builds: all six single-player models (top-down, platformer,
+    # SMB, auto-runner, racer P1) are A/B-proven byte-behaviour-identical to the C
+    # (asm-player.mjs) and flag-off byte-identical. TWO-PLAYER builds stay on the C
+    # for now — the P2 second actors aren't on ASM yet — unless PLAYGROUND_ASM_PLAYER
+    # is set (force-on incl. 2P, for the P2 A/B). PLAYGROUND_NO_ASM=1 is the kill
+    # switch (skips all asm flags below). The models are detected in the client
+    # main.c: top-down emits
     # `#define BW_GAME_STYLE 1`; a plain platformer emits NO BW_GAME_STYLE define
     # (it defaults to 0) and NO BW_SMB_JUMP; runner/racer are 2/3 and SMB carries
     # BW_SMB_JUMP (plat_update does NOT cover SMB physics). Both px/py widths are
@@ -2841,9 +2845,15 @@ def _build_rom(body):
         and "\n#define BW_GAME_STYLE 3" not in _cmc
         and not _asm_player_smb
     )
+    # Ship for single-player only (the P2 second actors aren't on ASM yet, so a 2P
+    # build must run entirely on the C). Mirror build_scene_inc's p2_active. The
+    # PLAYGROUND_ASM_PLAYER override force-enables even 2P (for the P2 A/B).
+    _p2_sprites = state.get("sprites") or []
+    player2_enabled = (player_idx2 is not None and player_idx2 >= 0
+                       and player_idx2 != player_idx and player_idx2 < len(_p2_sprites))
+    _p2_ok = (not player2_enabled) or bool(os.environ.get("PLAYGROUND_ASM_PLAYER"))
     nes_asm_player = bool(
-        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
-        and custom_main_c is not None
+        asm_ready and custom_main_c is not None and _p2_ok
         and (_asm_player_topdown or _asm_player_platformer or _asm_player_runner)
     )
     # SMB (Phase 2c 5b): style 0 + BW_SMB_JUMP — smb_update (accel/skid + ladder/
@@ -2852,16 +2862,14 @@ def _build_rom(body):
     # in the Makefile (links player_asm.s + -D's out the C blocks) and additionally
     # passes `-D NES_ASM_SMB` to ca65 so player_asm.s compiles its SMB section.
     nes_asm_smb = bool(
-        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
-        and custom_main_c is not None
+        asm_ready and custom_main_c is not None and _p2_ok
         and _asm_player_smb
     )
     # Racer (Phase 2c): style 3 — racer_update. NES_ASM_RACER=1 IMPLIES NES_ASM_PLAYER
     # in the Makefile and passes `-D NES_ASM_RACER` to ca65 so player_asm.s compiles
     # its racer section (racer_update + the racer-only globals it imports).
     nes_asm_racer = bool(
-        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
-        and custom_main_c is not None
+        asm_ready and custom_main_c is not None and _p2_ok
         and _asm_player_racer
     )
 
