@@ -66,6 +66,10 @@ node functions/scroll_stream_prepare/test.mjs || fail=1
 run anim "functions/advance_animation/ref.c functions/advance_animation/test.c functions/advance_animation/asm.s"
 node functions/advance_animation/test.mjs || fail=1
 
+# Phase 2c — player physics leaves (feasibility doc 2026-07-07-asm-player-physics).
+run pxi "functions/px_integrate/ref.c functions/px_integrate/test.c functions/px_integrate/asm.s"
+node functions/px_integrate/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
