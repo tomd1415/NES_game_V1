@@ -9,6 +9,37 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v38 — 2026-07-08 — SMB player update WIRED + A/B-verified (Phase 2c 5b, OFF by default)
+
+### Changed / migration
+- **The SMB player update now runs on hand-written 6502 under the flag,
+  A/B-proven identical to the C.** platformer.c gates the C SMB blocks (the SMB
+  horizontal accel/skid, the shared ladder/jump-trigger — already covered by the
+  `!(style 0 && NES_ASM_PLAYER)` gates — the SMB variable-cut, and the
+  ascent/gravity) under NES_ASM_PLAYER and calls `smb_update()` in their place;
+  the SMB-only fireball throw (BW_SMB_POWERUPS) + `prev_pad = pad` stay in C.
+- **Real bug caught by the wired A/B and fixed:** `smb_accel` in player_asm.s
+  hardcoded the asm-lab leaf's SMB tuning (walk 384 / run 640 / accel 24), but the
+  Builder's Speed preset derives BW_SMB_WALK_MAX/RUN_MAX/ACCEL (e.g. Speed 2 =
+  384/640/**48**), so the ASM velocity ramped at half the accel and the player
+  lagged the C. Fixed by emitting `SMB_WALK_MAX/RUN_MAX/ACCEL` into project.inc
+  (server derives them from the same Speed table + clamp as builder-modules.js)
+  and having smb_accel read those instead of the hardcoded constants.
+- **Makefile:** `NES_ASM_SMB=1` implies NES_ASM_PLAYER (links player_asm.s + -D's
+  out the C blocks) and additionally passes `-D NES_ASM_SMB` to ca65 (new
+  `$(ASFLAGS)` in the generic `.s` rule) so player_asm.s compiles its SMB section.
+- **Server:** `nes_asm_player` now also accepts SMB via a distinct `nes_asm_smb`
+  gate (line-anchored `\n#define BW_SMB_JUMP`) → passes `NES_ASM_SMB=1`.
+- A/B (`asm-player.mjs`): a 2-screen SMB project (SOLID floor + 3-tall WALL + LADDER),
+  player running RIGHT (B held) with periodic A-jumps — C ≡ ASM **px/py/jumping** at
+  every matched tick over 400 ticks (accel/skid ramp, run-boosted jump, variable-cut,
+  +3 gravity, wall bump, u16 crossing to screen 2). Exercises the whole smb_update
+  (smb_accel → smb_hstep → pl_ladder / smb_jump → pl_vmove).
+- **Still off by default / not shipped.** Linked only under PLAYGROUND_ASM_PLAYER;
+  flag off = byte-identical (golden `1730448e` + `_rom-equiv` `54a15150` UNCHANGED).
+  PLAYGROUND_NO_ASM=1 is the kill switch. Top-down + platformer + SMB player physics
+  are now all on 6502 behind the flag; racer/runner + player 2 remain.
+
 ## v37 — 2026-07-08 — SMB player update composed in ASM (Phase 2c 5b-i, OFF/unwired)
 
 ### Added

@@ -119,6 +119,19 @@ endif
 # the matching C player block in main.c.  Requires a SCROLL build (px/py are u16)
 # + top-down game style; needs NES_ASM_LEAF (behaviour_at).  Same off-by-default,
 # byte-identical-when-off contract; not shipped to pupils yet (PLAYGROUND_ASM_PLAYER).
+# SMB player update on hand-written 6502 (Phase 2c 5b).  NES_ASM_SMB=1 IMPLIES
+# NES_ASM_PLAYER (so player_asm.s links + the C SMB blocks are -D'd out and
+# smb_update() is called) AND passes `-D NES_ASM_SMB` to ca65 so player_asm.s
+# compiles its SMB section (smb_update + the SMB-only globals _smb_vx/_smb_px_sub
+# it imports).  Only valid for an SMB build (BW_GAME_STYLE 0 + BW_SMB_JUMP).  Same
+# off-by-default, byte-identical-when-off contract; not shipped to pupils yet.
+# Set before the NES_ASM_PLAYER block so the := takes effect there.
+NES_ASM_SMB ?= 0
+ifeq ($(NES_ASM_SMB),1)
+NES_ASM_PLAYER := 1
+ASFLAGS += -D NES_ASM_SMB
+endif
+
 NES_ASM_PLAYER ?= 0
 ifeq ($(NES_ASM_PLAYER),1)
 CFLAGS  += -DNES_ASM_PLAYER=1
@@ -174,7 +187,7 @@ $(BUILD)/scroll.o: src/scroll.c src/scroll.h src/bg_world.h | $(BUILD)
 # -I src so the hand-written engine .s files can `.include "project.inc"` +
 # "asm_macros.inc" (Phase 1: per-project ASM constants + the MULC macro).
 $(BUILD)/%.o: src/%.s assets/sprites/game.chr assets/backgrounds/level.nam | $(BUILD)
-	$(AS) -t $(TARGET) -I src -o $@ $<
+	$(AS) -t $(TARGET) $(ASFLAGS) -I src -o $@ $<
 
 # Audio (Phase 4.3) — only built when USE_AUDIO=1.  Engine asm is
 # vendored under tools/audio/famistudio/ (see NOTICE.md there); we

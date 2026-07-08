@@ -137,7 +137,11 @@ extern void load_background(void);
 /* Phase 2c — hand-written 6502 player updates (src/player_asm.s); linked + called
    only under NES_ASM_PLAYER, so flag off is byte-identical. */
 void td_update(void);      /* top-down   (BW_GAME_STYLE == 1) */
-void plat_update(void);    /* platformer (BW_GAME_STYLE == 0) */
+void plat_update(void);    /* platformer (BW_GAME_STYLE == 0, non-SMB) */
+/* SMB (BW_GAME_STYLE == 0 + BW_SMB_JUMP); declared unconditionally because
+   BW_SMB_JUMP is #defined later than this slot — the call site is still gated on
+   it, and an unused declaration links to nothing on non-SMB builds. */
+void smb_update(void);
 #endif
 
 /* Player position is u16 world-space under SCROLL_BUILD so the pupil can
@@ -1126,13 +1130,22 @@ void main(void) {
         // out here so exactly one runs. Flag off -> the C blocks run unchanged.
         td_update();
 #endif
-#if BW_GAME_STYLE == 0 && defined(NES_ASM_PLAYER)
+#if BW_GAME_STYLE == 0 && !defined(BW_SMB_JUMP) && defined(NES_ASM_PLAYER)
         // Phase 2c — the whole platformer move (this horizontal walk + the ladder/
         // jump block and the ascent/gravity block below) is the hand-written 6502
         // plat_update; those C blocks are #if'd out under the flag. `prev_pad = pad`
         // stays in C (runs after this; plat_update's jump trigger reads the old
-        // prev_pad). Flag off -> the C blocks run unchanged.
+        // prev_pad). Flag off -> the C blocks run unchanged. (SMB, style 0 + SMB
+        // jump, is excluded here — smb_update covers it below.)
         plat_update();
+#endif
+#if defined(BW_SMB_JUMP) && defined(NES_ASM_PLAYER)
+        // Phase 2c 5b — the SMB move (horizontal accel/skid + ladder/jump-trigger +
+        // variable-cut + ascent/gravity) is the hand-written 6502 smb_update; the C
+        // SMB blocks below are #if'd out under the flag. `prev_pad = pad` stays in C
+        // (smb_update's jump trigger reads the old prev_pad). Fireballs
+        // (BW_SMB_POWERUPS) also stay in C — smb_update covers only the move.
+        smb_update();
 #endif
 #if (BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3) && !defined(BW_SMB_JUMP) && !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0) && defined(NES_ASM_PLAYER))
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
@@ -1182,7 +1195,7 @@ void main(void) {
         }
 #endif  /* BW_GAME_STYLE != 2 && != 3 && !BW_SMB_JUMP */
 
-#ifdef BW_SMB_JUMP
+#if defined(BW_SMB_JUMP) && !defined(NES_ASM_PLAYER)   /* ASM smb_update owns this */
         // ----- SMB horizontal: accelerate to a run/walk max, friction, skid.
         // 8.8 fixed-point velocity (1/256 px/frame). Hold B to run.
         {
@@ -1229,7 +1242,7 @@ void main(void) {
                 else px = (pxcoord_t)np;
             }
         }
-#endif  /* BW_SMB_JUMP */
+#endif  /* BW_SMB_JUMP && !(NES_ASM_PLAYER) */
 
 #if BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2
         // ----- Platformer vertical movement: ladders + jump + gravity -----
@@ -1326,7 +1339,7 @@ void main(void) {
             }
         }
 #endif  /* !(platformer + NES_ASM_PLAYER) — the C ladder + jump trigger */
-#ifdef BW_SMB_JUMP
+#if defined(BW_SMB_JUMP) && !defined(NES_ASM_PLAYER)   /* ASM smb_update owns this */
         /* SMB variable-height jump: releasing A *and* UP during the rise cuts
          * the ascent short (keeping a small minimum), so a tap is a short hop
          * and a hold is a full jump. Only trims an in-progress rise. */

@@ -874,9 +874,13 @@ sbrow:   .res 1
 
 .segment "CODE"
 
-SMB_RUN  = 640
-SMB_WALK = 384
-SMB_ACC  = 24
+; SMB horizontal tuning comes from project.inc (SMB_WALK_MAX/RUN_MAX/ACCEL),
+; which the server derives from the Builder's Speed preset — MUST match the C's
+; BW_SMB_* or the ASM velocity ramps at a different rate (the asm-lab leaf's
+; hardcoded 640/384/24 only matched Speed 2's walk/run, never its accel).
+SMB_RUN  = SMB_RUN_MAX
+SMB_WALK = SMB_WALK_MAX
+SMB_ACC  = SMB_ACCEL
 
 ; smb_accel — signed 16-bit accelerate smb_vx toward the run/walk target (2x
 ; skid on reversal); plrdir from target sign. (asm-lab functions/smb_accel)

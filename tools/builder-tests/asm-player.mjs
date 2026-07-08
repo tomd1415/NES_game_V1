@@ -205,12 +205,104 @@ async function runPlatformer() {
   else bad(`platformer: divergence — ${diffs} px/py/jumping diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- SMB (game type 'smb'): BW_GAME_STYLE 0 + BW_SMB_JUMP. The move is 8.8
+// fixed-point accel/skid horizontal + ladder + A/UP jump (run-boosted, variable
+// -cut) + +3 gravity — the hand-written 6502 smb_update, linked via NES_ASM_SMB
+// (which implies NES_ASM_PLAYER). 2-screen so px/py are u16 (PX_WIDE path).
+function makeSmbState() {
+  const cols = 64, rows = 30, floorRow = 26;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) beh[floorRow][c] = 1;              // SOLID floor
+  for (let r = floorRow - 1; r >= floorRow - 3; r--) beh[r][20] = 2; // WALL column (3-tall: bump, clearable by a run-jump)
+  for (let r = floorRow - 1; r >= 8; r--) beh[r][44] = 6;           // LADDER column
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [{ role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) }];
+  const s = {
+    name: 'smbplayer', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'smb';
+  return s;
+}
+
+// Hold RIGHT + B (run) so the accel/skid path is exercised, and tap A (the
+// classic Mario jump) for 2 ticks every 40 — an edge -> a run-boosted jump whose
+// variable-cut trims when released. Tick-keyed so both builds get the same pad.
+const stepSmb = (n) => {
+  const tk = rd16(n, TICK);
+  n.buttonDown(1, H.BTN.RIGHT);
+  n.buttonDown(1, H.BTN.B);
+  // Hold A for 16 of every 44 ticks: an edge takes off (run-boosted, jmp_up=28),
+  // the hold builds height to clear the wall, and RELEASING it while jmp_up>4
+  // fires the SMB variable-cut — so both the full-rise and the cut paths run.
+  if (tk % 44 < 16) n.buttonDown(1, H.BTN.A);
+  n.frame();
+  n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(1, H.BTN.B); n.buttonUp(1, H.BTN.A);
+};
+
+async function runSmb() {
+  const s = makeSmbState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (!/^#define BW_SMB_JUMP\b/m.test(mainC)) { bad('smb: not an SMB build (no BW_SMB_JUMP) — server gate would not engage'); return; }
+  if (/^#define BW_GAME_STYLE [123]\b/m.test(mainC)) { bad('smb: unexpected non-0 BW_GAME_STYLE'); return; }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 180 }, mode: 'browser',
+    customMainC: withProbe(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`smb: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`smb: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('smb: ASM ROM == C ROM (NES_ASM_SMB did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepSmb(c); stepSmb(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('smb: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  const pxStart = rd16(c, PX);
+  let pxMax = pxStart, jumpedC = false;
+  for (let step = 0; step < 24000 && compared < 400; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('smb: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepSmb(c); else stepSmb(a); continue; }
+    const cpx = rd16(c, PX), apx = rd16(a, PX), cpy = rd16(c, PY), apy = rd16(a, PY);
+    const cj = c.cpu.mem[JU] & 0xFF, aj = a.cpu.mem[JU] & 0xFF;
+    if (cpx !== apx || cpy !== apy || cj !== aj) {
+      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C(${cpx},${cpy},j${cj}) A(${apx},${apy},j${aj})`;
+    }
+    if (cpx > pxMax) pxMax = cpx;
+    if (cj) jumpedC = true;
+    compared++;
+    stepSmb(c); stepSmb(a);
+  }
+
+  if (compared < 300) { bad(`smb: too few matched-tick samples (${compared})`); return; }
+  if (pxMax <= pxStart + 8) { bad(`smb: player did not run right (px ${pxStart}->${pxMax})`); return; }
+  if (pxMax < 256) { bad(`smb: player never crossed to screen 2 (px max ${pxMax}) — u16 path not exercised`); return; }
+  if (!jumpedC) { bad('smb: player never jumped (jumping stayed 0) — jump path not exercised'); return; }
+  if (diffs === 0)
+    ok(`smb player update (NES_ASM_SMB): C ≡ ASM px/py/jumping at every matched tick over `
+      + `${compared} ticks (run RIGHT ${pxStart}->${pxMax}, accel/skid, A-jumps, wall + ladder)`);
+  else bad(`smb: divergence — ${diffs} px/py/jumping diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
   await runCase(1);        // top-down non-scroll: u8 px/py
   await runCase(2);        // top-down scroll: u16 px/py
   await runPlatformer();   // platformer: walk + jump + gravity + ladder
+  await runSmb();          // SMB: accel/skid run + A-jump + variable-cut + gravity + ladder
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {
