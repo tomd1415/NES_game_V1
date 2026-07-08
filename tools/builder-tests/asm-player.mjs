@@ -380,6 +380,93 @@ async function runRunner() {
   else bad(`runner: divergence — ${diffs} px/py/jumping diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- Top-down racer (game type 'racer'): BW_GAME_STYLE 3. Steer rotates a
+// 16-direction heading, A/UP accelerates 8.8 along it (vx/vy from COS16), per-axis
+// integrate + world-clamp + box_on_edge slide, dominant-axis speed bleed, centre-
+// cell lap FSM. The hand-written 6502 racer_update = rc_drive -> rc_vel -> rc_axis
+// -> rc_laps. 2-screen (PX_WIDE) with a SOLID border so the accelerating car bumps.
+function makeRacerState() {
+  const cols = 64, rows = 30;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) { beh[0][c] = 1; beh[1][c] = 1; beh[rows - 2][c] = 1; beh[rows - 1][c] = 1; }
+  for (let r = 0; r < rows; r++) { beh[r][0] = 1; beh[r][1] = 1; beh[r][cols - 2] = 1; beh[r][cols - 1] = 1; }
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [{ role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) }];
+  const s = {
+    name: 'racerplayer', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'racer';
+  return s;
+}
+
+// Hold A (accelerate) and pulse RIGHT once every 8 ticks so the 16-dir heading
+// slowly sweeps through the diagonals — the car curves, so px AND vy are both
+// exercised (COS16 for every heading) and it spirals out into the border. Tick-
+// keyed so both builds get the same pad per game-tick.
+const stepRacer = (n) => {
+  const tk = rd16(n, TICK);
+  if (tk % 8 === 0) n.buttonDown(1, H.BTN.RIGHT);
+  n.buttonDown(1, H.BTN.A);
+  n.frame();
+  n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(1, H.BTN.A);
+};
+
+async function runRacer() {
+  const s = makeRacerState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (!/^#define BW_GAME_STYLE 3\b/m.test(mainC)) { bad('racer: not a racer build (no BW_GAME_STYLE 3) — server gate would not engage'); return; }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 256, y: 112 }, mode: 'browser',
+    customMainC: withProbe(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`racer: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`racer: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('racer: ASM ROM == C ROM (NES_ASM_RACER did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepRacer(c); stepRacer(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('racer: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  const pxStart = rd16(c, PX), pyStart = rd16(c, PY);
+  let pxMin = pxStart, pxMax = pxStart, pyMin = pyStart, pyMax = pyStart;
+  for (let step = 0; step < 24000 && compared < 400; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('racer: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepRacer(c); else stepRacer(a); continue; }
+    const cpx = rd16(c, PX), apx = rd16(a, PX), cpy = rd16(c, PY), apy = rd16(a, PY);
+    if (cpx !== apx || cpy !== apy) { diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C(${cpx},${cpy}) A(${apx},${apy})`; }
+    if (cpx < pxMin) pxMin = cpx; if (cpx > pxMax) pxMax = cpx;
+    if (cpy < pyMin) pyMin = cpy; if (cpy > pyMax) pyMax = cpy;
+    compared++;
+    stepRacer(c); stepRacer(a);
+  }
+
+  if (compared < 300) { bad(`racer: too few matched-tick samples (${compared})`); return; }
+  const dx = pxMax - pxMin, dy = pyMax - pyMin;
+  if (dx < 24 || dy < 24) { bad(`racer: not a diagonal move (dx ${dx}, dy ${dy}) — heading/COS16 velocity not exercised`); return; }
+  // The 2-tile SOLID border sits at px/py ~16 and ~ world-8; the accelerating car
+  // should reach an edge (box_on_edge slide or world clamp).
+  const hitEdge = pxMin < 48 || pyMin < 48 || pxMax > (64 * 8 - 48) || pyMax > (30 * 8 - 48);
+  if (!hitEdge) { bad(`racer: never reached a track edge (px ${pxMin}..${pxMax}, py ${pyMin}..${pyMax}) — collision not exercised`); return; }
+  if (diffs === 0)
+    ok(`racer player update (NES_ASM_RACER): C ≡ ASM px/py at every matched tick over `
+      + `${compared} ticks (steer -> diagonal dx ${dx}/dy ${dy}, accelerate, box_on_edge/clamp at a border)`);
+  else bad(`racer: divergence — ${diffs} px/py diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
@@ -388,6 +475,7 @@ try {
   await runPlatformer();   // platformer: walk + jump + gravity + ladder
   await runSmb();          // SMB: accel/skid run + A-jump + variable-cut + gravity + ladder
   await runRunner();       // auto-runner: autoscroll + track-end wrap respawn + A-jump + gravity
+  await runRacer();        // top-down racer: steer + accelerate + COS16 velocity + slide collision
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {

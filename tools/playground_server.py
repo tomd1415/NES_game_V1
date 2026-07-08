@@ -2831,6 +2831,10 @@ def _build_rom(body):
     # ASM runner section is gated `.if PX_WIDE` because it imports _cam_x, which
     # scroll.c defines only for a multi-screen world); a runner always is one.
     _asm_player_runner = ("\n#define BW_GAME_STYLE 2" in _cmc) and is_scroll
+    # Top-down racer (Phase 2c): style 3 -> racer_update (P1 car). Always a scroll
+    # build (racer_update uses u16 px/py); its own NES_ASM_RACER gate because it
+    # imports the racer-only globals a non-racer build never defines.
+    _asm_player_racer = ("\n#define BW_GAME_STYLE 3" in _cmc) and is_scroll
     _asm_player_platformer = (
         "\n#define BW_GAME_STYLE 1" not in _cmc
         and "\n#define BW_GAME_STYLE 2" not in _cmc
@@ -2852,6 +2856,14 @@ def _build_rom(body):
         and custom_main_c is not None
         and _asm_player_smb
     )
+    # Racer (Phase 2c): style 3 — racer_update. NES_ASM_RACER=1 IMPLIES NES_ASM_PLAYER
+    # in the Makefile and passes `-D NES_ASM_RACER` to ca65 so player_asm.s compiles
+    # its racer section (racer_update + the racer-only globals it imports).
+    nes_asm_racer = bool(
+        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
+        and custom_main_c is not None
+        and _asm_player_racer
+    )
 
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
@@ -2860,6 +2872,7 @@ def _build_rom(body):
             nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
             nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
             nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
+            nes_asm_racer=nes_asm_racer,
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -2870,6 +2883,7 @@ def _build_rom(body):
         nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
         nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
         nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
+            nes_asm_racer=nes_asm_racer,
         project_inc=project_inc, **audio_kwargs,
     ))
 
@@ -2954,7 +2968,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       audio_songs_asm=None, audio_sfx_asm=None,
                       nes_asm_leaf=False, nes_asm_scroll=False,
                       nes_asm_scene=False, nes_asm_ai=False,
-                      nes_asm_player=False, nes_asm_smb=False,
+                      nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False,
                       project_inc=None):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
@@ -3007,7 +3021,9 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                 make_args.append("NES_ASM_AI=1")
             if nes_asm_smb:                         # Phase 2c 5b — SMB player (implies PLAYER)
                 make_args.append("NES_ASM_SMB=1")
-            elif nes_asm_player:                    # Phase 2c — player update (top-down/platformer)
+            elif nes_asm_racer:                     # Phase 2c — racer player (implies PLAYER)
+                make_args.append("NES_ASM_RACER=1")
+            elif nes_asm_player:                    # Phase 2c — player update (top-down/platformer/runner)
                 make_args.append("NES_ASM_PLAYER=1")
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))

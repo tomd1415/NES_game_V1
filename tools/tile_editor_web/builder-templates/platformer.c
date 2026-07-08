@@ -143,6 +143,7 @@ void plat_update(void);    /* platformer (BW_GAME_STYLE == 0, non-SMB) */
    it, and an unused declaration links to nothing on non-SMB builds. */
 void smb_update(void);
 void run_update(void);      /* auto-runner (BW_GAME_STYLE == 2) */
+void racer_update(void);    /* top-down racer P1 (BW_GAME_STYLE == 3) */
 #endif
 
 /* Player position is u16 world-space under SCROLL_BUILD so the pupil can
@@ -977,7 +978,7 @@ void main(void) {
         if (py >= (WORLD_H_PX - 8)) runner_respawn();
 #endif
 
-#if BW_GAME_STYLE == 3
+#if BW_GAME_STYLE == 3 && !defined(NES_ASM_PLAYER)   /* ASM racer_update owns the P1 car */
         // Top-down racer: steer rotates the 16-direction heading, A/UP
         // accelerates along it (8.8 fixed-point), friction bleeds speed off, and
         // vx/vy come from COS16.  Position advances through the sub-pixel
@@ -1155,6 +1156,13 @@ void main(void) {
         // `prev_pad = pad` stays in C (run_update's jump trigger reads the old
         // prev_pad). Flag off -> the C blocks run unchanged.
         run_update();
+#endif
+#if BW_GAME_STYLE == 3 && defined(NES_ASM_PLAYER)
+        // Phase 2c — the P1 top-down racer move (steer + accel/friction/brake +
+        // COS16 velocity + per-axis slide collision + lap FSM) is the hand-written
+        // 6502 racer_update; the C P1 block above is #if'd out under the flag. The
+        // 2-player P2 block (if enabled) stays in C. Flag off -> the C runs unchanged.
+        racer_update();
 #endif
 #if (BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3) && !defined(BW_SMB_JUMP) && !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0) && defined(NES_ASM_PLAYER))
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL

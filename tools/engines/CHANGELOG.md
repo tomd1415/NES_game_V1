@@ -9,6 +9,31 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v42 — 2026-07-08 — top-down racer player update WIRED + A/B-verified (Phase 2c, OFF by default)
+
+### Changed / migration
+- **The top-down racer P1 player update now runs on hand-written 6502 under the
+  flag, A/B-proven identical to the C.** platformer.c gates the C style-3 P1 block
+  (`#if BW_GAME_STYLE == 3 && !defined(NES_ASM_PLAYER)`) and calls `racer_update()`
+  in its place (`#if BW_GAME_STYLE == 3 && defined(NES_ASM_PLAYER)`). The 2-player
+  P2 racer block stays in C (it uses the separate racer_*2 globals) — it rides with
+  the player-2 model work; racer_update writes only the P1 globals.
+- **Makefile:** `NES_ASM_RACER=1` implies NES_ASM_PLAYER (links player_asm.s + -D's
+  out the C P1 block + calls racer_update()) and passes `-D NES_ASM_RACER` to ca65
+  so player_asm.s compiles its racer section (racer_update + the racer-only globals
+  it imports). **Server:** a distinct `nes_asm_racer` gate (line-anchored
+  `\n#define BW_GAME_STYLE 3` AND is_scroll) → passes `NES_ASM_RACER=1`.
+- A/B (`asm-player.mjs`): a 2-screen racer (SOLID border) steering (heading sweep)
+  while accelerating — C ≡ ASM **px/py** at every matched tick over 400 ticks
+  (diagonal motion from COS16 velocity, per-axis integrate, box_on_edge slide /
+  world clamp at a border). Exercises the whole racer_update (rc_drive → rc_vel →
+  rc_axis → rc_laps).
+- **Still off by default / not shipped.** Linked only under PLAYGROUND_ASM_PLAYER;
+  flag off = byte-identical (golden `1730448e` + `_rom-equiv` `54a15150` UNCHANGED).
+  PLAYGROUND_NO_ASM=1 is the kill switch. **All six single-player models — top-down,
+  platformer, SMB, auto-runner, racer (P1) — now run on 6502 behind the flag.**
+  Remaining: the 2-player second actors (P2 platformer/top-down/racer).
+
 ## v41 — 2026-07-08 — top-down racer player update composed in ASM (Phase 2c, OFF/unwired)
 
 ### Added

@@ -132,6 +132,19 @@ NES_ASM_PLAYER := 1
 ASFLAGS += -D NES_ASM_SMB
 endif
 
+# Racer player update on hand-written 6502 (Phase 2c).  NES_ASM_RACER=1 IMPLIES
+# NES_ASM_PLAYER (links player_asm.s + -D's out the C style-3 P1 block + calls
+# racer_update()) AND passes `-D NES_ASM_RACER` to ca65 so player_asm.s compiles its
+# racer section (racer_update + the racer-only globals racer_heading/speed/px_sub/
+# py_sub/cp_stage/laps/finished it imports).  Only valid for a racer build
+# (BW_GAME_STYLE 3).  Same off-by-default, byte-identical-when-off contract.
+# Set before the NES_ASM_PLAYER block so the := takes effect there.
+NES_ASM_RACER ?= 0
+ifeq ($(NES_ASM_RACER),1)
+NES_ASM_PLAYER := 1
+ASFLAGS += -D NES_ASM_RACER
+endif
+
 NES_ASM_PLAYER ?= 0
 ifeq ($(NES_ASM_PLAYER),1)
 CFLAGS  += -DNES_ASM_PLAYER=1
