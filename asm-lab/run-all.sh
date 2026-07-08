@@ -97,6 +97,9 @@ node functions/smb_jump/test.mjs || fail=1
 run runh "functions/run_hstep/ref.c functions/run_hstep/test.c functions/run_hstep/asm.s"
 node functions/run_hstep/test.mjs || fail=1
 
+run rdrv "functions/racer_drive/ref.c functions/racer_drive/test.c functions/racer_drive/asm.s"
+node functions/racer_drive/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
