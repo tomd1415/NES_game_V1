@@ -106,6 +106,9 @@ node functions/racer_vel/test.mjs || fail=1
 run raxis "functions/racer_axis/ref.c functions/racer_axis/test.c functions/racer_axis/asm.s"
 node functions/racer_axis/test.mjs || fail=1
 
+run rlap "functions/racer_laps/ref.c functions/racer_laps/test.c functions/racer_laps/asm.s"
+node functions/racer_laps/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
