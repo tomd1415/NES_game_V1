@@ -2302,7 +2302,7 @@ def build_behaviour_c(state):
     return "\n".join(lines)
 
 
-def build_project_inc(state, player_idx, scene_sprites, start_y=120):
+def build_project_inc(state, player_idx, scene_sprites, start_y=120, player_idx2=-1):
     """Emit src/project.inc — the per-project ASM constants the hand-written 6502
     modules `.include`. Values MUST match collision.h / bg_world.h / scene.inc so
     the ASM and C engines agree. Uses ca65 `.define` (textual) not `SYM = value`
@@ -2318,6 +2318,16 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120):
         ps = sprites[player_idx] or {}
         pw = int(ps.get("width") or 2)
         ph = int(ps.get("height") or 2)
+    # Player-2 dimensions for the hand-written P2 update (NES_ASM_PLAYER2). The
+    # ASM P2 procs bake PLAYER2_W/H like the P1 procs bake PLAYER_W/H; feed them
+    # via project.inc (same discipline as PLAYER_W/RUNNER_*/RACER_*). Default to
+    # the P1 size when there is no distinct 2nd player sprite.
+    pw2, ph2 = pw, ph
+    if (isinstance(player_idx2, int) and 0 <= player_idx2 < len(sprites)
+            and player_idx2 != player_idx):
+        ps2 = sprites[player_idx2] or {}
+        pw2 = int(ps2.get("width") or 2)
+        ph2 = int(ps2.get("height") or 2)
     # SS_POS_WIDE mirrors build_scene_inc's wide_pos: 1 when any scene sprite
     # sits past the first screen (x or y > 255), so ss_x/ss_y are u16 in the C —
     # the scene-draw ASM must read them at the same width.
@@ -2385,6 +2395,8 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120):
         f".define BG_WORLD_ATTR_COLS     {acols}",
         f".define PLAYER_W               {pw}",
         f".define PLAYER_H               {ph}",
+        f".define PLAYER2_W              {pw2}",
+        f".define PLAYER2_H              {ph2}",
         f".define PLAYER_TILES_PER_FRAME {pw * ph}",
         f".define NUM_BEHAVIOUR_SPRITES  {max(num_beh, 1)}",
         f".define NUM_STATIC_SPRITES     {num_static}",
@@ -2767,7 +2779,7 @@ def _build_rom(body):
     behaviour_c = build_behaviour_c(state)
     bg_world_h = build_bg_world_h(state)
     bg_world_c = build_bg_world_c(state)
-    project_inc = build_project_inc(state, player_idx, scene_sprites, start_y)
+    project_inc = build_project_inc(state, player_idx, scene_sprites, start_y, player_idx2)
 
     # The universal hand-written 6502 engine is only linked when the main.c is
     # KNOWN ASM-ready: the stock main.c (custom_main_c is None) or a

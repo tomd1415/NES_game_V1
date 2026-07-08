@@ -2172,3 +2172,261 @@ rcos16:
     rts
 .endproc
 .endif  ; NES_ASM_RACER
+
+; ===========================================================================
+; p2_td_update — the PLAYER-2 top-down move (BW_GAME_STYLE 1 + PLAYER2_ENABLED).
+; Algorithmically identical to _td_update (4-way RIGHT/LEFT/UP/DOWN with the same
+; leading-edge wall probe) but on the P2 globals (px2/py2/pad2/plrdir2/walk_speed2)
+; and PLAYER2 dimensions. Reuses the dimension-free helpers (shr3/cell_solid/hprobe)
+; via the shared pxw/pyw working copies; the dimension-baking helpers get P2 twins
+; (p2_rows_from_py / p2_calc_cols use PH8_2 / PW8_2). Gated NES_ASM_PLAYER2 (a ca65
+; -D set only for a wired 2-player build) because it imports the P2-only globals a
+; single-player build never defines. Sets jumping2/jmp_up2 = 0 (no jump in top-down).
+.ifdef NES_ASM_PLAYER2
+.export _p2_td_update
+.import _px2, _py2, _pad2, _walk_speed2, _plrdir2, _jumping2, _jmp_up2
+
+PW8_2    = PLAYER2_W * 8
+PH8_2    = PLAYER2_H * 8
+RBOUND_2 = WORLD_W_PX - PW8_2
+
+.segment "CODE"
+
+; p2_rows_from_py: tdr0 = pyw>>3 ; tdr1 = (pyw + PH8_2 - 1)>>3
+.proc p2_rows_from_py
+    lda pyw
+    sta tmp1
+    lda pyw+1
+    sta tmp2
+    jsr shr3
+    sta tdr0
+    lda #(PH8_2 - 1)
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta tdr1
+    rts
+.endproc
+
+; p2_calc_cols: lcol = pxw>>3 ; rcol = (pxw + PW8_2 - 1)>>3
+.proc p2_calc_cols
+    lda pxw
+    sta tmp1
+    lda pxw+1
+    sta tmp2
+    jsr shr3
+    sta lcol
+    lda #(PW8_2 - 1)
+    clc
+    adc pxw
+    sta tmp1
+    lda pxw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta rcol
+    rts
+.endproc
+
+.proc _p2_td_update
+.if PX_WIDE
+    lda _px2
+    sta pxw
+    lda _px2+1
+    sta pxw+1
+    lda _py2
+    sta pyw
+    lda _py2+1
+    sta pyw+1
+.else
+    lda _px2
+    sta pxw
+    lda _py2
+    sta pyw
+    lda #0
+    sta pxw+1
+    sta pyw+1
+.endif
+    ; ---- RIGHT (pad2 & 0x01) ----
+    lda _pad2
+    and #$01
+    beq skip_right
+    lda pxw
+    cmp #<RBOUND_2
+    lda pxw+1
+    sbc #>RBOUND_2
+    bcs r_dir
+    lda #(PW8_2 - 1)
+    clc
+    adc _walk_speed2
+    clc
+    adc pxw
+    sta tmp1
+    lda pxw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta tdcol
+    jsr p2_rows_from_py
+    jsr hprobe
+    bne r_dir
+    lda pxw
+    clc
+    adc _walk_speed2
+    sta pxw
+    lda pxw+1
+    adc #0
+    sta pxw+1
+r_dir:
+    lda #$00
+    sta _plrdir2
+skip_right:
+    ; ---- LEFT (pad2 & 0x02) ----
+    lda _pad2
+    and #$02
+    beq skip_left
+    lda pxw+1
+    bne l_go
+    lda pxw
+    cmp _walk_speed2
+    bcc l_dir
+l_go:
+    lda pxw
+    sec
+    sbc _walk_speed2
+    sta tmp1
+    lda pxw+1
+    sbc #0
+    sta tmp2
+    jsr shr3
+    sta tdcol
+    jsr p2_rows_from_py
+    jsr hprobe
+    bne l_dir
+    lda pxw
+    sec
+    sbc _walk_speed2
+    sta pxw
+    lda pxw+1
+    sbc #0
+    sta pxw+1
+l_dir:
+    lda #$40
+    sta _plrdir2
+skip_left:
+    ; ---- UP (pad2 & 0x08) ----
+    lda _pad2
+    and #$08
+    beq skip_up
+    lda pyw+1
+    bne u_go
+    lda pyw
+    cmp _walk_speed2
+    bcc skip_up
+u_go:
+    lda pyw
+    sec
+    sbc _walk_speed2
+    sta tmp1
+    lda pyw+1
+    sbc #0
+    sta tmp2
+    jsr shr3
+    sta arow
+    jsr p2_calc_cols
+    lda lcol
+    sta pcol
+    lda arow
+    sta prow
+    jsr cell_solid
+    bne skip_up
+    lda rcol
+    sta pcol
+    lda arow
+    sta prow
+    jsr cell_solid
+    bne skip_up
+    lda pyw
+    sec
+    sbc _walk_speed2
+    sta pyw
+    lda pyw+1
+    sbc #0
+    sta pyw+1
+skip_up:
+    ; ---- DOWN (pad2 & 0x04) ----
+    lda _pad2
+    and #$04
+    beq skip_down
+    lda #PH8_2
+    clc
+    adc _walk_speed2
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    lda #<WORLD_H_PX
+    sec
+    sbc tmp1
+    lda #>WORLD_H_PX
+    sbc tmp2
+    bcc skip_down
+    lda #(PH8_2 - 1)
+    clc
+    adc _walk_speed2
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta arow
+    jsr p2_calc_cols
+    lda lcol
+    sta pcol
+    lda arow
+    sta prow
+    jsr cell_solid
+    bne skip_down
+    lda rcol
+    sta pcol
+    lda arow
+    sta prow
+    jsr cell_solid
+    bne skip_down
+    lda pyw
+    clc
+    adc _walk_speed2
+    sta pyw
+    lda pyw+1
+    adc #0
+    sta pyw+1
+skip_down:
+.if PX_WIDE
+    lda pxw
+    sta _px2
+    lda pxw+1
+    sta _px2+1
+    lda pyw
+    sta _py2
+    lda pyw+1
+    sta _py2+1
+.else
+    lda pxw
+    sta _px2
+    lda pyw
+    sta _py2
+.endif
+    lda #0
+    sta _jumping2
+    sta _jmp_up2
+    rts
+.endproc
+.endif  ; NES_ASM_PLAYER2

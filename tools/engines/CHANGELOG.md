@@ -9,6 +9,28 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v44 — 2026-07-08 — player-2 top-down update composed in ASM (Phase 2c, OFF/unwired)
+
+### Added
+- **p2_td_update proc in src/player_asm.s** — the PLAYER-2 top-down move
+  (BW_GAME_STYLE 1 + PLAYER2_ENABLED), algorithmically identical to td_update (4-way
+  RIGHT/LEFT/UP/DOWN, same leading-edge wall probe) but on the P2 globals
+  (px2/py2/pad2/plrdir2/walk_speed2) + PLAYER2 dimensions. Reuses the dimension-free
+  helpers (shr3/cell_solid/hprobe) via the shared pxw/pyw working copies; the
+  dimension-baking helpers get P2 twins (p2_rows_from_py/p2_calc_cols with PH8_2/PW8_2).
+  Sets jumping2/jmp_up2 = 0. project.inc now emits PLAYER2_W/H.
+
+### Changed / migration
+- **Gated under a new ca65 NES_ASM_PLAYER2 symbol** (like NES_ASM_SMB/RACER): the P2
+  section imports the P2-only globals a single-player build never defines, so it is
+  compiled ONLY for a wired 2-player build.
+- **Not wired yet** (no C caller, no Makefile -D, no server gate) — dead code in
+  current builds, absent flag-off. Flag off = byte-identical (golden 1730448e +
+  _rom-equiv 54a15150 UNCHANGED); the 6 single-player A/B cases still pass.
+  Assemble-checked both widths x {plain, NES_ASM_PLAYER2, all-P2-flags}.
+- Next: wire P2 top-down (Makefile + C gate + server + 2-player A/B), then P2 racer,
+  P2 platformer (simpler jump/gravity), P2 runner.
+
 ## v43 — 2026-07-08 — SHIP the ASM player physics by default (single-player)
 
 ### Changed / migration
