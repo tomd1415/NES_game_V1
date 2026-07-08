@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v49 — 2026-07-08 — player-2 runner update WIRED + A/B-verified (Phase 2c, OFF by default)
+
+### Changed / migration
+- **The player-2 auto-runner second actor now runs on hand-written 6502 under the
+  flag** — `p2_run_update` = the shared `p2_hwalk` only (a runner's P2 has no vertical
+  block). platformer.c gates the C P2 style-2 walk under NES_ASM_PLAYER and calls
+  `p2_run_update()`; the server `nes_asm_player2` gate now also accepts a 2P runner.
+- A/B (`asm-player.mjs`): a 2-player runner — P1 autoscrolls (run_update) + jumps, P2
+  walks via pad2 (p2_run_update) — C ≡ ASM P1 `px/py` AND P2 `px2/py2` at every matched
+  tick over 400 ticks (autoscroll, walk, wall bump).
+- **ALL player physics are now on hand-written 6502.** Six single-player models
+  (top-down, platformer, SMB, auto-runner, racer) SHIPPED BY DEFAULT (v43); the four
+  2-player second actors (top-down/racer/platformer/runner) A/B-verified behind the
+  PLAYGROUND_ASM_PLAYER toggle (2P builds still ship pure-C by default). Off by
+  default = byte-identical (golden `1730448e` + `_rom-equiv` `54a15150` UNCHANGED).
+- Next (user decision): ship 2-player ASM by default (drops the toggle from the P2
+  gate + `not player2_enabled` from the 1P gates) — that re-pins `_rom-equiv` (its 2P
+  fixture would then get ASM), so it's an outward-facing call to be surfaced.
+
 ## v48 — 2026-07-08 — player-2 platformer update WIRED + A/B-verified (Phase 2c, OFF by default)
 
 ### Changed / migration

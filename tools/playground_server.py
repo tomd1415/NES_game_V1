@@ -2894,7 +2894,8 @@ def _build_rom(body):
     nes_asm_player2 = bool(
         os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
         and custom_main_c is not None and player2_enabled
-        and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer)
+        and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer
+             or _asm_player_runner)
     )
 
     if custom_main_c is not None:

@@ -2185,6 +2185,7 @@ rcos16:
 .ifdef NES_ASM_PLAYER2
 .export _p2_td_update
 .export _p2_plat_update
+.export _p2_run_update
 .import _px2, _py2, _pad2, _walk_speed2, _plrdir2, _jumping2, _jmp_up2
 .import _prev_pad2
 
@@ -2639,6 +2640,48 @@ skip_down:
     lda #0
     sta _jumping2
 @store:
+.if PX_WIDE
+    lda pxw
+    sta _px2
+    lda pxw+1
+    sta _px2+1
+    lda pyw
+    sta _py2
+    lda pyw+1
+    sta _py2+1
+.else
+    lda pxw
+    sta _px2
+    lda pyw
+    sta _py2
+.endif
+    rts
+.endproc
+
+; ===========================================================================
+; p2_run_update — the PLAYER-2 auto-runner move (BW_GAME_STYLE 2 + PLAYER2_ENABLED).
+; In a runner the P2 second actor does the shared horizontal walk ONLY (no vertical
+; block for style 2 in the C), so this is just p2_hwalk on the pxw/pyw working copies.
+.proc _p2_run_update
+.if PX_WIDE
+    lda _px2
+    sta pxw
+    lda _px2+1
+    sta pxw+1
+    lda _py2
+    sta pyw
+    lda _py2+1
+    sta pyw+1
+.else
+    lda _px2
+    sta pxw
+    lda _py2
+    sta pyw
+    lda #0
+    sta pxw+1
+    sta pyw+1
+.endif
+    jsr p2_hwalk
 .if PX_WIDE
     lda pxw
     sta _px2

@@ -148,6 +148,7 @@ void racer_update(void);    /* top-down racer P1 (BW_GAME_STYLE == 3) */
 void p2_td_update(void);    /* player-2 top-down (BW_GAME_STYLE == 1) */
 void p2_racer_update(void); /* player-2 racer    (BW_GAME_STYLE == 3) */
 void p2_plat_update(void);  /* player-2 platformer (BW_GAME_STYLE == 0) */
+void p2_run_update(void);   /* player-2 auto-runner (BW_GAME_STYLE == 2) */
 #endif
 #endif
 
@@ -1634,7 +1635,13 @@ void main(void) {
         // blocks are #if'd out under the flag. Flag off -> the C runs unchanged.
         p2_plat_update();
 #endif
-#if !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0) && defined(NES_ASM_PLAYER))   /* ASM p2_td_update/p2_plat_update own styles 1/0 P2 */
+#if BW_GAME_STYLE == 2 && defined(NES_ASM_PLAYER)
+        // Phase 2c — the P2 auto-runner move (the shared horizontal walk only; a
+        // runner's P2 has no vertical block) is the hand-written 6502 p2_run_update;
+        // the C P2 walk below is #if'd out under the flag.
+        p2_run_update();
+#endif
+#if !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2) && defined(NES_ASM_PLAYER))   /* ASM p2_{td,plat,run}_update own styles 1/0/2 P2 */
         /* Horizontal walk with wall block. */
         if (pad2 & 0x01) {                    /* RIGHT */
             if (px2 < (WORLD_W_PX - PLAYER2_W * 8)) {

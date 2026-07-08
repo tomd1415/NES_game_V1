@@ -754,6 +754,94 @@ async function runP2Platformer() {
   else bad(`p2-plat: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- Player-2 runner (2-player, BW_GAME_STYLE 2 + PLAYER2_ENABLED). P1 autoscrolls
+// (ASM run_update) + jumps; P2 does the walk-only ASM p2_run_update via pad2. The C
+// reference runs both in C. Compares P1 px/py + P2 px2/py2.
+function makeP2RunnerState() {
+  const cols = 64, rows = 30, floorRow = 26;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) beh[floorRow][c] = 1;             // SOLID floor
+  for (let r = floorRow - 1; r >= floorRow - 3; r--) beh[r][40] = 2; // WALL for P2 to bump
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [
+    { role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'player', name: 'hero2', width: 2, height: 2, cells: H.mkCells(2, 2) },
+  ];
+  const s = {
+    name: 'p2run', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'runner';
+  s.builder.modules.players.config.count = 2;
+  s.builder.modules.players.submodules.player1.enabled = true;
+  s.builder.modules.players.submodules.player2.enabled = true;
+  return s;
+}
+
+// P1 taps A to jump (it autoscrolls automatically); P2 walks RIGHT via pad2.
+const stepP2Run = (n) => {
+  const tk = rd16(n, TICK);
+  if (tk % 44 < 2) n.buttonDown(1, H.BTN.A);
+  n.buttonDown(2, H.BTN.RIGHT);
+  n.frame();
+  n.buttonUp(1, H.BTN.A); n.buttonUp(2, H.BTN.RIGHT);
+};
+
+async function runP2Runner() {
+  const s = makeP2RunnerState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (!/^#define BW_GAME_STYLE 2\b/m.test(mainC)) { bad('p2-runner: not a runner build'); return; }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 180 },
+    playerSpriteIdx2: 1, playerStart2: { x: 200, y: 180 }, mode: 'browser',
+    customMainC: withProbe2(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`p2-runner: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`p2-runner: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('p2-runner: ASM ROM == C ROM (NES_ASM_PLAYER2 did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepP2Run(c); stepP2Run(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('p2-runner: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  const p1x0 = rd16(c, PX), p2x0 = rd16(c, PX2);
+  let p1xMax = p1x0, p2xMax = p2x0;
+  for (let step = 0; step < 24000 && compared < 400; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('p2-runner: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepP2Run(c); else stepP2Run(a); continue; }
+    const c1x = rd16(c, PX), a1x = rd16(a, PX), c1y = rd16(c, PY), a1y = rd16(a, PY);
+    const c2x = rd16(c, PX2), a2x = rd16(a, PX2), c2y = rd16(c, PY2), a2y = rd16(a, PY2);
+    if (c1x !== a1x || c1y !== a1y || c2x !== a2x || c2y !== a2y) {
+      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C p1(${c1x},${c1y}) p2(${c2x},${c2y}) A p1(${a1x},${a1y}) p2(${a2x},${a2y})`;
+    }
+    if (c1x > p1xMax) p1xMax = c1x;
+    if (c2x > p2xMax) p2xMax = c2x;
+    compared++;
+    stepP2Run(c); stepP2Run(a);
+  }
+
+  if (compared < 300) { bad(`p2-runner: too few matched-tick samples (${compared})`); return; }
+  if (p1xMax <= p1x0 + 8) { bad(`p2-runner: P1 did not autoscroll (${p1x0}->${p1xMax})`); return; }
+  if (p2xMax <= p2x0 + 8) { bad(`p2-runner: P2 did not walk right (${p2x0}->${p2xMax})`); return; }
+  if (diffs === 0)
+    ok(`p2 runner (NES_ASM_PLAYER2): C ≡ ASM P1 px/py AND P2 px2/py2 at every matched tick over `
+      + `${compared} ticks (P1 autoscroll ${p1x0}->${p1xMax}, P2 walk ${p2x0}->${p2xMax} + wall bump)`);
+  else bad(`p2-runner: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
@@ -766,6 +854,7 @@ try {
   await runP2Topdown();    // 2-player top-down: P1 td_update + P2 p2_td_update, both ASM
   await runP2Racer();      // 2-player racer: P1 racer_update + P2 p2_racer_update, both ASM
   await runP2Platformer(); // 2-player platformer: P1 plat_update + P2 p2_plat_update, both ASM
+  await runP2Runner();     // 2-player runner: P1 run_update + P2 p2_run_update (walk-only), both ASM
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {
