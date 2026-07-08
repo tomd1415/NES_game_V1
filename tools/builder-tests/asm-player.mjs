@@ -3,11 +3,11 @@
 //
 // player_asm.s (td_update) is the 4-way top-down move+collision, linked only
 // under NES_ASM_PLAYER (a test toggle, PLAYGROUND_ASM_PLAYER; NOT shipped). Its
-// logic is proven in asm-lab (functions/td_update); this proves the WIRED build:
-// a 2-screen top-down world with a moving player (holds RIGHT+DOWN, scrolls
-// across the world, bumps walls), dual-built pure C (PLAYGROUND_NO_ASM=1) vs the
-// ASM player (PLAYGROUND_ASM_PLAYER=1), matched-tick comparing the real u16
-// player px/py. Any diff is a real bug in the wired td_update.
+// logic is proven in asm-lab (functions/td_update); this proves the WIRED build
+// in BOTH px/py widths: a 1-screen project (u8 px/py) and a 2-screen scroll
+// project (u16), each with a moving player (holds RIGHT+DOWN, bumps walls),
+// dual-built pure C (PLAYGROUND_NO_ASM=1) vs the ASM player (PLAYGROUND_ASM_PLAYER=1),
+// matched-tick comparing the real player px/py. Any diff is a real bug.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,15 +27,17 @@ const win = H.loadBuilderModules();
 new Function(fs.readFileSync(path.join(H.WEB, 'engine-version.js'), 'utf8'))();  // target latest engine
 const tpl = H.readTemplate();
 
-function makeState() {
-  const cols = 64, rows = 30;              // 2 screens wide -> SCROLL_BUILD (u16 px/py)
+function makeState(screensX) {
+  const cols = 32 * screensX, rows = 30;
   const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
-  // scattered WALL blocks the diagonally-moving player bumps into (no floor —
-  // top-down has no gravity).
-  for (const [c, r] of [[12, 6], [12, 7], [20, 12], [21, 12], [34, 9], [34, 10], [48, 16], [30, 20]])
-    beh[r][c] = 2;
+  // scattered WALL blocks the diagonally-moving player bumps into (top-down: no
+  // gravity/floor). Scale positions across however many screens.
+  const walls = screensX === 1
+    ? [[12, 6], [12, 7], [20, 12], [24, 18], [16, 22], [28, 24]]
+    : [[12, 6], [12, 7], [20, 12], [21, 12], [34, 9], [34, 10], [48, 16], [30, 20]];
+  for (const [c, r] of walls) beh[r][c] = 2;
   const bg = {
-    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    name: 'bg', dimensions: { screens_x: screensX, screens_y: 1 },
     nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
     behaviour: beh,
   };
@@ -69,51 +71,58 @@ const stepMove = (n) => {
   n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(1, H.BTN.DOWN);
 };
 
-const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
-const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
-try {
-  const s = makeState();
+async function runCase(screensX) {
+  const wide = screensX > 1;
+  const label = `${screensX}-screen (${wide ? 'u16' : 'u8'} px/py)`;
+  const s = makeState(screensX);
   const mainC = win.BuilderAssembler.assemble(s, tpl);
-  if (!/#define BW_GAME_STYLE 1/.test(mainC)) bad('not a top-down build (BW_GAME_STYLE != 1) — server gate would not engage');
+  if (!/#define BW_GAME_STYLE 1/.test(mainC)) { bad(`${label}: not a top-down build — server gate would not engage`); return; }
+  if (wide !== /#define SCROLL_BUILD/.test(mainC)) { /* sanity only; SCROLL_BUILD is #if'd from BG_WORLD_COLS */ }
   const payload = {
     state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 24 }, mode: 'browser',
-    customMainC: withProbe(mainC),
-    sceneSprites: [],
+    customMainC: withProbe(mainC), sceneSprites: [],
   };
   const rc = await H.buildRom(PORT_C, payload);
   const ra = await H.buildRom(PORT_A, payload);
-  if (!rc.ok) bad(`C build failed (${rc.stage}): ` + String(rc.log || '').slice(-400));
-  else if (!ra.ok) bad(`ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-400));
-  else if (rc.romBytes.equals(ra.romBytes)) bad('ASM ROM == C ROM (NES_ASM_PLAYER did not engage)');
-  else {
-    const c = boot(rc.romBytes), a = boot(ra.romBytes);
-    let bootF = 0;
-    while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepMove(c); stepMove(a); bootF++; }
-    if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) bad('game loop never started (tick stuck at init)');
+  if (!rc.ok) { bad(`${label}: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`${label}: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad(`${label}: ASM ROM == C ROM (NES_ASM_PLAYER did not engage)`); return; }
 
-    let diffs = 0, firstDiff = '', compared = 0;
-    const pxStart = rd16(c, PX), pyStart = rd16(c, PY);
-    let pxMax = pxStart, pyMax = pyStart;
-    for (let step = 0; step < 20000 && compared < 300; step++) {
-      const tc = rd16(c, TICK), ta = rd16(a, TICK);
-      if (tc > 60000 || ta > 60000) { bad('tick overflowed before enough samples'); break; }
-      if (tc !== ta) { if (tc < ta) stepMove(c); else stepMove(a); continue; }
-      const cpx = rd16(c, PX), apx = rd16(a, PX), cpy = rd16(c, PY), apy = rd16(a, PY);
-      if (cpx !== apx || cpy !== apy) { diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C(${cpx},${cpy}) A(${apx},${apy})`; }
-      if (cpx > pxMax) pxMax = cpx;
-      if (cpy > pyMax) pyMax = cpy;
-      compared++;
-      stepMove(c); stepMove(a);
-    }
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepMove(c); stepMove(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad(`${label}: game loop never started`); return; }
 
-    if (compared < 250) bad(`too few matched-tick samples (${compared}) — harness did not run`);
-    else if (pxMax <= pxStart + 8 || pyMax <= pyStart + 8) bad(`player did not move diagonally (px ${pxStart}->${pxMax}, py ${pyStart}->${pyMax})`);
-    else if (pxMax < 256) bad(`player never crossed to screen 2 (px max ${pxMax}) — u16 path not exercised`);
-    else if (diffs === 0)
-      ok('td player update (NES_ASM_PLAYER): C ≡ ASM player px/py at every matched tick over '
-        + `${compared} ticks of 4-way scroll motion (px ${pxStart}->${pxMax} across the boundary, py ${pyStart}->${pyMax}, wall bumps)`);
-    else bad(`divergence — ${diffs} px/py diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+  let diffs = 0, firstDiff = '', compared = 0;
+  const pxStart = rd16(c, PX), pyStart = rd16(c, PY);
+  let pxMax = pxStart, pyMax = pyStart;
+  for (let step = 0; step < 20000 && compared < 300; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad(`${label}: tick overflowed`); return; }
+    if (tc !== ta) { if (tc < ta) stepMove(c); else stepMove(a); continue; }
+    const cpx = rd16(c, PX), apx = rd16(a, PX), cpy = rd16(c, PY), apy = rd16(a, PY);
+    if (cpx !== apx || cpy !== apy) { diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C(${cpx},${cpy}) A(${apx},${apy})`; }
+    if (cpx > pxMax) pxMax = cpx;
+    if (cpy > pyMax) pyMax = cpy;
+    compared++;
+    stepMove(c); stepMove(a);
   }
+
+  if (compared < 250) { bad(`${label}: too few matched-tick samples (${compared})`); return; }
+  if (pxMax <= pxStart + 8 || pyMax <= pyStart + 8) { bad(`${label}: player did not move (px ${pxStart}->${pxMax}, py ${pyStart}->${pyMax})`); return; }
+  if (wide && pxMax < 256) { bad(`${label}: player never crossed to screen 2 (px max ${pxMax}) — u16 path not exercised`); return; }
+  if (!wide && pxMax >= 256) { bad(`${label}: px exceeded 255 in a 1-screen build (${pxMax}) — not the u8 path`); return; }
+  if (diffs === 0)
+    ok(`td player update ${label}: C ≡ ASM px/py at every matched tick over ${compared} ticks `
+      + `(px ${pxStart}->${pxMax}, py ${pyStart}->${pyMax}, wall bumps)`);
+  else bad(`${label}: divergence — ${diffs} px/py diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
+const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
+const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
+try {
+  await runCase(1);   // non-scroll: u8 px/py
+  await runCase(2);   // scroll: u16 px/py
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {
@@ -122,4 +131,4 @@ try {
 }
 
 if (failed) process.exit(1);
-console.log('\nasm-player: the ASM td_update drives the top-down player identically to the C player update.');
+console.log('\nasm-player: the ASM td_update drives the top-down player identically to the C, in both px/py widths.');

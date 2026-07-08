@@ -2751,12 +2751,13 @@ def _build_rom(body):
         asm_ready and custom_main_c is not None and "ss_ai_type[" in custom_main_c
     )
     # Player update on hand-written 6502 (Phase 2c). NOT shipped: gated behind the
-    # PLAYGROUND_ASM_PLAYER test toggle. player_asm.s (td_update) assumes u16 px/py,
-    # so require a SCROLL build, and it only implements the TOP-DOWN model, so
-    # require BW_GAME_STYLE == 1 (detected in the client main.c). The C player
-    # block is #if'd out only under NES_ASM_PLAYER, so flag off is byte-identical.
+    # PLAYGROUND_ASM_PLAYER test toggle. player_asm.s (td_update) implements only
+    # the TOP-DOWN model, so require BW_GAME_STYLE == 1 (detected in the client
+    # main.c); it handles both px/py widths (a PX_WIDE .if picks u8 vs u16 from the
+    # project.inc BG_WORLD_COLS/ROWS), so no scroll requirement. The C player block
+    # is #if'd out only under NES_ASM_PLAYER, so flag off is byte-identical.
     nes_asm_player = bool(
-        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready and is_scroll
+        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
         and custom_main_c is not None and "#define BW_GAME_STYLE 1" in custom_main_c
     )
 

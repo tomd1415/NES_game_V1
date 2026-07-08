@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v33 — 2026-07-08 — top-down player update: u8 (non-scroll) path (Phase 2c, OFF by default)
+
+### Changed / migration
+- **`td_update` (`src/player_asm.s`) now covers BOTH px/py widths**, completing
+  top-down coverage. It loads px/py into 16-bit working copies at entry (hi=0 for
+  u8) and stores them back width-appropriately at exit, so all the interior math
+  is one 16-bit path and only the load/store branch on a new `PX_WIDE` `.define`
+  (u16 ⟺ `BG_WORLD_COLS > 32 || BG_WORLD_ROWS > 30`, mirroring the C SCROLL_BUILD).
+  The server `nes_asm_player` gate **drops the is_scroll requirement** — it now
+  engages for any top-down build under `PLAYGROUND_ASM_PLAYER` (1-screen u8 or
+  scrolling u16).
+- Still OFF by default / not shipped. Flag off = byte-identical (golden `1730448e`
+  + `_rom-equiv` `54a15150` UNCHANGED — the template is untouched this bump).
+- A/B: `asm-player.mjs` now runs BOTH a 1-screen (u8) and a 2-screen (u16)
+  top-down project — C ≡ ASM player px/py at every matched tick in each.
+- ca65 gotcha recorded in the file: `.if PX_WIDE` needs `.define` (not `=`, which
+  isn't visible to `.if` inside a `.proc`), and no parens around `>` (a
+  parenthesised `>` is read as the hi-byte operator).
+
 ## v32 — 2026-07-08 — top-down player update on hand-written 6502 (Phase 2c, OFF by default)
 
 ### Added

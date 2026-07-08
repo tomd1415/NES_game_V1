@@ -2,15 +2,18 @@
 ;
 ; Compiled + linked ONLY when NES_ASM_PLAYER=1 (Makefile); the matching C body in
 ; main.c is then #ifdef'd out, so flag OFF (default) = byte-identical to the pure-C
-; engine. Requires a SCROLL build (px/py are u16 world-space) — the server gate
-; only sets NES_ASM_PLAYER for is_scroll top-down projects, so this file assumes
-; 16-bit px/py. The non-scroll (u8) path stays C for now.
+; engine. Not shipped to pupils yet (PLAYGROUND_ASM_PLAYER test toggle).
 ;
 ; td_update — the TOP-DOWN player update (BW_GAME_STYLE == 1): 4-way move with
 ; per-direction collision, in the C's order (RIGHT, LEFT, then UP, DOWN — so the
 ; vertical step sees the post-horizontal px), then jumping/jmp_up/on_ladder = 0.
 ; Behaviourally identical to the C, proven in asm-lab (functions/td_update). The
 ; world bounds + player size are the project.inc constants the C bakes in.
+;
+; px/py in the shipped build are u8 (1x1/non-scroll) or u16 (scroll) — same split
+; as the C's pxcoord_t. td_update loads them into 16-bit working copies (pxw/pyw,
+; hi=0 for u8) at entry and stores them back width-appropriately at exit, so all
+; the interior math is one 16-bit path; only the load/store branch on PX_WIDE.
 
 .include "project.inc"
 
@@ -27,8 +30,21 @@ PH8        = PLAYER_H * 8
 WORLD_W_PX = BG_WORLD_COLS * 8
 WORLD_H_PX = BG_WORLD_ROWS * 8
 RBOUND     = WORLD_W_PX - PW8          ; RIGHT: move only while px < RBOUND
+; px/py are u16 exactly when the C uses SCROLL_BUILD (world bigger than one screen).
+; NB: `.define` (not `=`) so `.if PX_WIDE` resolves inside .proc scopes, like the
+; project.inc SS_POS_WIDE; and no parens around `>` (ca65 reads a parenthesised
+; `>` as the hi-byte operator).
+.if BG_WORLD_COLS > 32
+.define PX_WIDE 1
+.elseif BG_WORLD_ROWS > 30
+.define PX_WIDE 1
+.else
+.define PX_WIDE 0
+.endif
 
 .segment "BSS"
+pxw:   .res 2     ; 16-bit working copy of px (hi = 0 when not PX_WIDE)
+pyw:   .res 2
 tdcol: .res 1
 tdr0:  .res 1
 tdr1:  .res 1
@@ -94,19 +110,19 @@ prow:  .res 1
     rts
 .endproc
 
-; rows_from_py: tdr0 = py>>3 ; tdr1 = (py + PH8 - 1)>>3
+; rows_from_py: tdr0 = pyw>>3 ; tdr1 = (pyw + PH8 - 1)>>3
 .proc rows_from_py
-    lda _py
+    lda pyw
     sta tmp1
-    lda _py+1
+    lda pyw+1
     sta tmp2
     jsr shr3
     sta tdr0
     lda #(PH8 - 1)
     clc
-    adc _py
+    adc pyw
     sta tmp1
-    lda _py+1
+    lda pyw+1
     adc #0
     sta tmp2
     jsr shr3
@@ -114,19 +130,19 @@ prow:  .res 1
     rts
 .endproc
 
-; calc_cols: lcol = px>>3 ; rcol = (px + PW8 - 1)>>3
+; calc_cols: lcol = pxw>>3 ; rcol = (pxw + PW8 - 1)>>3
 .proc calc_cols
-    lda _px
+    lda pxw
     sta tmp1
-    lda _px+1
+    lda pxw+1
     sta tmp2
     jsr shr3
     sta lcol
     lda #(PW8 - 1)
     clc
-    adc _px
+    adc pxw
     sta tmp1
-    lda _px+1
+    lda pxw+1
     adc #0
     sta tmp2
     jsr shr3
@@ -135,24 +151,42 @@ prow:  .res 1
 .endproc
 
 .proc _td_update
+    ; --- load px/py into 16-bit working copies ---
+.if PX_WIDE
+    lda _px
+    sta pxw
+    lda _px+1
+    sta pxw+1
+    lda _py
+    sta pyw
+    lda _py+1
+    sta pyw+1
+.else
+    lda _px
+    sta pxw
+    lda _py
+    sta pyw
+    lda #0
+    sta pxw+1
+    sta pyw+1
+.endif
+
     ; ---- RIGHT (pad & 0x01) ----
     lda _pad
     and #$01
     beq skip_right
-    ; if (px < RBOUND) — 16-bit compare
-    lda _px
+    lda pxw
     cmp #<RBOUND
-    lda _px+1
+    lda pxw+1
     sbc #>RBOUND
     bcs r_dir                 ; px >= RBOUND -> no move
-    ; ahead_col = (px + PW8 + walk_speed - 1) >> 3
     lda #(PW8 - 1)
     clc
     adc _walk_speed
     clc
-    adc _px
+    adc pxw
     sta tmp1
-    lda _px+1
+    lda pxw+1
     adc #0
     sta tmp2
     jsr shr3
@@ -160,13 +194,13 @@ prow:  .res 1
     jsr rows_from_py
     jsr hprobe
     bne r_dir
-    lda _px
+    lda pxw
     clc
     adc _walk_speed
-    sta _px
-    lda _px+1
+    sta pxw
+    lda pxw+1
     adc #0
-    sta _px+1
+    sta pxw+1
 r_dir:
     lda #$00
     sta _plrdir
@@ -175,17 +209,17 @@ skip_right:
     lda _pad
     and #$02
     beq skip_left
-    lda _px+1
+    lda pxw+1
     bne l_go                  ; px >= 256 -> px >= walk_speed
-    lda _px
+    lda pxw
     cmp _walk_speed
     bcc l_dir                 ; px < walk_speed -> no move
 l_go:
-    lda _px
+    lda pxw
     sec
     sbc _walk_speed
     sta tmp1
-    lda _px+1
+    lda pxw+1
     sbc #0
     sta tmp2
     jsr shr3
@@ -193,13 +227,13 @@ l_go:
     jsr rows_from_py
     jsr hprobe
     bne l_dir
-    lda _px
+    lda pxw
     sec
     sbc _walk_speed
-    sta _px
-    lda _px+1
+    sta pxw
+    lda pxw+1
     sbc #0
-    sta _px+1
+    sta pxw+1
 l_dir:
     lda #$40
     sta _plrdir
@@ -208,17 +242,17 @@ skip_left:
     lda _pad
     and #$08
     beq skip_up
-    lda _py+1
+    lda pyw+1
     bne u_go
-    lda _py
+    lda pyw
     cmp _walk_speed
     bcc skip_up               ; py < walk_speed -> no move
 u_go:
-    lda _py
+    lda pyw
     sec
     sbc _walk_speed
     sta tmp1
-    lda _py+1
+    lda pyw+1
     sbc #0
     sta tmp2
     jsr shr3
@@ -236,26 +270,25 @@ u_go:
     sta prow
     jsr cell_solid
     bne skip_up
-    lda _py
+    lda pyw
     sec
     sbc _walk_speed
-    sta _py
-    lda _py+1
+    sta pyw
+    lda pyw+1
     sbc #0
-    sta _py+1
+    sta pyw+1
 skip_up:
     ; ---- DOWN (pad & 0x04) ----
     lda _pad
     and #$04
     beq skip_down
-    ; t = py + PH8 + walk_speed ; move only if t <= WORLD_H_PX
     lda #PH8
     clc
     adc _walk_speed
     clc
-    adc _py
+    adc pyw
     sta tmp1
-    lda _py+1
+    lda pyw+1
     adc #0
     sta tmp2                  ; t = py + PH8 + walk_speed
     lda #<WORLD_H_PX
@@ -264,14 +297,13 @@ skip_up:
     lda #>WORLD_H_PX
     sbc tmp2
     bcc skip_down             ; WORLD_H_PX < t -> t > WORLD_H_PX -> no move
-    ; ahead_row = (py + PH8 + walk_speed - 1) >> 3
     lda #(PH8 - 1)
     clc
     adc _walk_speed
     clc
-    adc _py
+    adc pyw
     sta tmp1
-    lda _py+1
+    lda pyw+1
     adc #0
     sta tmp2
     jsr shr3
@@ -289,14 +321,30 @@ skip_up:
     sta prow
     jsr cell_solid
     bne skip_down
-    lda _py
+    lda pyw
     clc
     adc _walk_speed
-    sta _py
-    lda _py+1
+    sta pyw
+    lda pyw+1
     adc #0
-    sta _py+1
+    sta pyw+1
 skip_down:
+    ; --- store working copies back to px/py ---
+.if PX_WIDE
+    lda pxw
+    sta _px
+    lda pxw+1
+    sta _px+1
+    lda pyw
+    sta _py
+    lda pyw+1
+    sta _py+1
+.else
+    lda pxw
+    sta _px
+    lda pyw
+    sta _py
+.endif
     lda #0
     sta _jumping
     sta _jmp_up
