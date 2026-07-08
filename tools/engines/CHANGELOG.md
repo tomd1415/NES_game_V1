@@ -9,6 +9,24 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v35 — 2026-07-08 — platformer player: gate the C blocks under the flag (Phase 2c 4b-ii, OFF by default)
+
+### Changed / migration
+- **platformer.c now gates the C platformer player blocks under NES_ASM_PLAYER**
+  and calls `plat_update()` in their place (mirroring the top-down `td_update()`
+  wiring). Precisely: the shared horizontal walk block's flag-exclusion now covers
+  `(BW_GAME_STYLE==1 || ==0) && NES_ASM_PLAYER`; the ladder+jump-trigger portion
+  and the jump-ascent/gravity portion each get `#if !(BW_GAME_STYLE==0 &&
+  defined(NES_ASM_PLAYER))`; `prev_pad = pad` stays ungated (runs after
+  plat_update, which reads the old prev_pad).
+- **Still not reachable for platformers** — the server `nes_asm_player` gate still
+  requires BW_GAME_STYLE==1 (top-down), so no platformer build sets the flag yet;
+  the plat_update() call is present but never taken. Flag off = byte-identical:
+  golden `1730448e` + `_rom-equiv` `54a15150` UNCHANGED (platformer-without-flag
+  runs the C exactly as before). Top-down A/B (`asm-player.mjs`) still green.
+- Next (4b-iii, 4b-iv): extend the server gate to plain platformers + A/B the
+  wired platformer player — at which point flag-on drives it on 6502.
+
 ## v34 — 2026-07-08 — platformer player update composed in ASM (Phase 2c 4b-i, OFF by default)
 
 ### Added
