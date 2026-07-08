@@ -33,6 +33,8 @@ PH8        = PLAYER_H * 8
 WORLD_W_PX = BG_WORLD_COLS * 8
 WORLD_H_PX = BG_WORLD_ROWS * 8
 RBOUND     = WORLD_W_PX - PW8          ; RIGHT: move only while px < RBOUND
+RUN_CAM_MAX = WORLD_W_PX - SCREEN_W_PX ; auto-runner: track end (wrap the camera)
+RUN_FALL_Y  = WORLD_H_PX - 8           ; auto-runner: fall-off-bottom respawn line
 ; px/py are u16 exactly when the C uses SCROLL_BUILD (world bigger than one screen).
 ; NB: `.define` (not `=`) so `.if PX_WIDE` resolves inside .proc scopes, like the
 ; project.inc SS_POS_WIDE; and no parens around `>` (ca65 reads a parenthesised
@@ -63,6 +65,8 @@ ul:    .res 1     ; plat_update: up_l / dn_l / head_l behaviour
 ur:    .res 1     ; plat_update: up_r / dn_r / head_r behaviour
 fall_amt: .res 1  ; pl_vmove gravity step: 2 (platformer) or 3 (SMB)
 sedge: .res 1     ; smb_hstep: leading-edge column
+runc:  .res 1     ; run_hstep: body-centre column (spike probe)
+runr:  .res 1     ; run_hstep: body-centre row
 
 .segment "CODE"
 
@@ -846,6 +850,195 @@ pu_pv:
 .endif
     rts
 .endproc
+
+; ===========================================================================
+; run_update — the AUTO-RUNNER player update (BW_GAME_STYLE 2). Same order as the
+; C: forced-scroll horizontal + respawn (run_hstep, on _px/_py/_cam_x directly) ->
+; the SHARED platformer vertical (pl_ladder detect+climb OR run_jump, then pl_vmove
+; with a +2 fall) on the pxw/pyw working copies. run_jump differs from pl_jump: the
+; runner takes off on UP-edge OR A-edge (the auto-runner's "tap to jump"), jmp_up=20,
+; no run-boost/variable-cut. Constants (RUNNER_AUTOSCROLL/SCREEN_X/SPIKE_ID/START_Y)
+; come from project.inc so the ASM matches the C's Builder-tuned values.
+;
+; The whole section is gated under PX_WIDE: an auto-runner is ALWAYS a multi-screen
+; scroll build (autoscroll needs a track wider than one screen), so it's always
+; PX_WIDE — and gating here means a 1-screen (non-scroll) build never imports
+; _cam_x, which scroll.c only defines for a multi-screen world.
+.if PX_WIDE
+.export _run_update
+.import _cam_x            ; the scroll camera the runner rides (scroll.c, PX_WIDE only)
+
+; run_respawn: cam_x=0; px=RUNNER_SCREEN_X; py=RUNNER_START_Y; jumping=0; jmp_up=0.
+.proc run_respawn
+    lda #0
+    sta _cam_x
+    sta _cam_x+1
+    sta _px+1
+    sta _jumping
+    sta _jmp_up
+    sta _py+1
+    lda #RUNNER_SCREEN_X
+    sta _px
+    lda #RUNNER_START_Y
+    sta _py
+    rts
+.endproc
+
+; run_hstep: cam_x += RUNNER_AUTOSCROLL; wrap at the track end; px = cam_x +
+; RUNNER_SCREEN_X; respawn on a spike at the body centre or on falling off the
+; bottom. Operates on _px/_py/_cam_x directly (16-bit). (asm-lab functions/run_hstep)
+.proc run_hstep
+    clc
+    lda _cam_x
+    adc #RUNNER_AUTOSCROLL
+    sta _cam_x
+    lda _cam_x+1
+    adc #0
+    sta _cam_x+1
+    ; if (cam_x >= RUN_CAM_MAX) respawn
+    lda _cam_x
+    cmp #<RUN_CAM_MAX
+    lda _cam_x+1
+    sbc #>RUN_CAM_MAX
+    bcc @nowrap
+    jsr run_respawn
+@nowrap:
+    ; px = cam_x + RUNNER_SCREEN_X
+    clc
+    lda _cam_x
+    adc #RUNNER_SCREEN_X
+    sta _px
+    lda _cam_x+1
+    adc #0
+    sta _px+1
+    ; run_c = (px + PLAYER_W*4) >> 3
+    clc
+    lda _px
+    adc #(PLAYER_W * 4)
+    sta tmp1
+    lda _px+1
+    adc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    sta runc
+    ; run_r = (py + PLAYER_H*4) >> 3
+    clc
+    lda _py
+    adc #(PLAYER_H * 4)
+    sta tmp1
+    lda _py+1
+    adc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    sta runr
+    ; if (behaviour_at(run_c, run_r) == RUNNER_SPIKE_ID) respawn
+    lda runc
+    ldx #0
+    jsr pushax
+    lda runr
+    ldx #0
+    jsr _behaviour_at
+    cmp #RUNNER_SPIKE_ID
+    bne @nospk
+    jsr run_respawn
+@nospk:
+    ; if (py >= RUN_FALL_Y) respawn
+    lda _py
+    cmp #<RUN_FALL_Y
+    lda _py+1
+    sbc #>RUN_FALL_Y
+    bcc @done
+    jsr run_respawn
+@done:
+    rts
+.endproc
+
+; run_jump: auto-runner take-off — UP-edge OR A-edge (tap to jump), jmp_up=20.
+.proc run_jump
+    lda _jumping
+    bne @d               ; already airborne -> no re-trigger
+    ; UP edge?
+    lda _pad
+    and #$08
+    beq @tryA
+    lda _prev_pad
+    and #$08
+    beq @go              ; UP now, not last frame -> take off
+@tryA:
+    ; A edge?
+    lda _pad
+    and #$80
+    beq @d
+    lda _prev_pad
+    and #$80
+    bne @d               ; A held last frame -> no edge
+@go:
+    lda #1
+    sta _jumping
+    lda #20
+    sta _jmp_up
+@d:
+    rts
+.endproc
+
+.proc _run_update
+    jsr run_hstep
+.if PX_WIDE
+    lda _px
+    sta pxw
+    lda _px+1
+    sta pxw+1
+    lda _py
+    sta pyw
+    lda _py+1
+    sta pyw+1
+.else
+    lda _px
+    sta pxw
+    lda _py
+    sta pyw
+    lda #0
+    sta pxw+1
+    sta pyw+1
+.endif
+    jsr pl_ladder
+    lda _on_ladder
+    bne @rv
+    jsr run_jump
+@rv:
+    lda #2
+    sta fall_amt
+    jsr pl_vmove
+.if PX_WIDE
+    lda pxw
+    sta _px
+    lda pxw+1
+    sta _px+1
+    lda pyw
+    sta _py
+    lda pyw+1
+    sta _py+1
+.else
+    lda pxw
+    sta _px
+    lda pyw
+    sta _py
+.endif
+    rts
+.endproc
+.endif  ; PX_WIDE (auto-runner section)
 
 ; ===========================================================================
 ; smb_update — the SMB player update (BW_GAME_STYLE 0 + BW_SMB_JUMP). Same order

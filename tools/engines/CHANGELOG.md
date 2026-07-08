@@ -9,6 +9,38 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v39 — 2026-07-08 — auto-runner player update composed in ASM (Phase 2c, OFF/unwired)
+
+### Added
+- **run_update proc in src/player_asm.s** — the AUTO-RUNNER player update
+  (BW_GAME_STYLE 2), composed in the C's order: forced-scroll horizontal +
+  respawn (run_hstep — cam_x += RUNNER_AUTOSCROLL, wrap at the track end, respawn
+  on a spike at the body centre or on falling off the bottom; asm-lab-proven,
+  functions/run_hstep) → the SHARED platformer vertical (pl_ladder detect+climb OR
+  run_jump, then pl_vmove with a +2 fall). run_jump differs from pl_jump: the
+  runner takes off on UP-edge OR A-edge (the auto-runner "tap to jump"), jmp_up=20,
+  no run-boost/variable-cut. Imports _cam_x (scroll.c).
+- **project.inc now emits RUNNER_AUTOSCROLL/SCREEN_X/SPIKE_ID/START_Y** (server
+  derives AUTOSCROLL from the Builder autoscroll-speed knob, START_Y from the
+  player start Y — same project-constants-via-project.inc discipline as SMB_*, so
+  the ASM matches the C's tuned values). RUNNER_* prefixed to avoid colliding with
+  scene.asminc's PLAYER_Y.
+
+### Changed / migration
+- **Gated under PX_WIDE** — an auto-runner is ALWAYS a multi-screen scroll build
+  (autoscroll needs a track wider than one screen), so the whole runner section
+  (the _cam_x import + run_update/run_hstep/run_jump/run_respawn + the export) only
+  assembles when PX_WIDE. This keeps a 1-screen (non-scroll) build from importing
+  _cam_x, which scroll.c defines only for a multi-screen world — so the top-down
+  1-screen player build still links.
+- **Not wired yet** — no C caller (the template still runs the C runner), and the
+  server gate still excludes style 2, so this is dead code in current flag builds
+  and absent flag-off. Flag off = byte-identical (golden 1730448e + _rom-equiv
+  54a15150 UNCHANGED); top-down + platformer + SMB A/B still pass. Assemble-checked
+  both PX_WIDE for both the SMB and non-SMB paths.
+- Next: gate the C style-2 blocks under NES_ASM_PLAYER + call run_update() + extend
+  the server gate to style-2 scroll builds, then A/B a runner project.
+
 ## v38 — 2026-07-08 — SMB player update WIRED + A/B-verified (Phase 2c 5b, OFF by default)
 
 ### Changed / migration
