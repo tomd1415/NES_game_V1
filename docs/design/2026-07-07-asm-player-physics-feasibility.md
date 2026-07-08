@@ -43,14 +43,15 @@ then flip per game-type — not all at once.
 
 Order chosen so every step is byte-behaviour-verifiable before the next:
 
-1. **Sub-pixel integrate helper** — `(pos, sub, vel) -> (pos', sub')` in 8.8
-   (the `acc = sub + v; pos += acc>>8; sub = acc & 0xFF` step). Pure math, no
-   collision; the smallest leaf. Unit-test in `asm-lab/` against the C for a
-   sweep of (pos, sub, vel) incl. negative velocities and the sign of `>>8`.
-2. **Axis collision-resolve helper** — `racer_box_on_edge` / the platformer
-   ground+wall probe as a callable ASM predicate (it already calls ASM
-   `behaviour_at`; this wraps the box-span loop). Leaf, A/B as a predicate over a
-   grid of boxes (like `asm-scene`'s render diff but for the boolean).
+1. **Sub-pixel integrate helper** — ✅ **DONE** (`asm-lab/functions/px_integrate/`).
+   `(pos, sub, vel) -> (pos', sub')` in 8.8 (`acc = sub + v; pos += acc>>8;
+   sub = acc & 0xFF`). 15-case unit test incl. backward-fractional, 16-bit wrap,
+   overflowing v — asm == C == JS model.
+2. **Axis collision-resolve helper** — ✅ **DONE** (`asm-lab/functions/box_on_edge/`).
+   `racer_box_on_edge` as a callable ASM predicate (16-bit box->cells per axis +
+   5 `behaviour_at` probes, short-circuit). 14-case unit test (corners, centre,
+   straddle, floor, bx>=256 out-of-map) — asm == C == JS model. **← leaves done;
+   next is the first wired-in update (3).**
 3. **top-down player update** — simplest full model (4-way, no gravity, no
    fixed-point run accel). First end-to-end `NES_ASM_PLAYER` game type. A/B:
    extend `asm-realproj.mjs` with a top-down variant + scripted 4-way input,
