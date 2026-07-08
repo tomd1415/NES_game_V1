@@ -296,6 +296,90 @@ async function runSmb() {
   else bad(`smb: divergence — ${diffs} px/py/jumping diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- Auto-runner (game type 'runner'): BW_GAME_STYLE 2. The camera autoscrolls
+// every frame and the player rides it at a fixed on-screen X (px = cam_x +
+// RUNNER_SCREEN_X); reaching the track end wraps back to the start. Jump is
+// UP/A-edge. The hand-written 6502 run_update = run_hstep (forced-scroll + respawn)
+// + the shared plat vertical (pl_ladder/run_jump/pl_vmove). 2-screen so PX_WIDE.
+function makeRunnerState() {
+  const cols = 64, rows = 30, floorRow = 26;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) beh[floorRow][c] = 1;              // SOLID floor to land on
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [{ role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) }];
+  const s = {
+    name: 'runplayer', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'runner';
+  return s;
+}
+
+// The runner ignores RIGHT/LEFT (px is camera-driven); tap A for 2 ticks every 44
+// (an edge -> a jump). Tick-keyed so both builds get the same pad per game-tick.
+const stepRunner = (n) => {
+  const tk = rd16(n, TICK);
+  if (tk % 44 < 2) n.buttonDown(1, H.BTN.A);
+  n.frame();
+  n.buttonUp(1, H.BTN.A);
+};
+
+async function runRunner() {
+  const s = makeRunnerState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (!/^#define BW_GAME_STYLE 2\b/m.test(mainC)) { bad('runner: not a runner build (no BW_GAME_STYLE 2) — server gate would not engage'); return; }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 180 }, mode: 'browser',
+    customMainC: withProbe(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`runner: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`runner: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('runner: ASM ROM == C ROM (NES_ASM_PLAYER did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepRunner(c); stepRunner(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('runner: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  let pxMax = 0, jumpedC = false, wrapped = false, prevPx = rd16(c, PX);
+  for (let step = 0; step < 24000 && compared < 400; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('runner: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepRunner(c); else stepRunner(a); continue; }
+    const cpx = rd16(c, PX), apx = rd16(a, PX), cpy = rd16(c, PY), apy = rd16(a, PY);
+    const cj = c.cpu.mem[JU] & 0xFF, aj = a.cpu.mem[JU] & 0xFF;
+    if (cpx !== apx || cpy !== apy || cj !== aj) {
+      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C(${cpx},${cpy},j${cj}) A(${apx},${apy},j${aj})`;
+    }
+    if (cpx > pxMax) pxMax = cpx;
+    if (cpx + 100 < prevPx) wrapped = true;   // px dropped sharply -> track-end respawn
+    prevPx = cpx;
+    if (cj) jumpedC = true;
+    compared++;
+    stepRunner(c); stepRunner(a);
+  }
+
+  if (compared < 300) { bad(`runner: too few matched-tick samples (${compared})`); return; }
+  if (pxMax < 256) { bad(`runner: player never crossed toward screen 2 (px max ${pxMax}) — u16/autoscroll not exercised`); return; }
+  if (!wrapped) { bad('runner: never hit a track-end respawn (px never wrapped) — respawn path not exercised'); return; }
+  if (!jumpedC) { bad('runner: player never jumped (jumping stayed 0) — jump path not exercised'); return; }
+  if (diffs === 0)
+    ok(`runner player update (NES_ASM_PLAYER): C ≡ ASM px/py/jumping at every matched tick over `
+      + `${compared} ticks (autoscroll to px ${pxMax}, track-end wrap respawn, A-jumps, gravity)`);
+  else bad(`runner: divergence — ${diffs} px/py/jumping diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
@@ -303,6 +387,7 @@ try {
   await runCase(2);        // top-down scroll: u16 px/py
   await runPlatformer();   // platformer: walk + jump + gravity + ladder
   await runSmb();          // SMB: accel/skid run + A-jump + variable-cut + gravity + ladder
+  await runRunner();       // auto-runner: autoscroll + track-end wrap respawn + A-jump + gravity
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {

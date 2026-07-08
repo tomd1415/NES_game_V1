@@ -9,6 +9,32 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v40 — 2026-07-08 — auto-runner player update WIRED + A/B-verified (Phase 2c, OFF by default)
+
+### Changed / migration
+- **The auto-runner player update now runs on hand-written 6502 under the flag,
+  A/B-proven identical to the C.** platformer.c gates the C style-2 blocks under
+  NES_ASM_PLAYER and calls `run_update()` in their place: the forced-scroll
+  horizontal + respawn block (`#if BW_GAME_STYLE == 2 && !defined(NES_ASM_PLAYER)`)
+  and the shared platformer vertical sub-blocks (ladder/jump-trigger +
+  ascent/gravity — the gate widened from `!(style0 && flag)` to
+  `!((style0 || style2) && flag)`). `prev_pad = pad` stays in C (run_update's jump
+  trigger reads the old prev_pad). The `run_update` prototype is declared
+  unconditionally (like smb_update).
+- **Server:** the `nes_asm_player` gate now also accepts the runner — a new
+  `_asm_player_runner` (line-anchored `\n#define BW_GAME_STYLE 2` AND is_scroll,
+  matching the ASM's `.if PX_WIDE` gate; a runner is always multi-screen). No
+  Makefile change (NES_ASM_PLAYER already links player_asm.s; the runner needs no
+  ca65 -D).
+- A/B (`asm-player.mjs`): a 2-screen runner (SOLID floor) autoscrolling with
+  periodic A-jumps — C ≡ ASM **px/py/jumping** at every matched tick over 400
+  ticks (autoscroll to px 318, track-end wrap respawn, jump take-off + gravity +
+  landing). Exercises the whole run_update (run_hstep + pl_ladder/run_jump/pl_vmove).
+- **Still off by default / not shipped.** Linked only under PLAYGROUND_ASM_PLAYER;
+  flag off = byte-identical (golden `1730448e` + `_rom-equiv` `54a15150` UNCHANGED).
+  PLAYGROUND_NO_ASM=1 is the kill switch. Top-down + platformer + SMB + auto-runner
+  player physics are now all on 6502 behind the flag; racer + player 2 remain.
+
 ## v39 — 2026-07-08 — auto-runner player update composed in ASM (Phase 2c, OFF/unwired)
 
 ### Added

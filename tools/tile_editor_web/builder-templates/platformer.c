@@ -142,6 +142,7 @@ void plat_update(void);    /* platformer (BW_GAME_STYLE == 0, non-SMB) */
    BW_SMB_JUMP is #defined later than this slot — the call site is still gated on
    it, and an unused declaration links to nothing on non-SMB builds. */
 void smb_update(void);
+void run_update(void);      /* auto-runner (BW_GAME_STYLE == 2) */
 #endif
 
 /* Player position is u16 world-space under SCROLL_BUILD so the pupil can
@@ -959,7 +960,7 @@ void main(void) {
         pad = read_controller();
 #endif
 
-#if BW_GAME_STYLE == 2
+#if BW_GAME_STYLE == 2 && !defined(NES_ASM_PLAYER)   /* ASM run_update owns this */
         // Auto-runner: advance the camera every frame, lock the player to a
         // fixed screen X (so the world scrolls past), and restart on reaching
         // the end, touching a spike tile, or falling off the bottom.  The
@@ -1147,6 +1148,14 @@ void main(void) {
         // (BW_SMB_POWERUPS) also stay in C — smb_update covers only the move.
         smb_update();
 #endif
+#if BW_GAME_STYLE == 2 && defined(NES_ASM_PLAYER)
+        // Phase 2c — the whole auto-runner move (the forced-scroll horizontal +
+        // respawn block above AND the shared platformer vertical below) is the
+        // hand-written 6502 run_update; those C blocks are #if'd out under the flag.
+        // `prev_pad = pad` stays in C (run_update's jump trigger reads the old
+        // prev_pad). Flag off -> the C blocks run unchanged.
+        run_update();
+#endif
 #if (BW_GAME_STYLE != 2 && BW_GAME_STYLE != 3) && !defined(BW_SMB_JUMP) && !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0) && defined(NES_ASM_PLAYER))
         // Horizontal walk with screen-bounds clamp.  SOLID_GROUND and WALL
         // tiles painted on the Behaviour page block the player from walking
@@ -1250,7 +1259,7 @@ void main(void) {
         // Ladder probe.  If any tile the player overlaps is a LADDER the
         // player can move up/down with the D-pad and gravity is suspended.
         // Stepping sideways off the ladder resumes normal falling.
-#if !(BW_GAME_STYLE == 0 && defined(NES_ASM_PLAYER))   /* ASM plat_update owns this */
+#if !((BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2) && defined(NES_ASM_PLAYER))   /* ASM plat_update / run_update owns this */
         {
             unsigned char lt_row = py >> 3;
             unsigned char lb_row = (py + (PLAYER_H << 3) - 1) >> 3;
@@ -1364,7 +1373,7 @@ void main(void) {
 #endif
         prev_pad = pad;
 
-#if !(BW_GAME_STYLE == 0 && defined(NES_ASM_PLAYER))   /* ASM plat_update owns this */
+#if !((BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2) && defined(NES_ASM_PLAYER))   /* ASM plat_update / run_update owns this */
         // Jump ascent: while jmp_up ticks remain, rise 2 px/frame. Once
         // the ascent budget is spent, gravity takes over and the player
         // falls until both feet sit on a SOLID_GROUND / PLATFORM tile

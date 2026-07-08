@@ -2799,6 +2799,10 @@ def _build_rom(body):
     _cmc = custom_main_c or ""
     _asm_player_topdown = "\n#define BW_GAME_STYLE 1" in _cmc
     _asm_player_smb = "\n#define BW_SMB_JUMP" in _cmc
+    # Auto-runner (Phase 2c): style 2 -> run_update. It MUST be a scroll build (the
+    # ASM runner section is gated `.if PX_WIDE` because it imports _cam_x, which
+    # scroll.c defines only for a multi-screen world); a runner always is one.
+    _asm_player_runner = ("\n#define BW_GAME_STYLE 2" in _cmc) and is_scroll
     _asm_player_platformer = (
         "\n#define BW_GAME_STYLE 1" not in _cmc
         and "\n#define BW_GAME_STYLE 2" not in _cmc
@@ -2808,7 +2812,7 @@ def _build_rom(body):
     nes_asm_player = bool(
         os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
         and custom_main_c is not None
-        and (_asm_player_topdown or _asm_player_platformer)
+        and (_asm_player_topdown or _asm_player_platformer or _asm_player_runner)
     )
     # SMB (Phase 2c 5b): style 0 + BW_SMB_JUMP — smb_update (accel/skid + ladder/
     # jump + variable-cut + gravity). Distinct from plat_update (which does NOT
