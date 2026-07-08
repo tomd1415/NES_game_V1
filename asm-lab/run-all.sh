@@ -70,6 +70,9 @@ node functions/advance_animation/test.mjs || fail=1
 run pxi "functions/px_integrate/ref.c functions/px_integrate/test.c functions/px_integrate/asm.s"
 node functions/px_integrate/test.mjs || fail=1
 
+run boe "functions/box_on_edge/ref.c functions/box_on_edge/test.c functions/box_on_edge/asm.s"
+node functions/box_on_edge/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
