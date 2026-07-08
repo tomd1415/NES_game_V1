@@ -144,6 +144,9 @@ void plat_update(void);    /* platformer (BW_GAME_STYLE == 0, non-SMB) */
 void smb_update(void);
 void run_update(void);      /* auto-runner (BW_GAME_STYLE == 2) */
 void racer_update(void);    /* top-down racer P1 (BW_GAME_STYLE == 3) */
+#if PLAYER2_ENABLED
+void p2_td_update(void);    /* player-2 top-down (BW_GAME_STYLE == 1) */
+#endif
 #endif
 
 /* Player position is u16 world-space under SCROLL_BUILD so the pupil can
@@ -1610,6 +1613,13 @@ void main(void) {
          * that's a known MVP limitation from builder-plan-player2.md
          * §1 and an easy follow-up chunk if pupils ask.
          * ---------------------------------------------------------- */
+#if BW_GAME_STYLE == 1 && defined(NES_ASM_PLAYER)
+        // Phase 2c — the P2 top-down move (this horizontal walk + the style-1
+        // vertical block below) is the hand-written 6502 p2_td_update; those C
+        // blocks are #if'd out under the flag. Flag off -> the C runs unchanged.
+        p2_td_update();
+#endif
+#if !(BW_GAME_STYLE == 1 && defined(NES_ASM_PLAYER))   /* ASM p2_td_update owns style-1 P2 */
         /* Horizontal walk with wall block. */
         if (pad2 & 0x01) {                    /* RIGHT */
             if (px2 < (WORLD_W_PX - PLAYER2_W * 8)) {
@@ -1645,6 +1655,7 @@ void main(void) {
             }
             plrdir2 = 0x40;
         }
+#endif  /* !(P2 top-down + NES_ASM_PLAYER) — the shared P2 horizontal walk */
 
 #if BW_GAME_STYLE == 0
         /* Platformer P2: edge-triggered jump (no ceiling bonk in MVP). */
@@ -1680,7 +1691,7 @@ void main(void) {
         }
 #endif  /* BW_GAME_STYLE == 0 (P2 platformer vertical) */
 
-#if BW_GAME_STYLE == 1
+#if BW_GAME_STYLE == 1 && !defined(NES_ASM_PLAYER)   /* ASM p2_td_update owns this */
         /* Top-down P2: 4-way step with wall collision (mirror of P1 above). */
         if (pad2 & 0x08) {                    /* UP */
             if (py2 >= walk_speed2) {

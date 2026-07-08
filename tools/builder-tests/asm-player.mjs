@@ -467,6 +467,109 @@ async function runRacer() {
   else bad(`racer: divergence — ${diffs} px/py diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- Player-2 top-down (2-player, BW_GAME_STYLE 1 + PLAYER2_ENABLED). P1 runs the
+// ASM td_update, P2 runs the ASM p2_td_update; both drive their own pad. The C
+// reference (PLAYGROUND_NO_ASM) runs both in C. Matched-tick compares P1 px/py AND
+// P2 px2/py2. A P2-aware probe exposes px2/py2 (they exist only in a 2P build).
+const PX2 = 0x0718, PY2 = 0x071A;
+function withProbe2(mainC) {
+  const inj = '{static unsigned int _tk; ++_tk;'
+    + `(*(unsigned char*)${TICK})=(unsigned char)(_tk&0xFF);(*(unsigned char*)${TICK + 1})=(unsigned char)(_tk>>8);`
+    + `(*(unsigned char*)${PX})=(unsigned char)px;(*(unsigned char*)${PX + 1})=(unsigned char)(px>>8);`
+    + `(*(unsigned char*)${PY})=(unsigned char)py;(*(unsigned char*)${PY + 1})=(unsigned char)(py>>8);`
+    + `(*(unsigned char*)${PX2})=(unsigned char)px2;(*(unsigned char*)${PX2 + 1})=(unsigned char)(px2>>8);`
+    + `(*(unsigned char*)${PY2})=(unsigned char)py2;(*(unsigned char*)${PY2 + 1})=(unsigned char)(py2>>8);} `;
+  return mainC.replace('while (oam_idx < 256) {', inj + 'while (oam_idx < 256) {');
+}
+
+function makeP2TdState() {
+  const cols = 32, rows = 30;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  // WALL blocks both players bump into (P1 moving down-right from the top-left,
+  // P2 moving down-left from the top-right).
+  for (const [c, r] of [[10, 8], [10, 9], [22, 8], [22, 9], [16, 20]]) beh[r][c] = 2;
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 1, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [
+    { role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'player', name: 'hero2', width: 2, height: 2, cells: H.mkCells(2, 2) },
+  ];
+  const s = {
+    name: 'p2td', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'topdown';
+  s.builder.modules.players.config.count = 2;
+  s.builder.modules.players.submodules.player1.enabled = true;
+  s.builder.modules.players.submodules.player2.enabled = true;
+  return s;
+}
+
+// P1 pad 1 moves down-right; P2 pad 2 moves down-left. Both 4-way top-down.
+const stepP2 = (n) => {
+  n.buttonDown(1, H.BTN.RIGHT); n.buttonDown(1, H.BTN.DOWN);
+  n.buttonDown(2, H.BTN.LEFT);  n.buttonDown(2, H.BTN.DOWN);
+  n.frame();
+  n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(1, H.BTN.DOWN);
+  n.buttonUp(2, H.BTN.LEFT);  n.buttonUp(2, H.BTN.DOWN);
+};
+
+async function runP2Topdown() {
+  const s = makeP2TdState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (!/#define BW_GAME_STYLE 1/.test(mainC)) { bad('p2-td: not a top-down build'); return; }
+  if (!/^#define PLAYER2_ENABLED 1/m.test(mainC) && !/PLAYER2_ENABLED 1/.test(mainC)) { /* server emits PLAYER2_ENABLED into scene.inc, not main.c — can't line-check here */ }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 40, y: 24 },
+    playerSpriteIdx2: 1, playerStart2: { x: 200, y: 24 }, mode: 'browser',
+    customMainC: withProbe2(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`p2-td: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`p2-td: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('p2-td: ASM ROM == C ROM (NES_ASM_PLAYER2 did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  const rd = (n, addr) => rd16(n, addr);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepP2(c); stepP2(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('p2-td: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0;
+  const p1x0 = rd(c, PX), p2x0 = rd(c, PX2);
+  let p1xMax = p1x0, p2xMin = p2x0;
+  for (let step = 0; step < 20000 && compared < 300; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('p2-td: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepP2(c); else stepP2(a); continue; }
+    const c1x = rd(c, PX), a1x = rd(a, PX), c1y = rd(c, PY), a1y = rd(a, PY);
+    const c2x = rd(c, PX2), a2x = rd(a, PX2), c2y = rd(c, PY2), a2y = rd(a, PY2);
+    if (c1x !== a1x || c1y !== a1y || c2x !== a2x || c2y !== a2y) {
+      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C p1(${c1x},${c1y}) p2(${c2x},${c2y}) A p1(${a1x},${a1y}) p2(${a2x},${a2y})`;
+    }
+    if (c1x > p1xMax) p1xMax = c1x;
+    if (c2x < p2xMin) p2xMin = c2x;
+    compared++;
+    stepP2(c); stepP2(a);
+  }
+
+  if (compared < 250) { bad(`p2-td: too few matched-tick samples (${compared})`); return; }
+  if (p1xMax <= p1x0 + 8) { bad(`p2-td: P1 did not move right (${p1x0}->${p1xMax})`); return; }
+  if (p2xMin >= p2x0 - 8) { bad(`p2-td: P2 did not move left (${p2x0}->${p2xMin})`); return; }
+  if (diffs === 0)
+    ok(`p2 top-down (NES_ASM_PLAYER2): C ≡ ASM P1 px/py AND P2 px2/py2 at every matched tick over `
+      + `${compared} ticks (P1 ${p1x0}->${p1xMax} right, P2 ${p2x0}->${p2xMin} left, both 4-way + wall bumps)`);
+  else bad(`p2-td: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
@@ -476,6 +579,7 @@ try {
   await runSmb();          // SMB: accel/skid run + A-jump + variable-cut + gravity + ladder
   await runRunner();       // auto-runner: autoscroll + track-end wrap respawn + A-jump + gravity
   await runRacer();        // top-down racer: steer + accelerate + COS16 velocity + slide collision
+  await runP2Topdown();    // 2-player top-down: P1 td_update + P2 p2_td_update, both ASM
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {

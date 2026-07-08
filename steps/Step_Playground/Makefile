@@ -145,6 +145,19 @@ NES_ASM_PLAYER := 1
 ASFLAGS += -D NES_ASM_RACER
 endif
 
+# Player-2 second-actor update on hand-written 6502 (Phase 2c).  NES_ASM_PLAYER2=1
+# IMPLIES NES_ASM_PLAYER (links player_asm.s + -D's out the C P2 block + calls the
+# p2_*_update proc) AND passes `-D NES_ASM_PLAYER2` to ca65 so player_asm.s compiles
+# its P2 section (the p2_* procs + the P2-only globals px2/py2/pad2/... it imports).
+# Only valid for a 2-player build (PLAYER2_ENABLED).  Same off-by-default,
+# byte-identical-when-off contract.  Set before the NES_ASM_PLAYER block so the :=
+# takes effect there.
+NES_ASM_PLAYER2 ?= 0
+ifeq ($(NES_ASM_PLAYER2),1)
+NES_ASM_PLAYER := 1
+ASFLAGS += -D NES_ASM_PLAYER2
+endif
+
 NES_ASM_PLAYER ?= 0
 ifeq ($(NES_ASM_PLAYER),1)
 CFLAGS  += -DNES_ASM_PLAYER=1

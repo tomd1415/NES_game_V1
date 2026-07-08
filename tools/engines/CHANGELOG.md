@@ -9,6 +9,29 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v45 — 2026-07-08 — player-2 top-down update WIRED + A/B-verified (Phase 2c, OFF by default)
+
+### Changed / migration
+- **The player-2 top-down second actor now runs on hand-written 6502 under the flag,
+  A/B-proven identical to the C.** platformer.c gates the C P2 top-down blocks under
+  NES_ASM_PLAYER — the shared P2 horizontal walk is excluded for style 1
+  (`#if !(BW_GAME_STYLE == 1 && defined(NES_ASM_PLAYER))`) and the style-1 vertical
+  block gets `&& !defined(NES_ASM_PLAYER)` — and calls `p2_td_update()` in their
+  place (it does both H+V).
+- **Makefile:** `NES_ASM_PLAYER2=1` implies NES_ASM_PLAYER and passes `-D
+  NES_ASM_PLAYER2` to ca65. **Server:** a distinct `nes_asm_player2` gate
+  (player2_enabled + top-down) that appends `NES_ASM_PLAYER2=1` IN ADDITION to the
+  P1 flag (a 2P top-down build runs P1 td_update + P2 p2_td_update). **Still gated on
+  PLAYGROUND_ASM_PLAYER** — 2P builds ship pure-C by default until all P2 styles are
+  done + the (re-pin-triggering) 2P-ship decision, so `_rom-equiv` (a 2P fixture)
+  stays `54a15150`.
+- A/B (`asm-player.mjs`): a 2-player top-down project (2 player sprites) driving both
+  pads — C ≡ ASM P1 `px/py` AND P2 `px2/py2` at every matched tick over 300 ticks
+  (P1 right, P2 left, both 4-way with wall bumps). A P2-aware probe exposes px2/py2.
+- Off by default; flag off = byte-identical (golden `1730448e` + `_rom-equiv`
+  `54a15150` UNCHANGED); the 6 single-player A/B cases still pass. Next: P2 racer, P2
+  platformer, P2 runner; then the 2P-ship decision.
+
 ## v44 — 2026-07-08 — player-2 top-down update composed in ASM (Phase 2c, OFF/unwired)
 
 ### Added

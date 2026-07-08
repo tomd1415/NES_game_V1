@@ -2884,6 +2884,18 @@ def _build_rom(body):
         asm_ready and custom_main_c is not None and _p2_ok
         and _asm_player_racer
     )
+    # Player-2 second actor (Phase 2c). NES_ASM_PLAYER2=1 IMPLIES NES_ASM_PLAYER and
+    # passes `-D NES_ASM_PLAYER2` to ca65 so player_asm.s compiles its P2 section
+    # (p2_* procs + the P2-only globals). Only a 2-player build, and only the styles
+    # already converted (top-down = style 1 so far). GATED on PLAYGROUND_ASM_PLAYER
+    # for now — 2P builds ship pure-C by default until ALL P2 styles are done and the
+    # (re-pin-triggering) 2P-ship decision is taken, so _rom-equiv (a 2P fixture)
+    # stays byte-identical.
+    nes_asm_player2 = bool(
+        os.environ.get("PLAYGROUND_ASM_PLAYER") and asm_ready
+        and custom_main_c is not None and player2_enabled
+        and _asm_player_topdown
+    )
 
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
@@ -2892,7 +2904,7 @@ def _build_rom(body):
             nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
             nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
             nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
-            nes_asm_racer=nes_asm_racer,
+            nes_asm_racer=nes_asm_racer, nes_asm_player2=nes_asm_player2,
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -2903,7 +2915,7 @@ def _build_rom(body):
         nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
         nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
         nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
-            nes_asm_racer=nes_asm_racer,
+            nes_asm_racer=nes_asm_racer, nes_asm_player2=nes_asm_player2,
         project_inc=project_inc, **audio_kwargs,
     ))
 
@@ -2988,7 +3000,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       audio_songs_asm=None, audio_sfx_asm=None,
                       nes_asm_leaf=False, nes_asm_scroll=False,
                       nes_asm_scene=False, nes_asm_ai=False,
-                      nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False,
+                      nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False, nes_asm_player2=False,
                       project_inc=None):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
@@ -3045,6 +3057,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                 make_args.append("NES_ASM_RACER=1")
             elif nes_asm_player:                    # Phase 2c — player update (top-down/platformer/runner)
                 make_args.append("NES_ASM_PLAYER=1")
+            if nes_asm_player2:                     # Phase 2c — P2 second actor (implies PLAYER; combines with P1)
+                make_args.append("NES_ASM_PLAYER2=1")
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
             (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))
