@@ -9,6 +9,29 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v46 — 2026-07-08 — player-2 racer update composed in ASM (Phase 2c, OFF/unwired)
+
+### Added
+- **p2_racer_update proc in src/player_asm.s** — the PLAYER-2 top-down racer
+  (BW_GAME_STYLE 3 + PLAYER2_ENABLED), the line-for-line P1 racer on the *2 globals
+  (px2/py2/px2_sub/py2_sub/racer_heading2/racer_speed2/racer_cp_stage2/racer_laps2/
+  racer_finished2) + PLAYER2 dims. The four main procs (p2_rc_drive/vel/axis/laps)
+  are the P1 rc_* bodies mechanically ported onto the *2 globals; the dimension-free
+  helpers (rc_velcomp/rc_axis3/rc_probe/rc_rbe) + the rcos16 table + the shared racer
+  scratch are REUSED. Guarded by if(!(racer_finished || racer_finished2)) (2P RACE_OVER).
+
+### Changed / migration
+- **Gated `.if NES_ASM_PLAYER2 .and NES_ASM_RACER`** — it needs the racer helpers
+  (only compiled under NES_ASM_RACER) AND the P2 globals (only under NES_ASM_PLAYER2);
+  a 2-player racer build sets both, a 2P non-racer build sets only PLAYER2 and skips
+  this section (so it never references rc_* there).
+- **Not wired yet** (no C caller, no server style-3 P2 gate) — dead code (nothing
+  sets both flags in a real build yet). Flag off = byte-identical (golden 1730448e +
+  _rom-equiv 54a15150 UNCHANGED); the 7 A/B cases (incl. P2 top-down) still pass.
+  Assemble-checked both widths x {plain, PLAYER2, PLAYER2+RACER, RACER}.
+- Next: wire P2 racer (C gate + call + server gate for style-3 2P + A/B), then P2
+  platformer (leaves) + P2 runner.
+
 ## v45 — 2026-07-08 — player-2 top-down update WIRED + A/B-verified (Phase 2c, OFF by default)
 
 ### Changed / migration

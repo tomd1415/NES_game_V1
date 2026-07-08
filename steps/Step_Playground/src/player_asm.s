@@ -2430,3 +2430,489 @@ skip_down:
     rts
 .endproc
 .endif  ; NES_ASM_PLAYER2
+
+; ===========================================================================
+; p2_racer_update — the PLAYER-2 top-down racer (BW_GAME_STYLE 3 + PLAYER2_ENABLED).
+; Line-for-line the P1 racer (rc_drive/rc_vel/rc_axis/rc_laps) on the *2 globals +
+; PLAYER2 dims, so the four main procs are duplicated onto px2/py2/px2_sub/py2_sub/
+; racer_heading2/racer_speed2/racer_cp_stage2/racer_laps2/racer_finished2 (via a
+; mechanical sed of the P1 bodies) while the dimension-free helpers (rc_velcomp/
+; rc_axis3/rc_probe/rc_rbe) + the rcos16 table + the shared racer scratch are REUSED.
+; Gated `.if NES_ASM_PLAYER2 .and NES_ASM_RACER` because it needs the racer helpers
+; (only compiled under NES_ASM_RACER) AND the P2 globals (only under NES_ASM_PLAYER2)
+; — a 2-player racer build sets both; a 2P non-racer build sets only PLAYER2 and skips
+; this. Guarded by if(!(racer_finished || racer_finished2)) = the 2P RACE_OVER.
+.if .defined(NES_ASM_PLAYER2) .and .defined(NES_ASM_RACER)
+.export _p2_racer_update
+.import _racer_heading2, _racer_speed2, _px2, _py2, _px2_sub, _py2_sub
+.import _racer_cp_stage2, _racer_laps2, _racer_finished2
+
+RC_XMAX_2 = WORLD_W_PX - PLAYER2_W * 8
+RC_YMAX_2 = WORLD_H_PX - PLAYER2_H * 8
+
+.segment "CODE"
+.proc p2_rc_drive
+    lda _pad
+    and #$02
+    beq @noL
+    lda _racer_heading2
+    clc
+    adc #15
+    and #15
+    sta _racer_heading2
+@noL:
+    lda _pad
+    and #$01
+    beq @noR
+    lda _racer_heading2
+    clc
+    adc #1
+    and #15
+    sta _racer_heading2
+@noR:
+    lda _pad
+    and #$88
+    bne @accel
+    lda _pad
+    and #$04
+    bne @brake
+    jmp @friction
+@accel:
+    clc
+    lda _racer_speed2
+    adc #<RACER_ACCEL
+    sta _racer_speed2
+    lda _racer_speed2+1
+    adc #>RACER_ACCEL
+    sta _racer_speed2+1
+    sec
+    lda #<RACER_MAX_SPEED
+    sbc _racer_speed2
+    lda #>RACER_MAX_SPEED
+    sbc _racer_speed2+1
+    bvc @ac1
+    eor #$80
+@ac1:
+    bpl @ret
+    lda #<RACER_MAX_SPEED
+    sta _racer_speed2
+    lda #>RACER_MAX_SPEED
+    sta _racer_speed2+1
+@ret:
+    rts
+@brake:
+    sec
+    lda _racer_speed2
+    sbc #<RACER_BRAKE
+    sta _racer_speed2
+    lda _racer_speed2+1
+    sbc #>RACER_BRAKE
+    sta _racer_speed2+1
+    sec
+    lda _racer_speed2
+    sbc #<RC_NEG_REV
+    lda _racer_speed2+1
+    sbc #>RC_NEG_REV
+    bvc @br1
+    eor #$80
+@br1:
+    bpl @ret2
+    lda #<RC_NEG_REV
+    sta _racer_speed2
+    lda #>RC_NEG_REV
+    sta _racer_speed2+1
+@ret2:
+    rts
+@friction:
+    sec
+    lda #<RACER_FRICTION
+    sbc _racer_speed2
+    lda #>RACER_FRICTION
+    sbc _racer_speed2+1
+    bvc @fr1
+    eor #$80
+@fr1:
+    bpl @frNP
+    sec
+    lda _racer_speed2
+    sbc #<RACER_FRICTION
+    sta _racer_speed2
+    lda _racer_speed2+1
+    sbc #>RACER_FRICTION
+    sta _racer_speed2+1
+    rts
+@frNP:
+    sec
+    lda _racer_speed2
+    sbc #<RC_NEG_FRI
+    lda _racer_speed2+1
+    sbc #>RC_NEG_FRI
+    bvc @fr2
+    eor #$80
+@fr2:
+    bpl @frZ
+    clc
+    lda _racer_speed2
+    adc #<RACER_FRICTION
+    sta _racer_speed2
+    lda _racer_speed2+1
+    adc #>RACER_FRICTION
+    sta _racer_speed2+1
+    rts
+@frZ:
+    lda #0
+    sta _racer_speed2
+    sta _racer_speed2+1
+    rts
+.endproc
+
+.proc p2_rc_vel
+    lda _racer_speed2
+    sta ralo
+    lda _racer_speed2+1
+    sta rahi
+    ldx #2
+@shr:
+    lda rahi
+    cmp #$80
+    ror rahi
+    ror ralo
+    dex
+    bne @shr
+    lda rahi
+    bpl @apos
+    sec
+    lda #0
+    sbc ralo
+    sta rmaga
+    lda #$FF
+    sta rsgna
+    jmp @vx
+@apos:
+    lda ralo
+    sta rmaga
+    lda #0
+    sta rsgna
+@vx:
+    ldx _racer_heading2
+    lda rcos16,x
+    jsr rc_velcomp
+    lda rrlo
+    sta rvx
+    lda rrhi
+    sta rvx+1
+    lda _racer_heading2
+    clc
+    adc #12
+    and #15
+    tax
+    lda rcos16,x
+    jsr rc_velcomp
+    lda rrlo
+    sta rvy
+    lda rrhi
+    sta rvy+1
+    rts
+.endproc
+
+.proc p2_rc_axis
+    ; ===== X =====
+    lda _px2
+    sta rklo
+    lda _px2+1
+    sta rkhi
+    lda _px2_sub
+    sta rksb
+    clc
+    lda _px2_sub
+    adc rvx
+    sta _px2_sub
+    lda rvx+1
+    adc #0
+    sta rdhi
+    clc
+    lda _px2
+    adc rdhi
+    sta rnlo
+    lda rdhi
+    bpl @xp
+    lda #$FF
+    bne @xa
+@xp:
+    lda #0
+@xa:
+    adc _px2+1
+    sta rnhi
+    lda rnhi
+    bpl @xnn
+    lda #0
+    sta rnlo
+    sta rnhi
+    sta _px2_sub
+    jmp @xst
+@xnn:
+    lda #<RC_XMAX_2
+    cmp rnlo
+    lda #>RC_XMAX_2
+    sbc rnhi
+    bcs @xst
+    lda #<RC_XMAX_2
+    sta rnlo
+    lda #>RC_XMAX_2
+    sta rnhi
+    lda #0
+    sta _px2_sub
+@xst:
+    lda rnlo
+    sta _px2
+    lda rnhi
+    sta _px2+1
+    lda _px2
+    sta rbx
+    lda _px2+1
+    sta rbx+1
+    lda _py2
+    sta rby
+    lda _py2+1
+    sta rby+1
+    lda #PLAYER2_W
+    sta rbw
+    lda #PLAYER2_H
+    sta rbh
+    jsr rc_rbe
+    beq @xok
+    lda rklo
+    sta _px2
+    lda rkhi
+    sta _px2+1
+    lda rksb
+    sta _px2_sub
+    lda #1
+    sta rhitx
+    jmp @ybeg
+@xok:
+    lda #0
+    sta rhitx
+@ybeg:
+    ; ===== Y =====
+    lda _py2
+    sta rklo
+    lda _py2+1
+    sta rkhi
+    lda _py2_sub
+    sta rksb
+    clc
+    lda _py2_sub
+    adc rvy
+    sta _py2_sub
+    lda rvy+1
+    adc #0
+    sta rdhi
+    clc
+    lda _py2
+    adc rdhi
+    sta rnlo
+    lda rdhi
+    bpl @yp
+    lda #$FF
+    bne @ya
+@yp:
+    lda #0
+@ya:
+    adc _py2+1
+    sta rnhi
+    lda rnhi
+    bpl @ynn
+    lda #0
+    sta rnlo
+    sta rnhi
+    sta _py2_sub
+    jmp @yst
+@ynn:
+    lda #<RC_YMAX_2
+    cmp rnlo
+    lda #>RC_YMAX_2
+    sbc rnhi
+    bcs @yst
+    lda #<RC_YMAX_2
+    sta rnlo
+    lda #>RC_YMAX_2
+    sta rnhi
+    lda #0
+    sta _py2_sub
+@yst:
+    lda rnlo
+    sta _py2
+    lda rnhi
+    sta _py2+1
+    lda _px2
+    sta rbx
+    lda _px2+1
+    sta rbx+1
+    lda _py2
+    sta rby
+    lda _py2+1
+    sta rby+1
+    lda #PLAYER2_W
+    sta rbw
+    lda #PLAYER2_H
+    sta rbh
+    jsr rc_rbe
+    beq @yok
+    lda rklo
+    sta _py2
+    lda rkhi
+    sta _py2+1
+    lda rksb
+    sta _py2_sub
+    lda #1
+    sta rhity
+    jmp @bleed
+@yok:
+    lda #0
+    sta rhity
+@bleed:
+    ; avx -> rnlo:rnhi, avy -> rklo:rkhi
+    lda rvx+1
+    bpl @avxp
+    sec
+    lda #0
+    sbc rvx
+    sta rnlo
+    lda #0
+    sbc rvx+1
+    sta rnhi
+    jmp @avy
+@avxp:
+    lda rvx
+    sta rnlo
+    lda rvx+1
+    sta rnhi
+@avy:
+    lda rvy+1
+    bpl @avyp
+    sec
+    lda #0
+    sbc rvy
+    sta rklo
+    lda #0
+    sbc rvy+1
+    sta rkhi
+    jmp @cond
+@avyp:
+    lda rvy
+    sta rklo
+    lda rvy+1
+    sta rkhi
+@cond:
+    lda rhitx
+    beq @tryhy
+    lda rnlo
+    cmp rklo
+    lda rnhi
+    sbc rkhi
+    bcs @burn           ; avx >= avy
+@tryhy:
+    lda rhity
+    beq @done
+    lda rklo
+    cmp rnlo
+    lda rkhi
+    sbc rnhi
+    bcs @burn           ; avy >= avx
+    jmp @done
+@burn:
+    lda _racer_speed2+1
+    cmp #$80
+    ror _racer_speed2+1
+    ror _racer_speed2
+@done:
+    rts
+.endproc
+
+.proc p2_rc_laps
+    clc
+    lda _px2
+    adc #(PLAYER2_W * 4)
+    sta tmp1
+    lda _px2+1
+    adc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    ldx #0
+    jsr pushax
+    clc
+    lda _py2
+    adc #(PLAYER2_H * 4)
+    sta tmp1
+    lda _py2+1
+    adc #0
+    sta tmp2
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lsr tmp2
+    ror tmp1
+    lda tmp1
+    ldx #0
+    jsr _behaviour_at
+    sta rmid
+    cmp #RC_CP1
+    bne @notcp1
+    lda _racer_cp_stage2
+    bne @done
+    lda #1
+    sta _racer_cp_stage2
+    jmp @done
+@notcp1:
+    lda rmid
+    cmp #RC_CP2
+    bne @notcp2
+    lda _racer_cp_stage2
+    cmp #1
+    bne @done
+    lda #2
+    sta _racer_cp_stage2
+    jmp @done
+@notcp2:
+    lda rmid
+    cmp #RC_FINISH
+    bne @done
+    lda _racer_cp_stage2
+    cmp #RACER_CP_COUNT
+    bcc @done
+    lda #0
+    sta _racer_cp_stage2
+    inc _racer_laps2
+    lda _racer_laps2
+    cmp #RACER_LAPS_TO_WIN
+    bcc @done
+    lda #1
+    sta _racer_finished2
+@done:
+    rts
+.endproc
+
+; _p2_racer_update — compose in the C's order, guarded by the 2P RACE_OVER
+; (!(racer_finished || racer_finished2)). _racer_finished is imported by the
+; NES_ASM_RACER section (active whenever this P2-racer section is).
+.proc _p2_racer_update
+    lda _racer_finished
+    bne @done
+    lda _racer_finished2
+    bne @done
+    jsr p2_rc_drive
+    jsr p2_rc_vel
+    jsr p2_rc_axis
+    jsr p2_rc_laps
+@done:
+    rts
+.endproc
+.endif  ; NES_ASM_PLAYER2 .and NES_ASM_RACER
