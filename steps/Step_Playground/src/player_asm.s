@@ -20,11 +20,14 @@
 .export _td_update
 .import _behaviour_at
 .import _px, _py, _pad, _walk_speed, _plrdir, _jumping, _jmp_up, _on_ladder
+.import _prev_pad, _climb_speed
 .import pushax
 .importzp tmp1, tmp2
 
 BEH_SOLID  = 1
 BEH_WALL   = 2
+BEH_PLAT   = 3
+BEH_LADDER = 6
 PW8        = PLAYER_W * 8
 PH8        = PLAYER_H * 8
 WORLD_W_PX = BG_WORLD_COLS * 8
@@ -53,6 +56,11 @@ lcol:  .res 1
 rcol:  .res 1
 pcol:  .res 1
 prow:  .res 1
+drow:  .res 1     ; plat_update: head/foot/ladder row
+ntlo:  .res 1     ; plat_update: new_top / new_foot lo
+nthi:  .res 1
+ul:    .res 1     ; plat_update: up_l / dn_l / head_l behaviour
+ur:    .res 1     ; plat_update: up_r / dn_r / head_r behaviour
 
 .segment "CODE"
 
@@ -349,5 +357,488 @@ skip_down:
     sta _jumping
     sta _jmp_up
     sta _on_ladder
+    rts
+.endproc
+
+; ===========================================================================
+; plat_update — the PLATFORMER player update (BW_GAME_STYLE == 0). Runs the same
+; pieces the C does, in order: horizontal walk -> ladder(detect+climb) OR jump
+; trigger -> vertical (ascent/gravity). Reuses shr3/cell_solid/hprobe/calc_cols/
+; rows_from_py; adds bat/cell_solid_or_plat + the ladder/jump/vmove bodies (each
+; asm-lab-proven, ported to the pxw/pyw working copies). _td_update is untouched.
+; The C's `prev_pad = pad` stays in C (runs after this; the jump trigger reads
+; the old prev_pad).
+; ===========================================================================
+.export _plat_update
+
+; hwalk: horizontal RIGHT/LEFT on pxw + plrdir (caller loads pxw/pyw). Same logic
+; as _td_update's horizontal, as a callable proc so _td_update stays untouched.
+.proc hwalk
+    lda _pad
+    and #$01
+    beq h_sr
+    lda pxw
+    cmp #<RBOUND
+    lda pxw+1
+    sbc #>RBOUND
+    bcs h_rdir
+    lda #(PW8 - 1)
+    clc
+    adc _walk_speed
+    clc
+    adc pxw
+    sta tmp1
+    lda pxw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta tdcol
+    jsr rows_from_py
+    jsr hprobe
+    bne h_rdir
+    lda pxw
+    clc
+    adc _walk_speed
+    sta pxw
+    lda pxw+1
+    adc #0
+    sta pxw+1
+h_rdir:
+    lda #$00
+    sta _plrdir
+h_sr:
+    lda _pad
+    and #$02
+    beq h_sl
+    lda pxw+1
+    bne h_lgo
+    lda pxw
+    cmp _walk_speed
+    bcc h_ldir
+h_lgo:
+    lda pxw
+    sec
+    sbc _walk_speed
+    sta tmp1
+    lda pxw+1
+    sbc #0
+    sta tmp2
+    jsr shr3
+    sta tdcol
+    jsr rows_from_py
+    jsr hprobe
+    bne h_ldir
+    lda pxw
+    sec
+    sbc _walk_speed
+    sta pxw
+    lda pxw+1
+    sbc #0
+    sta pxw+1
+h_ldir:
+    lda #$40
+    sta _plrdir
+h_sl:
+    rts
+.endproc
+
+; bat: A = behaviour_at(pcol, prow)
+.proc bat
+    lda pcol
+    ldx #0
+    jsr pushax
+    lda prow
+    ldx #0
+    jsr _behaviour_at
+    rts
+.endproc
+
+; cell_solid_or_plat: behaviour_at(pcol,prow) SOLID/WALL/PLATFORM ? A=1 : A=0
+.proc cell_solid_or_plat
+    jsr bat
+    cmp #BEH_SOLID
+    beq @y
+    cmp #BEH_WALL
+    beq @y
+    cmp #BEH_PLAT
+    beq @y
+    lda #0
+    rts
+@y:
+    lda #1
+    rts
+.endproc
+
+; pl_jump: UP edge && !jumping -> jumping=1, jmp_up=20
+.proc pl_jump
+    lda _pad
+    and #$08
+    beq @d
+    lda _prev_pad
+    and #$08
+    bne @d
+    lda _jumping
+    bne @d
+    lda #1
+    sta _jumping
+    lda #20
+    sta _jmp_up
+@d:
+    rts
+.endproc
+
+; pl_ladder: detect body/ladder overlap -> on_ladder; if on ladder, climb UP/DOWN
+; (ladder-wins-over-solid) and pin jumping/jmp_up = 0. Operates on pxw/pyw.
+.proc pl_ladder
+    lda #0
+    sta _on_ladder
+    jsr calc_cols
+    lda pyw
+    sta tmp1
+    lda pyw+1
+    sta tmp2
+    jsr shr3
+    sta prow
+    lda #(PH8 - 1)
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta drow
+@dloop:
+    lda prow
+    cmp drow
+    bcc @ddo
+    beq @ddo
+    jmp @ddone
+@ddo:
+    lda lcol
+    sta pcol
+    jsr bat
+    cmp #BEH_LADDER
+    beq @dyes
+    lda rcol
+    sta pcol
+    jsr bat
+    cmp #BEH_LADDER
+    beq @dyes
+    inc prow
+    jmp @dloop
+@dyes:
+    lda #1
+    sta _on_ladder
+@ddone:
+    lda _on_ladder
+    bne @climb
+    rts
+@climb:
+    lda _pad
+    and #$08
+    bne @ugo
+    jmp @aftup
+@ugo:
+    lda pyw+1
+    bne @ntsub
+    lda pyw
+    cmp _climb_speed
+    bcs @ntsub
+    lda #0
+    sta ntlo
+    sta nthi
+    jmp @urow
+@ntsub:
+    lda pyw
+    sec
+    sbc _climb_speed
+    sta ntlo
+    lda pyw+1
+    sbc #0
+    sta nthi
+@urow:
+    lda ntlo
+    sta tmp1
+    lda nthi
+    sta tmp2
+    jsr shr3
+    sta drow
+    lda lcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr bat
+    sta ul
+    lda rcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr bat
+    sta ur
+    lda ul
+    cmp #BEH_LADDER
+    beq @uyes
+    lda ur
+    cmp #BEH_LADDER
+    beq @uyes
+    lda ul
+    cmp #BEH_SOLID
+    beq @aftup
+    cmp #BEH_WALL
+    beq @aftup
+    lda ur
+    cmp #BEH_SOLID
+    beq @aftup
+    cmp #BEH_WALL
+    beq @aftup
+@uyes:
+    lda ntlo
+    sta pyw
+    lda nthi
+    sta pyw+1
+@aftup:
+    lda _pad
+    and #$04
+    bne @dgo
+    jmp @aftdn
+@dgo:
+    lda _climb_speed
+    clc
+    adc #PH8
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta drow
+    lda lcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr bat
+    sta ul
+    lda rcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr bat
+    sta ur
+    lda pyw
+    cmp #<(WORLD_H_PX - 8)
+    lda pyw+1
+    sbc #>(WORLD_H_PX - 8)
+    bcs @aftdn
+    lda ul
+    cmp #BEH_LADDER
+    beq @dyes2
+    lda ur
+    cmp #BEH_LADDER
+    beq @dyes2
+    lda ul
+    cmp #BEH_SOLID
+    beq @aftdn
+    cmp #BEH_WALL
+    beq @aftdn
+    lda ur
+    cmp #BEH_SOLID
+    beq @aftdn
+    cmp #BEH_WALL
+    beq @aftdn
+@dyes2:
+    lda pyw
+    clc
+    adc _climb_speed
+    sta pyw
+    lda pyw+1
+    adc #0
+    sta pyw+1
+@aftdn:
+    lda #0
+    sta _jumping
+    sta _jmp_up
+    rts
+.endproc
+
+; pl_vmove: platformer vertical physics (ascent / gravity). Operates on pxw/pyw.
+.proc pl_vmove
+    lda _on_ladder
+    beq @nl
+    rts
+@nl:
+    lda _jumping
+    beq @tograv
+    lda _jmp_up
+    bne @asc
+@tograv:
+    jmp @grav
+@asc:
+    lda pyw+1
+    bne @hsub
+    lda pyw
+    cmp #2
+    bcs @hsub
+    lda #0
+    sta drow
+    jmp @hp
+@hsub:
+    lda pyw
+    sec
+    sbc #2
+    sta tmp1
+    lda pyw+1
+    sbc #0
+    sta tmp2
+    jsr shr3
+    sta drow
+@hp:
+    jsr calc_cols
+    lda lcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr cell_solid
+    bne @bonk
+    lda rcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr cell_solid
+    bne @bonk
+    jmp @rise
+@bonk:
+    lda #0
+    sta _jmp_up
+    rts
+@rise:
+    lda pyw+1
+    bne @r2
+    lda pyw
+    cmp #18
+    bcs @r2
+    lda #16
+    sta pyw
+    lda #0
+    sta pyw+1
+    jmp @dj
+@r2:
+    lda pyw
+    sec
+    sbc #2
+    sta pyw
+    lda pyw+1
+    sbc #0
+    sta pyw+1
+@dj:
+    dec _jmp_up
+    rts
+@grav:
+    lda #PH8
+    clc
+    adc pyw
+    sta tmp1
+    lda pyw+1
+    adc #0
+    sta tmp2
+    jsr shr3
+    sta drow
+    jsr calc_cols
+    lda lcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr cell_solid_or_plat
+    bne @land
+    lda rcol
+    sta pcol
+    lda drow
+    sta prow
+    jsr cell_solid_or_plat
+    bne @land
+    jmp @fall
+@land:
+    lda drow
+    sta tmp1
+    lda #0
+    sta tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2
+    asl tmp1
+    rol tmp2
+    lda tmp1
+    sec
+    sbc #PH8
+    sta pyw
+    lda tmp2
+    sbc #0
+    sta pyw+1
+    lda #0
+    sta _jumping
+    rts
+@fall:
+    lda pyw
+    cmp #<(WORLD_H_PX - 8)
+    lda pyw+1
+    sbc #>(WORLD_H_PX - 8)
+    bcs @air
+    lda pyw
+    clc
+    adc #2
+    sta pyw
+    lda pyw+1
+    adc #0
+    sta pyw+1
+@air:
+    lda #1
+    sta _jumping
+    rts
+.endproc
+
+; _plat_update — compose the platformer update in the C's order.
+.proc _plat_update
+.if PX_WIDE
+    lda _px
+    sta pxw
+    lda _px+1
+    sta pxw+1
+    lda _py
+    sta pyw
+    lda _py+1
+    sta pyw+1
+.else
+    lda _px
+    sta pxw
+    lda _py
+    sta pyw
+    lda #0
+    sta pxw+1
+    sta pyw+1
+.endif
+    jsr hwalk
+    jsr pl_ladder
+    lda _on_ladder
+    bne pu_pv
+    jsr pl_jump
+pu_pv:
+    jsr pl_vmove
+.if PX_WIDE
+    lda pxw
+    sta _px
+    lda pxw+1
+    sta _px+1
+    lda pyw
+    sta _py
+    lda pyw+1
+    sta _py+1
+.else
+    lda pxw
+    sta _px
+    lda pyw
+    sta _py
+.endif
     rts
 .endproc

@@ -9,6 +9,27 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v34 — 2026-07-08 — platformer player update composed in ASM (Phase 2c 4b-i, OFF by default)
+
+### Added
+- **`plat_update` proc in `src/player_asm.s`** — the PLATFORMER player update
+  (BW_GAME_STYLE == 0) composed from the asm-lab-proven leaves, run in the C's
+  exact order: horizontal walk (`hwalk`, the shared RIGHT/LEFT block as a callable
+  proc so `td_update` stays untouched) → ladder detect+climb OR jump-trigger →
+  vertical ascent/gravity (`pl_vmove`). Adds `bat`/`cell_solid_or_plat`; imports
+  `_prev_pad`/`_climb_speed`. Both px widths (the pxw/pyw working-copy pattern).
+
+### Changed / migration
+- **Not wired yet** — `plat_update` is defined but not called by any C, and
+  `player_asm.s` only compiles under `NES_ASM_PLAYER` (a top-down-only test toggle
+  right now), so this is dead code in the top-down build and absent flag-off.
+  Flag off = byte-identical (golden `1730448e` + `_rom-equiv` `54a15150`
+  UNCHANGED). The top-down A/B (`asm-player.mjs`, both widths) still passes —
+  `td_update` is untouched. Assemble-checked for both PX_WIDE.
+- Next (4b-ii..iv): gate the C platformer blocks under NES_ASM_PLAYER + call
+  `plat_update()`, extend the server gate to BW_GAME_STYLE 0, and A/B a platformer
+  project — at which point flag-on drives the platformer player on 6502.
+
 ## v33 — 2026-07-08 — top-down player update: u8 (non-scroll) path (Phase 2c, OFF by default)
 
 ### Changed / migration
