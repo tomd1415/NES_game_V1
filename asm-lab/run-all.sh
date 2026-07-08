@@ -85,6 +85,9 @@ node functions/plat_ladder/test.mjs || fail=1
 run pjmp "functions/plat_jump/ref.c functions/plat_jump/test.c functions/plat_jump/asm.s"
 node functions/plat_jump/test.mjs || fail=1
 
+run smba "functions/smb_accel/ref.c functions/smb_accel/test.c functions/smb_accel/asm.s"
+node functions/smb_accel/test.mjs || fail=1
+
 echo
 if [ "$fail" -ne 0 ]; then echo "asm-lab: SOME TESTS FAILED"; exit 1; fi
 echo "asm-lab: all tests passed."
