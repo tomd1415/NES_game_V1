@@ -213,7 +213,7 @@ next_row:
 ; overflow guard (stop once the 256-byte shadow buffer is full). oam_idx is
 ; advanced with a real 16-bit add (not iny/sty) so the 252->256 step sets the hi
 ; byte the guard tests, exactly like scene_asm.s.
-.ifdef NES_ASM_PLAYER2
+.if PLAYER2_ENABLED
 .export _draw_player2
 .import _px2, _py2, _plrdir2, _player2_tiles, _player2_attrs
 
@@ -351,4 +351,4 @@ p2_next_row:
     inc pd_r
     jmp p2_row_loop
 .endproc
-.endif  ; NES_ASM_PLAYER2
+.endif  ; PLAYER2_ENABLED

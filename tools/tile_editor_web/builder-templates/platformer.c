@@ -752,6 +752,9 @@ static void load_background_n(unsigned char n) {
 #ifndef RUNNER_SCREEN_X
 #define RUNNER_SCREEN_X 64        /* the player's fixed on-screen X (rides the camera) */
 #endif
+#ifndef RUNNER_SCREEN_X_2
+#define RUNNER_SCREEN_X_2 32      /* player 2's fixed on-screen X in a 2-player runner */
+#endif
 #ifndef BW_RUNNER_SPIKE_ID
 #define BW_RUNNER_SPIKE_ID 7      /* behaviour slot painted as the deadly spike */
 #endif
@@ -764,6 +767,19 @@ void runner_respawn(void) {
     jumping = 0;
     jmp_up = 0;
 }
+#if PLAYER2_ENABLED
+/* 2-player runner death flags — dedicated (NOT the HP module's player_dead, which
+ * only exists when HP is enabled) so the 2p runner works on any project. A set flag
+ * means that car is a "ghost": still visible + riding the scroll, but immune. */
+unsigned char runner_dead1, runner_dead2;
+/* 2-player runner: reset BOTH cars to the start and clear their ghost flags. */
+void runner_respawn2(void) {
+    cam_x = 0;
+    px  = RUNNER_SCREEN_X;   py  = PLAYER_Y;   jumping  = 0; jmp_up  = 0;
+    px2 = RUNNER_SCREEN_X_2; py2 = PLAYER2_Y;  jumping2 = 0; jmp_up2 = 0;
+    runner_dead1 = 0; runner_dead2 = 0;
+}
+#endif
 #endif
 
 /* Arc E §3 — top-down racer (BW_GAME_STYLE == 3).  Angle-based velocity: steer
@@ -984,7 +1000,7 @@ void main(void) {
         pad = read_controller();
 #endif
 
-#if BW_GAME_STYLE == 2 && !defined(NES_ASM_PLAYER)   /* ASM run_update owns this */
+#if BW_GAME_STYLE == 2 && !defined(NES_ASM_PLAYER) && !PLAYER2_ENABLED   /* ASM run_update owns this; 2p runner uses the block below */
         // Auto-runner: advance the camera every frame, lock the player to a
         // fixed screen X (so the world scrolls past), and restart on reaching
         // the end, touching a spike tile, or falling off the bottom.  The
@@ -999,6 +1015,63 @@ void main(void) {
                 runner_respawn();
         }
         if (py >= (WORLD_H_PX - 8)) runner_respawn();
+#endif
+
+#if BW_GAME_STYLE == 2 && PLAYER2_ENABLED
+        // --- 2-player auto-runner (pure C — see the nes_asm_player gate) ---------
+        // Both cars ride the shared camera at their own fixed screen X and jump
+        // independently (A/UP + gravity).  On death (a spike under the body or a
+        // fall off the bottom) a car becomes an immune "ghost" that keeps riding
+        // the scroll; when BOTH are dead, both restart.  Self-contained (each
+        // car's vertical is inline) so it depends on no shared/ASM vertical block.
+        // Both cars use the same simple fixed-height jump for a consistent feel.
+        cam_x += AUTOSCROLL_SPEED;
+        if (cam_x >= RUNNER_CAM_MAX) runner_respawn2();     /* reached the end -> both restart */
+        px  = cam_x + RUNNER_SCREEN_X;                      /* ghosts keep riding too */
+        px2 = cam_x + RUNNER_SCREEN_X_2;
+        /* ---- Player 1: jump + gravity + death (skipped while a ghost) ---- */
+        if (!runner_dead1) {
+            if ((pad & 0x88) && !(prev_pad & 0x88) && !jumping) { jumping = 1; jmp_up = 20; }
+            if (jumping && jmp_up > 0) { if (py >= 18) py -= 2; else py = 16; jmp_up--; }
+            else {
+                unsigned char fr = (unsigned char)((py + (PLAYER_H << 3)) >> 3);
+                unsigned char gl = behaviour_at((unsigned int)(px >> 3), (unsigned int)fr);
+                unsigned char gr = behaviour_at((unsigned int)((px + (PLAYER_W << 3) - 1) >> 3), (unsigned int)fr);
+                if (gl == BEHAVIOUR_SOLID_GROUND || gl == BEHAVIOUR_WALL || gl == BEHAVIOUR_PLATFORM
+                 || gr == BEHAVIOUR_SOLID_GROUND || gr == BEHAVIOUR_WALL || gr == BEHAVIOUR_PLATFORM) {
+                    py = ((pxcoord_t)fr << 3) - (PLAYER_H << 3); jumping = 0;
+                } else { if (py < (WORLD_H_PX - 8)) py += 2; jumping = 1; }
+            }
+            {
+                unsigned char sc = (unsigned char)((px + (PLAYER_W << 2)) >> 3);
+                unsigned char sr = (unsigned char)((py + (PLAYER_H << 2)) >> 3);
+                if (behaviour_at((unsigned int)sc, (unsigned int)sr) == BW_RUNNER_SPIKE_ID
+                 || py >= (WORLD_H_PX - 8)) runner_dead1 = 1;
+            }
+        }
+        prev_pad = pad;
+        /* ---- Player 2: same, on pad2 ---- */
+        if (!runner_dead2) {
+            if ((pad2 & 0x88) && !(prev_pad2 & 0x88) && !jumping2) { jumping2 = 1; jmp_up2 = 20; }
+            if (jumping2 && jmp_up2 > 0) { if (py2 >= 18) py2 -= 2; else py2 = 16; jmp_up2--; }
+            else {
+                unsigned char fr2 = (unsigned char)((py2 + (PLAYER2_H << 3)) >> 3);
+                unsigned char gl2 = behaviour_at((unsigned int)(px2 >> 3), (unsigned int)fr2);
+                unsigned char gr2 = behaviour_at((unsigned int)((px2 + (PLAYER2_W << 3) - 1) >> 3), (unsigned int)fr2);
+                if (gl2 == BEHAVIOUR_SOLID_GROUND || gl2 == BEHAVIOUR_WALL || gl2 == BEHAVIOUR_PLATFORM
+                 || gr2 == BEHAVIOUR_SOLID_GROUND || gr2 == BEHAVIOUR_WALL || gr2 == BEHAVIOUR_PLATFORM) {
+                    py2 = ((pxcoord_t)fr2 << 3) - (PLAYER2_H << 3); jumping2 = 0;
+                } else { if (py2 < (WORLD_H_PX - 8)) py2 += 2; jumping2 = 1; }
+            }
+            {
+                unsigned char sc2 = (unsigned char)((px2 + (PLAYER2_W << 2)) >> 3);
+                unsigned char sr2 = (unsigned char)((py2 + (PLAYER2_H << 2)) >> 3);
+                if (behaviour_at((unsigned int)sc2, (unsigned int)sr2) == BW_RUNNER_SPIKE_ID
+                 || py2 >= (WORLD_H_PX - 8)) runner_dead2 = 1;
+            }
+        }
+        prev_pad2 = pad2;
+        if (runner_dead1 && runner_dead2) runner_respawn2();   /* both down -> restart together */
 #endif
 
 #if BW_GAME_STYLE == 3 && !defined(NES_ASM_PLAYER)   /* ASM racer_update owns the P1 car */
@@ -1305,9 +1378,10 @@ void main(void) {
         }
 #endif  /* BW_SMB_JUMP && !(NES_ASM_PLAYER) */
 
-#if BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2
+#if BW_GAME_STYLE == 0 || (BW_GAME_STYLE == 2 && !PLAYER2_ENABLED)
         // ----- Platformer vertical movement: ladders + jump + gravity -----
-        // (Shared by the platformer (== 0) and the auto-runner (== 2).)
+        // (Shared by the platformer (== 0) and the 1-player auto-runner (== 2).
+        //  The 2-player runner does both cars' vertical in its own block above.)
         // Ladder probe.  If any tile the player overlaps is a LADDER the
         // player can move up/down with the D-pad and gravity is suspended.
         // Stepping sideways off the ladder resumes normal falling.
@@ -1672,7 +1746,7 @@ void main(void) {
         // the C P2 walk below is #if'd out under the flag.
         p2_run_update();
 #endif
-#if !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2) && defined(NES_ASM_PLAYER))   /* ASM p2_{td,plat,run}_update own styles 1/0/2 P2 */
+#if !((BW_GAME_STYLE == 1 || BW_GAME_STYLE == 0 || BW_GAME_STYLE == 2) && defined(NES_ASM_PLAYER)) && !(BW_GAME_STYLE == 2 && PLAYER2_ENABLED)   /* ASM p2_{td,plat,run}_update own styles 1/0/2 P2; 2p runner auto-runs P2 in its own block */
         /* Horizontal walk with wall block. */
         if (pad2 & 0x01) {                    /* RIGHT */
             if (px2 < (WORLD_W_PX - PLAYER2_W * 8)) {

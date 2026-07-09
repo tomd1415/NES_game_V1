@@ -2332,8 +2332,9 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120, player_idx2
     # via project.inc (same discipline as PLAYER_W/RUNNER_*/RACER_*). Default to
     # the P1 size when there is no distinct 2nd player sprite.
     pw2, ph2 = pw, ph
-    if (isinstance(player_idx2, int) and 0 <= player_idx2 < len(sprites)
-            and player_idx2 != player_idx):
+    p2_on = (isinstance(player_idx2, int) and 0 <= player_idx2 < len(sprites)
+             and player_idx2 != player_idx)
+    if p2_on:
         ps2 = sprites[player_idx2] or {}
         pw2 = int(ps2.get("width") or 2)
         ph2 = int(ps2.get("height") or 2)
@@ -2406,6 +2407,7 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120, player_idx2
         f".define PLAYER_H               {ph}",
         f".define PLAYER2_W              {pw2}",
         f".define PLAYER2_H              {ph2}",
+        f".define PLAYER2_ENABLED        {1 if p2_on else 0}",
         f".define PLAYER_TILES_PER_FRAME {pw * ph}",
         f".define NUM_BEHAVIOUR_SPRITES  {max(num_beh, 1)}",
         f".define NUM_STATIC_SPRITES     {num_static}",
@@ -2874,9 +2876,15 @@ def _build_rom(body):
     _p2_sprites = state.get("sprites") or []
     player2_enabled = (player_idx2 is not None and player_idx2 >= 0
                        and player_idx2 != player_idx and player_idx2 < len(_p2_sprites))
+    # NB a 2-PLAYER auto-runner (style 2) uses the pure-C 2p-runner path (both cars
+    # auto-run + jump + ghost-on-death, restart when both die — see platformer.c),
+    # so it engages NEITHER NES_ASM_PLAYER (P1) nor NES_ASM_PLAYER2 (P2). The 1p
+    # runner keeps the ASM run_update. (Chosen: C for the niche 2p runner keeps the
+    # proven 1p ASM run_update untouched.)
     nes_asm_player = bool(
         asm_ready and custom_main_c is not None
-        and (_asm_player_topdown or _asm_player_platformer or _asm_player_runner)
+        and (_asm_player_topdown or _asm_player_platformer
+             or (_asm_player_runner and not player2_enabled))
     )
     # SMB (Phase 2c 5b): style 0 + BW_SMB_JUMP — smb_update (accel/skid + ladder/
     # jump + variable-cut + gravity). Distinct from plat_update (which does NOT
@@ -2897,13 +2905,13 @@ def _build_rom(body):
     # Player-2 second actor (Phase 2c). NES_ASM_PLAYER2=1 IMPLIES NES_ASM_PLAYER and
     # passes `-D NES_ASM_PLAYER2` to ca65 so player_asm.s compiles its P2 section
     # (p2_* procs + the P2-only globals). SHIPPED BY DEFAULT (engine v50) for any
-    # 2-player build of a covered style (top-down/racer/platformer/runner) — all four
-    # P2 second actors are A/B-proven byte-behaviour-identical to the C. PLAYGROUND_
-    # NO_ASM=1 remains the whole-engine kill switch.
+    # 2-player build of a covered style (top-down/racer/platformer) — those P2 second
+    # actors are A/B-proven byte-behaviour-identical to the C. PLAYGROUND_NO_ASM=1
+    # remains the whole-engine kill switch. The 2-player RUNNER is excluded: it uses
+    # the pure-C 2p-runner path (both cars auto-run; see nes_asm_player above).
     nes_asm_player2 = bool(
         asm_ready and custom_main_c is not None and player2_enabled
-        and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer
-             or _asm_player_runner)
+        and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer)
     )
     # Player OAM DRAW loop (Phase 2d). NES_ASM_PDRAW=1 links pdraw_asm.s
     # (draw_player + draw_player2 under NES_ASM_PLAYER2) and -D's out the plain C P1

@@ -762,7 +762,7 @@ function makeP2RunnerState() {
   const cols = 64, rows = 30, floorRow = 26;
   const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
   for (let c = 0; c < cols; c++) beh[floorRow][c] = 1;             // SOLID floor
-  for (let r = floorRow - 1; r >= floorRow - 3; r--) beh[r][40] = 2; // WALL for P2 to bump
+  beh[floorRow - 1][40] = 7; beh[floorRow - 1][41] = 7;           // spike wall (id 7) for the death test
   const bg = {
     name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
     nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
@@ -787,60 +787,54 @@ function makeP2RunnerState() {
   return s;
 }
 
-// P1 taps A to jump (it autoscrolls automatically); P2 walks RIGHT via pad2.
-const stepP2Run = (n) => {
-  const tk = rd16(n, TICK);
-  if (tk % 44 < 2) n.buttonDown(1, H.BTN.A);
-  n.buttonDown(2, H.BTN.RIGHT);
-  n.frame();
-  n.buttonUp(1, H.BTN.A); n.buttonUp(2, H.BTN.RIGHT);
-};
-
+// 2-PLAYER RUNNER (engine v56): both cars auto-run (ride the camera) and jump
+// independently; a car that hits a spike / falls becomes an immune ghost that keeps
+// scrolling until BOTH die, then both restart. This is the pure-C 2p-runner path (no
+// ASM to A/B — the server routes a 2p runner to C), so this is a behavioural check of
+// the shipped config (C physics + ASM draw): both auto-run, P2 has vertical (jumps),
+// and running into the spike restarts the pair.
 async function runP2Runner() {
   const s = makeP2RunnerState();
   const mainC = win.BuilderAssembler.assemble(s, tpl);
   if (!/^#define BW_GAME_STYLE 2\b/m.test(mainC)) { bad('p2-runner: not a runner build'); return; }
   const payload = {
-    state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 180 },
-    playerSpriteIdx2: 1, playerStart2: { x: 200, y: 180 }, mode: 'browser',
+    state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 192 },
+    playerSpriteIdx2: 1, playerStart2: { x: 24, y: 192 }, mode: 'browser',
     customMainC: withProbe2(mainC), sceneSprites: [],
   };
-  const rc = await H.buildRom(PORT_C, payload);
-  const ra = await H.buildRom(PORT_A, payload);
-  if (!rc.ok) { bad(`p2-runner: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
-  if (!ra.ok) { bad(`p2-runner: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
-  if (rc.romBytes.equals(ra.romBytes)) { bad('p2-runner: ASM ROM == C ROM (NES_ASM_PLAYER2 did not engage)'); return; }
-
-  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  const rd = await H.buildRom(PORT_D, payload);   // shipped config: 2p-runner C physics + ASM draw
+  if (!rd.ok) { bad(`p2-runner: build failed (${rd.stage}): ` + String(rd.log || '').slice(-300)); return; }
+  const n = boot(rd.romBytes);
   let bootF = 0;
-  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepP2Run(c); stepP2Run(a); bootF++; }
-  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('p2-runner: game loop never started'); return; }
+  while (bootF < 400 && rd16(n, TICK) > 60000) { n.frame(); bootF++; }
+  if (rd16(n, TICK) > 60000) { bad('p2-runner: game loop never started'); return; }
 
-  let diffs = 0, firstDiff = '', compared = 0;
-  const p1x0 = rd16(c, PX), p2x0 = rd16(c, PX2);
-  let p1xMax = p1x0, p2xMax = p2x0;
-  for (let step = 0; step < 24000 && compared < 400; step++) {
-    const tc = rd16(c, TICK), ta = rd16(a, TICK);
-    if (tc > 60000 || ta > 60000) { bad('p2-runner: tick overflowed'); return; }
-    if (tc !== ta) { if (tc < ta) stepP2Run(c); else stepP2Run(a); continue; }
-    const c1x = rd16(c, PX), a1x = rd16(a, PX), c1y = rd16(c, PY), a1y = rd16(a, PY);
-    const c2x = rd16(c, PX2), a2x = rd16(a, PX2), c2y = rd16(c, PY2), a2y = rd16(a, PY2);
-    if (c1x !== a1x || c1y !== a1y || c2x !== a2x || c2y !== a2y) {
-      diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C p1(${c1x},${c1y}) p2(${c2x},${c2y}) A p1(${a1x},${a1y}) p2(${a2x},${a2y})`;
-    }
-    if (c1x > p1xMax) p1xMax = c1x;
-    if (c2x > p2xMax) p2xMax = c2x;
-    compared++;
-    stepP2Run(c); stepP2Run(a);
+  // Phase A — both jump every ~30 frames (to clear the spike): assert both auto-run
+  // (px + px2 climb with the camera) and P2 has a working vertical (py2 dips on jump).
+  const p1x0 = rd16(n, PX), p2x0 = rd16(n, PX2);
+  let p1xMax = p1x0, p2xMax = p2x0, p2yMin = 255, p2yMax = 0;
+  for (let i = 0; i < 120; i++) {
+    if (i % 30 === 0) { n.buttonDown(1, H.BTN.A); n.buttonDown(2, H.BTN.A); }
+    n.frame();
+    n.buttonUp(1, H.BTN.A); n.buttonUp(2, H.BTN.A);
+    const p1x = rd16(n, PX), p2x = rd16(n, PX2), p2y = rd16(n, PY2);
+    if (p1x > p1xMax) p1xMax = p1x;
+    if (p2x > p2xMax) p2xMax = p2x;
+    if (p2y < p2yMin) p2yMin = p2y;
+    if (p2y > p2yMax) p2yMax = p2y;
   }
+  if (p1xMax <= p1x0 + 40) { bad(`p2-runner: P1 did not auto-run (${p1x0}->${p1xMax})`); return; }
+  if (p2xMax <= p2x0 + 40) { bad(`p2-runner: P2 did not auto-run (${p2x0}->${p2xMax})`); return; }
+  if (p2yMax - p2yMin < 4) { bad(`p2-runner: P2 has no vertical / never jumped (py2 range ${p2yMin}-${p2yMax})`); return; }
 
-  if (compared < 300) { bad(`p2-runner: too few matched-tick samples (${compared})`); return; }
-  if (p1xMax <= p1x0 + 8) { bad(`p2-runner: P1 did not autoscroll (${p1x0}->${p1xMax})`); return; }
-  if (p2xMax <= p2x0 + 8) { bad(`p2-runner: P2 did not walk right (${p2x0}->${p2xMax})`); return; }
-  if (diffs === 0)
-    ok(`p2 runner (NES_ASM_PLAYER2): C ≡ ASM P1 px/py AND P2 px2/py2 at every matched tick over `
-      + `${compared} ticks (P1 autoscroll ${p1x0}->${p1xMax}, P2 walk ${p2x0}->${p2xMax} + wall bump)`);
-  else bad(`p2-runner: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+  // Phase B — stop jumping so both run into the spike wall; the pair must restart
+  // (px snaps back toward the start once both are ghosts).
+  let sawReset = false, prev = rd16(n, PX);
+  for (let i = 0; i < 500; i++) { n.frame(); const p = rd16(n, PX); if (p < prev - 100) sawReset = true; prev = p; }
+  if (!sawReset) { bad('p2-runner: no restart after both hit the spike (px kept climbing)'); return; }
+
+  ok(`2p runner autorun (pure-C 2p path + ASM draw): both cars auto-run `
+    + `(P1 ${p1x0}->${p1xMax}, P2 ${p2x0}->${p2xMax}), P2 jumps (py2 ${p2yMin}-${p2yMax}), and the pair restarts on the spike`);
 }
 
 // ---- Racer lap-FSM coverage (2-player). The other racer cases never place
@@ -1097,7 +1091,7 @@ try {
   await runP2Topdown();    // 2-player top-down: P1 td_update + P2 p2_td_update, both ASM
   await runP2Racer();      // 2-player racer: P1 racer_update + P2 p2_racer_update, both ASM
   await runP2Platformer(); // 2-player platformer: P1 plat_update + P2 p2_plat_update, both ASM
-  await runP2Runner();     // 2-player runner: P1 run_update + P2 p2_run_update (walk-only), both ASM
+  await runP2Runner();     // 2-player runner: both cars auto-run (pure-C 2p path) + jump + ghost/restart
   await runRacerLaps();    // racer lap FSM (rc_laps/p2_rc_laps) + brake/reverse coverage
   await runPDraw();        // P1 OAM draw loop (pdraw_asm.s): C-draw ≡ ASM-draw OAM
   await runPDraw(2, 3);    // non-square player draw (2 wide x 3 tall)

@@ -9,6 +9,28 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v56 — 2026-07-09 — 2-player auto-runner (FCEUX feedback)
+
+### Added / migration
+- **A 2-player auto-runner now runs BOTH cars.** A pupil's FCEUX pass found that in a
+  2-player runner only P1 auto-ran (P2 merely walked) and a death vanished the sprite.
+  Now both cars ride the shared camera at their own fixed screen X (`RUNNER_SCREEN_X`
+  / `RUNNER_SCREEN_X_2`), jump independently (A/UP + gravity), and on death (a spike
+  under the body or a fall) become an immune **"ghost"** that keeps scrolling until
+  BOTH are down, then both restart (`runner_respawn2`). New dedicated flags
+  `runner_dead1`/`runner_dead2` (not the HP module's `player_dead`, so it works on any
+  project). Both cars use the same simple fixed-height jump for a consistent feel.
+- **A 2-player runner uses the pure-C path** — it engages neither `NES_ASM_PLAYER`
+  (P1) nor `NES_ASM_PLAYER2` (P2), leaving the proven 1-player ASM `run_update`
+  untouched. The 1p runner is byte-for-byte unchanged. (The P1 OAM *draw* still ships
+  as ASM — `draw_player2`'s gate moved from `NES_ASM_PLAYER2` to the new project.inc
+  `PLAYER2_ENABLED`, so the P2 draw twin is available for any 2-player build.)
+- **Goldens UNCHANGED** (`1730448e` + `_rom-equiv` `0aed6e95`): the new blocks are all
+  gated `BW_GAME_STYLE == 2 && PLAYER2_ENABLED`, which no golden fixture is; the gate
+  additions to the shared blocks only carve out the 2p-runner case, so every existing
+  model compiles identically. `asm-player.mjs` covers it behaviourally (both cars
+  auto-run + P2 jumps + the pair restarts on a spike).
+
 ## v55 — 2026-07-09 — 2-player camera follows the midpoint (FCEUX feedback)
 
 ### Changed / migration
