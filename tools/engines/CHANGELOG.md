@@ -9,6 +9,27 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v54 — 2026-07-09 — SHIP the player OAM draw loop on hand-written 6502 by default
+
+### Changed / migration
+- **The player OAM draw loop now ships BY DEFAULT** (P1 `draw_player` + P2
+  `draw_player2`, pdraw_asm.s). The server `nes_asm_pdraw` gate no longer requires
+  the `PLAYGROUND_ASM_PDRAW` toggle — it engages for any scroll build with a custom
+  main.c (the Studio/Builder path). Proven C-draw ≡ ASM-draw byte-for-byte in the OAM
+  shadow by `asm-player.mjs` (P1 square + 2×3 + 3×1, and P1+P2 2-player, across a
+  screen-2 scroll with the horizontal flip); the draw is the same pre-vblank work as
+  the C, so it carries no new timing risk.
+- **Goldens UNCHANGED** — `1730448e` (stock: no custom main.c → gate never fires) and
+  `_rom-equiv` `0aed6e95` (its fixture is 1-screen → outside the scroll-only pdraw
+  envelope). So no re-pin was needed.
+- **New granular kill switch `PLAYGROUND_NO_PDRAW=1`** reverts just the draw to C
+  (the whole-engine `PLAYGROUND_NO_ASM=1` still reverts everything). Off-by-default 1-
+  screen and no-custom-main builds keep the C draw as before.
+- **Per-frame hot loops now fully on ASM.** With the draw shipped, every per-frame
+  hot loop — physics, AI, collision, scroll, scene-draw, animation, and now the
+  player draw — runs on hand-written 6502 (see
+  `docs/design/2026-07-09-full-asm-engine-scoping.md`).
+
 ## v53 — 2026-07-09 — Racer steering rate-limit (FCEUX feedback)
 
 ### Changed / migration

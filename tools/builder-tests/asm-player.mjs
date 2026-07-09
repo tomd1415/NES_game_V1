@@ -1080,8 +1080,11 @@ async function runPDraw2P() {
 }
 
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
-const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
-const srvD = await H.startServer(PORT_D, { PLAYGROUND_ASM_PLAYER: '1', PLAYGROUND_ASM_PDRAW: '1' });
+// PORT_A = ASM physics + C draw. As of v54 the OAM draw ships by default, so the
+// C-draw reference must explicitly opt out with the granular PLAYGROUND_NO_PDRAW
+// kill switch; PORT_D is the ASM draw (pdraw now default-on).
+const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1', PLAYGROUND_NO_PDRAW: '1' });
+const srvD = await H.startServer(PORT_D, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
   await runCase(1);        // top-down non-scroll: u8 px/py
   await runCase(2);        // top-down scroll: u16 px/py

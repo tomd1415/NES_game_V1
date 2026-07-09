@@ -2905,17 +2905,19 @@ def _build_rom(body):
         and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer
              or _asm_player_runner)
     )
-    # Player-1 OAM DRAW loop (Phase 2d). NES_ASM_PDRAW=1 links pdraw_asm.s
-    # (draw_player) and -D's out the plain C P1 draw loop in main.c. Generic
-    # (works for any player — it reads anim_tiles/anim_attrs/anim_base), needs a
-    # scroll build (calls world_to_screen_x/y, which pulls in NES_ASM_SCROLL).
-    # NOT shipped by default yet: gated behind PLAYGROUND_ASM_PDRAW while the OAM
-    # A/B (asm-player.mjs) proves it byte-identical to the C draw, exactly how the
-    # P2 second actors rode PLAYGROUND_ASM_PLAYER before v50. With the env unset
-    # the default build keeps the C draw, so golden/_rom-equiv stay byte-identical.
+    # Player OAM DRAW loop (Phase 2d). NES_ASM_PDRAW=1 links pdraw_asm.s
+    # (draw_player + draw_player2 under NES_ASM_PLAYER2) and -D's out the plain C P1
+    # and P2 draw loops in main.c. Generic (works for any player — it reads
+    # anim_tiles/anim_attrs/anim_base + the fixed player2_tiles/attrs), needs a
+    # scroll build (calls world_to_screen_x/y). SHIPPED BY DEFAULT (engine v54): the
+    # OAM A/B (asm-player.mjs) proves C-draw ≡ ASM-draw byte-for-byte in the shadow
+    # buffer, and the draw is the same pre-vblank work as the C. Only scroll builds
+    # with a custom main.c engage it; the stock/golden + 1-screen _rom-equiv fixtures
+    # are outside that envelope, so both goldens stay byte-identical. PLAYGROUND_
+    # NO_ASM=1 remains the whole-engine kill switch (skips this with everything else).
     nes_asm_pdraw = bool(
         asm_ready and custom_main_c is not None and is_scroll
-        and os.environ.get("PLAYGROUND_ASM_PDRAW")
+        and not os.environ.get("PLAYGROUND_NO_PDRAW")   # granular kill switch (draw only)
     )
 
     if custom_main_c is not None:
