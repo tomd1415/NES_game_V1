@@ -27,7 +27,7 @@ const win = H.loadBuilderModules();
 new Function(fs.readFileSync(path.join(H.WEB, 'engine-version.js'), 'utf8'))();  // target latest engine
 const tpl = H.readTemplate();
 
-function makeState(screensX) {
+function makeState(screensX, pw = 2, ph = 2) {
   const cols = 32 * screensX, rows = 30;
   const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
   // scattered WALL blocks the diagonally-moving player bumps into (top-down: no
@@ -41,7 +41,7 @@ function makeState(screensX) {
     nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
     behaviour: beh,
   };
-  const sprites = [{ role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) }];
+  const sprites = [{ role: 'player', name: 'hero', width: pw, height: ph, cells: H.mkCells(pw, ph) }];
   const s = {
     name: 'tdplayer', version: 1, universal_bg: 0x21, sprites,
     sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
@@ -72,10 +72,11 @@ const stepMove = (n) => {
   n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(1, H.BTN.DOWN);
 };
 
-async function runCase(screensX) {
+async function runCase(screensX, pw = 2, ph = 2) {
   const wide = screensX > 1;
-  const label = `${screensX}-screen (${wide ? 'u16' : 'u8'} px/py)`;
-  const s = makeState(screensX);
+  const dimTag = (pw === 2 && ph === 2) ? '' : ` ${pw}x${ph} player`;
+  const label = `${screensX}-screen (${wide ? 'u16' : 'u8'} px/py)${dimTag}`;
+  const s = makeState(screensX, pw, ph);
   const mainC = win.BuilderAssembler.assemble(s, tpl);
   if (!/#define BW_GAME_STYLE 1/.test(mainC)) { bad(`${label}: not a top-down build — server gate would not engage`); return; }
   if (wide !== /#define SCROLL_BUILD/.test(mainC)) { /* sanity only; SCROLL_BUILD is #if'd from BG_WORLD_COLS */ }
@@ -956,6 +957,8 @@ const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
   await runCase(1);        // top-down non-scroll: u8 px/py
   await runCase(2);        // top-down scroll: u16 px/py
+  await runCase(1, 3, 1);  // non-square player (3 wide x 1 tall): PW8/PH8 with W,H != 2
+  await runCase(1, 1, 3);  // non-square player (1 wide x 3 tall)
   await runPlatformer();   // platformer: walk + jump + gravity + ladder
   await runSmb();          // SMB: accel/skid run + A-jump + variable-cut + gravity + ladder
   await runRunner();       // auto-runner: autoscroll + track-end wrap respawn + A-jump + gravity
