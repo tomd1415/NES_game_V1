@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v52 — 2026-07-09 — Player-2 draw twin on hand-written 6502 (off by default)
+
+### Added
+- **`draw_player2` in `src/pdraw_asm.s`** — the hand-written 6502 twin of the plain
+  P2 OAM draw loop, for a 2-player non-racer build with no tagged P2 animation.
+  Mirrors `draw_player` but reads the fixed `player2_tiles`/`player2_attrs` arrays
+  (a new `P2_LINKAGE` macro makes them linker-visible under `NES_ASM_PDRAW`, static
+  otherwise) on `px2`/`py2`/`plrdir2`, and carries the C's `oam_idx > 252`
+  OAM-overflow guard (P2 is drawn after P1, so a large P1+P2 can fill the shadow
+  buffer). `oam_idx` is advanced with a real 16-bit add — not `iny`/`sty` — so the
+  252→256 step sets the hi byte the guard tests. Compiled only under
+  `NES_ASM_PLAYER2` (a 2-player build); the animated-P2 branch stays C.
+
+### Off by default — byte-identical when off
+- With `NES_ASM_PDRAW` unset, `P2_LINKAGE` = `static` and the draw stays C. Golden
+  `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED. Proven C-draw ≡ ASM-draw in the
+  P1+P2 OAM shadow by `asm-player.mjs` (`runPDraw2P`: 2P top-down, P1 across screen
+  2, P2 driven left with the horizontal flip, identical ASM physics both sides).
+
 ## v51 — 2026-07-09 — Player-1 OAM draw loop on hand-written 6502 (off by default)
 
 ### Added

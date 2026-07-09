@@ -200,3 +200,155 @@ next_row:
     inc pd_r
     jmp row_loop
 .endproc
+
+; -----------------------------------------------------------------------------
+; void draw_player2(void) — the plain (non-animated) PLAYER-2 draw loop, for a
+; 2-player NON-racer build (BW_GAME_STYLE != 3; the racer draws P2 rotated in C).
+; Compiled only under NES_ASM_PLAYER2 (a 2-player build), so the P2-only symbols
+; it imports exist; called from main.c's P2 draw dispatch only when the project
+; has no tagged P2 animation (the animated branch stays C). Mirrors draw_player
+; but reads the FIXED player2_tiles/player2_attrs arrays (P2_LINKAGE makes them
+; linker-visible) with a running pointer from each array base, and — because P2
+; is drawn AFTER P1 and a large P1+P2 can fill OAM — carries the C's oam_idx>252
+; overflow guard (stop once the 256-byte shadow buffer is full). oam_idx is
+; advanced with a real 16-bit add (not iny/sty) so the 252->256 step sets the hi
+; byte the guard tests, exactly like scene_asm.s.
+.ifdef NES_ASM_PLAYER2
+.export _draw_player2
+.import _px2, _py2, _plrdir2, _player2_tiles, _player2_attrs
+
+.proc _draw_player2
+    ; base_x = px2, widened to u16
+.if PX_WIDE
+    lda _px2
+    sta pd_bx
+    lda _px2+1
+    sta pd_bx+1
+.else
+    lda _px2
+    sta pd_bx
+    lda #0
+    sta pd_bx+1
+.endif
+    ; ptr1 = player2_tiles ; ptr2 = player2_attrs (fixed arrays, forward walk)
+    lda #<_player2_tiles
+    sta ptr1
+    lda #>_player2_tiles
+    sta ptr1+1
+    lda #<_player2_attrs
+    sta ptr2
+    lda #>_player2_attrs
+    sta ptr2+1
+    lda #0
+    sta pd_r
+p2_row_loop:
+    lda pd_r
+    cmp #PLAYER2_H
+    bcc @row_go
+    rts
+@row_go:
+    ; wy = py2 + r*8  (u16)
+    lda pd_r
+    asl a
+    asl a
+    asl a
+    clc
+.if PX_WIDE
+    adc _py2
+    sta pd_wy
+    lda _py2+1
+    adc #0
+    sta pd_wy+1
+.else
+    adc _py2
+    sta pd_wy
+    lda #0
+    adc #0
+    sta pd_wy+1
+.endif
+    lda #0
+    sta pd_c
+p2_col_loop:
+    lda pd_c
+    cmp #PLAYER2_W
+    bcc @col_go
+    jmp p2_next_row
+@col_go:
+    ; OAM overflow guard (matches C `if (oam_idx > 252) break`): oam_idx is a
+    ; multiple of 4 <= 256, so oam_idx > 252 <=> hi byte set.  Stop entirely.
+    lda _oam_idx+1
+    beq @room
+    rts
+@room:
+    ; tile / attr from the running pointers
+    ldy #0
+    lda (ptr1),y
+    sta pd_tile
+    lda (ptr2),y
+    eor _plrdir2
+    sta pd_attr
+    ; sy = world_to_screen_y(wy)
+    lda pd_wy
+    ldx pd_wy+1
+    jsr _world_to_screen_y
+    sta pd_sy
+    ; colidx = (plrdir2 == 0x40) ? (PLAYER2_W-1-c) : c
+    lda _plrdir2
+    cmp #$40
+    bne @noflip
+    lda #(PLAYER2_W-1)
+    sec
+    sbc pd_c
+    jmp @havecol
+@noflip:
+    lda pd_c
+@havecol:
+    asl a
+    asl a
+    asl a
+    clc
+    adc pd_bx
+    sta tmp1
+    lda pd_bx+1
+    adc #0
+    tax
+    lda tmp1
+    jsr _world_to_screen_x
+    sta pd_sx
+    ; write 4 OAM bytes at oam_idx (guard guarantees hi==0 -> room for 4)
+    ldy _oam_idx
+    lda pd_sy
+    sta _oam_buf,y
+    iny
+    lda pd_tile
+    sta _oam_buf,y
+    iny
+    lda pd_attr
+    sta _oam_buf,y
+    iny
+    lda pd_sx
+    sta _oam_buf,y
+    ; oam_idx += 4 (16-bit; 252+4 = 256 sets hi, which the guard tests)
+    lda _oam_idx
+    clc
+    adc #4
+    sta _oam_idx
+    lda _oam_idx+1
+    adc #0
+    sta _oam_idx+1
+    ; advance the running tile/attr pointers
+    inc ptr1
+    bne :+
+    inc ptr1+1
+:
+    inc ptr2
+    bne :+
+    inc ptr2+1
+:
+    inc pd_c
+    jmp p2_col_loop
+p2_next_row:
+    inc pd_r
+    jmp p2_row_loop
+.endproc
+.endif  ; NES_ASM_PLAYER2

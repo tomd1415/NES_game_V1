@@ -1004,6 +1004,81 @@ async function runPDraw(pw = 2, ph = 2) {
   else bad(`${label}: OAM divergence — ${diffs} diffs (first: ${firstDiff}) over ${cmp} matched ticks`);
 }
 
+// Phase 2d — the PLAYER-2 draw twin (pdraw_asm.s / draw_player2), for a 2-player
+// non-racer build with no tagged P2 animation. Same isolation as runPDraw: both
+// sides run identical ASM physics (P1 td_update + P2 p2_td_update), so the only
+// difference is C-draw vs ASM-draw. Compares the P1+P2 OAM entries. P1 drives
+// RIGHT across screen 2; P2 drives LEFT (plrdir2=0x40 -> P2 horizontal-flip path).
+async function runPDraw2P() {
+  const label = 'P1+P2 OAM draw (2P)';
+  const cols = 64, rows = 30;   // 2-screen -> scroll build (pdraw needs is_scroll)
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (const [c, r] of [[12, 6], [12, 7], [34, 9], [48, 16]]) beh[r][c] = 2;
+  const bg = { name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh };
+  const sprites = [
+    { role: 'player', name: 'hero', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'player', name: 'hero2', width: 2, height: 2, cells: H.mkCells(2, 2) },
+  ];
+  const s = {
+    name: 'p2draw', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'topdown';
+  s.builder.modules.players.config.count = 2;
+  s.builder.modules.players.submodules.player1.enabled = true;
+  s.builder.modules.players.submodules.player2.enabled = true;
+  const N = 2 * 2 * 4 * 2;   // P1 (2x2) + P2 (2x2) = 32 OAM bytes
+  const mainC = withProbe2(win.BuilderAssembler.assemble(s, tpl));
+  const payload = { state: s, playerSpriteIdx: 0, playerStart: { x: 24, y: 120 },
+    playerSpriteIdx2: 1, playerStart2: { x: 200, y: 120 }, mode: 'browser', customMainC: mainC, sceneSprites: [] };
+  const ra = await H.buildRom(PORT_A, payload);   // ASM P1+P2 physics + C draw
+  const rd = await H.buildRom(PORT_D, payload);   // ASM P1+P2 physics + ASM draw (draw_player + draw_player2)
+  if (!ra.ok) { bad(`${label}: C-draw build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (!rd.ok) { bad(`${label}: ASM-draw build failed (${rd.stage}): ` + String(rd.log || '').slice(-300)); return; }
+  if (ra.romBytes.equals(rd.romBytes)) { bad(`${label}: ASM-draw ROM == C-draw ROM (NES_ASM_PDRAW did not engage)`); return; }
+
+  const c = boot(ra.romBytes), a = boot(rd.romBytes);
+  const PX2 = 0x0718, PY2 = 0x071A;
+  const oamN = (n) => { const o = []; for (let i = 0; i < N; i++) o.push(n.ppu.spriteMem[i] & 0xFF); return o; };
+  const press = (n) => {
+    n.buttonDown(1, H.BTN.RIGHT); n.buttonDown(2, H.BTN.LEFT); n.frame();
+    n.buttonUp(1, H.BTN.RIGHT); n.buttonUp(2, H.BTN.LEFT);
+  };
+  let bf = 0;
+  while (bf < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { press(c); press(a); bf++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad(`${label}: game loop never started`); return; }
+
+  let diffs = 0, cmp = 0, firstDiff = '', p2flip = false;
+  const px1Start = rd16(c, PX), px2Start = rd16(c, PX2); let px1Max = px1Start, px2Min = px2Start;
+  for (let step = 0; step < 340 && cmp < 320; step++) {
+    press(c); press(a);
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc !== ta) { bad(`${label}: physics desynced (C ${tc}, ASM ${ta})`); return; }
+    const oc = oamN(c), oa = oamN(a);
+    for (let i = 0; i < N; i++) { if (oc[i] !== oa[i]) { diffs++; if (!firstDiff) firstDiff = `step ${step} tick ${tc} oam[${i}]: C=${oc[i]} ASM=${oa[i]}`; break; } }
+    for (let i = 16 + 2; i < N; i += 4) { if (oc[i] & 0x40) p2flip = true; }   // P2 attr bytes (second half)
+    const px1 = rd16(c, PX), px2 = rd16(c, PX2);
+    if (px1 > px1Max) px1Max = px1;
+    if (px2 < px2Min) px2Min = px2;
+    cmp++;
+  }
+
+  if (cmp < 300) { bad(`${label}: too few samples (${cmp})`); return; }
+  if (px1Max < 256) { bad(`${label}: P1 never crossed to screen 2 (px max ${px1Max})`); return; }
+  if (px2Min >= px2Start) { bad(`${label}: P2 did not move left (px2 ${px2Start}->${px2Min})`); return; }
+  if (!p2flip) { bad(`${label}: P2 horizontal-flip never occurred — draw_player2 flip path not exercised`); return; }
+  if (diffs === 0)
+    ok(`${label} (NES_ASM_PDRAW + NES_ASM_PLAYER2): C-draw ≡ ASM-draw OAM at every matched tick over ${cmp} ticks `
+      + `(P1 ${px1Start}->${px1Max} across screen 2, P2 ${px2Start}->${px2Min} left with H-flip)`);
+  else bad(`${label}: OAM divergence — ${diffs} diffs (first: ${firstDiff}) over ${cmp} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 const srvD = await H.startServer(PORT_D, { PLAYGROUND_ASM_PLAYER: '1', PLAYGROUND_ASM_PDRAW: '1' });
@@ -1024,6 +1099,7 @@ try {
   await runPDraw();        // P1 OAM draw loop (pdraw_asm.s): C-draw ≡ ASM-draw OAM
   await runPDraw(2, 3);    // non-square player draw (2 wide x 3 tall)
   await runPDraw(3, 1);    // non-square player draw (3 wide x 1 tall)
+  await runPDraw2P();      // P2 draw twin (draw_player2): P1+P2 OAM C-draw ≡ ASM-draw
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {

@@ -1715,10 +1715,19 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             f"#define PLAYER2_X {int(start_x2) & 0xFF}",
             f"#define PLAYER2_Y {int(start_y2) & 0xFF}",
             "",
-            f"static const unsigned char player2_tiles[{pw2*ph2}] = {{",
+            # Linkage for the P2 tile/attr arrays the P2 draw loop reads. Normally
+            # `static` (byte-identical); when the P1/P2 draw ASM is built
+            # (NES_ASM_PDRAW) they must be linker-visible so pdraw_asm.s's
+            # draw_player2 can import them. Flag-off is byte-for-byte unchanged.
+            "#if defined(NES_ASM_PDRAW)",
+            "#define P2_LINKAGE",
+            "#else",
+            "#define P2_LINKAGE static",
+            "#endif",
+            f"P2_LINKAGE const unsigned char player2_tiles[{pw2*ph2}] = {{",
             "    " + ", ".join(f"0x{t:02X}" for t in p2_tiles),
             "};",
-            f"static const unsigned char player2_attrs[{pw2*ph2}] = {{",
+            f"P2_LINKAGE const unsigned char player2_attrs[{pw2*ph2}] = {{",
             "    " + ", ".join(f"0x{a:02X}" for a in p2_attrs),
             "};",
             "",

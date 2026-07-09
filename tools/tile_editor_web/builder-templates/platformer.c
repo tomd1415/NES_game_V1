@@ -549,6 +549,10 @@ void draw_scene_sprites(void);
    Linked + called only under NES_ASM_PDRAW (the server sets it); the C call site
    also excludes the walk-bob case, so the twin need not add the bob offset. */
 void draw_player(void);
+/* Plain P2 draw twin (2-player non-racer builds with no tagged P2 animation).
+   Defined in pdraw_asm.s only under NES_ASM_PLAYER2 (a 2-player build), which is
+   always set wherever a P2 draw is reached, so the call resolves. */
+void draw_player2(void);
 #endif
 /* advance_animation's ASM twin covers the BASIC animation state machine only; a
    project with an attack one-shot or racer rotation keeps the inline C. */
@@ -2091,6 +2095,10 @@ void main(void) {
                 }
             }
         }
+#elif defined(NES_ASM_PDRAW)
+        /* hand-written 6502 twin — pdraw_asm.s (Phase 2d).  The plain (no tagged
+         * P2 animation) P2 draw; carries the same OAM-overflow guard as the C. */
+        draw_player2();
 #else
         for (r = 0; r < PLAYER2_H; r++) {
             /* BR-03 — see the animated branch above: guard every P2 write so a
