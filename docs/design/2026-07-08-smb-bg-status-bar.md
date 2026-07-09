@@ -4,8 +4,27 @@
 fixed background status bar, held stationary over the horizontally-scrolling
 playfield by a sprite-0-hit mid-frame scroll split (how real SMB does it).
 
-**Status:** designed + scoped, NOT yet built. Gated behind a new `BW_SMB_HUD_BG`
-path (off by default → byte-identical). Two blockers surfaced below.
+**Status:** BUILD IN PROGRESS (started 2026-07-09, engine → v58). User chose the full
+build (iterate the split via FCEUX) after the v57 HUD-digit cache confirmed the SMB
+"inconsistent speed" is this same frame budget. Gated behind `BW_SMB_HUD_BG` (off by
+default → byte-identical). Two blockers below still hold; Blocker 1 (top-4-rows) is
+accepted as opt-in.
+
+### Build progress (this is the working checklist)
+- [x] **Flag + glyph seeding (Phase 1).** `smbhud.config.background` → builder-modules
+  emits `#define BW_SMB_HUD_BG 1` (gated targetEngine ≥ 58); server `_seed_hud_digits_bg`
+  seeds the 0-9 glyphs into BG tiles 48-57 (mirrors the sprite/dialogue seeding).
+- [ ] **Static strip (Phase 2).** At boot, write labels + zeroed digits into nametable
+  rows 0-3; jsnes-verifiable (read the nametable).
+- [ ] **Live updates + drop OAM HUD (Phase 3).** Buffer digit writes into the status
+  nametable on change; `#ifdef BW_SMB_HUD_BG` compiles OUT the OAM `bw_hud_digit` draw.
+  jsnes-verifiable (nametable digits change; no HUD sprites in OAM). Fully works for a
+  NON-scrolling SMB (no split needed) — commit + bump v58 at this milestone.
+- [ ] **Sprite-0 split (Phase 4).** FCEUX-only. Sprite 0 at the strip bottom; vblank
+  sets scroll (0,0), busy-poll `PPU_STATUS` bit 6, then write the playfield scroll —
+  hand-written 6502. Iterate with the user via FCEUX.
+- [ ] **Streamer skip (Phase 5).** `scroll_stream` writes the playfield to rows 4-29
+  only. FCEUX-validate scrolling doesn't smear the bar.
 
 ## Why the flicker happens (confirmed)
 

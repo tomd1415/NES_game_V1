@@ -834,6 +834,39 @@ def _seed_hud_digits(state):
             tile["pixels"] = [row[:] for row in _DIALOGUE_FONT[d]]
 
 
+def _smbhud_bg_enabled(state):
+    """True when the SMB HUD is on AND set to the background-status-bar mode
+    (needs the 0-9 glyphs seeded into the BACKGROUND pattern table)."""
+    try:
+        m = state["builder"]["modules"]
+        if m.get("game", {}).get("config", {}).get("type") != "smb":
+            return False
+        hud = m.get("smbhud", {})
+        return bool(hud.get("enabled") and (hud.get("config") or {}).get("background"))
+    except Exception:
+        return False
+
+
+def _seed_hud_digits_bg(state):
+    """Seed the built-in 0-9 glyphs into blank BACKGROUND tiles at their ASCII
+    indices (48..57) when the SMB HUD is in background mode, so the nametable
+    status bar can draw the read-out as background tiles (BW_SMB_HUD_BG). Same
+    indices as the dialogue font, so the two never conflict.  A no-op otherwise,
+    so non-bg-HUD ROMs are byte-identical."""
+    if not _smbhud_bg_enabled(state):
+        return
+    bg = state.get("bg_tiles")
+    if not isinstance(bg, list):
+        return
+    for d in "0123456789":
+        idx = ord(d)
+        if not (0 <= idx < len(bg)):
+            continue
+        tile = bg[idx]
+        if isinstance(tile, dict) and _pixels_blank(tile.get("pixels")):
+            tile["pixels"] = [row[:] for row in _DIALOGUE_FONT[d]]
+
+
 def build_chr(state):
     """Two independent 256-tile pools -> 8KB CHR.
 
@@ -848,6 +881,7 @@ def build_chr(state):
     """
     _seed_dialogue_font(state)
     _seed_hud_digits(state)
+    _seed_hud_digits_bg(state)
     if "sprite_tiles" in state and "bg_tiles" in state:
         return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
              + _encode_pool(state["bg_tiles"], "bg_tiles")

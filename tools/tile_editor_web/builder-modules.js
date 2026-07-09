@@ -1537,7 +1537,7 @@
       'death spends a life. Coins add 200 to the score.',
       'A v7 engine feature — only builds on engine v7+ with the SMB game type.',
     ],
-    defaultConfig: { startTime: 400, startLives: 3, hudPal: 0 },
+    defaultConfig: { startTime: 400, startLives: 3, hudPal: 0, background: false },
     schema: [],
     applyToTemplate(template, node, state) {
       const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
@@ -1545,13 +1545,20 @@
                  state.builder.modules.game.config && state.builder.modules.game.config.type;
       if (targetEngine < 7 || gt !== 'smb') return template;   // gated → byte-identical
       const c = (node && node.config) || {};
-      return A.appendToSlot(template, 'declarations', [
+      const lines = [
         '/* [builder] SMB HUD (engine v7) — coins / time / score / lives. */',
         '#define BW_SMB_HUD 1',
         '#define BW_HUD_START_TIME ' + A.clampInt(c.startTime, 0, 999, 400),
         '#define BW_HUD_START_LIVES ' + A.clampInt(c.startLives, 1, 9, 3),
         '#define BW_HUD_PAL ' + A.clampInt(c.hudPal, 0, 3, 0),
-      ].join('\n'));
+      ];
+      /* Background status bar (engine v58): the HUD is drawn in the nametable and
+       * held over the scrolling playfield by a sprite-0 split, instead of as OAM
+       * sprites.  Frees the HUD's per-frame sprite + digit-math cost and dodges the
+       * 8-sprites-per-scanline flicker, at the cost of the top 4 rows (a fixed
+       * 32px bar).  Opt-in → byte-identical when off. */
+      if (c.background && targetEngine >= 58) lines.push('#define BW_SMB_HUD_BG 1');
+      return A.appendToSlot(template, 'declarations', lines.join('\n'));
     },
   };
 

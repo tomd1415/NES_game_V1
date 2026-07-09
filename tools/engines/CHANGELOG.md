@@ -9,6 +9,22 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v58 — 2026-07-09 — SMB background status bar — Phase 1 (glyph seeding; off by default)
+
+### Added (start of a multi-phase feature — off by default → byte-identical)
+- Groundwork for the **SMB background status bar** (the definitive fix for both the
+  SMB HUD flicker and the frame-budget "inconsistent speed": moving the HUD off OAM
+  sprites into a nametable strip held over the scrolling playfield by a sprite-0
+  split — see `docs/design/2026-07-08-smb-bg-status-bar.md`). This engine bump is
+  **Phase 1 only**: the opt-in `smbhud.config.background` flag (builder-modules emits
+  `#define BW_SMB_HUD_BG 1`, gated targetEngine ≥ 58) and the server seeding the 0-9
+  glyphs into BG tiles 48-57 (`_seed_hud_digits_bg`, mirrors the sprite/dialogue
+  seeding). Nothing enables it yet, so golden `1730448e` + `_rom-equiv` `0aed6e95`
+  are UNCHANGED and every existing ROM is byte-identical.
+- Phases 2-5 (nametable strip, live digit updates + dropping the OAM HUD, the
+  sprite-0 split, and the scroll-streamer skip) follow; the split (Phase 4) is
+  timing-critical 6502 that only FCEUX can validate.
+
 ## v57 — 2026-07-09 — SMB HUD digit cache (perf; FCEUX feedback)
 
 ### Changed
