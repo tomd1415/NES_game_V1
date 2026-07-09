@@ -5,10 +5,10 @@ while (leaves → AI → scroll → scene-draw → all player physics, shipped b
 engine v50). Is the "full ASM engine" goal essentially done, and if not, what's left
 and is it worth converting?
 
-**Short answer:** the **perf-relevant core is complete** — every hot per-frame loop
-is on ASM. What remains in cc65 C is glue + event-driven gameplay logic, where ASM
-buys ~zero runtime and adds real risk. One modest per-frame candidate remains (the
-player OAM draw loop). Everything else is a purity/education project with diminishing
+**Short answer:** the **perf-relevant core is complete AND shipped** — every hot
+per-frame loop is on ASM by default (as of v54, the player OAM draw loop too). What
+remains in cc65 C is glue + event-driven gameplay logic, where ASM buys ~zero runtime
+and adds real risk. Everything else is a purity/education project with diminishing
 returns.
 
 ## What's already on hand-written 6502 (the frame budget)
@@ -42,14 +42,15 @@ Inventory of `platformer.c` (~2600 lines) beyond the ASM-gated blocks:
    real (if modest) value — but the *scene* draw (the bigger sprite count) is already
    ASM, and the player is only 4–8 sprites. **ASM value: modest. Risk: moderate**
    (rendering + P2 + anim variants).
-   - **UPDATE (v51, 2026-07-09):** the **P1 draw loop is now converted** —
-     `src/pdraw_asm.s` (`draw_player`), OFF BY DEFAULT behind `PLAYGROUND_ASM_PDRAW`,
-     A/B-proven C-draw ≡ ASM-draw byte-for-byte in the OAM shadow (square + 2×3 + 3×1
-     players, screen-2 scroll, flip). Reads `anim_tiles`/`anim_attrs`/`anim_base`, so
-     it covers static + animated players. The **P2 draw** (the animation-variant
-     source-select block, ~1981–2076) is the remaining piece — more conditional
-     (walk/jump frame select) and lower value (P2 is niche). Ship-by-default of P1 is
-     a separate, surfaced decision (re-pins `_rom-equiv`).
+   - **DONE + SHIPPED (v51→v54, 2026-07-09):** the **player draw loop is converted
+     and ships by default** — `src/pdraw_asm.s` (`draw_player` + `draw_player2`).
+     A/B-proven C-draw ≡ ASM-draw byte-for-byte in the OAM shadow (P1 square + 2×3 +
+     3×1, and P1+P2 2-player, across a screen-2 scroll with the flip). Reads
+     `anim_tiles`/`anim_attrs`/`anim_base` (P1) + `player2_tiles`/`attrs` (P2), so it
+     covers static + animated players. Engages for any scroll build with a custom
+     main.c; granular kill switch `PLAYGROUND_NO_PDRAW=1`. Goldens unchanged (stock =
+     no custom main.c; `_rom-equiv` fixture = 1-screen, outside the envelope). Only
+     the **animated-P2** branch (walk/jump source-select) stays C — niche, low value.
 
 3. **Gameplay-logic modules** — SMB power-ups (fireball pool, mushroom/star), blocks
    (? blocks, coins), stomp, HP + damage, spawn-on-hit effects, doors / multi-bg,
