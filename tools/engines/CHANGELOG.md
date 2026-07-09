@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v53 — 2026-07-09 — Racer steering rate-limit (FCEUX feedback)
+
+### Changed / migration
+- **The top-down racer's steering is now rate-limited.** A pupil's FCEUX pass found
+  it "far too sensitive": a held LEFT/RIGHT rotated the 16-direction heading **every
+  frame** (~3.75 full spins/sec at 60fps). It now turns one 22.5° step then waits
+  `RACER_TURN_CD` frames — default **6** (one step per 7 frames, ~8× calmer). New
+  globals `racer_turn_cd`/`racer_turn_cd2`; new constant `RACER_TURN_CD` (C
+  `#ifndef` default in the template + `.define` in project.inc — keep them equal).
+  Tune it down toward 0 for a twitchier car. Applied identically in the C and in the
+  hand-written ASM (`rc_drive`/`p2_rc_drive`), so the racer A/B stays byte-identical
+  (`asm-player.mjs`). **Changes racer ROM output** (intended); golden `1730448e` and
+  `_rom-equiv` `0aed6e95` UNCHANGED (neither fixture is a racer).
+- Not addressed here (also from the same FCEUX pass, tracked separately): the racer
+  sprite rendering "sideways" is an **art convention** — the rotation bakes frames
+  assuming the base car art faces **east/right** (heading 0; see the §3 header
+  comment), so a starter car drawn facing another way looks rotated. Fix is the
+  starter art, not the engine.
+
 ## v52 — 2026-07-09 — Player-2 draw twin on hand-written 6502 (off by default)
 
 ### Added

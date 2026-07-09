@@ -775,6 +775,11 @@ void runner_respawn(void) {
 #ifndef RACER_ACCEL
 #define RACER_ACCEL 13            /* 8.8 px/frame added while accelerating (~0.05) */
 #endif
+#ifndef RACER_TURN_CD
+#define RACER_TURN_CD 6           /* frames between heading steps while steering held
+                                     (0 = every frame = the old twitchy feel; 6 = one
+                                     22.5deg step per 7 frames, ~8x calmer) */
+#endif
 #ifndef RACER_FRICTION
 #define RACER_FRICTION 8          /* 8.8 px/frame bled off when coasting (~0.03) */
 #endif
@@ -813,6 +818,7 @@ void runner_respawn(void) {
 #define RACER_REV_MAX (RACER_MAX_SPEED / 2)
 #endif
 unsigned char racer_heading;      /* 0..15 (16 directions, 22.5deg steps) */
+unsigned char racer_turn_cd;      /* steer cooldown: frames until the next heading step (rate-limits turning) */
 signed int    racer_speed;        /* 8.8 fixed-point, -RACER_REV_MAX..+RACER_MAX_SPEED */
 unsigned char px_sub, py_sub;     /* sub-pixel position accumulators */
 unsigned char racer_laps;         /* completed laps */
@@ -823,6 +829,7 @@ unsigned char racer_finished;     /* reached RACER_LAPS_TO_WIN -> race won */
  * The camera follows P1 (chosen model), so P2 can scroll off-screen.  The race
  * ends as soon as EITHER car finishes. */
 unsigned char racer_heading2;
+unsigned char racer_turn_cd2;
 signed int    racer_speed2;
 unsigned char px2_sub, py2_sub;
 unsigned char racer_laps2, racer_cp_stage2, racer_finished2;
@@ -1021,8 +1028,17 @@ void main(void) {
             signed int  acc, np;   // 16-bit sub-pixel accumulate + new coord
             pxcoord_t   keep;      // pre-move coord for push-back
             unsigned char keep_sub, hit_x = 0, hit_y = 0;
-            if (pad & 0x02) racer_heading = (racer_heading + 15) & 15;  // LEFT  = turn CCW
-            if (pad & 0x01) racer_heading = (racer_heading + 1) & 15;   // RIGHT = turn CW
+            // Steering is rate-limited: one 22.5deg heading step, then a
+            // RACER_TURN_CD-frame cooldown before the next.  Without it a held
+            // LEFT/RIGHT rotated every frame (~3.75 full spins/sec at 60fps),
+            // which felt far too twitchy.  (Tune RACER_TURN_CD in project.inc.)
+            if (racer_turn_cd) {
+                racer_turn_cd--;
+            } else if (pad & 0x03) {
+                if (pad & 0x02) racer_heading = (racer_heading + 15) & 15;  // LEFT  = turn CCW
+                if (pad & 0x01) racer_heading = (racer_heading + 1) & 15;   // RIGHT = turn CW
+                racer_turn_cd = RACER_TURN_CD;
+            }
             if (pad & 0x88) {                                           // A or UP = accelerate
                 racer_speed += RACER_ACCEL;
                 if (racer_speed > RACER_MAX_SPEED) racer_speed = RACER_MAX_SPEED;
@@ -1090,8 +1106,13 @@ void main(void) {
             signed int  acc, np;   // 16-bit math (no `long`) — see P1 block
             pxcoord_t   keep;
             unsigned char keep_sub, hit_x = 0, hit_y = 0;
-            if (pad2 & 0x02) racer_heading2 = (racer_heading2 + 15) & 15;
-            if (pad2 & 0x01) racer_heading2 = (racer_heading2 + 1) & 15;
+            if (racer_turn_cd2) {                                       // rate-limited steer (see P1)
+                racer_turn_cd2--;
+            } else if (pad2 & 0x03) {
+                if (pad2 & 0x02) racer_heading2 = (racer_heading2 + 15) & 15;
+                if (pad2 & 0x01) racer_heading2 = (racer_heading2 + 1) & 15;
+                racer_turn_cd2 = RACER_TURN_CD;
+            }
             if (pad2 & 0x88) {
                 racer_speed2 += RACER_ACCEL;
                 if (racer_speed2 > RACER_MAX_SPEED) racer_speed2 = RACER_MAX_SPEED;

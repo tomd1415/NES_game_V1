@@ -2421,6 +2421,7 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120, player_idx2
         f".define RUNNER_START_Y         {run_start_y}",
         f".define RACER_MAX_SPEED        {racer_max}",
         ".define RACER_ACCEL            13",
+        ".define RACER_TURN_CD          6",   # steer cooldown — keep == the C #define RACER_TURN_CD
         ".define RACER_FRICTION         8",
         ".define RACER_BRAKE            40",
         f".define RACER_REV_MAX          {racer_max // 2}",

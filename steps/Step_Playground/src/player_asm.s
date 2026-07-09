@@ -1456,7 +1456,7 @@ su_pv:
 .ifdef NES_ASM_RACER
 .export _racer_update
 .import _racer_heading, _racer_speed, _px_sub, _py_sub
-.import _racer_cp_stage, _racer_laps, _racer_finished
+.import _racer_cp_stage, _racer_laps, _racer_finished, _racer_turn_cd
 .importzp tmp3
 
 RC_XMAX    = RBOUND                     ; WORLD_W_PX - PW8
@@ -1511,6 +1511,17 @@ rcos16:
 
 ; ---- rc_drive: steer + accel/friction/brake/reverse (signed-16, from racer_drive)
 .proc rc_drive
+    ; steer, rate-limited by racer_turn_cd (matches the C cooldown): if cooling
+    ; down, decrement and don't turn; else if a turn button is held, turn one
+    ; step and re-arm the cooldown.
+    lda _racer_turn_cd
+    beq @canturn
+    dec _racer_turn_cd
+    jmp @steerdone
+@canturn:
+    lda _pad
+    and #$03
+    beq @steerdone
     lda _pad
     and #$02
     beq @noL
@@ -1529,6 +1540,9 @@ rcos16:
     and #15
     sta _racer_heading
 @noR:
+    lda #RACER_TURN_CD
+    sta _racer_turn_cd
+@steerdone:
     lda _pad
     and #$88
     bne @accel
@@ -2715,13 +2729,22 @@ skip_down:
 .if .defined(NES_ASM_PLAYER2) .and .defined(NES_ASM_RACER)
 .export _p2_racer_update
 .import _racer_heading2, _racer_speed2, _px2, _py2, _px2_sub, _py2_sub
-.import _racer_cp_stage2, _racer_laps2, _racer_finished2
+.import _racer_cp_stage2, _racer_laps2, _racer_finished2, _racer_turn_cd2
 
 RC_XMAX_2 = WORLD_W_PX - PLAYER2_W * 8
 RC_YMAX_2 = WORLD_H_PX - PLAYER2_H * 8
 
 .segment "CODE"
 .proc p2_rc_drive
+    ; steer, rate-limited by racer_turn_cd2 (matches the C cooldown — see rc_drive)
+    lda _racer_turn_cd2
+    beq @canturn
+    dec _racer_turn_cd2
+    jmp @steerdone
+@canturn:
+    lda _pad2
+    and #$03
+    beq @steerdone
     lda _pad2
     and #$02
     beq @noL
@@ -2740,6 +2763,9 @@ RC_YMAX_2 = WORLD_H_PX - PLAYER2_H * 8
     and #15
     sta _racer_heading2
 @noR:
+    lda #RACER_TURN_CD
+    sta _racer_turn_cd2
+@steerdone:
     lda _pad2
     and #$88
     bne @accel
