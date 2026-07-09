@@ -41,8 +41,15 @@ Inventory of `platformer.c` (~2600 lines) beyond the ASM-gated blocks:
    source select, position. **Per-frame**, so it's the one remaining candidate with
    real (if modest) value — but the *scene* draw (the bigger sprite count) is already
    ASM, and the player is only 4–8 sprites. **ASM value: modest. Risk: moderate**
-   (rendering + P2 + anim variants). **Verdict: optional — the only piece worth doing
-   if chasing completeness or a sprite-heavy-frame margin.**
+   (rendering + P2 + anim variants).
+   - **UPDATE (v51, 2026-07-09):** the **P1 draw loop is now converted** —
+     `src/pdraw_asm.s` (`draw_player`), OFF BY DEFAULT behind `PLAYGROUND_ASM_PDRAW`,
+     A/B-proven C-draw ≡ ASM-draw byte-for-byte in the OAM shadow (square + 2×3 + 3×1
+     players, screen-2 scroll, flip). Reads `anim_tiles`/`anim_attrs`/`anim_base`, so
+     it covers static + animated players. The **P2 draw** (the animation-variant
+     source-select block, ~1981–2076) is the remaining piece — more conditional
+     (walk/jump frame select) and lower value (P2 is niche). Ship-by-default of P1 is
+     a separate, surfaced decision (re-pins `_rom-equiv`).
 
 3. **Gameplay-logic modules** — SMB power-ups (fireball pool, mushroom/star), blocks
    (? blocks, coins), stomp, HP + damage, spawn-on-hit effects, doors / multi-bg,
