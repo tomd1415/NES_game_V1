@@ -672,18 +672,21 @@
       '.222222.', '2......2', '2.2222.2', '2.2..2.2', '2.2..2.2', '2.2222.2', '2......2', '.222222.',
     ]);
     state.bg_tiles[6].defaultBehaviour = 5;    // checkpoint 1 (trigger slot)
-    // A simple top-down car (points up): two tiles mirrored left/right so the
-    // whole 2×2 metasprite reads as a car, not the walking hero.
-    state.sprite_tiles[13] = tileFrom('car-top', [
-      '....1111', '...11111', '..111111', '..113311', '..113311', '..111111', '.2111111', '.2111111',
+    // A simple top-down car pointing RIGHT (east).  The racer engine's heading 0
+    // is east (see platformer.c §3 "Heading 0 = right"), and its auto-rotation
+    // bakes frames from the base art assuming it faces east — so the car must be
+    // drawn facing right to render correctly at rest and rotate cleanly.  Two
+    // tiles mirrored TOP/BOTTOM (flipV): a rear quadrant + a tapered front nose.
+    state.sprite_tiles[13] = tileFrom('car-rear', [
+      '...22...', '..111111', '.1111111', '11111111', '11111111', '11111111', '11111111', '11111111',
     ]);
-    state.sprite_tiles[14] = tileFrom('car-bot', [
-      '..111111', '..111111', '..113311', '..113311', '..111111', '.2111111', '.2111111', '..111111',
+    state.sprite_tiles[14] = tileFrom('car-front', [
+      '..22....', '11111...', '331111..', '3311111.', '3311111.', '11111111', '11111111', '11111111',
     ]);
-    function carCell(tile, flip) { return { tile: tile, palette: 0, flipH: !!flip, flipV: false, priority: false, empty: false }; }
+    function carCell(tile, fv) { return { tile: tile, palette: 0, flipH: false, flipV: !!fv, priority: false, empty: false }; }
     var car = {
       name: 'Car', role: 'player', flying: false, width: 2, height: 2,
-      cells: [[carCell(13, false), carCell(13, true)], [carCell(14, false), carCell(14, true)]],
+      cells: [[carCell(13, false), carCell(14, false)], [carCell(13, true), carCell(14, true)]],
     };
     state.sprites = [car];
     var g = blankBg(state, 2, 2);   // racer needs ≥2 screens on an axis
