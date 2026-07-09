@@ -282,6 +282,18 @@ unsigned char bw_prev_dead = 0;   /* edge-detect death to spend a life once */
 #ifndef BW_SMB_BLOCKS
 unsigned int  bw_coins = 0;       /* the blocks module owns bw_coins when it is on */
 #endif
+/* HUD digit cache (perf).  The 11 HUD digit sprites are re-drawn every frame, but
+ * re-EXTRACTING them (score/time/coins/lives -> digits) needs slow cc65 16-bit
+ * divides — the 6502 has no divide — and it dominated the frame budget, so a busy
+ * SMB scene dropped from 60 to 30fps (movement felt like it changed speed).  Since
+ * these values change rarely, cache the digit values + the last source values and
+ * recompute a group only when it CHANGES; the per-frame draw just reads the cache.
+ * Sentinels force a recompute on the first frame. */
+unsigned char bw_hud_d[11];       /* [0-1] coins, [2-4] time, [5] lives, [6-10] score */
+unsigned int  bw_hud_last_score = 0xFFFF;
+unsigned int  bw_hud_last_time  = 0xFFFF;
+unsigned int  bw_hud_last_coins = 0xFFFF;
+unsigned char bw_hud_last_lives = 0xFF;
 #ifndef BW_HUD_START_TIME
 #define BW_HUD_START_TIME 400
 #endif
@@ -2373,24 +2385,41 @@ void main(void) {
          * Spread across two tile-rows so no scanline exceeds the 8-sprite limit. */
         {
             unsigned int hv;
-            /* COINS (2 digits) top-left. */
-            hv = bw_coins; if (hv > 99) hv = 99;
-            bw_hud_digit(24, 8, (unsigned char)(hv / 10));
-            bw_hud_digit(32, 8, (unsigned char)(hv % 10));
-            /* TIME (3 digits) top-centre. */
-            hv = bw_timer; if (hv > 999) hv = 999;
-            bw_hud_digit(120, 8, (unsigned char)((hv / 100) % 10));
-            bw_hud_digit(128, 8, (unsigned char)((hv / 10) % 10));
-            bw_hud_digit(136, 8, (unsigned char)(hv % 10));
-            /* LIVES (1 digit) second row left. */
-            bw_hud_digit(24, 20, (unsigned char)(bw_lives % 10));
-            /* SCORE (5 digits) second row centre. */
-            hv = bw_score;
-            bw_hud_digit(112, 20, (unsigned char)((hv / 10000) % 10));
-            bw_hud_digit(120, 20, (unsigned char)((hv / 1000) % 10));
-            bw_hud_digit(128, 20, (unsigned char)((hv / 100) % 10));
-            bw_hud_digit(136, 20, (unsigned char)((hv / 10) % 10));
-            bw_hud_digit(144, 20, (unsigned char)(hv % 10));
+            /* Recompute a group's digits ONLY when its source value changed (the
+             * divides are the cost); the draw below always reads the cache. */
+            if (bw_coins != bw_hud_last_coins) {
+                hv = bw_coins; if (hv > 99) hv = 99;
+                bw_hud_d[0] = (unsigned char)(hv / 10);
+                bw_hud_d[1] = (unsigned char)(hv % 10);
+                bw_hud_last_coins = bw_coins;
+            }
+            if (bw_timer != bw_hud_last_time) {
+                hv = bw_timer; if (hv > 999) hv = 999;
+                bw_hud_d[2] = (unsigned char)((hv / 100) % 10);
+                bw_hud_d[3] = (unsigned char)((hv / 10) % 10);
+                bw_hud_d[4] = (unsigned char)(hv % 10);
+                bw_hud_last_time = bw_timer;
+            }
+            if (bw_lives != bw_hud_last_lives) {
+                bw_hud_d[5] = (unsigned char)(bw_lives % 10);
+                bw_hud_last_lives = bw_lives;
+            }
+            if (bw_score != bw_hud_last_score) {
+                hv = bw_score;
+                bw_hud_d[6]  = (unsigned char)((hv / 10000) % 10);
+                bw_hud_d[7]  = (unsigned char)((hv / 1000) % 10);
+                bw_hud_d[8]  = (unsigned char)((hv / 100) % 10);
+                bw_hud_d[9]  = (unsigned char)((hv / 10) % 10);
+                bw_hud_d[10] = (unsigned char)(hv % 10);
+                bw_hud_last_score = bw_score;
+            }
+            /* Draw from the cache (4 cheap OAM stores each — no divides). Layout:
+             * COINS top-left, TIME top-centre, LIVES + SCORE on the second row. */
+            bw_hud_digit(24, 8, bw_hud_d[0]);   bw_hud_digit(32, 8, bw_hud_d[1]);
+            bw_hud_digit(120, 8, bw_hud_d[2]);  bw_hud_digit(128, 8, bw_hud_d[3]);  bw_hud_digit(136, 8, bw_hud_d[4]);
+            bw_hud_digit(24, 20, bw_hud_d[5]);
+            bw_hud_digit(112, 20, bw_hud_d[6]); bw_hud_digit(120, 20, bw_hud_d[7]); bw_hud_digit(128, 20, bw_hud_d[8]);
+            bw_hud_digit(136, 20, bw_hud_d[9]); bw_hud_digit(144, 20, bw_hud_d[10]);
         }
 #endif
 

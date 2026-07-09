@@ -9,6 +9,26 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v57 — 2026-07-09 — SMB HUD digit cache (perf; FCEUX feedback)
+
+### Changed
+- **The SMB HUD now caches its digits.** A pupil found SMB movement speed
+  inconsistent (it "suddenly gets faster" as a scene lightens). Root cause is the
+  NTSC frame budget — a busy SMB scene overruns and drops to 30fps, so the player
+  moves at half speed until the load eases. The HUD was a big part of that: it
+  re-extracted all 11 digit sprites (coins/time/lives/score) EVERY frame, and cc65
+  has no 6502 divide, so the 5-digit score alone cost several slow 16-bit divides per
+  frame. Now each group's digits are recomputed only when its value CHANGES (cached
+  in `bw_hud_d[]`), and the per-frame draw just reads the cache. Behaviour-identical
+  (same digits, same OAM); measured to lift a minimal SMB scene's 60fps headroom from
+  ~1 to ~3 on-screen enemies. Only affects SMB-HUD builds; golden `1730448e` +
+  `_rom-equiv` `0aed6e95` UNCHANGED (no golden fixture uses the SMB HUD).
+- NB the maximal SMB *showcase starter* is still frame-budget-bound (all modules +
+  items + enemies exceed 60fps regardless of the cache). The definitive fix is the
+  parked sprite-0-split background status bar (`docs/design/2026-07-08-smb-bg-status-
+  bar.md`), which removes the HUD's per-frame sprite + math cost entirely and also
+  fixes the 8-sprite HUD flicker.
+
 ## v56 — 2026-07-09 — 2-player auto-runner (FCEUX feedback)
 
 ### Added / migration
