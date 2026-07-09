@@ -842,6 +842,115 @@ async function runP2Runner() {
   else bad(`p2-runner: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
 }
 
+// ---- Racer lap-FSM coverage (2-player). The other racer cases never place
+// CHECKPOINT/FINISH tiles, so rc_laps / p2_rc_laps (the checkpoint/finish FSM) and
+// the brake/reverse drive path go unexercised in the WIRED build (only the asm-lab
+// leaves cover them). This drives both cars across checkpoint(5) + finish(7) tiles,
+// with P2 also braking/reversing, and matched-tick compares px/py/px2/py2 PLUS the
+// FSM state (racer_cp_stage/laps/finished + the *2 twins).
+const RCP = 0x071C, RLP = 0x071D, RFN = 0x071E, RCP2 = 0x0720, RLP2 = 0x0721, RFN2 = 0x0722;
+function withProbeRacerLaps(mainC) {
+  const inj = '{static unsigned int _tk; ++_tk;'
+    + `(*(unsigned char*)${TICK})=(unsigned char)(_tk&0xFF);(*(unsigned char*)${TICK + 1})=(unsigned char)(_tk>>8);`
+    + `(*(unsigned char*)${PX})=(unsigned char)px;(*(unsigned char*)${PX + 1})=(unsigned char)(px>>8);`
+    + `(*(unsigned char*)${PY})=(unsigned char)py;(*(unsigned char*)${PY + 1})=(unsigned char)(py>>8);`
+    + `(*(unsigned char*)${PX2})=(unsigned char)px2;(*(unsigned char*)${PX2 + 1})=(unsigned char)(px2>>8);`
+    + `(*(unsigned char*)${PY2})=(unsigned char)py2;(*(unsigned char*)${PY2 + 1})=(unsigned char)(py2>>8);`
+    + `(*(unsigned char*)${RCP})=racer_cp_stage;(*(unsigned char*)${RLP})=racer_laps;(*(unsigned char*)${RFN})=racer_finished;`
+    + `(*(unsigned char*)${RCP2})=racer_cp_stage2;(*(unsigned char*)${RLP2})=racer_laps2;(*(unsigned char*)${RFN2})=racer_finished2;} `;
+  return mainC.replace('while (oam_idx < 256) {', inj + 'while (oam_idx < 256) {');
+}
+
+function makeRacerLapsState() {
+  const cols = 64, rows = 30;
+  const beh = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let c = 0; c < cols; c++) { beh[0][c] = 1; beh[1][c] = 1; beh[rows - 2][c] = 1; beh[rows - 1][c] = 1; }
+  for (let r = 0; r < rows; r++) { beh[r][0] = 1; beh[r][1] = 1; beh[r][cols - 2] = 1; beh[r][cols - 1] = 1; }
+  // CHECKPOINT (behaviour slot 5) + FINISH (slot 7) columns spanning the play area
+  // (not solid, so the cars drive THROUGH them; the centre-cell FSM picks them up).
+  for (let r = 3; r <= 26; r++) { beh[r][15] = 5; beh[r][30] = 6; beh[r][45] = 7; }
+  const bg = {
+    name: 'bg', dimensions: { screens_x: 2, screens_y: 1 },
+    nametable: Array.from({ length: rows }, () => Array.from({ length: cols }, () => ({ tile: 0, palette: 0 }))),
+    behaviour: beh,
+  };
+  const sprites = [
+    { role: 'player', name: 'car1', width: 2, height: 2, cells: H.mkCells(2, 2) },
+    { role: 'player', name: 'car2', width: 2, height: 2, cells: H.mkCells(2, 2) },
+  ];
+  const s = {
+    name: 'racerlaps', version: 1, universal_bg: 0x21, sprites,
+    sprite_tiles: H.blankPool(), bg_tiles: H.blankPool(),
+    sprite_palettes: Array.from({ length: 4 }, () => ({ slots: [0x16, 0x27, 0x30] })),
+    bg_palettes: Array.from({ length: 4 }, () => ({ slots: [0x0F, 0x10, 0x30] })),
+    animations: [], animation_assignments: { walk: null, jump: null }, nextAnimationId: 1,
+    backgrounds: [bg], behaviour_types: H.BEHAVIOUR_TYPES, selectedBgIdx: 0, builder: win.BuilderDefaults(),
+  };
+  s.builder.modules.game.config.type = 'racer';
+  s.builder.modules.players.config.count = 2;
+  s.builder.modules.players.submodules.player1.enabled = true;
+  s.builder.modules.players.submodules.player2.enabled = true;
+  return s;
+}
+
+// P1 drives STRAIGHT right (heading starts at 0 = right; no steering) so it crosses
+// checkpoint(15) -> checkpoint2(30) -> finish(45) in order and completes a full lap
+// (exercises the racer_laps++/finished branch). P2 accelerates, steers, and
+// periodically brakes/reverses (DOWN) to exercise rc_drive's brake+reverse path.
+const stepRacerLaps = (n) => {
+  const tk = rd16(n, TICK);
+  n.buttonDown(1, H.BTN.A);
+  if (tk % 30 < 18) n.buttonDown(2, H.BTN.A); else n.buttonDown(2, H.BTN.DOWN);
+  if (tk % 10 === 0) n.buttonDown(2, H.BTN.LEFT);
+  n.frame();
+  n.buttonUp(1, H.BTN.A);
+  n.buttonUp(2, H.BTN.A); n.buttonUp(2, H.BTN.DOWN); n.buttonUp(2, H.BTN.LEFT);
+};
+
+async function runRacerLaps() {
+  const s = makeRacerLapsState();
+  const mainC = win.BuilderAssembler.assemble(s, tpl);
+  if (!/^#define BW_GAME_STYLE 3\b/m.test(mainC)) { bad('racer-laps: not a racer build'); return; }
+  const payload = {
+    state: s, playerSpriteIdx: 0, playerStart: { x: 100, y: 96 },
+    playerSpriteIdx2: 1, playerStart2: { x: 360, y: 160 }, mode: 'browser',
+    customMainC: withProbeRacerLaps(mainC), sceneSprites: [],
+  };
+  const rc = await H.buildRom(PORT_C, payload);
+  const ra = await H.buildRom(PORT_A, payload);
+  if (!rc.ok) { bad(`racer-laps: C build failed (${rc.stage}): ` + String(rc.log || '').slice(-300)); return; }
+  if (!ra.ok) { bad(`racer-laps: ASM build failed (${ra.stage}): ` + String(ra.log || '').slice(-300)); return; }
+  if (rc.romBytes.equals(ra.romBytes)) { bad('racer-laps: ASM ROM == C ROM (NES_ASM did not engage)'); return; }
+
+  const c = boot(rc.romBytes), a = boot(ra.romBytes);
+  let bootF = 0;
+  while (bootF < 400 && (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000)) { stepRacerLaps(c); stepRacerLaps(a); bootF++; }
+  if (rd16(c, TICK) > 60000 || rd16(a, TICK) > 60000) { bad('racer-laps: game loop never started'); return; }
+
+  let diffs = 0, firstDiff = '', compared = 0, sawCp = false, sawLapOrFin = false;
+  const rd8 = (n, x) => n.cpu.mem[x] & 0xFF;
+  for (let step = 0; step < 24000 && compared < 500; step++) {
+    const tc = rd16(c, TICK), ta = rd16(a, TICK);
+    if (tc > 60000 || ta > 60000) { bad('racer-laps: tick overflowed'); return; }
+    if (tc !== ta) { if (tc < ta) stepRacerLaps(c); else stepRacerLaps(a); continue; }
+    const fC = [rd16(c, PX), rd16(c, PY), rd16(c, PX2), rd16(c, PY2), rd8(c, RCP), rd8(c, RLP), rd8(c, RFN), rd8(c, RCP2), rd8(c, RLP2), rd8(c, RFN2)];
+    const fA = [rd16(a, PX), rd16(a, PY), rd16(a, PX2), rd16(a, PY2), rd8(a, RCP), rd8(a, RLP), rd8(a, RFN), rd8(a, RCP2), rd8(a, RLP2), rd8(a, RFN2)];
+    if (!fC.every((v, i) => v === fA[i])) { diffs++; if (!firstDiff) firstDiff = `tick ${tc}: C[${fC}] A[${fA}]`; }
+    if (fC[4] > 0 || fC[7] > 0) sawCp = true;                 // a checkpoint was armed (cp_stage advanced)
+    if (fC[5] > 0 || fC[8] > 0 || fC[6] > 0 || fC[9] > 0) sawLapOrFin = true;  // a lap counted / finished
+    compared++;
+    stepRacerLaps(c); stepRacerLaps(a);
+  }
+
+  if (compared < 350) { bad(`racer-laps: too few matched-tick samples (${compared})`); return; }
+  if (!sawCp) { bad('racer-laps: neither car ever armed a checkpoint — the FSM was not exercised (adjust the track)'); return; }
+  if (!sawLapOrFin) { bad('racer-laps: no lap ever counted — the racer_laps++/finished branch was not exercised (adjust the track)'); return; }
+  if (diffs === 0)
+    ok(`racer lap FSM (NES_ASM_RACER + NES_ASM_PLAYER2): C ≡ ASM px/py/px2/py2 AND cp_stage/laps/finished (x2) at every matched tick over `
+      + `${compared} ticks (both cars drive across checkpoint+finish tiles${sawLapOrFin ? ', laps counted' : ''}; P2 brakes/reverses)`);
+  else bad(`racer-laps: divergence — ${diffs} diffs (first: ${firstDiff}) over ${compared} matched ticks`);
+}
+
 const srvC = await H.startServer(PORT_C, { PLAYGROUND_NO_ASM: '1' });
 const srvA = await H.startServer(PORT_A, { PLAYGROUND_ASM_PLAYER: '1' });
 try {
@@ -855,6 +964,7 @@ try {
   await runP2Racer();      // 2-player racer: P1 racer_update + P2 p2_racer_update, both ASM
   await runP2Platformer(); // 2-player platformer: P1 plat_update + P2 p2_plat_update, both ASM
   await runP2Runner();     // 2-player runner: P1 run_update + P2 p2_run_update (walk-only), both ASM
+  await runRacerLaps();    // racer lap FSM (rc_laps/p2_rc_laps) + brake/reverse coverage
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
 } finally {
