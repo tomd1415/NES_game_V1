@@ -9,6 +9,35 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v51 — 2026-07-09 — Player-1 OAM draw loop on hand-written 6502 (off by default)
+
+### Added
+- **`src/pdraw_asm.s` (`draw_player`)** — the hand-written 6502 twin of the plain
+  P1 OAM draw loop. Builds the player-1 sprite's OAM entries each frame from
+  `anim_tiles`/`anim_attrs`/`anim_base` (so it covers the static player and any
+  assigned animation — those pointers already select the current frame), applies the
+  horizontal flip (the `(PLAYER_W-1-c)` column when `plrdir==0x40`), and calls
+  `world_to_screen_x/y` (px/py widened per `PX_WIDE`). Leaves `oam_idx` at
+  `PLAYER_W*PLAYER_H*4` so the P2/scene/HUD draws continue in C from there. This is
+  the last per-frame hot loop still in cc65 C (see the full-ASM scoping doc,
+  `docs/design/2026-07-09-full-asm-engine-scoping.md`).
+- Gated `NES_ASM_PDRAW` in the Makefile (links `pdraw_asm.s`, `-D`'s out the plain
+  C P1 draw loop in main.c; the C call site also excludes the walk-bob case). The
+  server sets it only behind the `PLAYGROUND_ASM_PDRAW` dev toggle for now (needs a
+  scroll build for `world_to_screen`), exactly how the P2 second actors rode
+  `PLAYGROUND_ASM_PLAYER` before their v50 flip.
+
+### Off by default — byte-identical when off
+- With `NES_ASM_PDRAW` unset (the default: no `PLAYGROUND_ASM_PDRAW`), the template's
+  `#if defined(NES_ASM_PDRAW)` guards leave the C draw loop untouched and
+  `pdraw_asm.s` is not compiled. Golden `1730448e` and `_rom-equiv` `0aed6e95` both
+  UNCHANGED. Proven C-draw ≡ ASM-draw byte-for-byte in the OAM shadow by
+  `asm-player.mjs` (three new cases: square + 2×3 + 3×1 players, comparing the P1
+  OAM entries across a screen-2 scroll with the horizontal flip exercised; both sides
+  run identical ASM physics so any OAM diff is a pure draw bug). NOT yet shipped by
+  default — the ship-by-default flip (which re-pins `_rom-equiv`) is a separate,
+  surfaced decision.
+
 ## v50 — 2026-07-08 — SHIP the 2-player ASM player physics by default
 
 ### Changed / migration

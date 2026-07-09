@@ -544,6 +544,12 @@ void advance_animation(void);   /* main_asm.s twin (basic anim only — see belo
    only when the project has no tagged scene animations (BW_HAS_SCENE_ANIM==0). */
 void draw_scene_sprites(void);
 #endif
+#ifdef NES_ASM_PDRAW
+/* Plain P1 OAM draw loop has a hand-written 6502 twin in pdraw_asm.s (Phase 2d).
+   Linked + called only under NES_ASM_PDRAW (the server sets it); the C call site
+   also excludes the walk-bob case, so the twin need not add the bob offset. */
+void draw_player(void);
+#endif
 /* advance_animation's ASM twin covers the BASIC animation state machine only; a
    project with an attack one-shot or racer rotation keeps the inline C. */
 #if defined(NES_ASM_LEAF) && !((ATTACK_FRAME_COUNT > 0) && BW_ATTACK_BUTTON) && !((BW_GAME_STYLE == 3) && BW_RACER_ROT)
@@ -1935,6 +1941,13 @@ void main(void) {
 #endif
         bob = (bob_phase & 8) ? 1 : 0;
 #endif
+#if defined(NES_ASM_PDRAW) && (BW_BOB_WHEN_WALKING == 0)
+        /* hand-written 6502 twin — pdraw_asm.s (Phase 2d).  Builds the P1 OAM
+         * entries; leaves oam_idx at PLAYER_W*PLAYER_H*4 so the P2/scene/HUD
+         * draws below continue from it.  Linked + called only under
+         * NES_ASM_PDRAW (server sets it), so flag off is byte-identical. */
+        draw_player();
+#else
         for (r = 0; r < PLAYER_H; r++) {
             for (c = 0; c < PLAYER_W; c++) {
 #ifdef SCROLL_BUILD
@@ -1969,6 +1982,7 @@ void main(void) {
                 oam_buf[oam_idx++] =sx;
             }
         }
+#endif
 
 #if PLAYER2_ENABLED && BW_GAME_STYLE != 3
         /* --- Player 2 ---------------------------------------------

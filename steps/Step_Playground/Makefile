@@ -103,6 +103,19 @@ CFLAGS  += -DNES_ASM_SCENE=1
 ASM_SRC += src/scene_asm.s
 endif
 
+# Player-1 OAM DRAW loop on hand-written 6502 (Phase 2d).  Generic: builds the
+# P1 sprite's OAM entries each frame from anim_tiles/anim_attrs/anim_base (so it
+# covers both the static player and any assigned animation) and calls
+# world_to_screen_x/y — project-independent, so shippable.  Links
+# src/pdraw_asm.s and -D's out the PLAIN C P1 draw loop in main.c (the C call
+# site also excludes the bob case).  Needs NES_ASM_SCROLL (world_to_screen).
+# Same off-by-default, byte-identical-when-off contract.
+NES_ASM_PDRAW ?= 0
+ifeq ($(NES_ASM_PDRAW),1)
+CFLAGS  += -DNES_ASM_PDRAW=1
+ASM_SRC += src/pdraw_asm.s
+endif
+
 # Scene-sprite AI helpers on hand-written 6502 (Phase 2b).  NES_ASM_AI=1 links
 # src/ai_asm.s (bw_sprite_blocked — the per-enemy collision probe, calls the
 # shipped behaviour_at) and -D's out the matching C helper emitted into main.c by

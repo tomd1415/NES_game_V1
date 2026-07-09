@@ -2895,6 +2895,18 @@ def _build_rom(body):
         and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer
              or _asm_player_runner)
     )
+    # Player-1 OAM DRAW loop (Phase 2d). NES_ASM_PDRAW=1 links pdraw_asm.s
+    # (draw_player) and -D's out the plain C P1 draw loop in main.c. Generic
+    # (works for any player — it reads anim_tiles/anim_attrs/anim_base), needs a
+    # scroll build (calls world_to_screen_x/y, which pulls in NES_ASM_SCROLL).
+    # NOT shipped by default yet: gated behind PLAYGROUND_ASM_PDRAW while the OAM
+    # A/B (asm-player.mjs) proves it byte-identical to the C draw, exactly how the
+    # P2 second actors rode PLAYGROUND_ASM_PLAYER before v50. With the env unset
+    # the default build keeps the C draw, so golden/_rom-equiv stay byte-identical.
+    nes_asm_pdraw = bool(
+        asm_ready and custom_main_c is not None and is_scroll
+        and os.environ.get("PLAYGROUND_ASM_PDRAW")
+    )
 
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
@@ -2904,6 +2916,7 @@ def _build_rom(body):
             nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
             nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
             nes_asm_racer=nes_asm_racer, nes_asm_player2=nes_asm_player2,
+            nes_asm_pdraw=nes_asm_pdraw,
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -3000,6 +3013,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       nes_asm_leaf=False, nes_asm_scroll=False,
                       nes_asm_scene=False, nes_asm_ai=False,
                       nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False, nes_asm_player2=False,
+                      nes_asm_pdraw=False,
                       project_inc=None):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
@@ -3058,6 +3072,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                 make_args.append("NES_ASM_PLAYER=1")
             if nes_asm_player2:                     # Phase 2c — P2 second actor (implies PLAYER; combines with P1)
                 make_args.append("NES_ASM_PLAYER2=1")
+            if nes_asm_pdraw:                       # Phase 2d — P1 OAM draw loop (independent of the player-update flags)
+                make_args.append("NES_ASM_PDRAW=1")
         if audio_songs_asm and audio_sfx_asm:
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
             (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))
