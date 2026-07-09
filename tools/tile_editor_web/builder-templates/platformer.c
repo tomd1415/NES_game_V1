@@ -1933,8 +1933,17 @@ void main(void) {
         // edges and held steady inside the deadzone by scroll_follow()
         // itself, so the camera eases rather than teleports.
         // (The auto-runner, == 2, advances cam_x itself at the top of the loop.)
+#if PLAYER2_ENABLED
+        // 2-player: follow the MIDPOINT of both actors' centres so neither
+        // drives off-screen (e.g. the 2-player racer).  They can still separate
+        // by more than a screen — the camera just keeps them both as centred as
+        // one viewport allows.  (px + PLAYER_W*4 is player 1's centre x, etc.)
+        scroll_follow(((unsigned int)px + (PLAYER_W << 2) + (unsigned int)px2 + (PLAYER2_W << 2)) >> 1,
+                      ((unsigned int)py + (PLAYER_H << 2) + (unsigned int)py2 + (PLAYER2_H << 2)) >> 1);
+#else
         scroll_follow((unsigned int)px + ((PLAYER_W << 3) >> 1),
                       (unsigned int)py + ((PLAYER_H << 3) >> 1));
+#endif
 #endif
 #endif
 

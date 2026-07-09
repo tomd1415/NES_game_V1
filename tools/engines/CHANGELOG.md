@@ -9,6 +9,20 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v55 — 2026-07-09 — 2-player camera follows the midpoint (FCEUX feedback)
+
+### Changed / migration
+- **In a 2-player scroll game the camera now follows the MIDPOINT of both actors'
+  centres**, not just player 1. A pupil's FCEUX pass found that in the 2-player racer
+  the camera tracked only P1, so P2 could drive off-screen. The `scroll_follow()` call
+  site now averages the two centres when `PLAYER2_ENABLED` (they can still separate by
+  more than a viewport — the camera just keeps them both as centred as one screen
+  allows). C-only change (the ASM `scroll_follow` follows whatever centre it's given);
+  applies to any 2-player multi-screen build except the auto-runner (which drives the
+  camera itself). Golden `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED — `SCROLL_BUILD`
+  is multi-screen-only (`BG_WORLD_COLS>32 || BG_WORLD_ROWS>30`) and both fixtures are
+  1-screen, so the call isn't compiled there.
+
 ## v54 — 2026-07-09 — SHIP the player OAM draw loop on hand-written 6502 by default
 
 ### Changed / migration
