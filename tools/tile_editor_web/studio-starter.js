@@ -604,7 +604,12 @@
     for (var y = 0; y < g.H; y++) { g.put(0, y, 1, 1); g.put(g.W - 1, y, 1, 1); }
     // A short interior wall to make the room feel like a room, plus a door.
     for (var iy = 6; iy <= 13; iy++) g.put(18, iy, 1, 1);
-    g.put(g.W - 1, 15, 4, 4);   // door on the right wall
+    // Door on the right wall, TWO tiles tall (rows 15-16) — the player is a 2x2
+    // metasprite, so a 1-tile door left its lower half blocked by the solid wall
+    // cell below and it could never reach the doorway.  The player starts at
+    // y=120 (rows 15-16), so it can walk straight right into the opening.
+    g.put(g.W - 1, 15, 4, 4);
+    g.put(g.W - 1, 16, 4, 4);
     state.builder = global.BuilderDefaults();
     var m = state.builder.modules;
     m.game.config.type = 'topdown';
