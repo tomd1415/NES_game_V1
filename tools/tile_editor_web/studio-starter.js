@@ -669,6 +669,69 @@
     return state;
   }
 
+  // --- Geo Dash: a Geometry-Dash-style auto-runner (rhythmic spike/block
+  // course on the runner engine).  Requested by pupils (feedback #11); the
+  // runner style already provides the tap-to-jump + instant-restart-on-spike
+  // core loop, so this is a themed starter (a cube hero + an obstacle course),
+  // not a new engine style. ------------------------------------------------
+  function createGeoDash(opts) {
+    opts = opts || {};
+    var state = global.DefaultState.create({ name: opts.name || 'Geo Dash', template: 'platformer', now: opts.now });
+    seedSharedTiles(state);
+    state.behaviour_types = defaultBehaviourTypes().concat([{ id: 7, name: 'spike', label: 'Spike', color: 0x16 }]);
+    // Spike (bg 5, behaviour 7 = the runner "fail": one touch → instant restart).
+    state.bg_tiles[5] = tileFrom('spike', [
+      '........', '........', '...1....', '..111...', '..111...', '.11111..', '11111111', '11111111',
+    ]);
+    state.bg_tiles[5].defaultBehaviour = 7;
+    // Block (bg 6, behaviour 3 = platform: land on top, pass through the sides —
+    // so a mistimed jump is a stumble, not an unfair invisible-wall death).
+    state.bg_tiles[6] = tileFrom('block', [
+      '33333333', '31111113', '31111113', '31111113', '31111113', '31111113', '31111113', '33333333',
+    ]);
+    state.bg_tiles[6].defaultBehaviour = 3;
+    // A Geometry-Dash-style cube hero (2×2, a bordered square with two eyes).
+    state.sprite_tiles[20] = tileFrom('cube-tl', ['33333333', '31111111', '31111111', '31111331', '31111331', '31111111', '31111111', '31111111']);
+    state.sprite_tiles[21] = tileFrom('cube-tr', ['33333333', '11111113', '11111113', '13311113', '13311113', '11111113', '11111113', '11111113']);
+    state.sprite_tiles[22] = tileFrom('cube-bl', ['31111111', '31111111', '31111111', '31111111', '31111111', '31111111', '31111111', '33333333']);
+    state.sprite_tiles[23] = tileFrom('cube-br', ['11111113', '11111113', '11111113', '11111113', '11111113', '11111113', '11111113', '33333333']);
+    function cubeCell(t) { return { tile: t, palette: 0, flipH: false, flipV: false, priority: false, empty: false }; }
+    state.sprites = [{ name: 'Cube', role: 'player', flying: false, width: 2, height: 2,
+      cells: [[cubeCell(20), cubeCell(21)], [cubeCell(22), cubeCell(23)]] }];
+    // Six screens of rhythmic obstacles on a continuous floor.
+    var g = blankBg(state, 6, 1);
+    for (var x = 0; x < g.W; x++) { g.put(x, 28, 1, 1); g.put(x, 29, 1, 1); }
+    function spike(c) { g.put(c, 27, 5, 7); }
+    function spikes(c, n) { for (var i = 0; i < n; i++) spike(c + i); }
+    function step(c, h) { for (var y = 0; y < h; y++) g.put(c, 27 - y, 6, 3); }   // a block column h tall
+    // Escalating pattern, generously spaced for a first course (speed 2).
+    spike(18);
+    spike(32);
+    spikes(46, 2);
+    step(60, 1); spike(63);
+    spikes(76, 3);
+    step(92, 2);
+    spikes(108, 2);
+    step(122, 1); spike(124);
+    spikes(138, 3);
+    step(152, 2); spikes(155, 2);
+    spike(170); spike(174); spike(178);
+    state.builder = global.BuilderDefaults();
+    var m = state.builder.modules;
+    m.game.config = m.game.config || {};
+    m.game.config.type = 'runner';
+    m.game.config.autoscrollSpeed = 2;
+    if (m.behaviour_walls) m.behaviour_walls.enabled = true;
+    if (m.dialogue) m.dialogue.enabled = false;   // dialogue is unsupported in runner builds
+    if (m.players && m.players.submodules && m.players.submodules.player1) {
+      m.players.submodules.player1.config.startX = 24;
+      m.players.submodules.player1.config.startY = 196;
+    }
+    turnOffWin(state);
+    stampEngine(state);
+    return state;
+  }
+
   // --- Top-down racer: a rectangular ring track with a finish + checkpoint --
   function createRacer(opts) {
     opts = opts || {};
@@ -810,6 +873,11 @@
         create: createRunner,
       },
       {
+        id: 'geodash', emoji: '🟦', label: 'Geo Dash',
+        desc: 'A Geometry-Dash-style auto-runner: tap to jump the cube over a rhythmic course of spikes and blocks — one touch of a spike and you restart. Built on the runner engine; speed it up in Rules for a real challenge.',
+        create: createGeoDash,
+      },
+      {
         id: 'racer', emoji: '🏎️', label: 'Top-down racer',
         desc: 'A top-down racing track: steer, accelerate and brake around a ring, cross the finish line and a checkpoint each lap.',
         create: createRacer,
@@ -824,8 +892,8 @@
 
   global.StudioStarter = {
     create: create, createSmb: createSmb,
-    createTopdown: createTopdown, createRunner: createRunner, createRacer: createRacer,
-    createScratch: createScratch,
+    createTopdown: createTopdown, createRunner: createRunner, createGeoDash: createGeoDash,
+    createRacer: createRacer, createScratch: createScratch,
     createTutorial: createTutorial, tutorialFor: tutorialFor,
     list: list, tileFrom: tileFrom,
   };
