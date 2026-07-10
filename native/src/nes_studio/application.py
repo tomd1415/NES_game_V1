@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication, QStandardPaths
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
@@ -25,6 +26,9 @@ def create_application(argv: Sequence[str]) -> QApplication:
     existing = QApplication.instance()
     if existing is not None:
         return existing
+
+    if os.environ.get("NES_STUDIO_TEST_MODE") == "1":
+        QStandardPaths.setTestModeEnabled(True)
 
     QCoreApplication.setOrganizationName(ORGANIZATION_NAME)
     QCoreApplication.setOrganizationDomain(ORGANIZATION_DOMAIN)

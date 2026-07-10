@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from PySide6.QtCore import QIODevice, QSaveFile, Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QIODevice, QSaveFile, QStandardPaths, QTimer, Qt
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
 from ..core.resources import ResourceLocator
 from ..core.project_document import ProjectDocument, ProjectFormatError
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
+from ..persistence.autosave import AutosaveRepository
 from .diagnostics import DiagnosticsDialog
 from .widgets.world_canvas import WorldCanvas
 
@@ -42,6 +44,18 @@ class MainWindow(QMainWindow):
         self._mode_buttons: dict[str, QPushButton] = {}
         self._tool_buttons: dict[str, QPushButton] = {}
         self._document = ProjectDocument.preview()
+        data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.AppDataLocation
+        )
+        self._autosave = AutosaveRepository(Path(data_root) / "autosave")
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(1000)
+        self._autosave_timer.timeout.connect(self._flush_autosave)
+        self._snapshot_timer = QTimer(self)
+        self._snapshot_timer.setInterval(30_000)
+        self._snapshot_timer.timeout.connect(self._snapshot_if_changed)
+        self._snapshot_timer.start()
 
         self.setObjectName("mainWindow")
         self.setWindowTitle(APP_DISPLAY_NAME)
@@ -236,6 +250,7 @@ class MainWindow(QMainWindow):
 
     def _world_cell_changed(self, col: int, row: int, value: int) -> None:
         self._document.set_world_tile(col, row, value)
+        self._autosave_timer.start()
         self._update_document_title()
         self.statusBar().showMessage(f"WORLD cell ({col}, {row}) changed to tile {value}")
 
@@ -259,6 +274,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{self._document.name}{marker} — {APP_DISPLAY_NAME}")
 
     def open_project_path(self, path: str) -> bool:
+        if self._document.dirty:
+            self._autosave.snapshot(self._document.to_json(), "before_import")
         try:
             document = ProjectDocument.open(path)
         except (OSError, ProjectFormatError) as exc:
@@ -282,9 +299,25 @@ class MainWindow(QMainWindow):
             return False
         self._document.path = Path(path)
         self._document.dirty = False
+        self._autosave.save_current(payload)
         self._update_document_title()
         self.statusBar().showMessage(f"Saved {path}")
         return True
+
+    def _flush_autosave(self) -> None:
+        if self._document.dirty:
+            self._autosave.save_current(self._document.to_json())
+            self.statusBar().showMessage("Autosaved recovery copy")
+
+    def _snapshot_if_changed(self) -> None:
+        if self._document.dirty:
+            self._autosave.snapshot(self._document.to_json(), "auto_30s")
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
+        self._autosave_timer.stop()
+        self._snapshot_timer.stop()
+        self._flush_autosave()
+        super().closeEvent(event)
 
     def _open_project(self) -> None:
         path, _filter = QFileDialog.getOpenFileName(

@@ -19,6 +19,14 @@ class NativeShellTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        os.environ.setdefault("NES_STUDIO_TEST_MODE", "1")
+        cls.data_root = tempfile.TemporaryDirectory()
+        os.environ["NES_STUDIO_DATA_ROOT"] = cls.data_root.name
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        os.environ.pop("NES_STUDIO_DATA_ROOT", None)
+        cls.data_root.cleanup()
 
     def test_shell_constructs_without_starting_event_loop(self) -> None:
         from nes_studio.application import create_application

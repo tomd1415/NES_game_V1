@@ -28,6 +28,11 @@ shared project JSON; **File → Save Project As…** writes edits atomically whi
 preserving fields the native preview does not yet understand. Open
 **View → Diagnostics** to inspect the active Qt, resource and XDG paths.
 
+WORLD edits are debounced into an atomic XDG recovery copy. Changed projects
+also receive deduplicated 30-second snapshots (eight retained), a snapshot is
+taken before replacing a dirty project through Open, and pending recovery data
+is flushed when the window closes. Undo/redo history remains separate.
+
 ## Requirements
 
 - Python 3.11 or newer;
