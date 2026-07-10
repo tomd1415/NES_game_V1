@@ -3,27 +3,31 @@
 1. Have a fill option for the background tile
 2. The 'door' or any movement to a new background when there are more than screen in the background
 appears to get confused and show the wrong background for one of the screens.
-   *CONFIRMED still open — root-caused 2026-07-10 (engine v62).* Reproduced on
-   FCEUX: a door from a 2-screen bg0 to a 2-screen bg1 loads bg1's *visible*
-   screen correctly, but scrolling to bg1's second screen shows **bg0's**
-   tiles. Control test (starting the game *in* bg1) renders both of its screens
-   correctly, so bg1's data is fine — the *transition* is what breaks it.
+   *FIXED 2026-07-10 (engine v63).* Was reproduced on FCEUX: a door from a
+   2-screen bg0 to a 2-screen bg1 loaded bg1's visible screen but showed **bg0's**
+   tiles on bg1's second screen (a control test starting *in* bg1 rendered both
+   its screens correctly, so bg1's data was fine — the *transition* broke it).
    **Root cause:** `scroll_stream()` fetches from `bg_world_tiles[]`, a fixed
-   compile-time array = the *starting* bg. `load_background_n()` swaps the
-   nametables (T2.1) and the behaviour map (T2.2) on a door but NOT
-   `bg_world_tiles`, so the streamer re-fetches the old bg's columns as you
-   scroll and overwrites the door-loaded destination. Predicted by the comment
-   at `steps/Step_Playground/src/scroll.c:320-330` (which assumed it only bit
-   >2×2 worlds; it also bites 2×1/2×2 multi-bg). **Fix:** make `bg_world_tiles`
-   a mutable pointer that `load_background_n` swaps to the new bg's tiles
-   (mirroring the T2.2 behaviour-map swap) — an engine change (bump + snapshot).
+   compile-time array = the *starting* room, which `load_background_n()` does not
+   swap on a door (it swaps the nametables T2.1 and behaviour map T2.2), so the
+   streamer re-streamed the old room over the door-loaded destination.
+   **Fix (v63):** a multi-bg door build within 2×2 now **skips the streamer** —
+   `load_world_bg`/`load_background_n` already blit the whole room into all four
+   nametables from the per-bg `bg_nametable_<n>` data, so the camera only pans
+   (`scroll_apply_ppu`); streaming was redundant there. This also handles
+   differently-sized rooms (each loaded by its own `bg_nametable_<n>`) which a
+   `bg_world_tiles` pointer-swap would not, and is guarded so a >2-screen
+   *selected* room keeps its streamer. Gated behind `BW_DOORS_MULTIBG_ENABLED` +
+   `SCROLL_BUILD` → non-multi-bg byte-identical. FCEUX-confirmed the door
+   destination now renders correctly on both screens.
 3. When the there is a jump to a different background, sometimes the the 'behaviour blocks' are from the
 wrong background.
-   *Same root cause as item 2 (still open).* T2.2 already swaps the behaviour
-   *map* on a door, so the *collision* half is handled — but the streamer
-   re-streaming the old bg's tiles (item 2) means the visible tiles and the
-   behaviour map can disagree after a transition. The item-2 `bg_world_tiles`
-   swap fixes both together.
+   *FIXED 2026-07-10 (engine v63) — same fix as item 2.* T2.2 already swapped the
+   behaviour *map* on a door (collision followed the room), but the streamer
+   re-streaming the old room's *tiles* (item 2) meant the visible tiles and the
+   behaviour map could disagree. Skipping the streamer for multi-bg (item 2's
+   v63 fix) keeps both in sync — the room the pupil sees is the room they
+   collide with.
 4. Please find NES game creation resources and reference them to help.
    *Done:* curated in [`docs/reference/nes-resources.md`](../reference/nes-resources.md)
    (NESdev wiki frame/NMI/PPU/scrolling, cc65, FamiStudio, etc., each with a
