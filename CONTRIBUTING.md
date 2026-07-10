@@ -51,14 +51,14 @@ high-impact paths. Add real web/native team handles there when they exist; do
 not add placeholder handles that GitHub cannot resolve.
 
 **Bootstrapping exception.** The ownership boundaries above describe the
-steady state. The `native/`, `shared/` and `tests/contracts/` directories do not
-exist yet, and the first PRs that create them (the plan's PRs 1–4: baseline,
-Python-core extraction, QJSEngine spike, native shell slice) are inherently
-cross-cutting. Treat those bootstrapping PRs as **joint** — reviewed by both the
-web and native leads with product-owner sign-off — until the directories exist
-and the per-team boundaries can apply. `.github/CODEOWNERS` already lists
-`/shared/` and `/tests/contracts/`; those entries are inert until the paths are
-created, which is expected.
+steady state. The first native scaffold creates `native/` and
+`packaging/linux/`; the later `shared/` and `tests/contracts/` extraction PRs
+remain inherently cross-cutting. Treat the plan's first four PRs (baseline,
+Python-core extraction, QJSEngine spike and native shell slice) as **joint** —
+reviewed by both the web and native leads with product-owner sign-off. After a
+boundary has a stable interface and contract coverage, its normal per-team
+ownership can apply. `.github/CODEOWNERS` entries for future paths remain inert
+until those paths are created, which is expected.
 
 ## Branch and integration model
 
@@ -70,7 +70,7 @@ Create short-lived branches from an up-to-date `main`, for example:
 ```text
 fix/web-project-import
 feat/web-tile-usage
-chore/linux-native-baseline-v62
+chore/linux-native-bootstrap-v63
 feat/native-project-browser
 refactor/shared-build-core
 engine/v63-description
@@ -84,6 +84,42 @@ prerequisites merge.
 Avoid combining unrelated web, native and engine work in one pull request.
 Cross-target refactors are the exception and should be explicitly labelled as
 shared changes.
+
+### Shared-server checkout safety
+
+Do not let two developers edit the same working directory. Each concurrently
+active developer or branch needs its own Git worktree. A second full clone is
+normally unnecessary and makes local branches/objects harder to coordinate.
+
+Recommended initial layout on this server:
+
+```text
+/home/duguid/NES_game_V1          main/integration and web-team checkout
+/home/duguid/NES_game_V1-native   native bootstrap worktree
+```
+
+If several developers in either group work concurrently, create additional
+worktrees with unique directory and branch names. One worktree is not safe to
+share merely because both developers belong to the same team.
+
+Before editing, every developer should run:
+
+```bash
+pwd
+git status --short --branch
+git worktree list
+```
+
+The output must show the expected directory and the developer's own branch.
+Git prevents the same branch being checked out in two worktrees, but it cannot
+prevent two shells or editors from modifying the same worktree. Coordinate
+ports and local `.env` files separately as well.
+
+Do not use `git reset --hard`, `git clean -fdx`, or delete another worktree to
+resolve shared-server conflicts. Commit or stash owned work, identify the
+person using the checkout, and resolve the situation explicitly. Use a full
+second clone only when Unix permissions, credentials, storage isolation or a
+separate Git object lifecycle genuinely require it.
 
 ## Pull-request review rules
 

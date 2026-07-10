@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.tomd1415.NESStudio.Devel</id>
+  <name>NES Studio Native (Development)</name>
+  <summary>Create and build NES games with a native Linux editor</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <launchable type="desktop-id">io.github.tomd1415.NESStudio.Devel.desktop</launchable>
+  <description>
+    <p>
+      NES Studio Native is the Linux desktop sibling of the supported NES
+      Studio web application. It creates projects that target real NES ROMs.
+    </p>
+  </description>
+  <provides>
+    <binary>nes-studio</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0.dev0" date="2026-07-10">
+      <description>
+        <p>Initial development shell and packaging metadata.</p>
+      </description>
+    </release>
+  </releases>
+</component>

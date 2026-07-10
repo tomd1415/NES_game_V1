@@ -1,6 +1,6 @@
 # ADR: Native Linux app is a second sibling product over frozen contracts
 
-**Date:** 2026-07-10 · **Baseline:** engine v62 · **Owner:** `@tomd1415`
+**Date:** 2026-07-10 · **Baseline:** engine v63 · **Owner:** `@tomd1415`
 
 **Status:** Accepted for *direction*. The QJSEngine mechanism (below) is
 provisional pending the Phase 3 go/no-go spike. Full detail and the phased
@@ -15,7 +15,7 @@ so the "why" survives independently of the much longer plan.
 A separate team will build a genuine native Linux desktop application while the
 browser app continues to be developed and shipped. The repository's hardest-won
 asset is not its UI — it is the **project→ROM contract**: the canonical JSON
-project schema plus 62 versioned engine snapshots and the deterministic
+project schema plus 63 versioned engine snapshots and the deterministic
 Builder/cc65 pipeline that turns a project into a byte-stable ROM. Any native
 effort that risks that contract is not worth doing.
 
@@ -51,7 +51,7 @@ effort that risks that contract is not worth doing.
    under Node with only `window = globalThis` — no DOM/localStorage/fetch. The
    residual risk is narrower — whether QJSEngine's ES coverage matches what the
    V8-authored scripts use — and is gated by an explicit Phase 3 spike across all
-   62 snapshots with a byte-for-byte Node differential and a documented go/no-go.
+   63 snapshots with a byte-for-byte Node differential and a documented go/no-go.
 
 ## Alternatives rejected
 
@@ -85,7 +85,7 @@ effort that risks that contract is not worth doing.
 - **Untrusted compiler input is a security boundary.** Pupil custom C/ASM/audio
   needs a trusted-local vs. sandboxed-classroom split; the remote profile runs in
   a real OS sandbox with no network/host access and hard resource limits.
-- **Historical-engine honesty.** v1–v62 Python codegen was never snapshotted, so
+- **Historical-engine honesty.** v1–v63 Python codegen was never snapshotted, so
   exact historical reconstruction can't be promised from snapshots alone; record
   it as a limitation and bundle Python codegen from the new baseline forward.
 - **Effort is a floor, not a target.** The plan's 28–47 person-weeks is

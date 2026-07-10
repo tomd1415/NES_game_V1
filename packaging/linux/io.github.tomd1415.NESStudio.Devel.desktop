@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=NES Studio Native (Development)
+Comment=Create and build NES games with a native Linux editor
+Exec=nes-studio %F
+Icon=io.github.tomd1415.NESStudio.Devel
+Terminal=false
+Categories=Development;Education;
+Keywords=NES;game;editor;education;
+MimeType=application/x-nes-studio-project;
+StartupNotify=true

@@ -4,7 +4,7 @@
 
 **Assessment date:** 2026-07-10
 
-**Codebase baseline:** engine v62
+**Codebase baseline:** engine v63
 
 **Target:** add a genuine Linux desktop application alongside the supported web application
 
@@ -98,7 +98,7 @@ another:
 
 Use `main` as the integration branch for both products. Develop the native app
 through short-lived, reviewable branches such as
-`chore/linux-native-baseline-v62`, `refactor/shared-build-core` and
+`chore/linux-native-bootstrap-v63`, `refactor/shared-build-core` and
 `feat/native-shell`; merge each completed slice back to `main`. Do not maintain
 a permanent native branch, because it would allow shared engines, fixtures and
 build behavior to drift. A Git worktree is useful when both applications need
@@ -149,7 +149,7 @@ The present application contains:
 | Accounts and cloud-project store | [accounts.py](../../../tools/accounts.py), 444 lines | Reusable transport-neutral SQLite service; not required for ordinary local projects. |
 | Non-vendored browser JavaScript | 14,069 lines under [tile_editor_web](../../../tools/tile_editor_web/) | Keep it maintained for the web target. Pure algorithms may be retained or ported for native; native DOM, storage, orchestration and rendering require separate implementations. |
 | HTML pages | 22,501 lines across eight pages | Keep the web surfaces supported. Do not port page-for-page; express their capabilities through the unified native Studio information architecture. |
-| Engine history | 62 snapshots, approximately 34 MB, under [tools/engines](../../../tools/engines/) | Share and preserve the compatibility data across both targets; do not rewrite every historical generator. |
+| Engine history | 63 snapshots, approximately 34 MB, under [tools/engines](../../../tools/engines/) | Share and preserve the compatibility data across both targets; do not rewrite every historical generator. |
 | Builder/ROM tests | 101 top-level .mjs files and about 14,615 lines | Preserve as the permanent project-to-ROM safety net for both products. |
 | Studio browser tests | 22 specs, 111 discovered Playwright tests | Keep them as the permanent web regression suite and behavioral specifications; add native UI tests rather than replacing them. |
 
@@ -376,14 +376,18 @@ native/
 packaging/
   linux/
     icons/
-    io.github.nesstudio.NESStudio.desktop
-    io.github.nesstudio.NESStudio.metainfo.xml
+    <approved-app-id>.desktop
+    <approved-app-id>.metainfo.xml
     mime/
 ~~~
 
 The exact reverse-DNS application ID should be confirmed before shipping. Once
 published, it becomes part of settings paths, desktop activation and package
 metadata and should not be changed casually.
+
+The initial scaffold therefore uses the explicitly non-production development
+ID `io.github.tomd1415.NESStudio.Devel`. The product owner still decides the
+permanent ID before the first distributable package.
 
 ### Core interfaces
 
@@ -753,7 +757,7 @@ The bridge should:
 Only scripts shipped inside a verified engine bundle may be evaluated. Never
 evaluate project-supplied JavaScript.
 
-Before committing to the bridge, run a spike across all 62 snapshots:
+Before committing to the bridge, run a spike across all 63 snapshots:
 
 - each assembler/module pair parses;
 - default Builder state can be constructed or supplied;
@@ -799,7 +803,7 @@ The native EngineRegistry should select:
 - the matching Step_Playground source/resource tree;
 - a compatible Python codegen version.
 
-For v1–v62, Python generator history was not frozen, so exact historical
+For v1–v63, Python generator history was not frozen, so exact historical
 reconstruction cannot be honestly promised from the snapshots alone. Record
 that as a legacy limitation. Starting with the extracted native/build-core
 baseline:
@@ -958,7 +962,7 @@ Work:
    - behavioral result for C versus ASM where bytes intentionally differ;
    - rendered/reference observations.
 5. Run the existing test suites.
-6. Regenerate and record the nine FCEUX C/ASM comparisons for engine v62.
+6. Regenerate and record the nine FCEUX C/ASM comparisons for engine v63.
 
 Important existing evidence gap:
 
@@ -966,7 +970,7 @@ Important existing evidence gap:
   timing/flicker, inaccessible doors, racer sensitivity/camera and two-player
   runner concerns.
 - test-results and fceux-validation are ignored by git.
-- the later local comparison ROMs predate engine v62 and v57 changed SMB frame
+- the later local comparison ROMs predate engine v63 and v57 changed SMB frame
   pacing.
 
 Create a small committed results manifest containing commit SHA, engine,
@@ -977,7 +981,7 @@ remain CI artifacts.
 **Exit gate:**
 
 - current suites are green or every failure is documented;
-- the v62 manual comparison has a durable result;
+- the v63 manual comparison has a durable result;
 - every parity row is preserve, improve, defer or deliberately drop;
 - baseline fixtures and hashes are committed.
 
@@ -999,6 +1003,9 @@ Work:
 
 The current workspace does not have PySide6 installed, so development setup
 must install it in an isolated environment or use a reproducible container.
+The server also lacks the matching Python `venv`/`ensurepip` package; install
+that prerequisite before creating the isolated environment rather than adding
+Qt packages to the system Python.
 
 **Exit gate:**
 
@@ -1049,7 +1056,7 @@ Work:
 1. Implement CodegenRuntime behind a small interface.
 2. Load current assembler/modules/template in a fresh QJSEngine.
 3. Compare generated source with Node across all representative fixtures.
-4. Iterate every v1–v62 snapshot and record support.
+4. Iterate every v1–v63 snapshot and record support.
 5. Capture console output and JavaScript exception stack/file/version.
 6. Test hostile strings in project names/dialogue/custom fields.
 7. Verify only trusted bundled scripts execute.
@@ -1490,7 +1497,7 @@ Choose one policy explicitly:
 3. support only a declared range and provide a conversion tool.
 
 Because classroom/offline use is central, bundling all supported snapshots is
-the safest behavior, but remember that v1–v62 lack complete historical Python
+the safest behavior, but remember that v1–v63 lack complete historical Python
 codegen snapshots.
 
 ### Licensing
@@ -1532,7 +1539,7 @@ should be reviewed during packaging, not after the pilot.
 | Emulator scope/licensing | jsnes is browser-specific; FCEUX is GPL | External FCEUX first; helper process later; legal review before choosing core |
 | Qt package size/licensing | PySide6 bundles Qt binaries and has LGPL obligations | Exclude unused/WebEngine modules; dynamic linking; notices/source compliance; SBOM |
 | Split web/native development | Two supported UIs can drift over time | One extracted core, required cross-target contracts, explicit compatibility ranges and permanent web/native CI jobs |
-| Existing engine defects blamed on port | Manual comparison already lists open behavior concerns | v62 baseline and separate engine-bug ledger before native changes |
+| Existing engine defects blamed on port | Manual comparison already lists open behavior concerns | v63 baseline and separate engine-bug ledger before native changes |
 
 ## Indicative effort
 
@@ -1575,7 +1582,7 @@ actual parity scope and QJSEngine/historical-engine compatibility.
   extend it with the Phase-0 scope decision (full union vs. Studio-only);
 - parity matrix;
 - representative project/request/source/ROM fixtures;
-- durable v62 FCEUX comparison manifest;
+- durable v63 FCEUX comparison manifest;
 - app ID/version/package decisions.
 
 ### PR 2 — Python core extraction

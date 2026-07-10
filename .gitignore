@@ -39,6 +39,18 @@ accounts.db-*
 # Python bytecode cache
 __pycache__/
 *.pyc
+.venv/
+.pytest_cache/
+.coverage
+coverage.xml
+dist/
+*.egg-info/
+
+# Native Linux application local/build output
+native/.mypy_cache/
+native/.ruff_cache/
+native/build/
+native/wheelhouse/
 
 # Node / Playwright (Studio redesign end-to-end tests)
 node_modules/

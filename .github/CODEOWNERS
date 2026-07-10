@@ -9,6 +9,10 @@
 /docs/design/decisions/ @tomd1415
 /docs/reference/project-state-schema.md @tomd1415
 
+# Native bootstrap ownership until resolvable native-team handles are added.
+/native/ @tomd1415
+/packaging/linux/ @tomd1415
+
 # Shared project-to-ROM and compatibility surfaces.
 /shared/ @tomd1415
 /tests/contracts/ @tomd1415
