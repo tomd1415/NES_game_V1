@@ -428,7 +428,7 @@ PySide6 fits this repository better than the main alternatives:
 | Option | Assessment |
 | --- | --- |
 | **PySide6 / Qt Widgets** | Recommended. Reuses Python build logic, provides strong custom drawing, models/views, dialogs, process APIs, undo, accessibility and a standalone QJSEngine. Qt's [QJSEngine](https://doc.qt.io/qt-6/qjsengine.html) evaluates JavaScript without a WebView. |
-| GTK4 / PyGObject | Viable and more GNOME-specific, but portable packaging is less self-contained and there is no equally direct fit for the 61 JavaScript generator snapshots. |
+| GTK4 / PyGObject | Viable and more GNOME-specific, but portable packaging is less self-contained and there is no equally direct fit for the 62 JavaScript generator snapshots. |
 | Rust plus egui/iced/Slint | Good long-term binary/performance characteristics, but would rewrite or sidecar both the Python build core and much browser domain logic. Highest parity risk. |
 | Native UI over the existing localhost server | Useful only as a short transition. It retains ports, HTTP/base64, process lifecycle and source-tree path assumptions. |
 | Electron/Tauri/WebView | Fastest wrapper, but remains a web UI and fails the stated requirement. |
@@ -648,7 +648,10 @@ contain the localStorage project catalog or Time Machine history. Support both:
    bundle should contain the catalog, every current document, available
    snapshots/backups, reason/time metadata and checksums. The native importer
    validates it, reports skipped or corrupt entries and imports atomically or
-   into a recoverable staging area.
+   into a recoverable staging area. Note that this is *net-new web-team scope
+   created by the native effort* and a shared-contract addition (a new bundle
+   format): schedule it with the web team and register it under the
+   shared-contract rules rather than treating it as a native-only assumption.
 
 Native project JSON exports must remain importable by the web app. If the
 native application later exports the multi-project bundle, the browser must
@@ -1548,6 +1551,17 @@ calendar time and major engine bug fixes.
 That puts a credible full-parity native release in the multi-month category,
 roughly 28–47 person-weeks before optional embedded emulation. A smaller Studio
 only MVP can arrive sooner, but its omitted features must be explicit.
+
+Treat these ranges as a floor, not a target, and read them with three caveats:
+
+- They assume a single engineer. Running two teams (web and native) adds
+  cross-review and coordination overhead that this number does not include.
+- The custom-painted-editor accessibility work (a per-mode `QAccessible`
+  grid/cell model with AT-SPI change notifications for WORLD, CHARS and TILES)
+  is the highest-variance line item. It is folded into "full authoring-mode
+  parity" above but is genuinely hard and rarely done well; budget it as its
+  own risk-weighted slice rather than assuming it is absorbed by the mode ports.
+- The embedded emulator and any bundled-toolchain licensing review are excluded.
 
 Re-estimate after Phases 0–3. Those phases reveal the two largest unknowns:
 actual parity scope and QJSEngine/historical-engine compatibility.

@@ -50,6 +50,16 @@ The checked-in `.github/CODEOWNERS` names the product owner only for shared and
 high-impact paths. Add real web/native team handles there when they exist; do
 not add placeholder handles that GitHub cannot resolve.
 
+**Bootstrapping exception.** The ownership boundaries above describe the
+steady state. The `native/`, `shared/` and `tests/contracts/` directories do not
+exist yet, and the first PRs that create them (the plan's PRs 1–4: baseline,
+Python-core extraction, QJSEngine spike, native shell slice) are inherently
+cross-cutting. Treat those bootstrapping PRs as **joint** — reviewed by both the
+web and native leads with product-owner sign-off — until the directories exist
+and the per-team boundaries can apply. `.github/CODEOWNERS` already lists
+`/shared/` and `/tests/contracts/`; those entries are inert until the paths are
+created, which is expected.
+
 ## Branch and integration model
 
 Use `main` as the integration branch for both products. Do not create permanent
@@ -92,6 +102,16 @@ The product owner may delegate approval for a defined category, but the
 delegation and its limits should be recorded. Silence is not approval for a
 breaking shared-contract change.
 
+Because every shared-contract PR routes to a single product owner, the
+build-core extraction phase (see the plan's Phases 2–3) will concentrate a burst
+of shared reviews on one person. Before that phase starts, the product owner
+should **name a delegated shared-contract reviewer per team** for the mechanical
+"output-preserving refactor" category, keeping only genuinely new or
+behavior-changing contracts for direct product-owner sign-off. Plan the
+delegation up front rather than discovering the bottleneck mid-extraction. This
+also protects the bus factor: shared-contract review should never depend on one
+unavailable person.
+
 ## Shared-contract rules
 
 Treat these as versioned interfaces between products:
@@ -101,7 +121,15 @@ Treat these as versioned interfaces between products:
 - build-request and build-result structures;
 - generated source and ROM behavior;
 - import/export and multi-project bundle formats;
-- identifiers referenced by tutorials, validation and navigation.
+- identifiers referenced by tutorials, validation and navigation;
+- **JavaScript Builder codegen runtime compatibility.** `builder-assembler.js`
+  and `builder-modules.js` must stay evaluable by the native app's embedded
+  QJSEngine runtime — no browser-only globals (DOM, `localStorage`, `fetch`,
+  `navigator`, `location`) and no language features outside the ES subset
+  QJSEngine supports. A change that passes every web test can still break native
+  ROM generation, so a PR touching either file **must run the native codegen
+  differential contract test**, even when it is otherwise web-only. These two
+  files are product-owner-owned in `.github/CODEOWNERS` for this reason.
 
 A shared-contract change must include:
 
