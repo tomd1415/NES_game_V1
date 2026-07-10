@@ -90,6 +90,28 @@ try {
   nes0.loadROM(romStr); nes0.frame();
   const early = new Set(fb0).size;
   console.log('  (context: 1-frame grab = ' + early + ' colours; PREVIEW_FRAMES = ' + window.NesEmulator.PREVIEW_FRAMES + ' → ' + c1 + ')');
+
+  // contentBBox (bug #25 framing): a sky-heavy NES frame is mostly backdrop, so
+  // the thumbnail crops to the game content and scales it up. The crop must
+  // ignore jsnes' black edge artifacts (leftmost 8px + right column) or it would
+  // always report a full-frame box.
+  {
+    const W = 256, H = 240, SKY = 0xffffab3c >>> 0, BLK = 0xff000000 >>> 0, HERO = 0xff30a050 >>> 0;
+    const f = new Uint32Array(W * H).fill(SKY);
+    for (let y = 0; y < H; y++) { for (let x = 0; x < 8; x++) f[y * W + x] = BLK; f[y * W + (W - 1)] = BLK; }
+    for (let y = 100; y < 120; y++) for (let x = 120; x < 150; x++) f[y * W + x] = HERO;
+    const box = window.NesEmulator.contentBBox(f, 8);
+    assert(box, 'contentBBox should find the interior blob, not report blank/full');
+    assert(box.x >= 8 && box.x < 120, 'contentBBox must exclude the black left edge (x=' + (box && box.x) + ')');
+    assert(box.w < W * 0.6 && box.h < H * 0.6, 'contentBBox should be a tight crop, not the whole frame');
+    console.log('✓ contentBBox crops to interior content, ignoring jsnes edge artifacts');
+
+    const full = new Uint32Array(W * H);
+    for (let i = 0; i < full.length; i++) full[i] = (i & 1) ? HERO : SKY; // dense checkerboard
+    assert(window.NesEmulator.contentBBox(full, 8) === null, 'a full-content frame should not crop (returns null)');
+    assert(window.NesEmulator.contentBBox(new Uint32Array(W * H).fill(SKY), 8) === null, 'a blank frame should not crop (returns null)');
+    console.log('✓ contentBBox returns null when there is no worthwhile crop (full or blank)');
+  }
 } finally {
   srv.kill('SIGTERM');
   await sleep(300);

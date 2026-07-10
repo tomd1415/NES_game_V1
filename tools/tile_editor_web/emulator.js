@@ -377,6 +377,56 @@
     for (var i = 0; i < n; i++) nes.frame();
   }
 
+  // The NES screen is sky-heavy: a platformer at rest is mostly backdrop with a
+  // thin band of ground + a small player, so a full-frame thumbnail looks empty
+  // (bug #25) — worst for near-empty pupil projects.  Crop the preview to where
+  // the game actually is, then scale that up, so the content fills the thumbnail
+  // instead of floating in a sea of backdrop.
+  //
+  // Pure + DOM-free (unit-tested headlessly): given a 256×240 RGBA frame buffer
+  // (Uint32Array), return the content bounding box {x,y,w,h} padded by `pad`, or
+  // null when there is no worthwhile crop (blank frame, or content already fills
+  // most of the screen so cropping would only stretch it).
+  // jsnes renders the NES left-column-clip region (leftmost 8px) and the far
+  // right column as solid black regardless of game content.  Those artifact
+  // strips span every row, so a naive scan always reports a full-frame box.
+  // Scan the interior only, and treat pure black as backdrop-equivalent, so the
+  // box tracks real game content, not the emulator's edge rendering.
+  var PREVIEW_W = 256, PREVIEW_H = 240;
+  var EDGE_L = 8, EDGE_R = 2, EDGE_BLACK = 0xff000000 >>> 0;
+  function contentBBox(fb, pad) {
+    if (!fb || fb.length < PREVIEW_W * PREVIEW_H) return null;
+    pad = (pad | 0) || 0;
+    var xLo = EDGE_L, xHi = PREVIEW_W - 1 - EDGE_R;
+    // Backdrop = the most frequent colour in the interior (the sky/fill).
+    var counts = new Map(), dom = 0, backdrop = fb[EDGE_L];
+    for (var y = 0; y < PREVIEW_H; y++) {
+      var r0 = y * PREVIEW_W;
+      for (var x = xLo; x <= xHi; x++) {
+        var c = fb[r0 + x], n = (counts.get(c) || 0) + 1;
+        counts.set(c, n);
+        if (n > dom) { dom = n; backdrop = c; }
+      }
+    }
+    var minX = PREVIEW_W, minY = PREVIEW_H, maxX = -1, maxY = -1;
+    for (var yy = 0; yy < PREVIEW_H; yy++) {
+      var row = yy * PREVIEW_W;
+      for (var xx = xLo; xx <= xHi; xx++) {
+        var v = fb[row + xx];
+        if (v === backdrop || v === EDGE_BLACK) continue; // sky or edge artifact
+        if (xx < minX) minX = xx; if (xx > maxX) maxX = xx;
+        if (yy < minY) minY = yy; if (yy > maxY) maxY = yy;
+      }
+    }
+    if (maxX < 0) return null;                          // wholly backdrop → nothing to crop
+    minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+    maxX = Math.min(PREVIEW_W - 1, maxX + pad); maxY = Math.min(PREVIEW_H - 1, maxY + pad);
+    var w = maxX - minX + 1, h = maxY - minY + 1;
+    // If content already covers most of the frame, a crop would only stretch it.
+    if (w * h >= 0.82 * PREVIEW_W * PREVIEW_H) return null;
+    return { x: minX, y: minY, w: w, h: h, backdrop: backdrop >>> 0 };
+  }
+
   // Build a PNG data-URL preview of `rom` (a Uint8Array).  Browser-only
   // (needs a canvas); returns a Promise<string>.
   async function capturePreview(rom, opts) {
@@ -396,7 +446,26 @@
     for (var j = 0; j < rom.length; j++) romStr += String.fromCharCode(rom[j]);
     nes.loadROM(romStr);
     stepPreviewFrames(nes, opts.frames || PREVIEW_FRAMES);
-    g.putImageData(img, 0, 0);
+
+    // Crop to the game content and scale it up so the thumbnail isn't mostly
+    // backdrop (bug #25).  Falls back to the plain full frame when there's no
+    // worthwhile crop (blank, or content already fills the screen).
+    var box = opts.noCrop ? null : contentBBox(fb, 8);
+    if (!box) { g.putImageData(img, 0, 0); return canvas.toDataURL('image/png'); }
+
+    var src = document.createElement('canvas');
+    src.width = 256; src.height = 240;
+    src.getContext('2d').putImageData(img, 0, 0);
+    // Largest integer scale that fits the crop into 256×240 (crisp NES pixels).
+    var scale = Math.max(1, Math.min(Math.floor(256 / box.w), Math.floor(240 / box.h)));
+    var dw = box.w * scale, dh = box.h * scale;
+    var dx = Math.floor((256 - dw) / 2), dy = Math.floor((240 - dh) / 2);
+    // Fill the letterbox with the backdrop colour (RGBA little-endian → r,g,b).
+    var bd = box.backdrop;
+    g.fillStyle = 'rgb(' + (bd & 0xff) + ',' + ((bd >> 8) & 0xff) + ',' + ((bd >> 16) & 0xff) + ')';
+    g.fillRect(0, 0, 256, 240);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(src, box.x, box.y, box.w, box.h, dx, dy, dw, dh);
     return canvas.toDataURL('image/png');
   }
 
@@ -405,6 +474,7 @@
     ensureJsnes: ensureJsnes,
     capturePreview: capturePreview,
     stepPreviewFrames: stepPreviewFrames,
+    contentBBox: contentBBox,
     PREVIEW_FRAMES: PREVIEW_FRAMES,
   };
 })();
