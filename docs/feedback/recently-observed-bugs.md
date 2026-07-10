@@ -48,6 +48,20 @@ was a massive improvement.
    iNES 4-screen bit). See also items 2/3 for the *door-transition* room-load,
    which is a separate concern from the scroll core.
 10. Enable scrolling platform games to go beyond 2 screens (research how far we can make these go)
+    *Done 2026-07-11 (engine v64/v65 + editor).* WORLD now has **➕ Add a screen**
+    arrows (◀▶▲▼) that grow the level one screen at a time in any direction
+    (▶/▼ extend, ◀/▲ push the level over and shift the art/entities). **How far:**
+    the engine already scrolled up to **8 screens** wide (256 cols) with no
+    change; a raw ~1KB/screen tile array then overflows NROM's 32KB PRG. So wide
+    1-tall levels are **column-deduplicated** (repeated sky/floor/blocks collapse
+    to a unique-column table + a 1-byte index), decoded by both the C and ASM
+    engines, letting levels reach **~12 screens** (the editor cap; further is
+    ROM-limited by the level's unique-column count). **Vertical** scroll stays
+    capped at **2 screens** (a hard engine limit — a follow-up if wanted). Guarded
+    by `builder-tests/scroll-wide-compressed.mjs` (C≡ASM nametables past screen 8)
+    + `studio-tests/world-grow.spec.js`. Truly full-SMB-*game* scale (many long
+    levels) would need a bigger mapper — a separate effort. Engine changelog v64
+    (format+C) / v65 (ASM).
 11. Add the ability to make a 'Geometry Dash' style game. This has been requested by many of the younger pupils and making this as easy as possible would be very helpful.
     *Largely covered:* the **runner** style is an auto-scroller with tap-to-jump
     and an instant restart when the player touches a spike tile — the Geometry
