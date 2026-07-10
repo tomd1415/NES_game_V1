@@ -1,0 +1,121 @@
+{
+  "version": 64,
+  "files": [
+    {
+      "path": "steps/Step_Playground/Makefile",
+      "sha1": "bc8c25de1ed7048a0a8f68300594f477bd706fc9"
+    },
+    {
+      "path": "steps/Step_Playground/assets/backgrounds/level.nam",
+      "sha1": "a95d77ee3cb381c5d1cd6c92512c4e4c22331df3"
+    },
+    {
+      "path": "steps/Step_Playground/assets/sprites/game.chr",
+      "sha1": "0631457264ff7f8d5fb1edc2c0211992a67c73e6"
+    },
+    {
+      "path": "steps/Step_Playground/cfg/nes.cfg",
+      "sha1": "be2b0e09154b0182bc60d2106240f103165a3bdb"
+    },
+    {
+      "path": "steps/Step_Playground/src/ai_asm.s",
+      "sha1": "dca93d97f6ec4b6a29d887215e76baf059cfc79f"
+    },
+    {
+      "path": "steps/Step_Playground/src/asm_macros.inc",
+      "sha1": "7dd40d0a69da756224ae9a628ccd3585a29a4b8c"
+    },
+    {
+      "path": "steps/Step_Playground/src/behaviour.c",
+      "sha1": "d27eac79fe9e76b66a12c191491e407151183e7a"
+    },
+    {
+      "path": "steps/Step_Playground/src/behaviour_asm.s",
+      "sha1": "30f0e66a13f62943cd8e5b5392e929142af5665b"
+    },
+    {
+      "path": "steps/Step_Playground/src/bg_world.c",
+      "sha1": "70ae8b25bf5fad5a61bcdf01734d5740008cd16a"
+    },
+    {
+      "path": "steps/Step_Playground/src/bg_world.h",
+      "sha1": "f0dca63f094b5c2a76a5179bda1226a7b013118f"
+    },
+    {
+      "path": "steps/Step_Playground/src/collision.h",
+      "sha1": "06df3b4352fc28b642d891c6ec09a80f469cb32e"
+    },
+    {
+      "path": "steps/Step_Playground/src/graphics.s",
+      "sha1": "b972615346f866d6c0fe450a054ed5ce3df65de9"
+    },
+    {
+      "path": "steps/Step_Playground/src/main.c",
+      "sha1": "95fe9972e3b9af5bb93b212d6fc66c79786c182f"
+    },
+    {
+      "path": "steps/Step_Playground/src/main.s.starter",
+      "sha1": "e498435903be360a5460aea8599961ad6282a3d0"
+    },
+    {
+      "path": "steps/Step_Playground/src/main_asm.s",
+      "sha1": "02b379f71667e93b68589b3dde7fb949cbd613f2"
+    },
+    {
+      "path": "steps/Step_Playground/src/main_special_asm.s",
+      "sha1": "f6fafe07192fcb330650789131e5c2c52059f7f4"
+    },
+    {
+      "path": "steps/Step_Playground/src/palettes.inc",
+      "sha1": "b80c8a6f13868da6ba059540148beb2b33862d01"
+    },
+    {
+      "path": "steps/Step_Playground/src/pdraw_asm.s",
+      "sha1": "32e31bd4a4c04ea7e45c1fbedee0b39600f6c433"
+    },
+    {
+      "path": "steps/Step_Playground/src/player_asm.s",
+      "sha1": "b034c81a3095a3a80be072bd42a97a6316f38dc5"
+    },
+    {
+      "path": "steps/Step_Playground/src/project.inc",
+      "sha1": "d7b4c83f176787c91dc2aed0b5406afcd0adc050"
+    },
+    {
+      "path": "steps/Step_Playground/src/scene.inc",
+      "sha1": "1c38c95fe7765cb2571c5943ecb6cb7cca20eac1"
+    },
+    {
+      "path": "steps/Step_Playground/src/scene_asm.s",
+      "sha1": "fde59dfda8c1488590f58f1293ca58b16495972c"
+    },
+    {
+      "path": "steps/Step_Playground/src/scroll.c",
+      "sha1": "e3acf289cfccc61e5c866d46bbb57c51f1d84ef9"
+    },
+    {
+      "path": "steps/Step_Playground/src/scroll.h",
+      "sha1": "c1218a90d7fbd314766664beae785df7925f225f"
+    },
+    {
+      "path": "steps/Step_Playground/src/scroll_asm.s",
+      "sha1": "eac06998b5362aa47838e5155a0673f0f770bb33"
+    },
+    {
+      "path": "tools/tile_editor_web/builder-assembler.js",
+      "sha1": "bc733a3e039cc858d3ce72f2848cbf8aa484625f"
+    },
+    {
+      "path": "tools/tile_editor_web/builder-modules.js",
+      "sha1": "66a48cf9cec326b7a2f60b1d55679a19de02f955"
+    },
+    {
+      "path": "tools/tile_editor_web/builder-templates/platformer.c",
+      "sha1": "4fc8405eba004995c64805cb6ff81a6dd97e665b"
+    },
+    {
+      "path": "tools/tile_editor_web/engine-version.js",
+      "sha1": "c444b2b118ed13ef8bc4c02137413fdcbcbb553d"
+    }
+  ]
+}
