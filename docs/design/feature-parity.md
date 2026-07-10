@@ -69,7 +69,7 @@
 **Composition & drawing**
 - [ ] Browse vs Paint mode toggle (M) — prevents accidental edits
 - [ ] Tools: pencil, flood fill (crosses cell boundaries), line, rect outline/fill, circle outline/fill, select marquee — with live drag previews
-- [ ] Marquee ops: copy/paste, rotate CW/CCW, flip H/V, scale ×2 / ÷2, clear, drag-to-move floating selection
+- [~] Marquee ops: ✅ copy/paste, rotate CW/CCW, flip H/V, scale ×2 / ÷2, clear (Studio CHARS ▦ Select, Maker+; `studio-chars.js`, tested in `studio-tests/chars-marquee.spec.js`). ⬜ still open: drag-to-move floating selection
 - [ ] Per-cell attributes — **already true OAM shape**: tile, palette, flipH, flipV, priority (behind-BG), empty
 - [ ] Minimap with per-cell palette pills; cell state banner with suggested next action
 - [ ] Zoom 4×–32×, checkerboard + transparent-bg theme, cell/pixel grids

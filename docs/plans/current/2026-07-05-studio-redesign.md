@@ -145,9 +145,14 @@ off here and update the status note in
 - [~] **CHARS parity gaps vs `sprites.html`:** ✅ shared-tile "also used
       by… / Duplicate first" conflict dialog on edit; ✅ animation preview
       player; ✅ whole-character Flip H/V (non-destructive) + flip-aware
-      editor canvas. **Still open:** marquee *region* select with
-      rotate/scale/copy-paste; tile-swap (drag) that rewrites every
-      reference (lands with TILES 2.3, both banks).
+      editor canvas; ✅ tile-swap (drag) that rewrites every reference (TILES
+      2.3, both banks); ✅ **marquee *region* select** (▦ Select tool, Maker+)
+      with copy/paste, rotate CW/CCW, flip H/V, scale ×2/÷2, clear — sprite-
+      pixel ops over a dragged box (`studio-chars.js`), tested end-to-end
+      (`studio-tests/chars-marquee.spec.js`, incl. a real mouse-drag). **Still
+      open (minor polish):** drag-to-*move* a floating selection, and the
+      keyboard shortcuts (Ctrl+C/V, Delete, arrow-nudge) — the button ops cover
+      the same actions.
 
 ### Phase 2 — deepen TILES
 - [x] 2.3 Drag-to-swap in the TILES bank grid that rewrites *every*

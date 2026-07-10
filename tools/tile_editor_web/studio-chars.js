@@ -25,6 +25,10 @@
   var strokeOpen = false;
   var shapeStart = null; // line/rect start (sprite-space {sx,sy})
   var shapeEnd = null;   // line/rect current end
+  var selRect = null;    // marquee {x0,y0,x1,y1} in sprite-pixel coords (normalised once dropped)
+  var selecting = false; // mid-drag of a new marquee
+  var clip = null;       // copied region — a 2D array of pen values (rows of ints)
+  var lastCtx = null;    // most recent ctx (for headless test hooks below)
 
   function sprites(ctx) { return ctx.getState().sprites || (ctx.getState().sprites = []); }
   function current(ctx) {
@@ -94,6 +98,14 @@
         });
       }
     }
+    // Marquee selection outline.
+    if (selRect) {
+      var rr = normSel(selRect);
+      var bx = layout.originX + rr.x0 * s, by = layout.originY + rr.y0 * s;
+      var bw = (rr.x1 - rr.x0 + 1) * s, bh = (rr.y1 - rr.y0 + 1) * s;
+      g.fillStyle = 'rgba(255,216,102,0.18)'; g.fillRect(bx, by, bw, bh);
+      g.strokeStyle = '#FFD866'; g.lineWidth = 2; g.strokeRect(bx + 0.5, by + 0.5, bw, bh);
+    }
   }
 
   function pixelFromCell(cell) {
@@ -119,6 +131,126 @@
     var sx = cell.flipH ? 7 - p.tx : p.tx;
     var sy = cell.flipV ? 7 - p.ty : p.ty;
     tile.pixels[sy][sx] = pen;
+  }
+
+  // ---- Marquee region select / copy / paste / transform (Maker+) ----------
+  // Operates on the metasprite's whole pixel grid (width*8 × height*8) in
+  // sprite-space (sx,sy). Reads/writes route through each cell + its flip
+  // flags (like paintPixel), so a flipped cell edits where the user sees it.
+  // Region ops write into shared CHR tiles directly (same as line/rect) — no
+  // per-tile "duplicate?" prompt, since a marquee edit is a bulk gesture.
+  function normSel(r) {
+    return { x0: Math.min(r.x0, r.x1), y0: Math.min(r.y0, r.y1),
+             x1: Math.max(r.x0, r.x1), y1: Math.max(r.y0, r.y1) };
+  }
+  function selDims() { if (!selRect) return null; var r = normSel(selRect); return { w: r.x1 - r.x0 + 1, h: r.y1 - r.y0 + 1 }; }
+  function spriteWH(ctx) { var sp = current(ctx); return sp ? { w: sp.width * 8, h: sp.height * 8 } : { w: 0, h: 0 }; }
+
+  // Read the pen value at sprite-pixel (sx,sy); 0 (transparent) if empty/oob.
+  function getSpritePixel(ctx, sx, sy) {
+    var sp = current(ctx); if (!sp) return 0;
+    if (sx < 0 || sy < 0 || sx >= sp.width * 8 || sy >= sp.height * 8) return 0;
+    var cell = sp.cells[sy >> 3][sx >> 3];
+    if (!cell || cell.empty) return 0;
+    var tile = ctx.getState().sprite_tiles[cell.tile];
+    if (!tile || !tile.pixels) return 0;
+    var tx = cell.flipH ? 7 - (sx & 7) : (sx & 7);
+    var ty = cell.flipV ? 7 - (sy & 7) : (sy & 7);
+    return tile.pixels[ty][tx] | 0;
+  }
+  // Write `value` at sprite-pixel (sx,sy). Allocates the cell's tile on demand
+  // for a non-zero write; a zero write into an empty cell is a no-op.
+  function setSpritePixel(ctx, sx, sy, value) {
+    var sp = current(ctx); if (!sp) return;
+    if (sx < 0 || sy < 0 || sx >= sp.width * 8 || sy >= sp.height * 8) return;
+    var state = ctx.getState();
+    var cell = sp.cells[sy >> 3][sx >> 3];
+    if (cell.empty) {
+      if (!value) return;
+      var t = freeSpriteTile(state); if (t < 0) return;
+      cell.tile = t; cell.empty = false;
+    }
+    var tile = state.sprite_tiles[cell.tile];
+    if (!tile || !tile.pixels) return;
+    var tx = cell.flipH ? 7 - (sx & 7) : (sx & 7);
+    var ty = cell.flipV ? 7 - (sy & 7) : (sy & 7);
+    tile.pixels[ty][tx] = value | 0;
+  }
+  // Extract the current marquee as a 2D pen-value grid (rows[y][x]).
+  function grabRegion(ctx) {
+    if (!selRect) return null;
+    var r = normSel(selRect), rows = [];
+    for (var y = r.y0; y <= r.y1; y++) {
+      var row = [];
+      for (var x = r.x0; x <= r.x1; x++) row.push(getSpritePixel(ctx, x, y));
+      rows.push(row);
+    }
+    return rows;
+  }
+  // Stamp a 2D pen grid with its top-left at (ax,ay); clipped to the sprite.
+  function stampRegion(ctx, buf, ax, ay) {
+    for (var y = 0; y < buf.length; y++)
+      for (var x = 0; x < buf[y].length; x++)
+        setSpritePixel(ctx, ax + x, ay + y, buf[y][x]);
+  }
+  // Zero every pixel in the current marquee (no undo — callers own it).
+  function zeroSel(ctx) {
+    var r = normSel(selRect);
+    for (var y = r.y0; y <= r.y1; y++) for (var x = r.x0; x <= r.x1; x++) setSpritePixel(ctx, x, y, 0);
+  }
+  // Re-anchor selRect from a top-left + dims, clipped to the sprite.
+  function setSelFromDims(ctx, x0, y0, w, h) {
+    var wh = spriteWH(ctx);
+    selRect = { x0: x0, y0: y0,
+      x1: Math.min(x0 + w - 1, wh.w - 1), y1: Math.min(y0 + h - 1, wh.h - 1) };
+  }
+
+  function copyRegion(ctx) { clip = grabRegion(ctx); }
+  function pasteRegion(ctx) {
+    if (!clip || !selRect) return;
+    var r = normSel(selRect);
+    ctx.pushUndo(); stampRegion(ctx, clip, r.x0, r.y0);
+    setSelFromDims(ctx, r.x0, r.y0, clip[0].length, clip.length);
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+  }
+  function clearRegion(ctx) {
+    if (!selRect) return;
+    ctx.pushUndo(); zeroSel(ctx); ctx.markDirty(); ctx.renderLive();
+  }
+  function flipRegion(ctx, axis) {
+    var buf = grabRegion(ctx); if (!buf) return;
+    var r = normSel(selRect), h = buf.length, w = buf[0].length, out = [];
+    for (var y = 0; y < h; y++) { var row = []; for (var x = 0; x < w; x++)
+      row.push(axis === 'h' ? buf[y][w - 1 - x] : buf[h - 1 - y][x]); out.push(row); }
+    ctx.pushUndo(); stampRegion(ctx, out, r.x0, r.y0);
+    ctx.markDirty(); ctx.renderLive();
+  }
+  function rotateRegion(ctx, dir) {
+    var buf = grabRegion(ctx); if (!buf) return;
+    var r = normSel(selRect), h = buf.length, w = buf[0].length, out = [];
+    // A w×h region becomes h wide × w tall; anchored at the same top-left.
+    for (var i = 0; i < w; i++) { var row = []; for (var j = 0; j < h; j++)
+      row.push(dir === 'cw' ? buf[h - 1 - j][i] : buf[j][w - 1 - i]); out.push(row); }
+    ctx.pushUndo(); zeroSel(ctx);            // clear the old footprint (rotation can leave an L)
+    stampRegion(ctx, out, r.x0, r.y0);
+    setSelFromDims(ctx, r.x0, r.y0, out[0].length, out.length);
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+  }
+  function scaleRegion(ctx, factor) {
+    var buf = grabRegion(ctx); if (!buf) return;
+    var r = normSel(selRect), h = buf.length, w = buf[0].length, out = [];
+    if (factor === 2) {                       // ×2 — each pixel → a 2×2 block
+      for (var y = 0; y < h; y++) { var a = [], b = [];
+        for (var x = 0; x < w; x++) { var v = buf[y][x]; a.push(v, v); b.push(v, v); }
+        out.push(a, b); }
+    } else {                                  // ÷2 — nearest-neighbour (every other pixel)
+      if (w < 2 || h < 2) return;
+      for (var y2 = 0; y2 < h; y2 += 2) { var rr = []; for (var x2 = 0; x2 < w; x2 += 2) rr.push(buf[y2][x2]); out.push(rr); }
+    }
+    ctx.pushUndo(); zeroSel(ctx);            // clear the old footprint so a shrink leaves no tail
+    stampRegion(ctx, out, r.x0, r.y0);
+    setSelFromDims(ctx, r.x0, r.y0, out[0].length, out.length);
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
   }
 
   // ---- Shared-tile "Duplicate first" safeguard ---------------------------
@@ -195,6 +327,7 @@
 
   // ---- Dock --------------------------------------------------------------
   function renderDock(dock, ctx) {
+    lastCtx = ctx;
     var state = ctx.getState();
     var arr = sprites(ctx);
 
@@ -204,7 +337,7 @@
       arr.push(makeSprite('character ' + (arr.length + 1)));
       // Give the new character a default reaction map so RULES stays aligned.
       if (global.StudioRules) global.StudioRules.syncReactions(state);
-      selIdx = arr.length - 1;
+      selIdx = arr.length - 1; selRect = null; selecting = false;
       ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
     } }));
     arr.forEach(function (sp, idx) {
@@ -214,7 +347,7 @@
       row.appendChild(thumb);
       row.appendChild(el('span', { class: 'grow', text: sp.name || ('character ' + idx) }));
       row.appendChild(el('span', { class: 'chip', text: sp.role || 'other' }));
-      row.addEventListener('click', function () { selIdx = idx; ackTiles = {}; ctx.renderLive(); ctx.renderDock(); });
+      row.addEventListener('click', function () { selIdx = idx; ackTiles = {}; selRect = null; selecting = false; ctx.renderLive(); ctx.renderDock(); });
       listSec.appendChild(row);
     });
     dock.appendChild(listSec);
@@ -294,7 +427,7 @@
         if (!confirm('Delete "' + (sp.name || 'character') + '"?')) return;
         ctx.pushUndo(); arr.splice(selIdx, 1);
         if (Array.isArray(state.behaviour_reactions)) state.behaviour_reactions.splice(selIdx, 1);
-        selIdx = Math.max(0, selIdx - 1);
+        selIdx = Math.max(0, selIdx - 1); selRect = null; selecting = false;
         ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); ctx.refresh();
       } }),
     ]));
@@ -359,9 +492,41 @@
     }
     dock.appendChild(penSec);
 
+    // Marquee region ops (Maker+): copy/paste + rotate/flip/scale/clear over
+    // a dragged selection. Pairs with the ▦ Select tool.
+    if (ctx.levelAtLeast('maker')) renderSelectionSection(dock, ctx);
+
     // Animations are a Maker-level concept (a still character is fine for a
     // first game); hide the whole section for Beginners.
     if (ctx.levelAtLeast('maker')) renderAnimations(dock, ctx);
+  }
+
+  function renderSelectionSection(dock, ctx) {
+    var d = selDims();
+    var sec = UI.section('Selection', el('span', { class: 'chip', text: '▦ marquee' }));
+    sec.appendChild(el('div', { class: 'dock-note', text: d
+      ? ('Selected ' + d.w + '×' + d.h + ' pixels — copy/paste, or transform it in place.')
+      : 'Pick ▦ Select and drag a box on the canvas, then copy/paste or transform the pixels inside.' }));
+    if (d) {
+      sec.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
+        el('button', { class: 'btn', text: '⧉ Copy', title: 'Copy the selected pixels', onclick: function () { copyRegion(ctx); ctx.renderDock(); } }),
+        el('button', { class: 'btn' + (clip ? '' : ' disabled'), text: '📋 Paste', title: 'Paste at the selection’s top-left', onclick: function () { if (clip) pasteRegion(ctx); } }),
+        el('button', { class: 'btn', text: '✕ Clear', title: 'Zero the pixels inside', onclick: function () { clearRegion(ctx); } }),
+      ]));
+      sec.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
+        el('button', { class: 'btn', text: '⤾ CCW', title: 'Rotate 90° anticlockwise', onclick: function () { rotateRegion(ctx, 'ccw'); } }),
+        el('button', { class: 'btn', text: '⤿ CW', title: 'Rotate 90° clockwise', onclick: function () { rotateRegion(ctx, 'cw'); } }),
+        el('button', { class: 'btn', text: '⇋ Flip H', title: 'Mirror left/right', onclick: function () { flipRegion(ctx, 'h'); } }),
+        el('button', { class: 'btn', text: '⇵ Flip V', title: 'Mirror up/down', onclick: function () { flipRegion(ctx, 'v'); } }),
+      ]));
+      sec.appendChild(el('div', { class: 'row', style: 'margin-top:4px' }, [
+        el('button', { class: 'btn', text: '🔎+ ×2', title: 'Enlarge 2× (clipped at the sprite edge)', onclick: function () { scaleRegion(ctx, 2); } }),
+        el('button', { class: 'btn' + (d.w >= 2 && d.h >= 2 ? '' : ' disabled'), text: '🔎− ÷2', title: 'Shrink 2× (nearest-neighbour)', onclick: function () { if (d.w >= 2 && d.h >= 2) scaleRegion(ctx, 0.5); } }),
+        el('button', { class: 'btn', text: '⊘ Deselect', onclick: function () { selRect = null; ctx.renderLive(); ctx.renderDock(); } }),
+      ]));
+      if (clip) sec.appendChild(el('div', { class: 'dock-note', text: 'Clipboard holds ' + clip[0].length + '×' + clip.length + ' pixels.' }));
+    }
+    dock.appendChild(sec);
   }
 
   var animSel = null;
@@ -549,16 +714,21 @@
       { id: 'fill', label: '🪣 Fill' },
       { id: 'line', label: '📏 Line' },
       { id: 'rect', label: '▭ Rect' },
+      { id: 'select', label: '▦ Select', minLevel: 'maker' },
     ],
     renderTV: renderTV,
     onRenderOverlay: onRenderOverlay,
     renderDock: renderDock,
-    onEnter: function (ctx) { if (selIdx >= sprites(ctx).length) selIdx = 0; ackTiles = {}; },
+    onEnter: function (ctx) { if (selIdx >= sprites(ctx).length) selIdx = 0; ackTiles = {}; selRect = null; selecting = false; },
     onExit: function () { stopPreview(); },
     onToolChange: function (id) { if (id === 'erase') pen = 0; else if (pen === 0) pen = 1; },
     onTvDown: function (cell, ctx) {
       var p = pixelFromCell(cell); if (!p) return;
       var tool = ctx.getActiveTool();
+      if (tool === 'select') {
+        selecting = true; selRect = { x0: p.sx, y0: p.sy, x1: p.sx, y1: p.sy };
+        ctx.renderLive(); return;
+      }
       if (tool === 'line' || tool === 'rect') {
         ctx.pushUndo(); strokeOpen = true;
         shapeStart = { sx: p.sx, sy: p.sy }; shapeEnd = { sx: p.sx, sy: p.sy };
@@ -572,6 +742,11 @@
       });
     },
     onTvMove: function (cell, ctx) {
+      if (ctx.getActiveTool() === 'select') {
+        if (!selecting) return;
+        var ps = pixelFromCell(cell); if (!ps) return;
+        selRect.x1 = ps.sx; selRect.y1 = ps.sy; ctx.renderLive(); return;
+      }
       if (!strokeOpen) return;
       var tool = ctx.getActiveTool();
       var p = pixelFromCell(cell); if (!p) return;
@@ -580,6 +755,10 @@
       paintPixel(ctx, p); ctx.renderLive();
     },
     onTvUp: function (cell, ctx) {
+      if (ctx.getActiveTool() === 'select') {
+        if (selecting) { selecting = false; selRect = normSel(selRect); ctx.renderDock(); }
+        return;
+      }
       if (!strokeOpen) return;
       var tool = ctx.getActiveTool();
       if ((tool === 'line' || tool === 'rect') && shapeStart) {
@@ -588,8 +767,22 @@
       }
       strokeOpen = false; ctx.markDirty(); ctx.renderLive(); ctx.renderDock(); ctx.refresh();
     },
-    _get: function () { return { selIdx: selIdx, pen: pen }; },
+    _get: function () { return { selIdx: selIdx, pen: pen, selRect: selRect, clip: clip }; },
     _select: function (i) { selIdx = i; },
+    // Headless hooks for studio-tests (drive the marquee ops without pointer
+    // drags). Use the last ctx handed to renderDock.
+    _test: {
+      setSel: function (x0, y0, x1, y1) { selRect = normSel({ x0: x0, y0: y0, x1: x1, y1: y1 }); },
+      selRect: function () { return selRect ? normSel(selRect) : null; },
+      get: function (x, y) { return getSpritePixel(lastCtx, x, y); },
+      set: function (x, y, v) { setSpritePixel(lastCtx, x, y, v); },
+      copy: function () { copyRegion(lastCtx); },
+      paste: function () { pasteRegion(lastCtx); },
+      clear: function () { clearRegion(lastCtx); },
+      flip: function (a) { flipRegion(lastCtx, a); },
+      rotate: function (d) { rotateRegion(lastCtx, d); },
+      scale: function (f) { scaleRegion(lastCtx, f); },
+    },
   };
 
   // Line + rectangle over the whole metasprite (bug #2). Pixels are in
