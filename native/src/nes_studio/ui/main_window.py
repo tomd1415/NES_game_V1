@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from ..core.resources import ResourceLocator
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
 from .diagnostics import DiagnosticsDialog
+from .widgets.world_canvas import WorldCanvas
 
 
 MODE_NAMES = ("WORLD", "CHARS", "TILES", "PALS", "RULES", "SOUND", "CODE")
@@ -35,6 +36,7 @@ class MainWindow(QMainWindow):
         self._resource_locator = resource_locator
         self._diagnostics: DiagnosticsDialog | None = None
         self._mode_buttons: dict[str, QPushButton] = {}
+        self._tool_buttons: dict[str, QPushButton] = {}
 
         self.setObjectName("mainWindow")
         self.setWindowTitle(APP_DISPLAY_NAME)
@@ -111,10 +113,16 @@ class MainWindow(QMainWindow):
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
         layout.addWidget(section)
-        for label in ("Select", "Paint", "Erase"):
+        tool_group = QButtonGroup(self)
+        tool_group.setExclusive(True)
+        for tool in ("select", "paint", "erase"):
+            label = tool.title()
             button = QPushButton(label, dock)
-            button.setEnabled(False)
-            button.setAccessibleDescription("Coming in the first editable WORLD slice")
+            button.setObjectName(f"world{label}Button")
+            button.setCheckable(True)
+            button.clicked.connect(lambda _checked=False, name=tool: self._select_world_tool(name))
+            tool_group.addButton(button)
+            self._tool_buttons[tool] = button
             layout.addWidget(button)
         layout.addStretch(1)
         return dock
@@ -146,16 +154,11 @@ class MainWindow(QMainWindow):
         screen = QFrame(television)
         screen.setObjectName("nesScreen")
         screen_layout = QVBoxLayout(screen)
-        preview = QLabel(
-            "NATIVE PREVIEW\n\n"
-            "The Qt workspace is running.\n"
-            "Project rendering arrives with the first WORLD slice.",
-            screen,
-        )
-        preview.setObjectName("previewMessage")
-        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview.setWordWrap(True)
-        screen_layout.addWidget(preview)
+        screen_layout.setContentsMargins(0, 0, 0, 0)
+        self.world_canvas = WorldCanvas(screen)
+        self.world_canvas.cell_changed.connect(self._world_cell_changed)
+        self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
+        screen_layout.addWidget(self.world_canvas)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
         return stage
@@ -211,6 +214,23 @@ class MainWindow(QMainWindow):
             }[mode]
         )
         self.statusBar().showMessage(f"{mode.title()} mode selected — editor controls coming next")
+        world_enabled = mode == "WORLD"
+        for button in self._tool_buttons.values():
+            button.setEnabled(world_enabled)
+        self.world_canvas.setEnabled(world_enabled)
+        if world_enabled:
+            self._select_world_tool(self.world_canvas.tool)
+
+    def _select_world_tool(self, tool: str) -> None:
+        self.world_canvas.set_tool(tool)
+        self._tool_buttons[tool].setChecked(True)
+        self.statusBar().showMessage(f"WORLD {tool.title()} tool — click or drag on the NES screen")
+
+    def _world_cell_changed(self, col: int, row: int, value: int) -> None:
+        self.statusBar().showMessage(f"WORLD cell ({col}, {row}) changed to tile {value}")
+
+    def _world_cursor_changed(self, col: int, row: int) -> None:
+        self.statusBar().showMessage(f"WORLD cell ({col}, {row}) — {self.world_canvas.tool.title()} tool")
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(

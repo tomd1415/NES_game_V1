@@ -32,9 +32,13 @@ class NativeShellTests(unittest.TestCase):
         self.assertIsNotNone(window.findChild(object, "nesScreen"))
         self.assertIsNotNone(window.findChild(object, "questPanel"))
         self.assertEqual(window.mode_title.text(), "WORLD")
+        self.assertTrue(window._tool_buttons["select"].isEnabled())
+        window._select_world_tool("paint")
+        self.assertEqual(window.world_canvas.tool, "paint")
         window.select_mode("CHARS")
         self.assertEqual(window.mode_title.text(), "CHARS")
         self.assertTrue(window._mode_buttons["CHARS"].isChecked())
+        self.assertFalse(window._tool_buttons["paint"].isEnabled())
         window.close()
         application.processEvents()
 
