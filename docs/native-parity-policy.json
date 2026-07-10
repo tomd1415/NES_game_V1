@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "scope": "studio_plus_legacy_union",
+  "approved_on": "2026-07-10",
+  "source": "design/feature-parity.md",
+  "allowed_dispositions": ["preserve", "improve", "defer", "drop"],
+  "default_disposition": "preserve",
+  "sections": {
+    "Backgrounds page (`index.html`)": ["WORLD", "TILES", "PALS"],
+    "Sprites page (`sprites.html`)": ["CHARS", "TILES", "PALS"],
+    "Builder page (`builder.html`)": ["RULES", "WORLD", "APP_CHROME"],
+    "Behaviour page (`behaviour.html`)": ["WORLD", "RULES"],
+    "Audio page (`audio.html`)": ["SOUND"],
+    "Code page (`code.html`)": ["CODE"],
+    "Gallery page (`gallery.html`)": ["HOME", "GALLERY"],
+    "Site-wide chrome & services": ["APP_CHROME", "PERSISTENCE", "SERVICES"]
+  },
+  "improvement_markers": [
+    "help text says 5",
+    "teaching hazard to fix",
+    "currently unauthenticated",
+    "union"
+  ],
+  "test_policy": {
+    "default": "native parity contract plus owning-mode test",
+    "shared_contract_areas": [
+      "Projects & persistence",
+      "Import / export",
+      "Play pipeline & emulator"
+    ]
+  }
+}

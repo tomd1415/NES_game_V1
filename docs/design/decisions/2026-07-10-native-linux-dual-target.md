@@ -10,6 +10,13 @@ day-to-day rules live in [`../../../CONTRIBUTING.md`](../../../CONTRIBUTING.md).
 This ADR records only the load-bearing decisions and the alternatives rejected,
 so the "why" survives independently of the much longer plan.
 
+**Phase-0 parity scope decision (2026-07-10):** the native product will preserve
+the union of the unified Studio and the legacy feature-parity checklist. A
+capability may be deliberately dropped only through a later product-owner
+decision recorded in an ADR. The executable coverage policy is
+[`../../native-parity-policy.json`](../../native-parity-policy.json), checked by
+the native contract suite.
+
 ## Context
 
 A separate team will build a genuine native Linux desktop application while the

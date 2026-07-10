@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "engine_version": 63,
+  "materialization_status": "partial",
+  "categories": {
+    "blank_scratch": ["tools/builder-tests/style-starters.mjs"],
+    "platformer": ["tools/builder-tests/style-starters.mjs", "tools/builder-tests/asm-realproj.mjs"],
+    "smb": ["tools/builder-tests/starter-smb.mjs", "tools/builder-tests/asm-corpus.mjs"],
+    "top_down": ["tools/builder-tests/style-starters.mjs", "tools/builder-tests/topdown.mjs"],
+    "auto_runner": ["tools/builder-tests/style-starters.mjs", "tools/builder-tests/runner.mjs"],
+    "racer": ["tools/builder-tests/style-starters.mjs", "tools/builder-tests/racer.mjs"],
+    "two_player": ["tools/builder-tests/player2.mjs", "tools/builder-tests/racer-2p.mjs", "tools/builder-tests/asm-player.mjs"],
+    "multi_screen": ["tools/builder-tests/asm-corpus.mjs", "tools/builder-tests/scroll-2x2.mjs"],
+    "multi_background": ["tools/builder-tests/round3-multi-bg.mjs"],
+    "metatiles": ["tools/builder-tests/metatiles.mjs", "tools/builder-tests/promote-roundtrip.mjs"],
+    "dialogue_audio": ["tools/builder-tests/dialogue-font.mjs", "tools/builder-tests/audio.mjs"],
+    "custom_c": ["tools/builder-tests/_rom-equiv.mjs"],
+    "custom_asm": ["tools/builder-tests/asm-play.mjs"],
+    "legacy_schema": ["tools/builder-tests/project-save-safety.mjs", "tools/builder-tests/project-menu.mjs"]
+  },
+  "artifact_contract": [
+    "project_json_sha256",
+    "play_request_json_sha256",
+    "generated_source_sha256",
+    "generated_include_sha256",
+    "rom_sha256",
+    "input_project_unchanged"
+  ],
+  "materialized": {
+    "starter_styles": ["basics", "smb", "topdown", "runner", "geodash", "racer", "scratch"]
+  },
+  "next_step": "Materialize the remaining multi-background, metatile, dialogue/audio, custom-language, two-player, and legacy-schema artifacts from the indexed generators."
+}

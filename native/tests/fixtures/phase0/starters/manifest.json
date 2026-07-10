@@ -1,0 +1,63 @@
+{
+  "engine_version": 63,
+  "fixtures": {
+    "basics": {
+      "generated_source_sha256": "9acaf3f5f08910a057e546dce3ec867d9f6d010a3912c6e95160e21d14e597ca",
+      "input_project_unchanged": true,
+      "play_request_json_sha256": "5b4b075d3e0fdbaa643f80164259840cec630d1242e3b65119e57a37f4829a17",
+      "project_json_sha256": "5a9c0bb6236be0c5369d5c39d511625073eb751e421061ee0c575d34e9d58f9e",
+      "rom_sha256": "4d11fa59045c4fc6dd9f6edf0d65bfbb4f868e1a401138067e317d3cba5e829b",
+      "rom_size": 49168
+    },
+    "geodash": {
+      "generated_source_sha256": "f9f0f78a7c86cf4a1c7a0b255e1482ff358d90f131a9d7f817134748033cb47d",
+      "input_project_unchanged": true,
+      "play_request_json_sha256": "1438d76b7ea7fd5b88b9de05698d922b7b501691ac3f3716cad73c1a3f548830",
+      "project_json_sha256": "dd5fa6b17126cc4e05d2e378858bed79a0c2286bca0ff95a2a36727a31049038",
+      "rom_sha256": "4a4415746ac53375724a2b1c5040f11a45025aa8f4d50167e54ea3ac38685ab8",
+      "rom_size": 49168
+    },
+    "racer": {
+      "generated_source_sha256": "27503e3e6342947c6fd87b3abb54c8665a6a214544d9f6e198ab2657896a08d2",
+      "input_project_unchanged": true,
+      "play_request_json_sha256": "f6c5c293a4f01fc28c0840aa4ccbca1e334c69f06332037b28ca0826bbe8b4fc",
+      "project_json_sha256": "f62d94560a85371d130cf14db8c3c4288076a22740d12833986aeda26911dffd",
+      "rom_sha256": "a4e1c538a7f11a38fdb50da83abdc22634873015f4fcc742bc7e959c7d5fb816",
+      "rom_size": 49168
+    },
+    "runner": {
+      "generated_source_sha256": "eeb171d4b00f4f877cbd75d9807e06d309729f349d505de25e657a1baab9d2c9",
+      "input_project_unchanged": true,
+      "play_request_json_sha256": "404310a3109013b4946aa6825a353327e5037a5346671d2736c692fc380ad05a",
+      "project_json_sha256": "23e4d8124ab825b2ac7f6fda5470db18d28a5e1d8bcfacc6ba18e4537e42bf75",
+      "rom_sha256": "8bfefb002b4e9f5f31e3a8fa2ed0db737820f73650c7549526c0e43ecb95c6f3",
+      "rom_size": 49168
+    },
+    "scratch": {
+      "generated_source_sha256": "5fee84afa74de155e4f0ea29235ef5860e1050ea7ee70edf603aa6f814185f22",
+      "input_project_unchanged": true,
+      "play_request_json_sha256": "4238144a2f7e8a1b773ae6581b2f146c71d1763fdb95d07fa2b1be6ef54bb037",
+      "project_json_sha256": "d7f2566f71fd2dc5df3e1e3af602a7b0eb5388f1ec06c4da276b19efa0f41582",
+      "rom_sha256": "15478717180594537ad14319026f1d62e49b1cb6dd5d7d66f60d9727c3fe5d5d",
+      "rom_size": 49168
+    },
+    "smb": {
+      "generated_source_sha256": "408284f9599b726c8a2a6f40bc9ece826df1643f34e9a40a2b7fb7146411a93c",
+      "input_project_unchanged": true,
+      "play_request_json_sha256": "050dabd2822b720015022eada1d81797acc04dc8acc60a85899dc4a1d1515625",
+      "project_json_sha256": "135b790c1be5b67e437da4fde372ebd2719765757763393408da2bc79a7e1f91",
+      "rom_sha256": "4427934de87af620e4ad892712c7231744318fde2dcc1c97c2ce52735d82d39b",
+      "rom_size": 49168
+    },
+    "topdown": {
+      "generated_source_sha256": "df45ca1b51073b4d196f99929227f0d2a62626e7ea005d1b5496d1d78c6c7f54",
+      "input_project_unchanged": true,
+      "play_request_json_sha256": "8fbc47cba33dee45e9a3e977d0f7984ba7af571ce162ab1ed6ebc4ab337418e1",
+      "project_json_sha256": "180bafe0ff5dc4700ce66d836820127da49766f2c98c8044d94f15043cd3198e",
+      "rom_sha256": "3bf0d377e28897c57f248bc1f8467a3d2a869f7ea36b6e70b419b93b776ddcf8",
+      "rom_size": 49168
+    }
+  },
+  "generator": "native/tests/contract/generate_phase0_starters.mjs",
+  "schema_version": 1
+}

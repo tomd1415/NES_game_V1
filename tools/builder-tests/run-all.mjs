@@ -46,6 +46,10 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
 const STEP = path.join(ROOT, 'steps', 'Step_Playground');
 const TEMPLATE = path.join(WEB, 'builder-templates', 'platformer.c');
+const SYNTAX_TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'nes-studio-syntax-'));
+process.on('exit', () => {
+  try { fs.rmSync(SYNTAX_TMP, { recursive: true, force: true }); } catch {}
+});
 
 // --- Step 1: JS syntax check -------------------------------------------
 function check(label, fn) {
@@ -98,7 +102,7 @@ check('engine snapshot matches live sources', () => {
 }) || (anyFail = true);
 
 // Inline <script> bodies in the HTML pages.  Regex-extract, write to
-// /tmp, then node --check each one.  (These are the heavyweight scripts
+// a private temp directory, then node --check each one.  (These are the heavyweight scripts
 // that define the pages' entire behaviour.)
 function extractInline(file) {
   const src = fs.readFileSync(path.join(WEB, file), 'utf8');
@@ -106,7 +110,7 @@ function extractInline(file) {
   const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
   let m; let i = 0;
   while ((m = re.exec(src)) !== null) {
-    const p = path.join('/tmp', `chk_${file.replace('.html', '')}_${i++}.js`);
+    const p = path.join(SYNTAX_TMP, `chk_${file.replace('.html', '')}_${i++}.js`);
     fs.writeFileSync(p, m[1]);
     out.push(p);
   }

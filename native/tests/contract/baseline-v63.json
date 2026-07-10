@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-07-10",
+  "repository_commit": "09bea15007533bb84ef58539f1cef70c31d754fd",
+  "engine_version": 63,
+  "scope": "studio_plus_legacy_union",
+  "toolchain": {
+    "python": "3.13.5",
+    "node": "20.19.2",
+    "npm": "9.2.0",
+    "cc65": "2.19-2",
+    "fceux": "2.6.5"
+  },
+  "automated_results": {
+    "native_unittest": {
+      "status": "pass",
+      "tests_run": 9,
+      "tests_skipped": 1,
+      "skip_reason": "The system Python does not provide PySide6; the isolated native environment is required for the Qt UI smoke test."
+    },
+    "builder_regression": {
+      "status": "pass",
+      "command": "npm run test:builder",
+      "notes": "All Builder regression checks passed outside the restricted process sandbox."
+    },
+    "engine_snapshot": {
+      "status": "pass",
+      "command": "node scripts/snapshot-engine.mjs --check"
+    }
+  },
+  "golden_rom_sha1": {
+    "stock": "1730448eca6d4857d3468407b33e41de7806bf99",
+    "no_modules_template": "1730448eca6d4857d3468407b33e41de7806bf99",
+    "everything_on": "0aed6e95684bc3bbd665353759f2a003dad45bf6"
+  },
+  "manual_fceux_v63": {
+    "status": "accepted_product_owner_attestation",
+    "required_cases": 9,
+    "attested_on": "2026-07-10",
+    "attestation": "The product owner reports that the C and ASM files passed all relevant attended tests checked at the time.",
+    "limitations": "The earlier manual run did not leave a case-by-case command, input-sequence, screenshot, or observation manifest. Current automated v63 coverage therefore remains the reproducible evidence; the attestation closes the attended gate without fabricating missing observations.",
+    "automated_v63_support": [
+      "asm-corpus.mjs: 14 project shapes rendered equivalently at rest",
+      "asm-player.mjs: platformer, top-down, SMB, runner, racer, and two-player matched-state checks",
+      "asm-realproj.mjs: scrolling composite with moving player and four enemy AI types",
+      "asm-ab.mjs: matched game-logic progress",
+      "asm-vscroll.mjs: vertical and diagonal scrolling",
+      "asm-play.mjs: raw ASM compile and link path"
+    ]
+  }
+}
