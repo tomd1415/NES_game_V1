@@ -14,12 +14,14 @@ accepted as opt-in.
 - [x] **Flag + glyph seeding (Phase 1).** `smbhud.config.background` → builder-modules
   emits `#define BW_SMB_HUD_BG 1` (gated targetEngine ≥ 58); server `_seed_hud_digits_bg`
   seeds the 0-9 glyphs into BG tiles 48-57 (mirrors the sprite/dialogue seeding).
-- [ ] **Static strip (Phase 2).** At boot, write labels + zeroed digits into nametable
-  rows 0-3; jsnes-verifiable (read the nametable).
-- [ ] **Live updates + drop OAM HUD (Phase 3).** Buffer digit writes into the status
-  nametable on change; `#ifdef BW_SMB_HUD_BG` compiles OUT the OAM `bw_hud_digit` draw.
-  jsnes-verifiable (nametable digits change; no HUD sprites in OAM). Fully works for a
-  NON-scrolling SMB (no split needed) — commit + bump v58 at this milestone.
+- [x] **Static strip (Phase 2) + Live updates + drop OAM HUD (Phase 3)** — v59.
+  `bw_hud_bg_init()` paints rows 0-3 at boot; `bw_hud_dirty` + `bw_hud_bg_paint()`
+  repaint in vblank on change; OAM `bw_hud_digit` compiled out under the flag.
+  jsnes-verified: 11 digits (tiles 48-57) in the nametable, live-updating, 0 HUD
+  sprites in OAM. **Fully works for a single-screen SMB + kills the HUD flicker.**
+  MEASURED: on top of the v57 cache this frees only a little extra frame budget —
+  the SMB speed ceiling is the **enemy AI + heavy SMB base**, not the HUD. So the bg
+  HUD's real win is the FLICKER + freed OAM, NOT the "inconsistent speed."
 - [ ] **Sprite-0 split (Phase 4).** FCEUX-only. Sprite 0 at the strip bottom; vblank
   sets scroll (0,0), busy-poll `PPU_STATUS` bit 6, then write the playfield scroll —
   hand-written 6502. Iterate with the user via FCEUX.
