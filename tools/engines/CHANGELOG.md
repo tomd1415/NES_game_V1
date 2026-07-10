@@ -9,6 +9,34 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v64 — 2026-07-10 — Level compression Phase 1: column-dedup format + C decode (dormant, byte-identical)
+
+### Added (feedback #10 groundwork — dormant → goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+Groundwork for scrolling levels **beyond 8 screens**. The raw `bg_world_tiles`
+array is ~1KB/screen and NROM's 32KB PRG caps a real project at ~8 screens (9+
+overflows). This phase adds a **column-deduplication** format so wide levels fit:
+the server emits `bg_col_index[COLS]` (a 1-byte unique-column id per world
+column) + `bg_col_data[UNIQ × ROWS]` (the unique columns) instead of the flat
+array; the scroll core reads `bg_col_data[bg_col_index[col] × BG_WORLD_ROWS + rr]`.
+
+- Server: `_dedup_columns` + `_bg_compression` (`playground_server.py`); emits the
+  dedup arrays + `SCROLL_COMPRESSED`/`BG_COL_UNIQ` in `bg_world.h` and
+  `SCROLL_COMPRESSED` in `project.inc`. Gated to **wide (>8 screens = >256 cols)
+  1-tall worlds** whose dedup fits a 1-byte index (<256 unique columns);
+  everything else stays on the raw path.
+- C engine: `scroll.c` decodes the dedup format under `#if SCROLL_COMPRESSED` at
+  the streamer + `load_world_bg` column reads; the raw `#else` is unchanged.
+- **Dormant + byte-identical:** compression only triggers past 8 screens, and no
+  project reaches that yet (the WORLD editor still caps at 2×2), so `SCROLL_COMPRESSED`
+  is 0 everywhere and all builds are byte-identical. Committed baseline
+  `project.inc` defines `SCROLL_COMPRESSED 0` for direct-make builds.
+- **Proven:** a 12-screen world builds + fits ROM with the C engine (a raw 12-wide
+  level overflows) and renders correctly on FCEUX across the far screens.
+
+**Still to come:** the ASM decoder in `scroll_asm.s` (the shipped engine — Phase 2)
+and the editor grow-a-screen arrows (Phase 3) that actually let a pupil exceed 8
+screens.
+
 ## v63 — 2026-07-10 — Fix multi-bg door transitions showing the wrong room (#2/#3)
 
 ### Fixed (multi-bg only → non-multi-bg builds byte-identical; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)

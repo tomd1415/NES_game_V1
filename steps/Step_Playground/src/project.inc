@@ -24,6 +24,11 @@
 ; this to 4 when the SMB background HUD is enabled.  Defined here so a direct
 ; `make NES_ASM_SCROLL=1` build (no server codegen) still assembles scroll_asm.s.
 .define SCROLL_SKIP_TOP        0
+; 1 when a wide (>8-screen) world's tiles are column-deduplicated (feedback #10)
+; so the scroll core reads bg_col_index/bg_col_data; 0 in the stock baseline =
+; raw bg_world_tiles = byte-identical.  Defined here so a direct
+; `make NES_ASM_SCROLL=1` build assembles scroll_asm.s.
+.define SCROLL_COMPRESSED      0
 ; --- Player (advance_animation) ---
 .define PLAYER_W               2
 .define PLAYER_H               2

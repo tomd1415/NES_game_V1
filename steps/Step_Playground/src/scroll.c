@@ -188,10 +188,19 @@ void scroll_stream_prepare(void) {
         if (col < BG_WORLD_COLS) {
             unsigned char rr;
 
+#if SCROLL_COMPRESSED
+            /* Column-deduplicated wide world: fetch this column's unique run. */
+            {
+                unsigned int cbase = (unsigned int)bg_col_index[col] *
+                                     BG_WORLD_ROWS;
+                for (rr = 0; rr < 30; rr++) col_buf[rr] = bg_col_data[cbase + rr];
+            }
+#else
             for (rr = 0; rr < 30; rr++) {
                 col_buf[rr] = bg_world_tiles[(unsigned int)rr *
                                              BG_WORLD_COLS + col];
             }
+#endif
             /* Bit 5 of the column id picks which nametable to write into —
                V-mirror aliases $2800/$2C00 to $2000/$2400 so this walks
                cleanly across arbitrarily wide worlds. */
@@ -360,9 +369,16 @@ void load_world_bg(void) {
                 PPU_ADDR = (unsigned char)(addr >> 8);
                 PPU_ADDR = (unsigned char)(addr & 0xFF);
                 for (cc = 0; cc < 32; cc++) {
+#if SCROLL_COMPRESSED
+                    /* Compressed worlds are 1-tall (sy==0): tile (col,row) =
+                       bg_col_data[bg_col_index[col] * BG_WORLD_ROWS + rr]. */
+                    PPU_DATA = bg_col_data[(unsigned int)bg_col_index[
+                        (unsigned int)sx * 32 + cc] * BG_WORLD_ROWS + rr];
+#else
                     PPU_DATA = bg_world_tiles[
                         ((unsigned int)sy * 30 + rr) * BG_WORLD_COLS +
                         (unsigned int)sx * 32 + cc];
+#endif
                 }
             }
 
