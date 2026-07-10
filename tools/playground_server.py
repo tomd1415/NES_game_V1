@@ -2634,7 +2634,11 @@ def _dedup_columns(tiles, cols, rows):
     index — the compression that lets levels exceed the ~8-screen NROM raw cap.
     """
     seen = {}
-    col_index = bytearray(cols)
+    # A plain list (not a bytearray) so the uid can exceed 255 without raising:
+    # levels with >=256 unique columns can't be indexed in one byte, but we must
+    # still count them so the caller can reject the world with a clear message
+    # instead of crashing with "byte must be in range(0, 256)".
+    col_index = []
     col_data = bytearray()
     for c in range(cols):
         colbytes = bytes(tiles[r * cols + c] for r in range(rows))
@@ -2643,7 +2647,7 @@ def _dedup_columns(tiles, cols, rows):
             uid = len(seen)
             seen[colbytes] = uid
             col_data.extend(colbytes)
-        col_index[c] = uid
+        col_index.append(uid)
     return col_index, col_data, len(seen)
 
 
@@ -2661,7 +2665,31 @@ def _bg_compression(state):
         col_index, col_data, uniq = _dedup_columns(tiles, cols, rows)
         if uniq < 256:
             return True, uniq, bytes(col_index), bytes(col_data)
+        # Wide world (>8 screens) with too many distinct columns to index in one
+        # byte.  It can't compress AND a raw >8-screen array overflows NROM, so
+        # return the real uniq (>=256) as a signal for _guard_world_fits().
+        return False, uniq, None, None
     return False, 0, None, None
+
+
+def _guard_world_fits(state):
+    """Reject worlds that provably cannot fit an NROM cartridge, with a clear,
+    kid-friendly message instead of a Python traceback (500) or an obscure
+    "memory area overflow" linker error.
+
+    The one case we can prove up front: a world more than 8 screens wide whose
+    columns are too varied to column-deduplicate into a 1-byte index (>=256
+    unique columns).  Such a world can neither compress nor fit as a raw
+    ~1KB/screen array, so building it always fails — better to say why."""
+    compress, uniq, _ci, _cd = _bg_compression(state)
+    if not compress and uniq >= 256:
+        raise BuildError(
+            "This level is too big to fit on the cartridge. It is more than 8 "
+            "screens wide and has too many different-looking columns "
+            f"({uniq}) for the console's tiny memory — the limit is 255. "
+            "Try making the level a bit shorter, or reuse more repeated "
+            "sections (flat floor, repeated blocks) so columns can be shared."
+        )
 
 
 def build_bg_world_c(state):
@@ -2800,6 +2828,11 @@ def _build_rom(body):
     # Arc E §1 (E1-0): expand any 16x16-metatile backgrounds into ordinary 8x8
     # nametable/behaviour grids before anything reads them.  No-op for 8x8.
     _expand_metatiles(state)
+
+    # Fail fast with a readable message on worlds that provably can't fit the
+    # cartridge (a wide level too varied to column-compress), rather than
+    # crashing deep in codegen or overflowing the linker.
+    _guard_world_fits(state)
 
     custom_main_c = body.get("customMainC")
     if custom_main_c is not None and not isinstance(custom_main_c, str):

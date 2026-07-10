@@ -62,6 +62,14 @@ was a massive improvement.
     + `studio-tests/world-grow.spec.js`. Truly full-SMB-*game* scale (many long
     levels) would need a bigger mapper — a separate effort. Engine changelog v64
     (format+C) / v65 (ASM).
+    *Follow-up fix 2026-07-11:* a wide level too **varied** to compress (>8
+    screens with ≥256 distinct columns, more than a 1-byte index can hold) used
+    to crash `/play` with a Python `ValueError` → HTTP **500** and no game. The
+    server now (a) counts unique columns without overflowing and (b) rejects the
+    un-fittable case up front with a clear, kid-readable message ("too big / too
+    many different-looking columns — make it shorter or reuse repeated
+    sections"). Guarded by `builder-tests/scroll-wide-too-varied.mjs`. Server-only
+    (`playground_server.py`); no ROM-output change, goldens byte-identical.
 11. Add the ability to make a 'Geometry Dash' style game. This has been requested by many of the younger pupils and making this as easy as possible would be very helpful.
     *Largely covered:* the **runner** style is an auto-scroller with tap-to-jump
     and an instant restart when the player touches a spike tile — the Geometry
