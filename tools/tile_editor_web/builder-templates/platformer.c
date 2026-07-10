@@ -105,6 +105,7 @@ void __fastcall__ famistudio_sfx_play(unsigned char sfx_index, unsigned char cha
    so cc65's "macro redefinition is not identical" check stays happy. */
 #define PPU_CTRL      (*(volatile unsigned char*)0x2000)
 #define PPU_MASK      (*(volatile unsigned char*)0x2001)
+#define PPU_STATUS    (*(volatile unsigned char*)0x2002)   /* bit 6 = sprite-0 hit */
 #define OAM_ADDR      (*(volatile unsigned char*)0x2003)
 #define OAM_DATA      (*(volatile unsigned char*)0x2004)
 #define PPU_SCROLL    (*(volatile unsigned char*)0x2005)
@@ -301,6 +302,15 @@ unsigned char bw_hud_last_lives = 0xFF;
  * so they can't go in the pre-vblank HUD block above). */
 unsigned char bw_hud_dirty = 1;   /* 1 at boot -> first vblank paints all 11 digits */
 #define BW_HUD_SET_DIRTY() (bw_hud_dirty = 1)
+/* Sprite-0 scroll split (scrolling SMB): a solid tile seeded by the server at this
+ * index in both pools — the bar's opaque bottom row (the bg hit target) and the
+ * sprite-0 marker (opaque only in its bottom row).  BW_HUDBG_SPLIT_Y is the marker's
+ * OAM y; its opaque row lands at scanline (y+8), where the split fires.  Tune in
+ * FCEUX so the split sits exactly at the strip's bottom (~scanline 32). */
+#define BW_HUDBG_SOLID_TILE 58
+#ifndef BW_HUDBG_SPLIT_Y
+#define BW_HUDBG_SPLIT_Y 23
+#endif
 /* Nametable (col,row) of each of the 11 digit tiles in the top status strip,
  * interleaved col,row — mirrors the OAM layout: coins + time on tile-row 1,
  * lives + score on tile-row 2. */
@@ -356,7 +366,8 @@ void bw_hud_bg_paint(void) {
 void bw_hud_bg_init(void) {
     unsigned int a;
     PPU_ADDR = 0x20; PPU_ADDR = 0x00;              /* $2000 = NT0, row 0 */
-    for (a = 0; a < 128; a++) PPU_DATA = 0x00;     /* 4 rows x 32 tiles cleared */
+    for (a = 0; a < 96; a++)  PPU_DATA = 0x00;     /* rows 0-2 cleared (behind the digits) */
+    for (a = 0; a < 32; a++)  PPU_DATA = BW_HUDBG_SOLID_TILE;  /* row 3 = solid bar (sprite-0 hit target + strip edge) */
     bw_hud_bg_paint();
 }
 #endif
@@ -2093,7 +2104,18 @@ void main(void) {
         // ~2273-cycle NTSC budget on complex scenes and produced
         // mid-screen corruption on real hardware / fceux (jsnes let
         // us get away with it because it doesn't enforce timing).
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+        /* Sprite 0 (OAM slot 0) parked on the status bar's solid bottom row so its
+         * hit fires the mid-frame scroll split.  attr 0x20 = behind bg (invisible —
+         * the hit still fires on pixel overlap).  Player/scene fill from slot 4. */
+        oam_buf[0] = BW_HUDBG_SPLIT_Y;
+        oam_buf[1] = BW_HUDBG_SOLID_TILE;
+        oam_buf[2] = 0x20;
+        oam_buf[3] = 8;
+        oam_idx = 4;
+#else
         oam_idx = 0;
+#endif
 
         // --- Player -------------------------------------------------------
         // When facing left, flip every tile horizontally AND draw the
@@ -2798,7 +2820,27 @@ void main(void) {
         PPU_SCROLL = 0;
 #endif
 
-#ifdef SCROLL_BUILD
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+        /* --- Sprite-0 status-bar split -----------------------------------
+         * Render the top strip (rows 0-3) at scroll (0,0); at the sprite-0 hit
+         * (its opaque bottom row over the strip's solid bar) swap in the
+         * playfield's horizontal scroll for the rest of the frame — so the strip
+         * stays put while the playfield scrolls.  The mid-frame writes must land
+         * in the split scanline's H-blank; this minimal 3-write sequence is the
+         * hand-tuned part (adjust BW_HUDBG_SPLIT_Y in FCEUX). */
+        PPU_CTRL = 0x10;                 /* NT0, +1 stride — strip at x=0 */
+        PPU_SCROLL = 0;
+        PPU_SCROLL = 0;
+        PPU_MASK = 0x1E;                 /* rendering on for the poll */
+        {   /* busy-wait for the sprite-0 hit — rigorously bounded so a frame where
+             * it never fires (rendering off, sprite 0 off-screen) can't hang. */
+            unsigned int s0g;
+            for (s0g = 0; s0g < 3000u; s0g++) { if (PPU_STATUS & 0x40) break; }
+        }
+        PPU_CTRL = (unsigned char)(0x10 | ((unsigned char)(cam_x >> 8) & 1));
+        PPU_SCROLL = (unsigned char)(cam_x & 0xFF);   /* playfield x for the rest of the frame */
+        PPU_SCROLL = 0;                               /* y is not reloaded mid-frame */
+#elif defined(SCROLL_BUILD)
         // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR
         // writes in scroll_stream() have settled.  Must be the last
         // PPU register write of the VBlank window or the camera jitters.

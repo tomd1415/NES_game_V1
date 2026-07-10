@@ -847,12 +847,20 @@ def _smbhud_bg_enabled(state):
         return False
 
 
+# Tile index (both pools) for the solid status-bar tile: an opaque background so
+# the sprite-0 split fires reliably, and the sprite-0 marker sprite itself.  58 is
+# just past the 0-9 digit glyphs (48-57) the bg HUD also seeds.
+BW_HUDBG_SOLID_TILE = 58
+
+
 def _seed_hud_digits_bg(state):
     """Seed the built-in 0-9 glyphs into blank BACKGROUND tiles at their ASCII
     indices (48..57) when the SMB HUD is in background mode, so the nametable
     status bar can draw the read-out as background tiles (BW_SMB_HUD_BG). Same
-    indices as the dialogue font, so the two never conflict.  A no-op otherwise,
-    so non-bg-HUD ROMs are byte-identical."""
+    indices as the dialogue font, so the two never conflict.  Also seeds a solid
+    opaque tile at BW_HUDBG_SOLID_TILE in BOTH pools — the bar background (so the
+    sprite-0 hit has an opaque bg pixel) and the sprite-0 marker.  A no-op
+    otherwise, so non-bg-HUD ROMs are byte-identical."""
     if not _smbhud_bg_enabled(state):
         return
     bg = state.get("bg_tiles")
@@ -865,6 +873,19 @@ def _seed_hud_digits_bg(state):
         tile = bg[idx]
         if isinstance(tile, dict) and _pixels_blank(tile.get("pixels")):
             tile["pixels"] = [row[:] for row in _DIALOGUE_FONT[d]]
+    solid = [[1] * 8 for _ in range(8)]
+    # BG: fully solid (the bar background + the sprite-0 hit target).
+    if isinstance(bg, list) and 0 <= BW_HUDBG_SOLID_TILE < len(bg):
+        t = bg[BW_HUDBG_SOLID_TILE]
+        if isinstance(t, dict) and _pixels_blank(t.get("pixels")):
+            t["pixels"] = [row[:] for row in solid]
+    # SPRITE-0 marker: opaque ONLY in the bottom row, so the hit fires on that
+    # scanline (the strip's bottom) rather than the sprite's top — a clean split.
+    sp = state.get("sprite_tiles")
+    if isinstance(sp, list) and 0 <= BW_HUDBG_SOLID_TILE < len(sp):
+        t = sp[BW_HUDBG_SOLID_TILE]
+        if isinstance(t, dict) and _pixels_blank(t.get("pixels")):
+            t["pixels"] = [[0] * 8 for _ in range(7)] + [[1] * 8]
 
 
 def build_chr(state):

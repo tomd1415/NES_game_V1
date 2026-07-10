@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v60 — 2026-07-10 — SMB background status bar — Phase 4 sprite-0 split (WIP, off by default)
+
+### Added (off by default → byte-identical; FCEUX-validated only)
+- The **sprite-0 scroll split** for a scrolling bg-HUD SMB (`BW_SMB_HUD_BG` +
+  `SCROLL_BUILD`): sprite 0 (OAM slot 0, an opaque marker seeded at
+  `BW_HUDBG_SOLID_TILE=58`, parked on the strip's solid bottom row) fires the split;
+  the vblank sets scroll (0,0) for the strip, then a bounded busy-poll on `PPU_STATUS`
+  bit 6 swaps in the playfield's horizontal scroll (`cam_x`) for the rest of the
+  frame. For a 2-screen level this needs no streamer skip / sprite-Y offset (the
+  strip lives on NT0 rows 0-3 at x=0; the playfield scrolls; actors stay in rows
+  4-29). `BW_HUDBG_SPLIT_Y` (default 23) tunes the split scanline. Added `PPU_STATUS`.
+- **This is a FIRST ATTEMPT, NOT verified.** jsnes cannot run it — it fails to set the
+  sprite-0 status bit the way hardware does, so the busy-poll times out and
+  `PPU_STATUS` reads desync `waitvsync` → jsnes hangs. On real hardware / FCEUX the
+  hit fires (verified geometry: `spr0HitY=31`), so it should run; the tear-free
+  timing + exact split line need FCEUX tuning (`BW_HUDBG_SPLIT_Y`). Off by default, so
+  golden `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED and every default ROM is
+  byte-identical.
+
 ## v59 — 2026-07-10 — SMB background status bar — Phases 2-3 (bg HUD; off by default)
 
 ### Added (still off by default → byte-identical)
