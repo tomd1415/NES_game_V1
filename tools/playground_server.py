@@ -45,6 +45,8 @@ import urllib.error
 import urllib.request
 from urllib.parse import unquote, urlparse
 
+from nes_studio_core import graphics as graphics_core
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
 
@@ -924,16 +926,7 @@ def _active_nametable(state):
     Legacy state had a single top-level `nametable` — fall back to that so
     older saves (and the example assets used in tests) still build.
     """
-    bgs = state.get("backgrounds")
-    if isinstance(bgs, list) and bgs:
-        idx = state.get("selectedBgIdx", 0) or 0
-        if not isinstance(idx, int) or idx < 0 or idx >= len(bgs):
-            idx = 0
-        bg = bgs[idx] or {}
-        nt = bg.get("nametable")
-        if isinstance(nt, list):
-            return nt
-    return state.get("nametable") or []
+    return graphics_core.active_nametable(state)
 
 
 def selected_bg_idx_safe(state):
@@ -952,33 +945,12 @@ def _nametable_bytes_for(nt):
     into the raw NES format: 32*30 tile bytes followed by 64 attribute
     bytes.  Extracted from build_nam so build_scene_inc can emit one
     per background for Phase B+ Round 3 (multi-background doors)."""
-    tiles_out = bytearray(SCREEN_COLS * SCREEN_ROWS)
-    for r in range(SCREEN_ROWS):
-        row = nt[r] if r < len(nt) else []
-        for c in range(SCREEN_COLS):
-            cell = row[c] if c < len(row) else None
-            if cell:
-                tiles_out[r * SCREEN_COLS + c] = int(cell.get("tile", 0)) & 0xFF
-    attr_out = bytearray(64)
-    for ar in range(8):
-        for ac in range(8):
-            byte = 0
-            for quad in range(4):
-                qr = (quad >> 1) & 1
-                qc = quad & 1
-                tr = ar * 4 + qr * 2
-                tc = ac * 4 + qc * 2
-                pal = 0
-                if tr < len(nt) and tc < len(nt[tr]) and isinstance(nt[tr][tc], dict):
-                    pal = int(nt[tr][tc].get("palette", 0)) & 3
-                byte |= pal << (quad * 2)
-            attr_out[ar * 8 + ac] = byte
-    return bytes(tiles_out) + bytes(attr_out)
+    return graphics_core.nametable_bytes(nt)
 
 
 def build_nam(state):
     """32x30 tile bytes + 64 attribute bytes = 1024-byte NES nametable."""
-    return _nametable_bytes_for(_active_nametable(state))
+    return graphics_core.build_nam(state)
 
 
 # --- 16x16 metatiles (Arc E §1, spike E1-0) -----------------------------------
@@ -997,31 +969,7 @@ def _expand_metatile_bg(bg):
     `bg.metatiles[i] = {tiles:[TL,TR,BL,BR], palette, behaviour}` and
     `bg.mtmap[r][c] = <metatile id>` (in metatile units).  An out-of-range or
     missing id expands to a blank (tile 0, palette 0, behaviour 0) block."""
-    mts = bg.get("metatiles") or []
-    mtmap = bg.get("mtmap") or []
-    mrows = len(mtmap)
-    mcols = max((len(r) for r in mtmap if isinstance(r, list)), default=0)
-    nrows, ncols = mrows * 2, mcols * 2
-    nametable = [[{"tile": 0, "palette": 0} for _ in range(ncols)]
-                 for _ in range(nrows)]
-    behaviour = [[0 for _ in range(ncols)] for _ in range(nrows)]
-    # TL, TR, BL, BR -> (row offset, col offset) within the 2x2 block.
-    quads = ((0, 0), (0, 1), (1, 0), (1, 1))
-    for mr in range(mrows):
-        row = mtmap[mr] if isinstance(mtmap[mr], list) else []
-        for mc in range(len(row)):
-            mid = row[mc]
-            if not isinstance(mid, int) or mid < 0 or mid >= len(mts):
-                continue
-            mt = mts[mid] or {}
-            tiles = mt.get("tiles") or []
-            pal = int(mt.get("palette", 0)) & 3
-            beh = int(mt.get("behaviour", 0)) & 0xFF
-            for k, (dr, dc) in enumerate(quads):
-                t = int(tiles[k]) & 0xFF if k < len(tiles) else 0
-                nametable[mr * 2 + dr][mc * 2 + dc] = {"tile": t, "palette": pal}
-                behaviour[mr * 2 + dr][mc * 2 + dc] = beh
-    return nametable, behaviour
+    return graphics_core.expand_metatile_background(bg)
 
 
 def _expand_metatiles(state):
@@ -1029,22 +977,7 @@ def _expand_metatiles(state):
     behaviour with the 8x8 grids expanded from its metatile map, and set its
     `dimensions` to span the expansion.  No-op for 8x8 (default) backgrounds, so
     existing projects and the byte-identical baseline are untouched."""
-    bgs = state.get("backgrounds") if isinstance(state, dict) else None
-    if not isinstance(bgs, list):
-        return state
-    for bg in bgs:
-        if not isinstance(bg, dict) or (bg.get("tileMode") or "8x8") != "16x16":
-            continue
-        nametable, behaviour = _expand_metatile_bg(bg)
-        bg["nametable"] = nametable
-        bg["behaviour"] = behaviour
-        nrows, ncols = len(nametable), (len(nametable[0]) if nametable else 0)
-        # 1 screen = 32x30 tiles; size dimensions to cover the expansion.
-        bg["dimensions"] = {
-            "screens_x": max(1, -(-ncols // SCREEN_COLS)),   # ceil-div
-            "screens_y": max(1, -(-nrows // SCREEN_ROWS)),
-        }
-    return state
+    return graphics_core.expand_metatiles(state)
 
 
 def _palette_slots(state, group, i):
