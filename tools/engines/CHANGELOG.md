@@ -9,6 +9,31 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v63 — 2026-07-10 — Fix multi-bg door transitions showing the wrong room (#2/#3)
+
+### Fixed (multi-bg only → non-multi-bg builds byte-identical; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+A door to a different background loaded the destination's *visible* screen
+correctly but, on scrolling to its second screen, showed the **starting** room's
+tiles (feedback #2/#3). **Root cause:** `scroll_stream()` fetches from
+`bg_world_tiles[]`, a fixed compile-time array = the starting room's tiles, which
+`load_background_n` does not swap on a door (it swaps the nametables and the
+behaviour map, T2.1/T2.2, but not the streamer source) — so re-streaming smeared
+the old room over the destination.
+
+**Fix (`platformer.c` main loop):** a multi-bg door build that stays within 2×2
+now **skips the streamer** (`scroll_stream_prepare` + `scroll_stream`).
+`load_world_bg` / `load_background_n` already blit the whole ≤2×2 room into all
+four nametables from the per-bg `bg_nametable_<n>` data, so the camera only needs
+to pan (`scroll_apply_ppu`) — streaming is redundant there and was the bug. This
+also handles differently-sized rooms (each loaded by its own `bg_nametable_<n>`),
+which a swap of the fixed-stride `bg_world_tiles` pointer would not. Guarded by
+`(BG_WORLD_COLS <= 64) && (BG_WORLD_ROWS <= 60)` so a >2-screen *selected* room
+(a long level + a small bonus room is still "multi-bg") keeps the streamer its
+main level needs. Gated entirely behind `BW_DOORS_MULTIBG_ENABLED` +
+`SCROLL_BUILD`, both off for stock/single-bg builds → byte-identical. Confirmed
+on FCEUX: a 2-screen bg0→bg1 door now renders bg1 correctly on both screens; the
+default SMB showcase (multi-bg + bg-HUD) still scrolls with the HUD fixed.
+
 ## v62 — 2026-07-10 — Complete the v61 SCROLL_SKIP_TOP freeze (byte-identical)
 
 ### Fixed (feature-off = byte-identical; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)

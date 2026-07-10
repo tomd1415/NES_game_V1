@@ -2770,7 +2770,12 @@ void main(void) {
             oam_idx += 4;
         }
 
-#ifdef SCROLL_BUILD
+/* Feedback #2/#3 — a multi-bg door build that stays within 2x2 skips the
+ * streamer (see the block-comment at scroll_stream() below).  The
+ * (BG_WORLD_COLS/ROWS <= 2 screens) guard keeps the streamer for a >2-screen
+ * *selected* room, whose main level genuinely needs it (a long level + a small
+ * bonus room is still "multi-bg"). */
+#if defined(SCROLL_BUILD) && !(BW_DOORS_MULTIBG_ENABLED && (BG_WORLD_COLS <= 64) && (BG_WORLD_ROWS <= 60))
         /* Resolve which column/row the scroll engine wants to stream
            BEFORE entering the vblank window.  The slow array indexing
            (`bg_world_tiles[rr * BG_WORLD_COLS + col]` × 30) happens
@@ -2810,12 +2815,20 @@ void main(void) {
         if (bw_hud_dirty) { bw_hud_bg_paint(); bw_hud_dirty = 0; }
 #endif
 
-#ifdef SCROLL_BUILD
+#if defined(SCROLL_BUILD) && !(BW_DOORS_MULTIBG_ENABLED && (BG_WORLD_COLS <= 64) && (BG_WORLD_ROWS <= 60))
         // Stream off-screen tile columns / rows for any 8-px boundary
         // the camera has crossed since last frame — has to happen while
         // rendering is still disabled.
+        //
+        // Skipped for a multi-bg door build within 2x2: load_world_bg /
+        // load_background_n already blit the WHOLE room into all four
+        // nametables from the per-bg bg_nametable_<n> data, so the camera only
+        // needs to pan (scroll_apply_ppu below).  Streaming is then redundant
+        // AND wrong — it fetches from bg_world_tiles[], the *starting* room's
+        // tiles, which load_background_n does not swap, so it smeared the old
+        // room over a door destination (feedback #2/#3).
         scroll_stream();
-#else
+#elif !defined(SCROLL_BUILD)
         PPU_SCROLL = 0;
         PPU_SCROLL = 0;
 #endif
