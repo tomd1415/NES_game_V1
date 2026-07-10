@@ -68,6 +68,15 @@ class WorldCanvas(QWidget):
         self._validate_cell(col, row)
         return self._cells[row][col]
 
+    def load_tiles(self, tiles: list[list[int]]) -> None:
+        if len(tiles) < self.ROWS or any(len(row) < self.COLS for row in tiles[: self.ROWS]):
+            raise ValueError("WORLD tile data must be at least 32 by 30")
+        self._cells = [list(map(int, row[: self.COLS])) for row in tiles[: self.ROWS]]
+        self._undo.clear()
+        self._redo.clear()
+        self.history_changed.emit(False, False)
+        self.update()
+
     def edit_cell(self, col: int, row: int) -> bool:
         """Apply the active tool; return whether the model changed."""
 
