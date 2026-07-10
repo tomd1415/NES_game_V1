@@ -23,8 +23,21 @@ accepted as opt-in.
   the SMB speed ceiling is the **enemy AI + heavy SMB base**, not the HUD. So the bg
   HUD's real win is the FLICKER + freed OAM, NOT the "inconsistent speed."
 - [ ] **Sprite-0 split (Phase 4).** FCEUX-only. Sprite 0 at the strip bottom; vblank
-  sets scroll (0,0), busy-poll `PPU_STATUS` bit 6, then write the playfield scroll —
-  hand-written 6502. Iterate with the user via FCEUX.
+  sets scroll (0,0), busy-poll `PPU_STATUS` bit 6, then write the playfield scroll.
+  **Assessed 2026-07-10 — deeper than first scoped:**
+  - The mid-frame scroll re-apply must fit the **~28-CPU-cycle H-blank** of the split
+    scanline, but the engine's `scroll_apply_ppu` (ASM, handles wide/tall nametable
+    select) is **~100 cycles** — too slow, it would tear. So the split needs a
+    *minimal hand-tuned* mid-frame write (fine-x + the coarse-x/nametable `$2006`/`$2005`
+    loopy bits only), separate from `scroll_apply_ppu`. This is the crux and is
+    cycle-exact → **jsnes can validate the LOGIC (does the strip stay put) but NOT the
+    tear-free TIMING; only FCEUX can.**
+  - OAM layout change: sprite 0 must be OAM slot 0 (an opaque tile parked at the strip
+    bottom over an opaque strip pixel), so `draw_player` must start at `oam_idx = 4`
+    under the flag.
+  - Player/enemy sprites still render over the top 32px, so a bg-HUD game must keep
+    actors in rows 4-29 (author the top as the strip). Starter would be authored so.
+  → Best done as a focused round with live FCEUX iteration, not one-shot.
 - [ ] **Streamer skip (Phase 5).** `scroll_stream` writes the playfield to rows 4-29
   only. FCEUX-validate scrolling doesn't smear the bar.
 
