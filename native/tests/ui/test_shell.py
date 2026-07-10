@@ -73,6 +73,11 @@ class NativeShellTests(unittest.TestCase):
             self.assertEqual(window.world_canvas.cell_value(3, 3), 0)
             self.assertTrue(window._document.dirty)
             self.assertTrue(any(entry.reason == "before_recovery" for entry in window._autosave.entries()))
+            window.new_project()
+            self.assertEqual(window._document.name, "Untitled Game")
+            self.assertTrue(window._document.dirty)
+            self.assertFalse(window.world_canvas.can_undo)
+            self.assertTrue(any(entry.reason == "before_new" for entry in window._autosave.entries()))
         window.close()
         application.processEvents()
 

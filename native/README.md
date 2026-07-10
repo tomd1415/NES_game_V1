@@ -35,6 +35,8 @@ is flushed when the window closes. Undo/redo history remains separate.
 Use **File → Recover Autosave** to restore the latest recovery copy. The app
 snapshots a dirty current document first and marks the recovered copy unsaved,
 so recovery never silently replaces an original project file.
+**File → New Project** starts a fresh canonical WORLD and snapshots any dirty
+project first.
 
 ## Requirements
 

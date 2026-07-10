@@ -358,6 +358,16 @@ class MainWindow(QMainWindow):
     def _recover_autosave(self) -> None:
         self.recover_autosave()
 
+    def new_project(self) -> None:
+        if self._document.dirty:
+            self._autosave.snapshot(self._document.to_json(), "before_new")
+        self._document = ProjectDocument.preview()
+        self._document.state["name"] = "Untitled Game"
+        self._document.dirty = True
+        self.world_canvas.load_tiles(self._document.world_tiles())
+        self._update_document_title()
+        self.statusBar().showMessage("Created a new project — use Save Project As to keep it")
+
     def _apply_theme(self) -> None:
         self.setStyleSheet(
             """
@@ -392,7 +402,10 @@ class MainWindow(QMainWindow):
 
     def _create_menus(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
-        self._add_placeholder(file_menu, "&New Project")
+        new_action = QAction("&New Project", self)
+        new_action.setShortcut(QKeySequence.StandardKey.New)
+        new_action.triggered.connect(self.new_project)
+        file_menu.addAction(new_action)
         open_action = QAction("&Open Project…", self)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self._open_project)
