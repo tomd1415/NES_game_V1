@@ -1,0 +1,23 @@
+# Product-owner review for governance and shared/high-impact contracts.
+# GitHub team handles for the web and native teams should be added when those
+# teams exist. Do not use unresolved placeholder handles.
+
+/.github/CODEOWNERS @tomd1415
+/.github/pull_request_template.md @tomd1415
+/CONTRIBUTING.md @tomd1415
+/docs/design/linux-native/ @tomd1415
+/docs/design/decisions/ @tomd1415
+/docs/reference/project-state-schema.md @tomd1415
+
+# Shared project-to-ROM and compatibility surfaces.
+/shared/ @tomd1415
+/tests/contracts/ @tomd1415
+/tools/engines/ @tomd1415
+/steps/Step_Playground/ @tomd1415
+/scripts/snapshot-engine.mjs @tomd1415
+/tools/playground_server.py @tomd1415
+/tools/tile_editor_web/builder-assembler.js @tomd1415
+/tools/tile_editor_web/builder-modules.js @tomd1415
+/tools/tile_editor_web/builder-validators.js @tomd1415
+/tools/tile_editor_web/engine-version.js @tomd1415
+/tools/tile_editor_web/play-pipeline.js @tomd1415

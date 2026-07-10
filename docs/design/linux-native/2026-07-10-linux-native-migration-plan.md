@@ -1,12 +1,12 @@
-# Native Linux migration assessment and implementation plan
+# Native Linux application assessment and dual-target implementation plan
 
 **Status:** proposed architecture and delivery plan
 
 **Assessment date:** 2026-07-10
 
-**Codebase baseline:** engine v61
+**Codebase baseline:** engine v62
 
-**Target:** a genuine Linux desktop application, not a browser page in a desktop wrapper
+**Target:** add a genuine Linux desktop application alongside the supported web application
 
 ## Executive conclusion
 
@@ -31,8 +31,9 @@ The recommended target is:
   Build and ROM export must still work when no emulator is installed. A later
   out-of-process emulator can provide in-window Play and headless preview
   capture.
-- The current browser application retained as a compatibility oracle until the
-  native parity gates pass.
+- The current browser application retained as a supported product with its own
+  release, test and deployment path. It is also the initial behavioral oracle
+  for native parity work.
 
 This choice minimizes changes to the most sensitive part of the product: the
 project-to-ROM contract. It also provides a genuinely native interface with
@@ -40,7 +41,7 @@ native menus, dialogs, accessibility, keyboard handling and desktop
 integration.
 
 A strict zero-JavaScript interpretation is possible, but it would require
-rewriting the 2,751-line Builder emitter and finding a new way to preserve 61
+rewriting the 2,751-line Builder emitter and finding a new way to preserve 62
 historical engine generators. The recommended interpretation of “not a web
 app” is therefore:
 
@@ -69,11 +70,72 @@ The native release should satisfy all of these conditions:
 8. Classroom accounts and gallery publishing, if retained, are optional
    network services. Their existence does not make the editor a web app.
 
+These conditions apply to the native artifact only. They do not deprecate or
+constrain the separately supported browser application.
+
 Electron, Tauri, Qt WebEngine and GTK WebKit are intentionally excluded. They
 would create an installable desktop shell quickly, but the interface would
 still be HTML/CSS/JavaScript rendered by a browser engine. Electron's own
 [process-model documentation](https://www.electronjs.org/docs/latest/tutorial/process-model)
 describes its renderer as web content inside a Chromium-style architecture.
+
+## Product and repository development strategy
+
+The web and native applications should be permanent sibling products in this
+repository. This is a dual-target implementation, not a cutover from one UI to
+another:
+
+- [tools/tile_editor_web](../../../tools/tile_editor_web/) remains the web
+  application and continues to receive fixes and product improvements;
+- `native/` contains the PySide6 application and has its own entry point,
+  dependency metadata, tests and release artifacts;
+- shared project schemas, engines, build behavior and deterministic fixtures
+  remain repository-level contracts used by both targets;
+- the extracted Python build core exposes an HTTP adapter for the web app and
+  a direct in-process adapter for the native app;
+- neither target may silently change the shared JSON or ROM contract for the
+  other target.
+
+Use `main` as the integration branch for both products. Develop the native app
+through short-lived, reviewable branches such as
+`chore/linux-native-baseline-v62`, `refactor/shared-build-core` and
+`feat/native-shell`; merge each completed slice back to `main`. Do not maintain
+a permanent native branch, because it would allow shared engines, fixtures and
+build behavior to drift. A Git worktree is useful when both applications need
+to be open at once, but it should still use ordinary short-lived branches.
+
+### Team topology and decision rights
+
+Two groups can develop the products concurrently when ownership follows the
+code boundaries:
+
+| Area | Primary responsibility | Required cross-team involvement |
+| --- | --- | --- |
+| Web UI, browser storage and Playwright product tests | Web team | Native review only when a shared contract or service interface changes |
+| Native UI, XDG persistence and Linux packaging | Native Linux team | Web review only when a shared contract or service interface changes |
+| Extracted build core, project schema, engines and cross-target fixtures | Joint | At least one reviewer from each team |
+| Product scope, deliberate parity differences and release policy | Product owner | Teams provide evidence and recommendations; product owner decides |
+
+The repository owner/product owner, GitHub `@tomd1415`, has final authority on
+product direction, shared-contract exceptions, security/data/licensing policy
+and release readiness. Routine implementation decisions remain with the owning
+team inside an approved scope. When teams disagree on a lasting or expensive
+choice, record the options, evidence and recommendations in an ADR; the product
+owner selects the outcome. This prevents an unresolved disagreement from
+turning into permanent branch or product divergence.
+
+The day-to-day branch, review, testing and release rules are defined in
+[CONTRIBUTING.md](../../../CONTRIBUTING.md). The initial
+[CODEOWNERS](../../../.github/CODEOWNERS) file requires the product owner's
+review on governance and high-impact shared paths. Add resolvable web/native
+GitHub team handles when those teams are created. CODEOWNERS enforcement also
+requires the corresponding branch-protection settings on the hosting service.
+
+CI should have explicit web, shared-contract and native jobs. A change to a
+shared schema, engine or build component must run both targets' relevant test
+suites. Web-only and native-only changes run their own UI suites plus the
+shared contract tests. Releases may use independent versions and schedules,
+provided each records the shared engine/schema compatibility range it ships.
 
 ## Current codebase assessment
 
@@ -83,13 +145,13 @@ The present application contains:
 
 | Area | Current size / evidence | Native implication |
 | --- | --- | --- |
-| Python build and HTTP backend | [playground_server.py](../../../tools/playground_server.py), 4,421 lines | Extract and reuse the build/codegen functions; replace HTTP as the local UI boundary. |
+| Python build and HTTP backend | [playground_server.py](../../../tools/playground_server.py), 4,421 lines | Extract and reuse the build/codegen functions; retain HTTP for the web app and use direct calls as the native UI boundary. |
 | Accounts and cloud-project store | [accounts.py](../../../tools/accounts.py), 444 lines | Reusable transport-neutral SQLite service; not required for ordinary local projects. |
-| Non-vendored browser JavaScript | 14,069 lines under [tile_editor_web](../../../tools/tile_editor_web/) | Pure algorithms can be retained or ported; DOM, storage, orchestration and rendering must be replaced. |
-| HTML pages | 22,501 lines across eight pages | Do not port page-for-page. Port the unified Studio information architecture and use the legacy pages only as the parity oracle. |
-| Engine history | 61 snapshots, approximately 34 MB, under [tools/engines](../../../tools/engines/) | Package or otherwise preserve the compatibility data; do not rewrite every historical generator. |
-| Builder/ROM tests | 101 top-level .mjs files and about 14,615 lines | Preserve as the project-to-ROM safety net during the migration. |
-| Studio browser tests | 22 specs, 111 discovered Playwright tests | Treat as behavioral specifications and replace them mode-by-mode with native UI tests. |
+| Non-vendored browser JavaScript | 14,069 lines under [tile_editor_web](../../../tools/tile_editor_web/) | Keep it maintained for the web target. Pure algorithms may be retained or ported for native; native DOM, storage, orchestration and rendering require separate implementations. |
+| HTML pages | 22,501 lines across eight pages | Keep the web surfaces supported. Do not port page-for-page; express their capabilities through the unified native Studio information architecture. |
+| Engine history | 62 snapshots, approximately 34 MB, under [tools/engines](../../../tools/engines/) | Share and preserve the compatibility data across both targets; do not rewrite every historical generator. |
+| Builder/ROM tests | 101 top-level .mjs files and about 14,615 lines | Preserve as the permanent project-to-ROM safety net for both products. |
+| Studio browser tests | 22 specs, 111 discovered Playwright tests | Keep them as the permanent web regression suite and behavioral specifications; add native UI tests rather than replacing them. |
 
 The npm project is not the application build. [package.json](../../../package.json)
 explicitly describes itself as the Playwright/browser test harness. There is no
@@ -571,7 +633,7 @@ backups in [storage.js](../../../tools/tile_editor_web/storage.js), despite
 older documentation mentioning other counts. Choose and document a new native
 retention policy explicitly instead of inheriting that drift.
 
-### Browser-to-native data migration
+### Cross-client data portability
 
 A current full-project JSON export contains one project state only. It does not
 contain the localStorage project catalog or Time Machine history. Support both:
@@ -581,13 +643,21 @@ contain the localStorage project catalog or Time Machine history. Support both:
    native project, snapshot that current state as before_import. When importing
    as a new project, preserve the source file and create an imported_baseline
    snapshot instead; there is no pre-import native state to snapshot.
-2. **Recommended cutover bundle:** add an “Export all projects” command to the
-   browser app before retirement. The versioned bundle should contain the
-   catalog, every current document, available snapshots/backups, reason/time
-   metadata and checksums. The native importer validates it, reports skipped or
-   corrupt entries and imports atomically or into a recoverable staging area.
+2. **Recommended interoperability bundle:** add an “Export all projects”
+   command to the browser app as an ongoing portability feature. The versioned
+   bundle should contain the catalog, every current document, available
+   snapshots/backups, reason/time metadata and checksums. The native importer
+   validates it, reports skipped or corrupt entries and imports atomically or
+   into a recoverable staging area.
 
-If the batch exporter is not delivered, migration guidance must state clearly
+Native project JSON exports must remain importable by the web app. If the
+native application later exports the multi-project bundle, the browser must
+either import the same versioned format or clearly reject unsupported bundle
+versions without affecting existing data. Add round-trip tests in both
+directions; data portability is a continuing product contract, not a one-time
+migration facility.
+
+If the batch exporter is not delivered, portability guidance must state clearly
 that each project needs a separate export and browser Time Machine history will
 not migrate.
 
@@ -611,9 +681,10 @@ has:
 - cancellation support;
 - tests callable without a GUI.
 
-Keep playground_server.py as a temporary adapter over the new core. This allows
-the browser app and native app to use the same implementation during the
-transition.
+Keep playground_server.py as the maintained HTTP adapter over the new core for
+the web application. The native application uses the same core directly. Both
+adapters need permanent contract tests so a core change cannot break one target
+while passing on the other.
 
 ### Compiler input is a security boundary
 
@@ -679,7 +750,7 @@ The bridge should:
 Only scripts shipped inside a verified engine bundle may be evaluated. Never
 evaluate project-supplied JavaScript.
 
-Before committing to the bridge, run a spike across all 61 snapshots:
+Before committing to the bridge, run a spike across all 62 snapshots:
 
 - each assembler/module pair parses;
 - default Builder state can be constructed or supplied;
@@ -725,7 +796,7 @@ The native EngineRegistry should select:
 - the matching Step_Playground source/resource tree;
 - a compatible Python codegen version.
 
-For v1–v61, Python generator history was not frozen, so exact historical
+For v1–v62, Python generator history was not frozen, so exact historical
 reconstruction cannot be honestly promised from the snapshots alone. Record
 that as a legacy limitation. Starting with the extracted native/build-core
 baseline:
@@ -884,7 +955,7 @@ Work:
    - behavioral result for C versus ASM where bytes intentionally differ;
    - rendered/reference observations.
 5. Run the existing test suites.
-6. Regenerate and record the nine FCEUX C/ASM comparisons for engine v61.
+6. Regenerate and record the nine FCEUX C/ASM comparisons for engine v62.
 
 Important existing evidence gap:
 
@@ -892,7 +963,7 @@ Important existing evidence gap:
   timing/flicker, inaccessible doors, racer sensitivity/camera and two-player
   runner concerns.
 - test-results and fceux-validation are ignored by git.
-- the later local comparison ROMs predate engine v61 and v57 changed SMB frame
+- the later local comparison ROMs predate engine v62 and v57 changed SMB frame
   pacing.
 
 Create a small committed results manifest containing commit SHA, engine,
@@ -903,7 +974,7 @@ remain CI artifacts.
 **Exit gate:**
 
 - current suites are green or every failure is documented;
-- the v61 manual comparison has a durable result;
+- the v62 manual comparison has a durable result;
 - every parity row is preserve, improve, defer or deliberately drop;
 - baseline fixtures and hashes are committed.
 
@@ -975,7 +1046,7 @@ Work:
 1. Implement CodegenRuntime behind a small interface.
 2. Load current assembler/modules/template in a fresh QJSEngine.
 3. Compare generated source with Node across all representative fixtures.
-4. Iterate every v1–v61 snapshot and record support.
+4. Iterate every v1–v62 snapshot and record support.
 5. Capture console output and JavaScript exception stack/file/version.
 6. Test hostile strings in project names/dialogue/custom fields.
 7. Verify only trusted bundled scripts execute.
@@ -1036,7 +1107,8 @@ Work:
     requests.
 11. Use transactional revision checks and create conflict copies on a stale
     write.
-12. Add the versioned all-project/history cutover-bundle importer.
+12. Add the versioned all-project/history interoperability-bundle importer.
+13. Add native-to-web and web-to-native JSON round-trip contract tests.
 
 **Exit gate:**
 
@@ -1047,7 +1119,7 @@ Work:
 - second launches reuse the existing writer and stale revisions never
   overwrite silently;
 - single-project and all-project bundle migration report exactly what history
-  was imported;
+  was imported, and native JSON remains importable by the web application;
 - no data is written outside the test XDG tree.
 
 ### Phase 6 — shell and first vertical native editor slice
@@ -1118,11 +1190,13 @@ re-express it with Qt models, widgets and commands.
 - undo, autosave, keyboard, focus and high contrast pass;
 - custom-painted grids expose semantic cells, cursor/selection changes and
   actions through AT-SPI or an equivalent structured view;
-- no legacy page retires merely because the native screen looks complete.
+- web behavior and its regression coverage remain supported when the native
+  screen reaches parity.
 
 ### Phase 8 — native CODE and SOUND workflows
 
-**Goal:** replace the two browser-specific specialist editors.
+**Goal:** implement native equivalents of the two browser-specific specialist
+editors without removing their web versions.
 
 CODE work:
 
@@ -1204,8 +1278,8 @@ that sandbox.
 
 ### Phase 10 — optional native emulator helper
 
-**Goal:** replace external-only Play and restore embedded/headless emulator
-capabilities.
+**Goal:** add embedded/headless emulator capabilities to the native target
+without coupling either product UI to an emulator implementation.
 
 Work:
 
@@ -1260,7 +1334,8 @@ CI jobs:
 | Job | Purpose |
 | --- | --- |
 | rom-regression | Existing Builder suite, engine snapshot check and asm-lab |
-| legacy-ui-oracle | Playwright Chromium during transition; retain traces/screenshots |
+| web-ui | Permanent Playwright Chromium regression suite for the supported web product; retain traces/screenshots |
+| cross-target-contract | Bidirectional JSON/bundle portability plus HTTP/direct-core and browser/native build contracts |
 | native-unit | Model, migrations, persistence, codegen bridge and build core |
 | native-ui-x11 | Qt interaction tests under Xvfb |
 | native-ui-wayland | Qt interaction tests under a headless Wayland compositor |
@@ -1281,30 +1356,40 @@ CI jobs:
 - release artifact contains no Chromium/WebEngine;
 - app can complete its core workflow with networking disabled.
 
-### Phase 12 — cutover and retirement
+### Phase 12 — dual-target launch and ongoing operation
 
-**Goal:** make native the default without losing a recovery path.
+**Goal:** release and maintain the native application without reducing support
+for the web application.
 
 Work:
 
-1. Pilot with teachers and pupils for at least one real classroom cycle.
-2. Compare bug/error/save-recovery reports with the browser release.
-3. Close the native parity matrix.
-4. Ship browser-to-native export/import guidance.
-5. Keep the browser app available for one compatibility release.
-6. Stop adding new editor behavior to two implementations; fix shared core
-   issues in the core.
-7. Retire browser pages only after their full parity group is satisfied.
-8. Archive Playwright UI tests only after equivalent native tests exist; keep
-   useful ROM/build tests indefinitely.
+1. Pilot the native application with teachers and pupils for at least one real
+   classroom cycle.
+2. Compare bug/error/save-recovery reports across the native and web releases.
+3. Close the native release parity matrix while keeping target-specific
+   capabilities explicit.
+4. Ship bidirectional project and bundle import/export guidance.
+5. Define independent web/native versioning, packaging and support policies.
+6. Put cross-target behavior in the shared core where practical; keep genuine
+   UI-specific behavior in its owning target with contract coverage.
+7. Keep the browser pages and Playwright suite maintained as product code and
+   regression coverage.
+8. Require shared schema, engine and build changes to pass web, native and
+   cross-target contract jobs before merge.
+9. Record compatibility ranges so users know which web release, native
+   release, project schema and engine versions interoperate.
 
 **Exit gate:**
 
-- every parity row is closed with evidence or a recorded decision;
-- no unresolved data-loss issue;
-- native build output meets the frozen ROM/behavior contracts;
-- support/rollback procedure is documented;
-- old browser UI is no longer required for ordinary operation.
+- every native release parity row is closed with evidence or a recorded
+  decision;
+- no unresolved data-loss issue exists in either target's interoperability
+  path;
+- native and web build output meet the shared ROM/behavior contracts;
+- both applications support their documented ordinary workflows;
+- web, native and cross-target CI jobs are required and green;
+- support, rollback and cross-client data-transfer procedures are documented;
+- either application can be released without forcing the other to release.
 
 ## Testing strategy
 
@@ -1330,7 +1415,9 @@ clean worktree or container and finish by checking for unexpected changes.
    - browser/Node versus QJSEngine source;
    - HTTP versus direct Python core;
    - browser request factory versus Python request factory;
-   - browser renderer versus native pixel buffer for fixtures.
+   - browser renderer versus native pixel buffer for fixtures;
+   - web-to-native and native-to-web project JSON round trips;
+   - versioned multi-project bundle acceptance/rejection in both targets.
 3. **Persistence fault tests**
    - crash, truncated write, full disk simulation, corrupt DB, retention,
      concurrent/second-instance behavior.
@@ -1400,7 +1487,7 @@ Choose one policy explicitly:
 3. support only a declared range and provide a conversion tool.
 
 Because classroom/offline use is central, bundling all supported snapshots is
-the safest behavior, but remember that v1–v61 lack complete historical Python
+the safest behavior, but remember that v1–v62 lack complete historical Python
 codegen snapshots.
 
 ### Licensing
@@ -1411,8 +1498,8 @@ Update [NOTICE.md](../../../NOTICE.md) and release material for:
 - any bundled cc65 binaries/libraries;
 - FCEUX if redistributed;
 - an emulator helper/core;
-- current jsnes/CodeMirror only while they remain in distributed browser
-  compatibility assets;
+- current jsnes/CodeMirror as dependencies of the separately distributed web
+  application;
 - FamiStudio sound-engine files.
 
 Use dynamic Qt libraries and exclude unused/GPL-only modules unless the chosen
@@ -1425,7 +1512,7 @@ should be reviewed during packaging, not after the pilot.
 
 | Risk | Why it matters here | Mitigation |
 | --- | --- | --- |
-| Silent feature loss | Seven mature pages still exceed current Studio in places | Native parity matrix; retire by capability, not by screen appearance |
+| Silent feature loss | Seven mature pages still exceed current Studio in places | Native parity matrix; implement by capability, not by copying screen appearance |
 | ROM drift | Client JS and Python jointly determine output | Frozen requests/sources/ROMs; differential tests; keep Node/ROM oracle |
 | QJSEngine incompatibility | Historical scripts were tested under browser/Node globals | Phase-3 spike across all snapshots; minimal immutable shims; fallback decision before UI port |
 | Historical engine promise is incomplete | Python server codegen was not snapshotted | State limitation; bundle Python codegen from new baseline onward; never mislabel builds |
@@ -1433,7 +1520,7 @@ should be reviewed during packaging, not after the pilot.
 | Untrusted compiler input | Pupil custom C/ASM/audio can attempt host reads or resource exhaustion | Separate local/remote profiles; remote OS sandbox, no network, read-only inputs and hard limits |
 | Data loss | Browser app has mature autosave/recovery behavior | Persistence before editing UI; atomic writes; fault-injection gates |
 | Multi-instance lost updates | SQLite serializes statements but does not prevent logical last-writer-wins | Single writer/IPC, transaction revision checks and conflict copies |
-| Incomplete browser migration | One-project JSON omits the catalog and Time Machine history | Versioned export-all bundle, or explicit per-project/history-loss guidance |
+| Incomplete cross-client portability | One-project JSON omits the catalog and Time Machine history | Versioned export-all bundle, bidirectional round-trip tests, or explicit per-project/history-loss guidance |
 | UI rewrite underestimation | Tens of thousands of browser lines and many classroom details | Vertical slice, mode-by-mode gates, union parity scope, avoid page-for-page duplication |
 | Pixel/render mismatch | NES editors require exact coordinates and nearest scaling | Canonical buffers, integer coordinates, differential pixel fixtures, scaling matrix |
 | Painted editor is opaque to screen readers | An accessible name on the canvas does not expose its cells or actions | Custom QAccessible grid/cell model or synchronized structured view plus Orca tests |
@@ -1441,8 +1528,8 @@ should be reviewed during packaging, not after the pilot.
 | Toolchain portability | Makefile assumes distro paths | Toolchain discovery/injection; diagnostics; bundled option |
 | Emulator scope/licensing | jsnes is browser-specific; FCEUX is GPL | External FCEUX first; helper process later; legal review before choosing core |
 | Qt package size/licensing | PySide6 bundles Qt binaries and has LGPL obligations | Exclude unused/WebEngine modules; dynamic linking; notices/source compliance; SBOM |
-| Split web/native development | Two UIs can drift during migration | One extracted core; freeze new web-only features; planned cutover window |
-| Existing engine defects blamed on port | Manual comparison already lists open behavior concerns | v61 baseline and separate engine-bug ledger before native changes |
+| Split web/native development | Two supported UIs can drift over time | One extracted core, required cross-target contracts, explicit compatibility ranges and permanent web/native CI jobs |
+| Existing engine defects blamed on port | Manual comparison already lists open behavior concerns | v62 baseline and separate engine-bug ledger before native changes |
 
 ## Indicative effort
 
@@ -1472,7 +1559,7 @@ actual parity scope and QJSEngine/historical-engine compatibility.
 - native-definition ADR;
 - parity matrix;
 - representative project/request/source/ROM fixtures;
-- durable v61 FCEUX comparison manifest;
+- durable v62 FCEUX comparison manifest;
 - app ID/version/package decisions.
 
 ### PR 2 — Python core extraction
@@ -1503,15 +1590,17 @@ the long mode-porting phase.
 
 ## Definition of done
 
-The conversion is complete only when:
+The first native release and dual-target foundation are complete only when:
 
-- [ ] no browser, WebView, HTML/CSS UI or localhost server is required;
+- [ ] the native application requires no browser, WebView, HTML/CSS UI or
+      localhost server;
 - [ ] no QtWebEngine/Chromium component ships in the native artifact;
 - [ ] local edit/build/export works offline;
 - [ ] all mutable data uses XDG locations;
 - [ ] installed resources may be read-only;
 - [ ] project JSON round-trips with unknown fields preserved;
-- [ ] legacy browser-exported projects import safely;
+- [ ] web-exported projects import safely into native and native-exported JSON
+      imports safely into web;
 - [ ] native build output meets frozen source/ROM/behavior contracts;
 - [ ] every retained feature-parity row has evidence;
 - [ ] autosave, snapshots, restore-before-current-snapshot and crash recovery
@@ -1521,8 +1610,8 @@ The conversion is complete only when:
       FCEUX;
 - [ ] second launch forwards to the single writer, and stale revisions produce
       conflict copies rather than silent overwrites;
-- [ ] single-project and batch browser migration account explicitly for project
-      history;
+- [ ] single-project and batch cross-client transfer account explicitly for
+      project history;
 - [ ] any enabled remote build path sandboxes untrusted C/ASM/audio with no
       network/host-data access and hard resource limits;
 - [ ] Wayland, X11, fractional scaling, keyboard-only and Orca/AT-SPI smoke
@@ -1530,20 +1619,27 @@ The conversion is complete only when:
 - [ ] desktop/AppStream/MIME metadata validate;
 - [ ] package notices, source obligations, SBOM and hashes are present;
 - [ ] a real classroom pilot has completed with a documented rollback path;
-- [ ] the browser UI is retained until native parity and data safety are proven.
+- [ ] the web application and Playwright suite remain supported and green;
+- [ ] shared schema, engine and build changes are gated by web, native and
+      cross-target CI jobs;
+- [ ] web and native releases declare compatibility ranges and can ship on
+      independent schedules.
 
 ## Final recommendation
 
-Proceed, but treat this as a staged native product port:
+Proceed as a staged addition of a second, native product target:
 
 1. preserve the JSON and ROM contracts;
 2. extract the Python build core;
 3. prove QJSEngine can preserve versioned Builder generation;
 4. establish native persistence and one complete vertical slice;
 5. port modes against the parity matrix;
-6. package and pilot before retiring the browser UI.
+6. package and pilot the native app while continuing to maintain and release
+   the web app.
 
 The architecture should optimize for behavioral preservation, not maximum
 source-language purity. A Qt Widgets UI plus Python core and a narrow trusted
 QJSEngine compatibility layer produces a genuine native Linux application
-while retaining the hardest-won parts of this repository.
+while retaining the hardest-won parts of this repository. The web and native
+interfaces should remain sibling products backed by shared project, engine and
+ROM contracts rather than successive versions where one replaces the other.

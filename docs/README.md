@@ -17,6 +17,9 @@ of how we got here.
 | [`feedback/`](feedback/) | Pupil and teacher bug reports / feature requests, plus broader feedback summaries. The [running bugs list](feedback/recently-observed-bugs.md) feeds the next plan. |
 | [`changelog/`](changelog/) | What shipped, when. The [changelog-implemented](changelog/changelog-implemented.md) is a single growing file with one section per shipped change, newest at the top. |
 
+Repository-wide contribution, ownership and cross-team review rules live in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
 ## What to read first
 
 - **New to the project?**  Start with the project-root
@@ -47,6 +50,11 @@ of how we got here.
   [`tools/engines/CHANGELOG.md`](../tools/engines/CHANGELOG.md) entry, and run
   `node scripts/snapshot-engine.mjs` to freeze the new version. `builder-tests`
   fails if the version constants disagree or the snapshot drifts from HEAD.
+- **Working on the web or native Linux products?** Read
+  [`CONTRIBUTING.md`](../CONTRIBUTING.md) for team ownership, branch and review
+  rules, then read the
+  [native Linux implementation plan](design/linux-native/2026-07-10-linux-native-migration-plan.md)
+  for the dual-target architecture and phased delivery plan.
 - **Looking for context on a past decision?**  Walk
   [`plans/archive/`](plans/archive/) — the chronological filenames
   let you scan quickly, and most of the recent entries

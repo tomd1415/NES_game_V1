@@ -1,8 +1,9 @@
-# Design documents — UI/UX redesign
+# Design and product architecture documents
 
-This folder holds the design documentation for the **complete UI/UX
-redesign** of the playground editor (Backgrounds / Sprites / Behaviour /
-Builder / Code pages and their shared chrome).
+This folder holds the design documentation for the browser editor's
+**complete UI/UX redesign** and for additional product architecture, including
+the native Linux application. The browser and native applications are
+supported sibling products.
 
 It is the counterpart to [`plans/`](../plans/): plans track *what work
 we execute and when*; this folder holds the *design intent* behind that
@@ -24,6 +25,15 @@ shippable plan for the redesign. It links the three docs that give it its
 | [`feature-parity.md`](feature-parity.md) | **The parity yardstick.** Everything the current seven pages do (from a 2026-07-05 code audit), page by page — no page retires until its checklist is covered. |
 | [`engine-versioning.md`](engine-versioning.md) | **The NES-engine versioning system.** How every ROM/project is stamped with an engine version, how each engine is snapshotted for rollback, and how the site falls back to the engine a game was authored for. **Read before changing the ROM-building engine.** |
 | [`quest-tutorials.md`](quest-tutorials.md) | **Quest tutorial plan.** Side-by-side, accessible tutorials for each Studio game style, including pupil wording, checks, starter kits, illustrations, audio, and large-text support. |
+
+### Native Linux application
+
+The
+[native Linux application plan](linux-native/2026-07-10-linux-native-migration-plan.md)
+defines the second, native product target. The browser application remains
+supported; both teams work from `main` and share project, engine and ROM
+contracts. Repository ownership and review rules are in
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 ### Decisions (ADR-style, under `decisions/`)
 

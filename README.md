@@ -224,6 +224,10 @@ The project's documentation now lives in **[`docs/`](docs/)** — see
 [`docs/README.md`](docs/README.md) for a navigation index.  The
 short version:
 
+- **Developing the web or native Linux application?** Read
+  **[`CONTRIBUTING.md`](CONTRIBUTING.md)** for ownership, branching, review and
+  shared-contract rules.
+
 - **[`docs/guides/`](docs/guides/)** — pupil-facing
   ([PUPIL_GUIDE](docs/guides/PUPIL_GUIDE.md),
   [BUILDER_GUIDE](docs/guides/BUILDER_GUIDE.md),
