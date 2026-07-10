@@ -38,8 +38,26 @@ accepted as opt-in.
   - Player/enemy sprites still render over the top 32px, so a bg-HUD game must keep
     actors in rows 4-29 (author the top as the strip). Starter would be authored so.
   → Best done as a focused round with live FCEUX iteration, not one-shot.
-- [ ] **Streamer skip (Phase 5).** `scroll_stream` writes the playfield to rows 4-29
-  only. FCEUX-validate scrolling doesn't smear the bar.
+- [x] **Sprite-0 split (Phase 4) + Streamer skip (Phase 5) — WORKING (v61).**
+  Validated on FCEUX HERE (headless `xvfb-run fceux --loadlua`, Lua screenshots +
+  `ppu.readbyte` nametable dumps — jsnes hangs on the split so it's useless for this).
+  Three fixes: (a) apply the strip scroll via `scroll_apply_ppu` (cam_x temporarily 0)
+  not bare `PPU_SCROLL` (latch); (b) `scroll_asm.s` column write skips `SCROLL_SKIP_TOP`
+  rows; (c) two-phase sprite-0 wait (clear-then-set) so a 60fps frame doesn't split at
+  scanline 0. On a standard 2-screen SMB the bar is fixed at the top, the level
+  scrolls, moving + stopped, no tear (consecutive frames identical md5).
+- [ ] **Multi-bg (doors) incompatibility — OPEN.** The showcase enables
+  `BW_DOORS_MULTIBG_ENABLED` (via door tiles); with it on, the strip is painted in
+  NT0 rows 0-3 (confirmed via `ppu.readbyte`) but the split does NOT display it — even
+  at boot (cam_x=0) and even with all other SMB modules off. Isolated to multi-bg;
+  suspect a mirroring / nametable-layout difference vs the split's
+  vertical-mirroring/horizontal-scroll assumption. Next debug target.
+
+**FCEUX self-test harness (reusable):** `scratchpad/fceux/*.lua` +
+`timeout N xvfb-run -a fceux --loadlua script.lua rom.nes`. `gui.savescreenshotas`,
+`ppu.readbyte(0x2000+...)`, `memory.readbyte`, `joypad.set(1,{right=true})`. Don't
+`os.exit` right after a screenshot (it won't flush) — advance a few frames or let the
+timeout kill it.
 
 ## Why the flicker happens (confirmed)
 
