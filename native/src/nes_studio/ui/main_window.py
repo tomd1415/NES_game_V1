@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -158,6 +158,7 @@ class MainWindow(QMainWindow):
         self.world_canvas = WorldCanvas(screen)
         self.world_canvas.cell_changed.connect(self._world_cell_changed)
         self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
+        self.world_canvas.history_changed.connect(self._world_history_changed)
         screen_layout.addWidget(self.world_canvas)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
@@ -232,6 +233,18 @@ class MainWindow(QMainWindow):
     def _world_cursor_changed(self, col: int, row: int) -> None:
         self.statusBar().showMessage(f"WORLD cell ({col}, {row}) — {self.world_canvas.tool.title()} tool")
 
+    def _world_history_changed(self, can_undo: bool, can_redo: bool) -> None:
+        self.undo_action.setEnabled(can_undo)
+        self.redo_action.setEnabled(can_redo)
+
+    def _undo_world(self) -> None:
+        if self.world_canvas.undo():
+            self.statusBar().showMessage("Undid WORLD edit")
+
+    def _redo_world(self) -> None:
+        if self.world_canvas.redo():
+            self.statusBar().showMessage("Redid WORLD edit")
+
     def _apply_theme(self) -> None:
         self.setStyleSheet(
             """
@@ -275,8 +288,18 @@ class MainWindow(QMainWindow):
         file_menu.addAction(exit_action)
 
         edit_menu = self.menuBar().addMenu("&Edit")
-        self._add_placeholder(edit_menu, "&Undo")
-        self._add_placeholder(edit_menu, "&Redo")
+        self.undo_action = QAction("&Undo", self)
+        self.undo_action.setObjectName("undoAction")
+        self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        self.undo_action.setEnabled(False)
+        self.undo_action.triggered.connect(self._undo_world)
+        edit_menu.addAction(self.undo_action)
+        self.redo_action = QAction("&Redo", self)
+        self.redo_action.setObjectName("redoAction")
+        self.redo_action.setShortcut(QKeySequence.StandardKey.Redo)
+        self.redo_action.setEnabled(False)
+        self.redo_action.triggered.connect(self._redo_world)
+        edit_menu.addAction(self.redo_action)
 
         view_menu = self.menuBar().addMenu("&View")
         diagnostics_action = QAction("&Diagnostics…", self)

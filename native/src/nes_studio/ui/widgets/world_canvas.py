@@ -21,6 +21,7 @@ class WorldCanvas(QWidget):
 
     cell_changed = Signal(int, int, int)
     cursor_changed = Signal(int, int)
+    history_changed = Signal(bool, bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -34,6 +35,10 @@ class WorldCanvas(QWidget):
         self._tool = "select"
         self._paint_value = 1
         self._hover: tuple[int, int] | None = None
+        self._undo: list[list[tuple[int, int, int, int]]] = []
+        self._redo: list[list[tuple[int, int, int, int]]] = []
+        self._stroke: list[tuple[int, int, int, int]] | None = None
+        self._stroke_cells: set[tuple[int, int]] = set()
         self._seed_preview()
 
     def _seed_preview(self) -> None:
@@ -72,9 +77,65 @@ class WorldCanvas(QWidget):
         value = self._paint_value if self._tool == "paint" else 0
         if self._cells[row][col] == value:
             return False
+        before = self._cells[row][col]
         self._cells[row][col] = value
+        change = (col, row, before, value)
+        if self._stroke is None:
+            self._undo.append([change])
+            self._redo.clear()
+            self.history_changed.emit(True, False)
+        elif (col, row) not in self._stroke_cells:
+            self._stroke.append(change)
+            self._stroke_cells.add((col, row))
         self.cell_changed.emit(col, row, value)
         self.update(self._cell_rect(col, row))
+        return True
+
+    def begin_stroke(self) -> None:
+        if self._stroke is None:
+            self._stroke = []
+            self._stroke_cells.clear()
+
+    def end_stroke(self) -> None:
+        if self._stroke is None:
+            return
+        if self._stroke:
+            self._undo.append(self._stroke)
+            self._redo.clear()
+            self.history_changed.emit(True, False)
+        self._stroke = None
+        self._stroke_cells.clear()
+
+    @property
+    def can_undo(self) -> bool:
+        return bool(self._undo)
+
+    @property
+    def can_redo(self) -> bool:
+        return bool(self._redo)
+
+    def undo(self) -> bool:
+        if not self._undo:
+            return False
+        stroke = self._undo.pop()
+        for col, row, before, _after in reversed(stroke):
+            self._cells[row][col] = before
+            self.cell_changed.emit(col, row, before)
+        self._redo.append(stroke)
+        self.history_changed.emit(self.can_undo, self.can_redo)
+        self.update()
+        return True
+
+    def redo(self) -> bool:
+        if not self._redo:
+            return False
+        stroke = self._redo.pop()
+        for col, row, _before, after in stroke:
+            self._cells[row][col] = after
+            self.cell_changed.emit(col, row, after)
+        self._undo.append(stroke)
+        self.history_changed.emit(self.can_undo, self.can_redo)
+        self.update()
         return True
 
     def _validate_cell(self, col: int, row: int) -> None:
@@ -122,7 +183,12 @@ class WorldCanvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             cell = self._cell_at(event.position().toPoint())
             if cell is not None:
+                self.begin_stroke()
                 self.edit_cell(*cell)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.end_stroke()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
         cell = self._cell_at(event.position().toPoint())

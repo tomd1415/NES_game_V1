@@ -25,7 +25,28 @@ def test_world_canvas_paint_and_erase_change_only_the_selected_cell() -> None:
     canvas.set_tool("erase")
     assert canvas.edit_cell(2, 2)
     assert canvas.cell_value(2, 2) == 0
+    assert canvas.undo()
+    assert canvas.cell_value(2, 2) == 1
+    assert canvas.undo()
+    assert canvas.cell_value(2, 2) == 0
+    assert canvas.redo()
+    assert canvas.cell_value(2, 2) == 1
     app.processEvents()
+
+
+def test_world_canvas_groups_a_drag_stroke_into_one_undo_step() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.set_tool("paint")
+    canvas.begin_stroke()
+    canvas.edit_cell(1, 1)
+    canvas.edit_cell(2, 1)
+    canvas.edit_cell(3, 1)
+    canvas.end_stroke()
+    assert all(canvas.cell_value(col, 1) == 1 for col in (1, 2, 3))
+    assert canvas.undo()
+    assert all(canvas.cell_value(col, 1) == 0 for col in (1, 2, 3))
+    assert not canvas.can_undo
 
 
 def test_select_tool_does_not_mutate_and_invalid_cells_are_rejected() -> None:
