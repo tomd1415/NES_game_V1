@@ -116,10 +116,18 @@ off here and update the status note in
 [`phased-plan.md`](../../design/phased-plan.md) when it lands.
 
 ### Phase 1 — finish parity
-- [ ] **RULES: sprite-reactions matrix** (per sprite × tile-type →
+- [x] **RULES: sprite-reactions matrix** (per sprite × tile-type →
       ignore/block/land/land_top/bounce/exit/call_handler), Maker-gated.
-      Port from `behaviour.html`; parity requires it
-      ([feature-parity](../../design/feature-parity.md) "Behaviour page").
+      Ported from `behaviour.html` — `studio-rules.js` `renderReactionsCard`
+      (per-character picker + friendlier KS3 verb labels), writes
+      `state.behaviour_reactions`, syncs on CHARS add/dup/delete, tested in
+      `studio-tests/rules.spec.js:81-126`. **At full parity** with the legacy
+      page (which was *also* data-only). ⚠️ **Runtime dispatch is NOT done**
+      (the deferred "Phase C" engine hook): the shipped engine hardcodes
+      collision by behaviour-ID and never calls `reaction_for()`, so the verbs
+      (bounce/land_top/exit/call_handler) have no per-sprite in-game effect yet
+      (only block-like solidity, which is ID-driven). Making the matrix
+      *mean* something at runtime is a separate engine sprint, not a parity port.
 - [x] **Finer expertise gating (1.7):** per-tool `minLevel` on the stage
       toolbar (WORLD ⛰ Type / ▦ Select are Maker+); dock sections gated by
       `ctx.levelAtLeast` (WORLD Tile-type + Selection, CHARS Animations +
