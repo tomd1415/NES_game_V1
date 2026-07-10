@@ -276,6 +276,84 @@
     ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
   }
 
+  // ---- Grow the world one screen at a time (feedback #10) ----------------
+  // Wide 1-tall levels compress (engine v64/v65), so they can go well past the
+  // 2-screen raw cap — up to MAX_SCREENS_X.  Vertical scroll is engine-capped at
+  // 2 screens, and the >8-screen compression is 1-tall only, so tall growth is
+  // limited to 2 and only allowed for narrow (<=2 wide) worlds.
+  var MAX_SCREENS_X = 12, MAX_SCREENS_Y = 2;
+  function bgDim(bg, ax) { return Math.max(1, (bg && bg.dimensions && bg.dimensions['screens_' + ax] | 0) || 1); }
+  function canGrow(bg, dir) {
+    if (!bg || isMetatileBg(bg)) return false;
+    var sx = bgDim(bg, 'x'), sy = bgDim(bg, 'y');
+    if (dir === 'left' || dir === 'right') return sx < (sy === 1 ? MAX_SCREENS_X : 2);
+    return sy < MAX_SCREENS_Y && sx <= 2;
+  }
+
+  // Prepend (grow left/up) pushes existing content over by one screen, so any
+  // stored WORLD coordinates on this bg must move with it.  Scene instances,
+  // blocks and the player start are a single (not-yet-per-bg) set, so shift them
+  // only for single-background games where the mapping is unambiguous; doors
+  // carry a bg index, so shift just this bg's doors either way.
+  function shiftWorldCoords(ctx, bgIdx, dxTiles, dyTiles) {
+    var s = ctx.getState();
+    var dpx = dxTiles * 8, dpy = dyTiles * 8;
+    var single = (s.backgrounds || []).length === 1;
+    if (single) sceneInstances(ctx).forEach(function (i) { i.x = (i.x | 0) + dpx; i.y = (i.y | 0) + dpy; });
+    var m = s.builder && s.builder.modules;
+    if (!m) return;
+    if (m.doors && m.doors.config && Array.isArray(m.doors.config.doorList)) {
+      m.doors.config.doorList.forEach(function (d) {
+        if ((d.bg | 0) === bgIdx) { d.tx = (d.tx | 0) + dxTiles; d.ty = (d.ty | 0) + dyTiles; d.spawnX = (d.spawnX | 0) + dpx; d.spawnY = (d.spawnY | 0) + dpy; }
+      });
+    }
+    if (single) {
+      if (m.blocks && m.blocks.config && Array.isArray(m.blocks.config.blockList))
+        m.blocks.config.blockList.forEach(function (b) { b.x = (b.x | 0) + dxTiles; b.y = (b.y | 0) + dyTiles; });
+      if (m.players && m.players.submodules && m.players.submodules.player1) {
+        var pc = m.players.submodules.player1.config;
+        pc.startX = (pc.startX | 0) + dpx; pc.startY = (pc.startY | 0) + dpy;
+      }
+    }
+  }
+
+  function growBackground(ctx, dir) {
+    var bg = activeBg(ctx);
+    if (isMetatileBg(bg)) { alert('This background uses 16×16 blocks — revert to 8×8 first to resize.'); return; }
+    if (!canGrow(bg, dir)) return;
+    ctx.pushUndo();
+    ensureBehaviour(bg);
+    var bgIdx = ctx.getState().selectedBgIdx | 0;
+    var oldCols = worldCols(bg), oldRows = worldRows(bg);
+    var sx = bgDim(bg, 'x'), sy = bgDim(bg, 'y');
+    var vs = ctx.viewScreen ? ctx.viewScreen() : { x: 0, y: 0 };
+    var nt = bg.nametable, bh = bg.behaviour;
+    function ntRow(n) { var a = []; for (var i = 0; i < n; i++) a.push({ tile: 0, palette: 0 }); return a; }
+    function bhRow(n) { var a = []; for (var i = 0; i < n; i++) a.push(0); return a; }
+    if (dir === 'right') {
+      for (var r = 0; r < oldRows; r++) { nt[r] = nt[r].concat(ntRow(SCREEN_W)); bh[r] = bh[r].concat(bhRow(SCREEN_W)); }
+      bg.dimensions.screens_x = sx + 1;
+      ctx.setViewScreen(sx, vs.y);
+    } else if (dir === 'left') {
+      for (var r2 = 0; r2 < oldRows; r2++) { nt[r2] = ntRow(SCREEN_W).concat(nt[r2]); bh[r2] = bhRow(SCREEN_W).concat(bh[r2]); }
+      bg.dimensions.screens_x = sx + 1;
+      shiftWorldCoords(ctx, bgIdx, SCREEN_W, 0);
+      ctx.setViewScreen(0, vs.y);
+    } else if (dir === 'down') {
+      for (var r3 = 0; r3 < SCREEN_H; r3++) { nt.push(ntRow(oldCols)); bh.push(bhRow(oldCols)); }
+      bg.dimensions.screens_y = sy + 1;
+      ctx.setViewScreen(vs.x, sy);
+    } else if (dir === 'up') {
+      var addNt = [], addBh = [];
+      for (var r4 = 0; r4 < SCREEN_H; r4++) { addNt.push(ntRow(oldCols)); addBh.push(bhRow(oldCols)); }
+      bg.nametable = addNt.concat(nt); bg.behaviour = addBh.concat(bh);
+      bg.dimensions.screens_y = sy + 1;
+      shiftWorldCoords(ctx, bgIdx, 0, SCREEN_H);
+      ctx.setViewScreen(vs.x, 0);
+    }
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+  }
+
   // ---- Painting (cx,cy are screen-local; +view offset → world) -----------
   function paintCell(ctx, cx, cy) {
     var s = ctx.getState();
@@ -779,11 +857,27 @@
         }));
       });
       sizeSec.appendChild(sizeRow);
+      // Grow one screen at a time in any direction (feedback #10). Wide 1-tall
+      // levels can go up to MAX_SCREENS_X screens (they compress); the arrow is
+      // enabled only where growth is allowed.
+      var growRow = el('div', { class: 'row', style: 'margin-top:4px' });
+      growRow.appendChild(el('span', { class: 'dock-note', style: 'margin:0 6px 0 0', text: '➕ Add a screen:' }));
+      [['◀', 'left'], ['▶', 'right'], ['▲', 'up'], ['▼', 'down']].forEach(function (g) {
+        growRow.appendChild(el('button', {
+          class: 'btn', text: g[0], disabled: canGrow(bg, g[1]) ? null : 'disabled',
+          title: 'Add a screen to the ' + g[1] + ' (grows the level)',
+          onclick: function () { growBackground(ctx, g[1]); },
+        }));
+      });
+      sizeSec.appendChild(growRow);
+      sizeSec.appendChild(el('div', { class: 'dock-note', text: 'Add screens to build a longer scrolling level (up to ' + MAX_SCREENS_X + ' wide). ◀/▲ push your level over; ▶/▼ extend it.' }));
       if (scr.x > 1 || scr.y > 1) {
         sizeSec.appendChild(el('div', { class: 'dock-note', text: 'Editing screen ' + (vs.x + 1) + ',' + (vs.y + 1) + ' of ' + scr.x + '×' + scr.y + '. Use the arrows to move around your world.' }));
         var nav = el('div', { class: 'row', style: 'margin-top:4px' });
         function navBtn(label, dx, dy, disabled) {
+          var dir = dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down';
           return el('button', { class: 'btn', text: label, disabled: disabled ? 'disabled' : null,
+            title: 'Show the screen to the ' + dir + ' (moves the view, not the level)',
             onclick: function () { ctx.setViewScreen(vs.x + dx, vs.y + dy); ctx.renderLive(); ctx.renderDock(); } });
         }
         nav.appendChild(navBtn('◀', -1, 0, vs.x <= 0));
