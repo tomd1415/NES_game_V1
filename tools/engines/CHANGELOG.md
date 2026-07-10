@@ -9,6 +9,31 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v65 — 2026-07-10 — Level compression Phase 2: ASM decoder (dormant, byte-identical)
+
+### Added (feedback #10 — the shipped ASM engine now decodes the dedup format; dormant → byte-identical)
+Phase 2 of go-beyond-8-screens (see v64). The hand-written 6502 scroll engine
+(`scroll_asm.s`, shipped when `NES_ASM_SCROLL`) now decodes the column-dedup
+format under `.if SCROLL_COMPRESSED`:
+- **Streamer** (`scroll_stream_prepare`): 16-bit column bound, then
+  `uid = bg_col_index[col]`, `ptr = bg_col_data + uid*BG_WORLD_ROWS` (via a
+  shared `dedup_col_ptr` helper — `uid*30 = uid*32 - uid*2`), and a contiguous
+  30-byte column copy (simpler than the raw strided read).
+- **`load_world_bg`** (boot): fills each boot screen's 32 columns column-major
+  with a +32 PPU stride, straight from the dedup data.
+- The nametable-select (`col & 0x20` / `col & 0x1F`) is unchanged — those
+  low-byte bits alternate NT0/NT1 every 32 columns regardless of the high byte,
+  so it walks correctly past column 255.
+
+**Correctness proven:** a 12-screen world built with the ASM engine renders
+byte-identical *nametables* to the C reference (FCEUX `ppu.readbyte` dump) and
+renders correctly across the far screens; the raw `.else` path is byte-identical
+(direct-ASM hash `12de06be` unchanged, stock matches golden `1730448e`). Still
+dormant (nothing exceeds 8 screens yet → `SCROLL_COMPRESSED` is 0 everywhere).
+
+**Still to come:** editor grow-a-screen arrows (Phase 3) + a wide-world C-vs-ASM
+regression test (Phase 4).
+
 ## v64 — 2026-07-10 — Level compression Phase 1: column-dedup format + C decode (dormant, byte-identical)
 
 ### Added (feedback #10 groundwork — dormant → goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)

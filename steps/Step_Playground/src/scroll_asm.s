@@ -300,8 +300,58 @@ PPU_SCROLL = $2005
 ; the row path is conditionally assembled only for vertically-scrolling worlds.
 ; Proven in asm-lab/functions/scroll_stream_prepare (parameterised).
 .export _scroll_stream_prepare
+.if SCROLL_COMPRESSED
+.import _bg_col_index, _bg_col_data
+.else
 .import _bg_world_tiles
+.endif
 .importzp ptr1
+
+.if SCROLL_COMPRESSED
+; dedup_col_ptr — A = unique-column id -> ptr1 = bg_col_data + uid*BG_WORLD_ROWS.
+; Column-deduplicated worlds are always 1-tall (BG_WORLD_ROWS == 30), so
+; uid*30 = uid*32 - uid*2.  Clobbers A, tmp2, tmp4; preserves X, Y, tmp1, tmp3.
+.proc dedup_col_ptr
+    sta tmp2                     ; save uid
+    lda #0
+    sta tmp4                     ; hi accumulator
+    lda tmp2                     ; uid*32 -> tmp4:A
+    asl a
+    rol tmp4
+    asl a
+    rol tmp4
+    asl a
+    rol tmp4
+    asl a
+    rol tmp4
+    asl a
+    rol tmp4
+    sta ptr1
+    lda tmp4
+    sta ptr1+1                   ; ptr1 = uid*32
+    lda tmp2                     ; uid*2 -> tmp4:tmp2
+    asl a
+    sta tmp2
+    lda #0
+    adc #0
+    sta tmp4
+    lda ptr1                     ; ptr1 = uid*32 - uid*2 = uid*30
+    sec
+    sbc tmp2
+    sta ptr1
+    lda ptr1+1
+    sbc tmp4
+    sta ptr1+1
+    lda ptr1                     ; ptr1 += bg_col_data
+    clc
+    adc #<_bg_col_data
+    sta ptr1
+    lda ptr1+1
+    adc #>_bg_col_data
+    sta ptr1+1
+    rts
+.endproc
+.endif
 .if BG_WORLD_COLS > 32
 .import _prev_cam_x, _col_buf, _col_addr, _col_pending
 .endif
@@ -362,6 +412,35 @@ PPU_SCROLL = $2005
     ror tmp1
     lsr tmp2
     ror tmp1
+.if SCROLL_COMPRESSED
+    ; Wide compressed world: 16-bit bound, then dedup column fetch.  tmp1 (col
+    ; lo) is preserved through dedup_col_ptr for the col_addr math below.
+    lda tmp2                     ; col >= BG_WORLD_COLS -> out
+    cmp #>BG_WORLD_COLS
+    bcc @col_in
+    bne @col_done
+    lda tmp1
+    cmp #<BG_WORLD_COLS
+    bcs @col_done
+@col_in:
+    lda #<_bg_col_index          ; uid = bg_col_index[col]  (col = tmp2:tmp1)
+    clc
+    adc tmp1
+    sta ptr1
+    lda #>_bg_col_index
+    adc tmp2
+    sta ptr1+1
+    ldy #0
+    lda (ptr1),y                 ; A = uid
+    jsr dedup_col_ptr            ; ptr1 = bg_col_data + uid*30
+    ldy #0
+@col_loop:
+    lda (ptr1),y                 ; col_buf[0..29] = the unique column (contiguous)
+    sta _col_buf,y
+    iny
+    cpy #30
+    bne @col_loop
+.else
     lda tmp2
     bne @col_done               ; col >= 256 -> out
 .if BG_WORLD_COLS < 256
@@ -391,6 +470,7 @@ PPU_SCROLL = $2005
     inx
     cpx #30
     bne @col_loop
+.endif
     lda tmp1                    ; col_addr = (col&0x20?0x2400:0x2000) + (col&0x1F)
     and #$1F
     sta _col_addr
@@ -685,7 +765,43 @@ lwb_nthi: .res 1
     adc #$08
 @nsy:
     sta lwb_nthi
-    ; --- tiles: ptr1 = bg_world_tiles + sy*30*BG_WORLD_COLS + sx*32 ---
+    ; --- tiles ---
+.if SCROLL_COMPRESSED
+    ; Compressed (1-tall): fill this screen's 32 columns from the dedup data,
+    ; column by column with a +32 PPU stride (each write walks down one column).
+    lda #$14                     ; +32 auto-increment
+    sta PPU_CTRL
+    ldx #0                       ; x = column within this screen (0..31)
+@ctcol:
+    lda lwb_nthi                 ; PPU addr = nt_base(hi) : x  (top of column x)
+    sta PPU_ADDR2
+    stx PPU_ADDR2                ; lo = x
+    lda lwb_sx                   ; world col = lwb_sx*32 + x
+    asl a
+    asl a
+    asl a
+    asl a
+    asl a
+    stx tmp1
+    clc
+    adc tmp1
+    tay
+    lda _bg_col_index,y          ; uid = bg_col_index[world col]
+    jsr dedup_col_ptr            ; ptr1 = bg_col_data + uid*30
+    ldy #0
+@ctrow:
+    lda (ptr1),y                 ; write 30 tiles down the column (+32 stride)
+    sta PPU_DATA2
+    iny
+    cpy #30
+    bne @ctrow
+    inx
+    cpx #32
+    bne @ctcol
+    lda #$10                     ; back to +1 stride for the attr fill
+    sta PPU_CTRL
+.else
+    ; --- raw: ptr1 = bg_world_tiles + sy*30*BG_WORLD_COLS + sx*32 ---
     lda #<_bg_world_tiles
     sta ptr1
     lda #>_bg_world_tiles
@@ -752,6 +868,7 @@ lwb_nthi: .res 1
     cmp #30
     beq @tdone
     jmp @trow
+.endif
 @tdone:
     ; --- attrs: ptr1 = bg_world_attrs + sy*8*BG_WORLD_ATTR_COLS + sx*8 ---
     lda #<_bg_world_attrs
