@@ -294,6 +294,25 @@ unsigned int  bw_hud_last_score = 0xFFFF;
 unsigned int  bw_hud_last_time  = 0xFFFF;
 unsigned int  bw_hud_last_coins = 0xFFFF;
 unsigned char bw_hud_last_lives = 0xFF;
+#ifdef BW_SMB_HUD_BG
+/* Background status bar (BW_SMB_HUD_BG): the HUD digits live in the nametable, not
+ * OAM.  bw_hud_dirty is set when any digit changed this frame so the vblank writer
+ * re-paints the strip only then (nametable PPU writes must happen with rendering off,
+ * so they can't go in the pre-vblank HUD block above). */
+unsigned char bw_hud_dirty = 1;   /* 1 at boot -> first vblank paints all 11 digits */
+#define BW_HUD_SET_DIRTY() (bw_hud_dirty = 1)
+/* Nametable (col,row) of each of the 11 digit tiles in the top status strip,
+ * interleaved col,row — mirrors the OAM layout: coins + time on tile-row 1,
+ * lives + score on tile-row 2. */
+const unsigned char bw_hud_bg_pos[22] = {
+    3,1, 4,1,           /* coins  (2) */
+    15,1, 16,1, 17,1,   /* time   (3) */
+    3,2,                /* lives  (1) */
+    14,2, 15,2, 16,2, 17,2, 18,2   /* score (5) */
+};
+#else
+#define BW_HUD_SET_DIRTY() ((void)0)   /* OAM-sprite HUD: no strip to repaint */
+#endif
 #ifndef BW_HUD_START_TIME
 #define BW_HUD_START_TIME 400
 #endif
@@ -318,6 +337,29 @@ void bw_hud_digit(unsigned char hx, unsigned char hy, unsigned char d) {
     oam_buf[oam_idx++] = BW_HUD_PAL;
     oam_buf[oam_idx++] = hx;
 }
+#ifdef BW_SMB_HUD_BG
+/* Paint all 11 status-bar digits into the nametable from the digit cache.
+ * PPU writes -> caller MUST have rendering off (boot, or the vblank window). */
+void bw_hud_bg_paint(void) {
+    unsigned char i;
+    unsigned int addr;
+    for (i = 0; i < 11; i++) {
+        addr = 0x2000 + (unsigned int)bw_hud_bg_pos[i * 2 + 1] * 32 + bw_hud_bg_pos[i * 2];
+        PPU_ADDR = (unsigned char)(addr >> 8);
+        PPU_ADDR = (unsigned char)(addr & 0xFF);
+        PPU_DATA = (unsigned char)(BW_HUD_DIGIT_BASE + bw_hud_d[i]);
+    }
+}
+/* Boot: clear the top 4 rows (the status strip) then paint the digits.  The
+ * split (Phase 4) keeps this strip stationary over a scrolling playfield; with
+ * no split it simply occupies rows 0-3 of a single-screen level. */
+void bw_hud_bg_init(void) {
+    unsigned int a;
+    PPU_ADDR = 0x20; PPU_ADDR = 0x00;              /* $2000 = NT0, row 0 */
+    for (a = 0; a < 128; a++) PPU_DATA = 0x00;     /* 4 rows x 32 tiles cleared */
+    bw_hud_bg_paint();
+}
+#endif
 #endif
 
 #ifdef BW_OAM_FLICKER
@@ -914,6 +956,16 @@ void main(void) {
     PPU_CTRL = 0x10;          // BG uses pattern table 1; sprites use table 0
     PPU_SCROLL = 0;
     PPU_SCROLL = 0;
+#endif
+#ifdef BW_SMB_HUD_BG
+    /* Paint the status strip into rows 0-3 while rendering is still off. */
+    bw_hud_bg_init();
+#ifdef SCROLL_BUILD
+    scroll_apply_ppu();       /* undo the strip's PPU_ADDR before rendering resumes */
+#else
+    PPU_SCROLL = 0;
+    PPU_SCROLL = 0;
+#endif
 #endif
     PPU_MASK = 0x1E;
 
@@ -2392,6 +2444,7 @@ void main(void) {
                 bw_hud_d[0] = (unsigned char)(hv / 10);
                 bw_hud_d[1] = (unsigned char)(hv % 10);
                 bw_hud_last_coins = bw_coins;
+                BW_HUD_SET_DIRTY();
             }
             if (bw_timer != bw_hud_last_time) {
                 hv = bw_timer; if (hv > 999) hv = 999;
@@ -2399,10 +2452,12 @@ void main(void) {
                 bw_hud_d[3] = (unsigned char)((hv / 10) % 10);
                 bw_hud_d[4] = (unsigned char)(hv % 10);
                 bw_hud_last_time = bw_timer;
+                BW_HUD_SET_DIRTY();
             }
             if (bw_lives != bw_hud_last_lives) {
                 bw_hud_d[5] = (unsigned char)(bw_lives % 10);
                 bw_hud_last_lives = bw_lives;
+                BW_HUD_SET_DIRTY();
             }
             if (bw_score != bw_hud_last_score) {
                 hv = bw_score;
@@ -2412,14 +2467,18 @@ void main(void) {
                 bw_hud_d[9]  = (unsigned char)((hv / 10) % 10);
                 bw_hud_d[10] = (unsigned char)(hv % 10);
                 bw_hud_last_score = bw_score;
+                BW_HUD_SET_DIRTY();
             }
-            /* Draw from the cache (4 cheap OAM stores each — no divides). Layout:
-             * COINS top-left, TIME top-centre, LIVES + SCORE on the second row. */
+#ifndef BW_SMB_HUD_BG
+            /* OAM-sprite HUD: draw from the cache (4 cheap OAM stores each — no
+             * divides). COINS top-left, TIME top-centre, LIVES + SCORE 2nd row.
+             * (The bg-status-bar path repaints the nametable in vblank instead.) */
             bw_hud_digit(24, 8, bw_hud_d[0]);   bw_hud_digit(32, 8, bw_hud_d[1]);
             bw_hud_digit(120, 8, bw_hud_d[2]);  bw_hud_digit(128, 8, bw_hud_d[3]);  bw_hud_digit(136, 8, bw_hud_d[4]);
             bw_hud_digit(24, 20, bw_hud_d[5]);
             bw_hud_digit(112, 20, bw_hud_d[6]); bw_hud_digit(120, 20, bw_hud_d[7]); bw_hud_digit(128, 20, bw_hud_d[8]);
             bw_hud_digit(136, 20, bw_hud_d[9]); bw_hud_digit(144, 20, bw_hud_d[10]);
+#endif
         }
 #endif
 
@@ -2723,6 +2782,11 @@ void main(void) {
         OAM_DMA  = 0x02;
 
         //@ insert: vblank_writes
+#ifdef BW_SMB_HUD_BG
+        /* Repaint the status-bar digits only when one changed (rendering is off
+         * here).  scroll_stream/scroll_apply below restore the playfield scroll. */
+        if (bw_hud_dirty) { bw_hud_bg_paint(); bw_hud_dirty = 0; }
+#endif
 
 #ifdef SCROLL_BUILD
         // Stream off-screen tile columns / rows for any 8-px boundary

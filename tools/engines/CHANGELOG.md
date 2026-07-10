@@ -9,6 +9,25 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v59 — 2026-07-10 — SMB background status bar — Phases 2-3 (bg HUD; off by default)
+
+### Added (still off by default → byte-identical)
+- **The SMB HUD now renders in the nametable instead of OAM sprites**, under
+  `BW_SMB_HUD_BG`. At boot `bw_hud_bg_init()` clears rows 0-3 and paints the status
+  strip; each frame the digit cache flags `bw_hud_dirty` when a value changed, and the
+  vblank window repaints only then (`bw_hud_bg_paint()` — nametable PPU writes with
+  rendering off). The OAM `bw_hud_digit` draw is compiled out under `BW_SMB_HUD_BG`.
+  jsnes-verified: the 11 digits appear as glyphs (tiles 48-57) in the nametable, live-
+  update (the timer counts down), and **zero** HUD sprites remain in OAM.
+- This **fully fixes a SINGLE-SCREEN SMB** (no split needed — the strip just occupies
+  rows 0-3) and **removes the 8-sprite HUD flicker** (no HUD sprites). Golden
+  `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED (nothing enables it).
+- Phases 4-5 (the sprite-0 split that holds the strip stationary over a SCROLLING
+  playfield, + the streamer skip) are next — FCEUX-validated.
+- **NB (measured):** on top of the v57 digit cache, the bg HUD frees only a little
+  extra frame budget — the SMB speed ceiling is the enemy AI + heavy SMB base, not the
+  HUD. So the bg HUD's win is the FLICKER (and freed OAM), not the speed.
+
 ## v58 — 2026-07-09 — SMB background status bar — Phase 1 (glyph seeding; off by default)
 
 ### Added (start of a multi-phase feature — off by default → byte-identical)
