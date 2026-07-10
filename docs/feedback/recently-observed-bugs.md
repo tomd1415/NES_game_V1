@@ -3,8 +3,27 @@
 1. Have a fill option for the background tile
 2. The 'door' or any movement to a new background when there are more than screen in the background
 appears to get confused and show the wrong background for one of the screens.
+   *CONFIRMED still open — root-caused 2026-07-10 (engine v62).* Reproduced on
+   FCEUX: a door from a 2-screen bg0 to a 2-screen bg1 loads bg1's *visible*
+   screen correctly, but scrolling to bg1's second screen shows **bg0's**
+   tiles. Control test (starting the game *in* bg1) renders both of its screens
+   correctly, so bg1's data is fine — the *transition* is what breaks it.
+   **Root cause:** `scroll_stream()` fetches from `bg_world_tiles[]`, a fixed
+   compile-time array = the *starting* bg. `load_background_n()` swaps the
+   nametables (T2.1) and the behaviour map (T2.2) on a door but NOT
+   `bg_world_tiles`, so the streamer re-fetches the old bg's columns as you
+   scroll and overwrites the door-loaded destination. Predicted by the comment
+   at `steps/Step_Playground/src/scroll.c:320-330` (which assumed it only bit
+   >2×2 worlds; it also bites 2×1/2×2 multi-bg). **Fix:** make `bg_world_tiles`
+   a mutable pointer that `load_background_n` swaps to the new bg's tiles
+   (mirroring the T2.2 behaviour-map swap) — an engine change (bump + snapshot).
 3. When the there is a jump to a different background, sometimes the the 'behaviour blocks' are from the
 wrong background.
+   *Same root cause as item 2 (still open).* T2.2 already swaps the behaviour
+   *map* on a door, so the *collision* half is handled — but the streamer
+   re-streaming the old bg's tiles (item 2) means the visible tiles and the
+   behaviour map can disagree after a transition. The item-2 `bg_world_tiles`
+   swap fixes both together.
 4. Please find NES game creation resources and reference them to help.
    *Done:* curated in [`docs/reference/nes-resources.md`](../reference/nes-resources.md)
    (NESdev wiki frame/NMI/PPU/scrolling, cc65, FamiStudio, etc., each with a
@@ -15,6 +34,15 @@ was a massive improvement.
 7. Include default sound fx in the audio section.
 8. Allow the user to set the default tempo for the audio and the ability to trigger tempo changes.
 9. Fix scrolling errors in vertical and 2 by 2 backgrounds.
+   *Confirmed fixed 2026-07-10 (engine v62).* A 2×2 world now scrolls seamlessly
+   across all four nametables in both axes — FCEUX + jsnes verified: the two
+   screen seams render as one clean full-height column / full-width row, scroll
+   the correct direction, stay put with no jitter (consecutive frames identical),
+   and the world edge stops the player instead of drifting into garbage. Guarded
+   by `tools/builder-tests/scroll-2x2.mjs` (drives the camera across both seams
+   and asserts they render + stream correctly), on top of `four-screen.mjs` (the
+   iNES 4-screen bit). See also items 2/3 for the *door-transition* room-load,
+   which is a separate concern from the scroll core.
 10. Enable scrolling platform games to go beyond 2 screens (research how far we can make these go)
 11. Add the ability to make a 'Geometry Dash' style game. This has been requested by many of the younger pupils and making this as easy as possible would be very helpful.
     *Largely covered:* the **runner** style is an auto-scroller with tap-to-jump
@@ -118,6 +146,14 @@ was a massive improvement.
     boundary?  ghost row appearing 12 tiles above / below where
     it should?  visible top scanline mid-scroll?  player drifts
     past world bottom into garbage?).
+    *Resolved — confirmed fixed 2026-07-10 (engine v62).* None of the listed
+    symptoms reproduce: FCEUX + jsnes drives of a 2×2 world show seamless
+    horizontal AND vertical scroll across all four nametables, clean seams, no
+    jitter (byte-identical consecutive frames), and the world edge halts the
+    player. Locked in by `tools/builder-tests/scroll-2x2.mjs`. (Sometime between
+    the §T3.1 tracking and v62 the scroll core was corrected.) The remaining
+    open scroll-adjacent items are the door/room-load ones (2/3) and going
+    **beyond** 2 screens (10) — both distinct from this.
 
 ---
 
