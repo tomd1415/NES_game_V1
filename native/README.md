@@ -7,6 +7,23 @@ contracts with the browser product.
 The current contents are the Phase-1 development shell. They intentionally do
 not extract or change the production build pipeline yet.
 
+## Runnable workspace preview
+
+The current preview is a genuine Qt workspace with the Studio mode rail,
+context dock, NES TV stage, quest log, menus and diagnostics. Editor tools and
+Play are visibly disabled until their native services land; launching the
+preview does not modify project files.
+
+From the repository root, run:
+
+```bash
+native/.venv/bin/nes-studio
+```
+
+Use the WORLD, CHARS, TILES, PALS, RULES, SOUND and CODE buttons to inspect the
+native workspace navigation. Open **View → Diagnostics** to inspect the active
+Qt, resource and XDG paths.
+
 ## Requirements
 
 - Python 3.11 or newer;

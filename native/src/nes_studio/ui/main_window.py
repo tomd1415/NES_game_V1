@@ -1,38 +1,248 @@
-"""Phase-1 native application shell."""
+"""Native NES Studio workspace shell."""
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QLabel, QMainWindow, QMenu, QMessageBox
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..core.resources import ResourceLocator
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
 from .diagnostics import DiagnosticsDialog
 
 
+MODE_NAMES = ("WORLD", "CHARS", "TILES", "PALS", "RULES", "SOUND", "CODE")
+
+
 class MainWindow(QMainWindow):
-    """Minimal real Qt shell used to establish native application identity."""
+    """Real Qt workspace establishing the native Studio information architecture."""
 
     def __init__(self, resource_locator: ResourceLocator) -> None:
         super().__init__()
         self._resource_locator = resource_locator
         self._diagnostics: DiagnosticsDialog | None = None
+        self._mode_buttons: dict[str, QPushButton] = {}
 
         self.setObjectName("mainWindow")
         self.setWindowTitle(APP_DISPLAY_NAME)
-        self.resize(1120, 720)
+        self.resize(1280, 800)
+        self.setMinimumSize(960, 640)
         self._create_menus()
+        self.setCentralWidget(self._create_workspace())
+        self._apply_theme()
+        self.select_mode("WORLD")
+        self.statusBar().showMessage("Native workspace ready — preview milestone")
 
-        welcome = QLabel(
-            "NES Studio native shell\n\n"
-            "The project model and editors will be added in later vertical slices.",
-            self,
+    def _create_workspace(self) -> QWidget:
+        root = QWidget(self)
+        root.setObjectName("studioWorkspace")
+        layout = QHBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        layout.addWidget(self._create_mode_rail())
+        splitter = QSplitter(Qt.Orientation.Horizontal, root)
+        splitter.setObjectName("workspaceSplitter")
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(self._create_context_dock())
+        splitter.addWidget(self._create_stage())
+        splitter.addWidget(self._create_quest_panel())
+        splitter.setSizes([250, 700, 280])
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter, 1)
+        return root
+
+    def _create_mode_rail(self) -> QWidget:
+        rail = QFrame(self)
+        rail.setObjectName("modeRail")
+        rail.setFixedWidth(108)
+        layout = QVBoxLayout(rail)
+        layout.setContentsMargins(10, 16, 10, 16)
+        layout.setSpacing(8)
+
+        brand = QLabel("NES\nSTUDIO", rail)
+        brand.setObjectName("brandLabel")
+        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand.setAccessibleName("NES Studio")
+        layout.addWidget(brand)
+
+        group = QButtonGroup(self)
+        group.setExclusive(True)
+        for mode in MODE_NAMES:
+            button = QPushButton(mode, rail)
+            button.setObjectName(f"mode{mode.title()}Button")
+            button.setCheckable(True)
+            button.setAccessibleName(f"Open {mode.title()} mode")
+            button.clicked.connect(lambda _checked=False, name=mode: self.select_mode(name))
+            group.addButton(button)
+            self._mode_buttons[mode] = button
+            layout.addWidget(button)
+        layout.addStretch(1)
+        return rail
+
+    def _create_context_dock(self) -> QWidget:
+        dock = QFrame(self)
+        dock.setObjectName("contextDock")
+        dock.setMinimumWidth(210)
+        layout = QVBoxLayout(dock)
+        layout.setContentsMargins(18, 20, 18, 20)
+
+        self.mode_title = QLabel(dock)
+        self.mode_title.setObjectName("modeTitle")
+        layout.addWidget(self.mode_title)
+        self.mode_help = QLabel(dock)
+        self.mode_help.setObjectName("modeHelp")
+        self.mode_help.setWordWrap(True)
+        layout.addWidget(self.mode_help)
+
+        section = QLabel("TOOLS", dock)
+        section.setObjectName("sectionLabel")
+        layout.addWidget(section)
+        for label in ("Select", "Paint", "Erase"):
+            button = QPushButton(label, dock)
+            button.setEnabled(False)
+            button.setAccessibleDescription("Coming in the first editable WORLD slice")
+            layout.addWidget(button)
+        layout.addStretch(1)
+        return dock
+
+    def _create_stage(self) -> QWidget:
+        stage = QFrame(self)
+        stage.setObjectName("stagePanel")
+        stage.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout = QVBoxLayout(stage)
+        layout.setContentsMargins(24, 20, 24, 24)
+
+        toolbar = QHBoxLayout()
+        self.live_badge = QLabel("● LIVE", stage)
+        self.live_badge.setObjectName("liveBadge")
+        toolbar.addWidget(self.live_badge)
+        toolbar.addStretch(1)
+        play = QPushButton("▶ PLAY", stage)
+        play.setObjectName("playButton")
+        play.setEnabled(False)
+        play.setAccessibleDescription("ROM build and Play will be enabled after build-core extraction")
+        toolbar.addWidget(play)
+        layout.addLayout(toolbar)
+
+        television = QFrame(stage)
+        television.setObjectName("television")
+        television.setAccessibleName("Live NES game preview")
+        tv_layout = QVBoxLayout(television)
+        tv_layout.setContentsMargins(24, 24, 24, 24)
+        screen = QFrame(television)
+        screen.setObjectName("nesScreen")
+        screen_layout = QVBoxLayout(screen)
+        preview = QLabel(
+            "NATIVE PREVIEW\n\n"
+            "The Qt workspace is running.\n"
+            "Project rendering arrives with the first WORLD slice.",
+            screen,
         )
-        welcome.setObjectName("nativeShellWelcome")
-        welcome.setAccessibleName("NES Studio native development shell")
-        welcome.setStyleSheet("font-size: 18px; padding: 32px;")
-        self.setCentralWidget(welcome)
-        self.statusBar().showMessage("Native shell ready")
+        preview.setObjectName("previewMessage")
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setWordWrap(True)
+        screen_layout.addWidget(preview)
+        tv_layout.addWidget(screen)
+        layout.addWidget(television, 1)
+        return stage
+
+    def _create_quest_panel(self) -> QWidget:
+        panel = QFrame(self)
+        panel.setObjectName("questPanel")
+        panel.setMinimumWidth(230)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 20, 18, 20)
+
+        title = QLabel("QUEST LOG", panel)
+        title.setObjectName("modeTitle")
+        layout.addWidget(title)
+        progress = QLabel("Native Studio foundation", panel)
+        progress.setObjectName("questHeading")
+        layout.addWidget(progress)
+        for text, done in (
+            ("Launch a real Qt application", True),
+            ("Build the Studio workspace", True),
+            ("Open a local project", False),
+            ("Paint a WORLD tile", False),
+            ("Build and export a ROM", False),
+        ):
+            item = QLabel(("✓  " if done else "○  ") + text, panel)
+            item.setObjectName("questComplete" if done else "questPending")
+            item.setWordWrap(True)
+            layout.addWidget(item)
+        layout.addStretch(1)
+
+        notice = QLabel("Development preview\nNo project files are modified by this shell.", panel)
+        notice.setObjectName("previewNotice")
+        notice.setWordWrap(True)
+        layout.addWidget(notice)
+        return panel
+
+    def select_mode(self, mode: str) -> None:
+        """Select a workspace mode and update its contextual introduction."""
+
+        if mode not in self._mode_buttons:
+            raise ValueError(f"Unknown Studio mode: {mode}")
+        self._mode_buttons[mode].setChecked(True)
+        self.mode_title.setText(mode)
+        self.mode_help.setText(
+            {
+                "WORLD": "Build screens, paint tile types, and place game objects.",
+                "CHARS": "Create characters, roles, frames, and animations.",
+                "TILES": "Edit the shared 8×8 graphics used by worlds and characters.",
+                "PALS": "Choose authentic NES background and sprite colours.",
+                "RULES": "Configure players, enemies, doors, dialogue, and winning.",
+                "SOUND": "Import songs and sound effects and watch the ROM budget.",
+                "CODE": "Inspect or edit the generated C and 6502 assembly source.",
+            }[mode]
+        )
+        self.statusBar().showMessage(f"{mode.title()} mode selected — editor controls coming next")
+
+    def _apply_theme(self) -> None:
+        self.setStyleSheet(
+            """
+            QMainWindow, #studioWorkspace { background: #0f0f1b; color: #f8f8f8; }
+            QMenuBar, QMenu, QStatusBar { background: #191933; color: #f8f8f8; }
+            QMenuBar::item:selected, QMenu::item:selected { background: #4b4b9b; }
+            #modeRail { background: #191933; border-right: 2px solid #4b4b9b; }
+            #brandLabel { color: #f8d878; font-weight: 900; font-size: 17px; padding-bottom: 12px; }
+            #modeRail QPushButton { background: transparent; color: #b8b8d8; border: 1px solid transparent; padding: 10px 3px; font-weight: 700; }
+            #modeRail QPushButton:hover { border-color: #7878c8; color: white; }
+            #modeRail QPushButton:checked { background: #383878; color: #f8f8f8; border-color: #9898e8; }
+            #contextDock, #questPanel { background: #202044; }
+            #contextDock { border-right: 1px solid #4b4b7b; }
+            #questPanel { border-left: 1px solid #4b4b7b; }
+            #modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
+            #modeHelp { color: #c8c8e8; padding: 6px 0 18px 0; }
+            #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
+            QPushButton { background: #383878; color: white; border: 1px solid #7878c8; border-radius: 3px; padding: 8px; }
+            QPushButton:disabled { background: #292949; color: #787898; border-color: #484868; }
+            #stagePanel { background: #101024; }
+            #liveBadge { color: #78d878; font-weight: 800; }
+            #television { background: #585868; border: 8px solid #303044; border-radius: 18px; }
+            #nesScreen { background: #181828; border: 4px solid #080810; }
+            #previewMessage { color: #a8e8f8; font-size: 17px; }
+            #questHeading { color: white; font-weight: 700; padding: 10px 0; }
+            #questComplete { color: #78d878; padding: 5px 0; }
+            #questPending { color: #b8b8d8; padding: 5px 0; }
+            #previewNotice { background: #30305c; color: #d8d8f8; border: 1px solid #6868a8; padding: 10px; }
+            QSplitter::handle { background: #4b4b7b; width: 2px; }
+            """
+        )
 
     def _create_menus(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
