@@ -2828,18 +2828,31 @@ void main(void) {
          * stays put while the playfield scrolls.  The mid-frame writes must land
          * in the split scanline's H-blank; this minimal 3-write sequence is the
          * hand-tuned part (adjust BW_HUDBG_SPLIT_Y in FCEUX). */
-        PPU_CTRL = 0x10;                 /* NT0, +1 stride — strip at x=0 */
-        PPU_SCROLL = 0;
-        PPU_SCROLL = 0;
-        PPU_MASK = 0x1E;                 /* rendering on for the poll */
-        {   /* busy-wait for the sprite-0 hit — rigorously bounded so a frame where
-             * it never fires (rendering off, sprite 0 off-screen) can't hang. */
-            unsigned int s0g;
-            for (s0g = 0; s0g < 3000u; s0g++) { if (PPU_STATUS & 0x40) break; }
+        {   /* Strip at scroll (0,0) via the engine's apply — it resets the loopy
+             * $2005/$2006 latch correctly after scroll_stream's writes (a bare
+             * PPU_SCROLL here would be mis-latched).  cam_x=0 -> NT0, x=0. */
+            unsigned int save_cx = cam_x;
+            cam_x = 0;
+            scroll_apply_ppu();
+            cam_x = save_cx;
         }
+        PPU_MASK = 0x1E;                 /* rendering on for the poll */
+        {   /* Two-phase sprite-0 wait, each rigorously bounded (a frame where the
+             * hit never fires can't hang).  Phase 1 waits for the PREVIOUS frame's
+             * hit flag to CLEAR (it clears at pre-render) — without this, a fast
+             * 60fps frame starts polling during vblank, sees the stale flag, and
+             * splits at scanline 0 (the strip vanishes).  Phase 2 waits for the
+             * fresh hit at the strip's bottom. */
+            unsigned int s0g;
+            for (s0g = 0; s0g < 4000u; s0g++) { if (!(PPU_STATUS & 0x40)) break; }
+            for (s0g = 0; s0g < 4000u; s0g++) { if (PPU_STATUS & 0x40) break; }
+        }
+        /* Playfield horizontal scroll for the rest of the frame.  Reading
+         * PPU_STATUS in the poll above already reset the write latch, so these two
+         * $2005 writes are (x,y).  The mid-frame x applies at the next scanline. */
         PPU_CTRL = (unsigned char)(0x10 | ((unsigned char)(cam_x >> 8) & 1));
-        PPU_SCROLL = (unsigned char)(cam_x & 0xFF);   /* playfield x for the rest of the frame */
-        PPU_SCROLL = 0;                               /* y is not reloaded mid-frame */
+        PPU_SCROLL = (unsigned char)(cam_x & 0xFF);
+        PPU_SCROLL = 0;
 #elif defined(SCROLL_BUILD)
         // Lock in the final PPU_CTRL + PPU_SCROLL after all PPU_ADDR
         // writes in scroll_stream() have settled.  Must be the last

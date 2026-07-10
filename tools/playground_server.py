@@ -2463,6 +2463,10 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120, player_idx2
         f".define PLAYER2_W              {pw2}",
         f".define PLAYER2_H              {ph2}",
         f".define PLAYER2_ENABLED        {1 if p2_on else 0}",
+        # Rows the column streamer skips at the top of the nametable — 4 when the SMB
+        # background status bar is on (BW_SMB_HUD_BG) so scroll_stream never overwrites
+        # the fixed status strip (rows 0-3); 0 otherwise -> byte-identical.
+        f".define SCROLL_SKIP_TOP        {4 if _smbhud_bg_enabled(state) else 0}",
         f".define PLAYER_TILES_PER_FRAME {pw * ph}",
         f".define NUM_BEHAVIOUR_SPRITES  {max(num_beh, 1)}",
         f".define NUM_STATIC_SPRITES     {num_static}",

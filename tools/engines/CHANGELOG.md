@@ -9,6 +9,28 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v61 — 2026-07-10 — SMB bg status bar — sprite-0 split now WORKS (off by default)
+
+### Fixed (the split renders correctly; still off by default → byte-identical)
+Validated on FCEUX here (headless via xvfb + Lua screenshots — jsnes can't run the
+split). Three fixes made it work on a 2-screen SMB:
+- **Latch:** the strip's scroll is now applied via the engine's `scroll_apply_ppu`
+  (with `cam_x` temporarily 0) instead of bare `PPU_SCROLL` writes, which were
+  mis-latched after `scroll_stream`'s `$2006` writes (the strip didn't render).
+- **Streamer skip (Phase 5):** `scroll_asm.s`'s column write skips the top
+  `SCROLL_SKIP_TOP` rows (4 when `BW_SMB_HUD_BG`, emitted to project.inc; 0 →
+  byte-identical), so the streamer never overwrites the fixed strip (rows 0-3) as the
+  level wraps.
+- **Two-phase sprite-0 wait:** first wait for the previous frame's hit flag to CLEAR,
+  then for the fresh hit — without this, a fast (60fps) frame polled during vblank,
+  saw the stale flag, and split at scanline 0 (the strip vanished when the player
+  stopped). Both bounded so it can never hang.
+
+Result: the status bar stays fixed at the top while the level scrolls, moving and
+stopped, no tear (consecutive frames identical). Golden `1730448e` + `_rom-equiv`
+`0aed6e95` UNCHANGED. **Remaining:** the doors/multi-bg showcase starter still doesn't
+show the strip (its bg-load path is the suspect) — under investigation.
+
 ## v60 — 2026-07-10 — SMB background status bar — Phase 4 sprite-0 split (WIP, off by default)
 
 ### Added (off by default → byte-identical; FCEUX-validated only)

@@ -578,6 +578,22 @@ PPU_DATA2 = $2007
 @docol:
     lda #$14                    ; PPU_CTRL_BASE | +32 stride
     sta PPU_CTRL
+.if SCROLL_SKIP_TOP > 0
+    ; Skip the top SCROLL_SKIP_TOP rows so the SMB bg status strip (rows 0-3) is
+    ; never overwritten as the level scrolls.  Start the column at row SKIP.
+    clc
+    lda _col_addr
+    adc #<(SCROLL_SKIP_TOP * 32)
+    tax
+    lda _col_addr+1
+    adc #>(SCROLL_SKIP_TOP * 32)
+    sta PPU_ADDR2               ; hi
+    stx PPU_ADDR2               ; lo
+    .repeat (30 - SCROLL_SKIP_TOP), i
+      lda _col_buf + SCROLL_SKIP_TOP + i
+      sta PPU_DATA2
+    .endrepeat
+.else
     lda _col_addr+1
     sta PPU_ADDR2
     lda _col_addr
@@ -586,6 +602,7 @@ PPU_DATA2 = $2007
       lda _col_buf+i
       sta PPU_DATA2
     .endrepeat
+.endif
     lda #0
     sta _col_pending
 @nocol:
