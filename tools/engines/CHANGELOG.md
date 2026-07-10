@@ -9,6 +9,28 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v62 — 2026-07-10 — Complete the v61 SCROLL_SKIP_TOP freeze (byte-identical)
+
+### Fixed (feature-off = byte-identical; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+- **project.inc baseline now defines `SCROLL_SKIP_TOP 0`.** The v61 commit (f1a576f)
+  added the symbol to `scroll_asm.s` + the server's `build_project_inc` emitter but not
+  to the committed `project.inc` baseline, so a direct `make NES_ASM_SCROLL=1` build
+  (no server codegen — used by the `asm-ab` / `asm-benchmark` A/B harnesses) failed to
+  assemble: `scroll_asm.s(581): Error: Constant expression expected`. Defaulting it to
+  0 in the baseline is feature-off = byte-identical (the server still overrides it to 4
+  when `BW_SMB_HUD_BG` is on). This completes the v61 freeze, whose snapshot used the
+  symbol in `scroll_asm.s` while its `project.inc` lacked it. `asm-ab` confirms the ASM
+  ROM still matches C at matched progress.
+
+### Note — multi-bg (doors) split RESOLVED (docs correction, no code)
+The v61 "doors showcase doesn't show the strip" was a misread: the strip's opaque
+solid-bar tile (58) renders in the level's green palette, mistaken for scrolled level
+content. FCEUX re-test of the full doors showcase (cam_x 0→240) shows the bar fixed at
+top while the level scrolls, NT0 rows 0-3 intact, consecutive frames byte-identical.
+The sprite-0 split works for standard AND multi-bg SMB. The `smb` starter now ships the
+bg status bar on by default (studio-starter.js — content, not engine).
+See [`docs/design/2026-07-08-smb-bg-status-bar.md`](../../docs/design/2026-07-08-smb-bg-status-bar.md).
+
 ## v61 — 2026-07-10 — SMB bg status bar — sprite-0 split now WORKS (off by default)
 
 ### Fixed (the split renders correctly; still off by default → byte-identical)
@@ -29,21 +51,6 @@ split). Three fixes made it work on a 2-screen SMB:
 Result: the status bar stays fixed at the top while the level scrolls, moving and
 stopped, no tear (consecutive frames identical). Golden `1730448e` + `_rom-equiv`
 `0aed6e95` UNCHANGED.
-
-### Patch (2026-07-10, byte-identical, re-snapshot in place — no version change)
-- **project.inc baseline now defines `SCROLL_SKIP_TOP 0`.** The v61 commit added the
-  symbol to `scroll_asm.s` + the server emitter but not to the committed `project.inc`
-  baseline, so a direct `make NES_ASM_SCROLL=1` build (no server codegen — used by the
-  `asm-ab` / `asm-benchmark` A/B harnesses) failed to assemble (`scroll_asm.s(581):
-  Constant expression expected`). Defaulting it to 0 in the baseline is feature-off =
-  byte-identical (the server still overrides it to 4 for the bg-HUD). This completes
-  the v61 freeze (re-snapshotted); goldens unchanged.
-- **Multi-bg (doors) split RESOLVED — it always worked.** The "doors showcase doesn't
-  show the strip" was a misread: the strip's opaque solid-bar tile (58) renders in the
-  level's green palette, mistaken for scrolled level content. FCEUX re-test of the full
-  doors showcase (cam_x 0→240) shows the bar fixed at top while the level scrolls, NT0
-  rows 0-3 intact, consecutive frames byte-identical. The split works for standard AND
-  multi-bg SMB. (See `docs/design/2026-07-08-smb-bg-status-bar.md`.)
 
 ## v60 — 2026-07-10 — SMB background status bar — Phase 4 sprite-0 split (WIP, off by default)
 
