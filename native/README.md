@@ -32,6 +32,9 @@ WORLD edits are debounced into an atomic XDG recovery copy. Changed projects
 also receive deduplicated 30-second snapshots (eight retained), a snapshot is
 taken before replacing a dirty project through Open, and pending recovery data
 is flushed when the window closes. Undo/redo history remains separate.
+Use **File → Recover Autosave** to restore the latest recovery copy. The app
+snapshots a dirty current document first and marks the recovered copy unsaved,
+so recovery never silently replaces an original project file.
 
 ## Requirements
 

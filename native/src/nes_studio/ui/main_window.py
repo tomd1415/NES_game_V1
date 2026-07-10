@@ -336,6 +336,28 @@ class MainWindow(QMainWindow):
                 path += ".json"
             self.save_project_path(path)
 
+    def recover_autosave(self) -> bool:
+        payload = self._autosave.load_current()
+        if payload is None:
+            self.statusBar().showMessage("No autosave recovery copy is available")
+            return False
+        if self._document.dirty:
+            self._autosave.snapshot(self._document.to_json(), "before_recovery")
+        try:
+            recovered = ProjectDocument.from_json(payload)
+        except ProjectFormatError as exc:
+            QMessageBox.critical(self, "Could not recover autosave", str(exc))
+            return False
+        recovered.dirty = True
+        self._document = recovered
+        self.world_canvas.load_tiles(recovered.world_tiles())
+        self._update_document_title()
+        self.statusBar().showMessage("Recovered autosave — use Save Project As to keep it")
+        return True
+
+    def _recover_autosave(self) -> None:
+        self.recover_autosave()
+
     def _apply_theme(self) -> None:
         self.setStyleSheet(
             """
@@ -379,6 +401,10 @@ class MainWindow(QMainWindow):
         save_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         save_action.triggered.connect(self._save_project_as)
         file_menu.addAction(save_action)
+        recover_action = QAction("&Recover Autosave", self)
+        recover_action.setObjectName("recoverAutosaveAction")
+        recover_action.triggered.connect(self._recover_autosave)
+        file_menu.addAction(recover_action)
         self._add_placeholder(file_menu, "Export &ROM…")
         file_menu.addSeparator()
         exit_action = QAction("E&xit", self)
