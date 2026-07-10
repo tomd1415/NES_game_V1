@@ -1570,7 +1570,9 @@ actual parity scope and QJSEngine/historical-engine compatibility.
 
 ### PR 1 — Baseline and decision records
 
-- native-definition ADR;
+- native-definition ADR — started in
+  [`../decisions/2026-07-10-native-linux-dual-target.md`](../decisions/2026-07-10-native-linux-dual-target.md);
+  extend it with the Phase-0 scope decision (full union vs. Studio-only);
 - parity matrix;
 - representative project/request/source/ROM fixtures;
 - durable v62 FCEUX comparison manifest;

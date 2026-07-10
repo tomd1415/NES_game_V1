@@ -39,6 +39,7 @@ contracts. Repository ownership and review rules are in
 
 | Doc | What it holds |
 | --- | ------------- |
+| [`decisions/2026-07-10-native-linux-dual-target.md`](decisions/2026-07-10-native-linux-dual-target.md) | **Native Linux = a second sibling product over frozen JSON/ROM contracts.** Records the load-bearing decisions (dual-target, extract the Python build core, PySide6, the provisional QJSEngine codegen bet) and the alternatives rejected. Companion to the [native migration plan](linux-native/2026-07-10-linux-native-migration-plan.md). |
 | [`decisions/2026-07-05-data-model-audit.md`](decisions/2026-07-05-data-model-audit.md) | Data-model gap tickets DM-1..DM-5 and their status. |
 | [`decisions/2026-07-05-engine-items-feasibility.md`](decisions/2026-07-05-engine-items-feasibility.md) | Feasibility + golden-ROM risk of each Phase-4 engine item; recommends per-door as the lowest-risk. |
 | [`decisions/2026-07-05-deliberate-parity-drops.md`](decisions/2026-07-05-deliberate-parity-drops.md) | Old-page affordances deliberately dropped/deferred and where each landed. |

@@ -19,9 +19,11 @@ regression.
 
 ## Deferred (planned, not a drop) — tracked elsewhere
 
-- **CHARS marquee *region* ops** (rotate / scale / rectangular copy-paste of
-  a pixel selection). Whole-character Flip H/V shipped; region-marquee is
-  deferred. Whole-tile flip/rotate live in TILES.
+- ~~**CHARS marquee *region* ops** (rotate / scale / rectangular copy-paste of
+  a pixel selection).~~ **Shipped 2026-07-10** — ▦ Select tool (Maker+) with
+  copy/paste, rotate CW/CCW, flip H/V, scale ×2/÷2, clear (`studio-chars.js`,
+  tested in `studio-tests/chars-marquee.spec.js`). Whole-tile flip/rotate still
+  live in TILES.
 - **Tile-swap by drag in CHARS/WORLD.** The reference-rewriting swap shipped
   in **TILES** (Phase 2.3) instead — one place, both banks.
 - **WORLD pop-out tileset window** and **in-TV zoom.** Minor conveniences;
