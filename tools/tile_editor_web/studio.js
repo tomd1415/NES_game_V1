@@ -276,12 +276,43 @@
     window.PlayPipeline.play(state, playOpts).then(function (res) {
       setSaveState('saved');
       refreshQuestsAndAttention();
-      if (!res || res.ok === false || !res.rom_b64) { setTvState(true); }
+      if (!res || res.ok === false || !res.rom_b64) {
+        setTvState(true);
+        if (res && res.ok === false && res.log) { showBuildError(res); }
+      }
     }).catch(function () {
       setTvState(true);
     }).finally(function () {
       btn.disabled = false;
     });
+  }
+
+  // A build failed (usually the level is too big for the cartridge).  The
+  // server sends a human-readable explanation in res.log; show it plainly
+  // rather than letting it vanish into the tiny status line.
+  function showBuildError(res) {
+    var log = String(res.log || 'The build failed.');
+    // The friendly server message comes before a "technical details" divider;
+    // lead with that, and offer the raw log underneath for the curious.
+    var split = log.split('----- technical details -----');
+    var friendly = split[0].trim() || log;
+    var technical = split.length > 1 ? split[1].trim() : '';
+    var bd = document.createElement('div');
+    bd.className = 'modal-backdrop open';
+    bd.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+      '<h2>😕 That game won’t fit yet</h2>' +
+      '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;max-height:45vh;overflow:auto">' +
+        escapeHtml(friendly) + '</div>' +
+      (technical ? '<details style="margin-top:10px;font-size:11px;color:var(--muted)">' +
+        '<summary style="cursor:pointer">Show technical details</summary>' +
+        '<pre style="white-space:pre-wrap;overflow:auto;max-height:30vh">' +
+        escapeHtml(technical) + '</pre></details>' : '') +
+      '<div class="modal-actions"><button class="btn primary" id="build-err-close" type="button">OK</button></div>' +
+      '</div>';
+    document.body.appendChild(bd);
+    function close() { if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+    bd.querySelector('#build-err-close').addEventListener('click', close);
   }
 
   // ---- Mode rail + dock --------------------------------------------------
