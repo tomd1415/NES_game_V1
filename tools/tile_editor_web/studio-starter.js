@@ -550,6 +550,12 @@
         m.smbhud.config = m.smbhud.config || {};
         m.smbhud.config.startTime = 400;
         m.smbhud.config.startLives = 3;
+        // Ship the fixed background status bar (sprite-0 split) by default:
+        // steady 60fps + zero HUD flicker + freed OAM.  The bar occupies the
+        // top 4 rows (rows 0-3); this level keeps them as sky and all actors
+        // below row 13, so nothing is clipped.  Needs engine >= 58 to emit
+        // (older targets ignore it).  Validated on FCEUX (standard + doors).
+        m.smbhud.config.background = true;
       }
       // v8: flagpole finish at the goal column (win_condition provides the win).
       if (m.flagpole) {
