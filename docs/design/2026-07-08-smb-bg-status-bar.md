@@ -46,12 +46,18 @@ accepted as opt-in.
   rows; (c) two-phase sprite-0 wait (clear-then-set) so a 60fps frame doesn't split at
   scanline 0. On a standard 2-screen SMB the bar is fixed at the top, the level
   scrolls, moving + stopped, no tear (consecutive frames identical md5).
-- [ ] **Multi-bg (doors) incompatibility — OPEN.** The showcase enables
-  `BW_DOORS_MULTIBG_ENABLED` (via door tiles); with it on, the strip is painted in
-  NT0 rows 0-3 (confirmed via `ppu.readbyte`) but the split does NOT display it — even
-  at boot (cam_x=0) and even with all other SMB modules off. Isolated to multi-bg;
-  suspect a mirroring / nametable-layout difference vs the split's
-  vertical-mirroring/horizontal-scroll assumption. Next debug target.
+- [x] **Multi-bg (doors) — RESOLVED, it always worked (v61).** The prior "strip
+  painted but not displayed" was a **misread**: the strip's opaque solid-bar tile
+  (`BW_HUDBG_SOLID_TILE=58`) renders in the level's green palette, which I mistook for
+  scrolled-in level content. Re-tested the FULL showcase (doors on, `BW_DOORS_MULTIBG_
+  ENABLED`) on FCEUX: probed `cam_x=0 cam_y=0` at rest; drove the player right to
+  `cam_x=240`; the strip (digits + bar) stays **fixed at the top** while the level
+  platforms scroll (compare `probe-boot.png` vs `probe-scrolled.png`), NT0 rows 0-3
+  stay the strip (`r1=5 r2=6 r3=32` after scroll = same as the standard case), and two
+  consecutive frames are **byte-identical** (no tear jitter). No mirroring/nametable
+  difference exists — `scroll_apply_ppu` has no multi-bg branch; both builds are
+  vertical-mirror (iNES byte6=3). **The sprite-0 split works for both standard 2-screen
+  SMB and the multi-bg doors showcase.**
 
 **FCEUX self-test harness (reusable):** `scratchpad/fceux/*.lua` +
 `timeout N xvfb-run -a fceux --loadlua script.lua rom.nes`. `gui.savescreenshotas`,
