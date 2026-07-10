@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from pathlib import Path
+
+from PySide6.QtCore import QIODevice, QSaveFile, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -20,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.resources import ResourceLocator
+from ..core.project_document import ProjectDocument, ProjectFormatError
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
 from .diagnostics import DiagnosticsDialog
 from .widgets.world_canvas import WorldCanvas
@@ -37,6 +41,7 @@ class MainWindow(QMainWindow):
         self._diagnostics: DiagnosticsDialog | None = None
         self._mode_buttons: dict[str, QPushButton] = {}
         self._tool_buttons: dict[str, QPushButton] = {}
+        self._document = ProjectDocument.preview()
 
         self.setObjectName("mainWindow")
         self.setWindowTitle(APP_DISPLAY_NAME)
@@ -44,8 +49,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 640)
         self._create_menus()
         self.setCentralWidget(self._create_workspace())
+        self.world_canvas.load_tiles(self._document.world_tiles())
         self._apply_theme()
         self.select_mode("WORLD")
+        self._update_document_title()
         self.statusBar().showMessage("Native workspace ready — preview milestone")
 
     def _create_workspace(self) -> QWidget:
@@ -228,6 +235,8 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"WORLD {tool.title()} tool — click or drag on the NES screen")
 
     def _world_cell_changed(self, col: int, row: int, value: int) -> None:
+        self._document.set_world_tile(col, row, value)
+        self._update_document_title()
         self.statusBar().showMessage(f"WORLD cell ({col}, {row}) changed to tile {value}")
 
     def _world_cursor_changed(self, col: int, row: int) -> None:
@@ -244,6 +253,55 @@ class MainWindow(QMainWindow):
     def _redo_world(self) -> None:
         if self.world_canvas.redo():
             self.statusBar().showMessage("Redid WORLD edit")
+
+    def _update_document_title(self) -> None:
+        marker = " *" if self._document.dirty else ""
+        self.setWindowTitle(f"{self._document.name}{marker} — {APP_DISPLAY_NAME}")
+
+    def open_project_path(self, path: str) -> bool:
+        try:
+            document = ProjectDocument.open(path)
+        except (OSError, ProjectFormatError) as exc:
+            QMessageBox.critical(self, "Could not open project", str(exc))
+            return False
+        self._document = document
+        self.world_canvas.load_tiles(document.world_tiles())
+        self._update_document_title()
+        self.statusBar().showMessage(f"Opened {document.path}")
+        return True
+
+    def save_project_path(self, path: str) -> bool:
+        destination = QSaveFile(path)
+        if not destination.open(QIODevice.OpenModeFlag.WriteOnly):
+            QMessageBox.critical(self, "Could not save project", destination.errorString())
+            return False
+        payload = self._document.to_json()
+        if destination.write(payload) != len(payload) or not destination.commit():
+            QMessageBox.critical(self, "Could not save project", destination.errorString())
+            destination.cancelWriting()
+            return False
+        self._document.path = Path(path)
+        self._document.dirty = False
+        self._update_document_title()
+        self.statusBar().showMessage(f"Saved {path}")
+        return True
+
+    def _open_project(self) -> None:
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "Open NES Studio Project", "", "NES Studio projects (*.json);;JSON files (*.json)"
+        )
+        if path:
+            self.open_project_path(path)
+
+    def _save_project_as(self) -> None:
+        suggested = str(self._document.path or Path(f"{self._document.name}.json"))
+        path, _filter = QFileDialog.getSaveFileName(
+            self, "Save NES Studio Project", suggested, "NES Studio projects (*.json)"
+        )
+        if path:
+            if not path.casefold().endswith(".json"):
+                path += ".json"
+            self.save_project_path(path)
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(
@@ -280,7 +338,14 @@ class MainWindow(QMainWindow):
     def _create_menus(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
         self._add_placeholder(file_menu, "&New Project")
-        self._add_placeholder(file_menu, "&Open Project…")
+        open_action = QAction("&Open Project…", self)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_action.triggered.connect(self._open_project)
+        file_menu.addAction(open_action)
+        save_action = QAction("Save Project &As…", self)
+        save_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_action.triggered.connect(self._save_project_as)
+        file_menu.addAction(save_action)
         self._add_placeholder(file_menu, "Export &ROM…")
         file_menu.addSeparator()
         exit_action = QAction("E&xit", self)

@@ -22,10 +22,11 @@ native/.venv/bin/nes-studio
 
 Use the WORLD, CHARS, TILES, PALS, RULES, SOUND and CODE buttons to inspect the
 native workspace navigation. WORLD is the first interactive slice: choose
-**Paint** or **Erase**, then click or drag over the 32×30 NES tile grid. This
-preview model is intentionally in memory only until native project sessions and
-autosave land. Open **View → Diagnostics** to inspect the active Qt, resource
-and XDG paths.
+**Paint** or **Erase**, then click or drag over the 32×30 NES tile grid.
+**File → Open Project…** loads the selected background from a
+shared project JSON; **File → Save Project As…** writes edits atomically while
+preserving fields the native preview does not yet understand. Open
+**View → Diagnostics** to inspect the active Qt, resource and XDG paths.
 
 ## Requirements
 

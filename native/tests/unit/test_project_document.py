@@ -53,3 +53,11 @@ def test_project_document_snapshot_is_detached_and_invalid_grid_is_rejected() ->
         pass
     else:
         raise AssertionError("invalid project grid was accepted")
+
+
+def test_preview_document_is_canonical_and_editable() -> None:
+    document = ProjectDocument.preview()
+    assert document.name == "Native Preview"
+    assert len(document.world_tiles()) == 30
+    assert len(document.world_tiles()[0]) == 32
+    assert document.world_tiles()[24][0] == 2

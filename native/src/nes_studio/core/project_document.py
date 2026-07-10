@@ -22,6 +22,35 @@ class ProjectDocument:
     dirty: bool = False
 
     @classmethod
+    def preview(cls) -> "ProjectDocument":
+        """Create the small canonical in-memory project shown by the preview UI."""
+
+        nametable = [
+            [{"tile": 0, "palette": 0} for _ in range(32)] for _ in range(30)
+        ]
+        for row in range(24, 30):
+            for col in range(32):
+                nametable[row][col]["tile"] = 2 if row == 24 else 1
+        for col, height in ((5, 3), (6, 3), (12, 5), (13, 5), (22, 2)):
+            for row in range(24 - height, 24):
+                nametable[row][col]["tile"] = 3
+        return cls(
+            state={
+                "name": "Native Preview",
+                "version": 2,
+                "selectedBgIdx": 0,
+                "backgrounds": [
+                    {
+                        "name": "room1",
+                        "dimensions": {"screens_x": 1, "screens_y": 1},
+                        "nametable": nametable,
+                        "behaviour": [[0 for _ in range(32)] for _ in range(30)],
+                    }
+                ],
+            }
+        )
+
+    @classmethod
     def from_json(cls, data: str | bytes, path: Path | None = None) -> "ProjectDocument":
         try:
             state = json.loads(data)
@@ -39,6 +68,10 @@ class ProjectDocument:
 
     def to_json(self) -> bytes:
         return (json.dumps(self.state, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+    @property
+    def name(self) -> str:
+        return str(self.state.get("name") or "Untitled")
 
     def snapshot(self) -> dict[str, Any]:
         return copy.deepcopy(self.state)
@@ -72,4 +105,3 @@ class ProjectDocument:
         if int(cell.get("tile", 0)) != tile:
             cell["tile"] = tile
             self.dirty = True
-

@@ -4,6 +4,8 @@ import importlib.util
 import os
 import sys
 import unittest
+import json
+import tempfile
 from pathlib import Path
 
 NATIVE_ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +45,16 @@ class NativeShellTests(unittest.TestCase):
         self.assertEqual(window.mode_title.text(), "CHARS")
         self.assertTrue(window._mode_buttons["CHARS"].isChecked())
         self.assertFalse(window._tool_buttons["paint"].isEnabled())
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project.json"
+            window.select_mode("WORLD")
+            window._select_world_tool("paint")
+            window.world_canvas.edit_cell(2, 2)
+            self.assertTrue(window.save_project_path(str(project)))
+            saved = json.loads(project.read_text(encoding="utf-8"))
+            self.assertEqual(saved["backgrounds"][0]["nametable"][2][2]["tile"], 1)
+            self.assertTrue(window.open_project_path(str(project)))
+            self.assertEqual(window.world_canvas.cell_value(2, 2), 1)
         window.close()
         application.processEvents()
 
