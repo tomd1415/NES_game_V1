@@ -28,8 +28,22 @@ split). Three fixes made it work on a 2-screen SMB:
 
 Result: the status bar stays fixed at the top while the level scrolls, moving and
 stopped, no tear (consecutive frames identical). Golden `1730448e` + `_rom-equiv`
-`0aed6e95` UNCHANGED. **Remaining:** the doors/multi-bg showcase starter still doesn't
-show the strip (its bg-load path is the suspect) — under investigation.
+`0aed6e95` UNCHANGED.
+
+### Patch (2026-07-10, byte-identical, re-snapshot in place — no version change)
+- **project.inc baseline now defines `SCROLL_SKIP_TOP 0`.** The v61 commit added the
+  symbol to `scroll_asm.s` + the server emitter but not to the committed `project.inc`
+  baseline, so a direct `make NES_ASM_SCROLL=1` build (no server codegen — used by the
+  `asm-ab` / `asm-benchmark` A/B harnesses) failed to assemble (`scroll_asm.s(581):
+  Constant expression expected`). Defaulting it to 0 in the baseline is feature-off =
+  byte-identical (the server still overrides it to 4 for the bg-HUD). This completes
+  the v61 freeze (re-snapshotted); goldens unchanged.
+- **Multi-bg (doors) split RESOLVED — it always worked.** The "doors showcase doesn't
+  show the strip" was a misread: the strip's opaque solid-bar tile (58) renders in the
+  level's green palette, mistaken for scrolled level content. FCEUX re-test of the full
+  doors showcase (cam_x 0→240) shows the bar fixed at top while the level scrolls, NT0
+  rows 0-3 intact, consecutive frames byte-identical. The split works for standard AND
+  multi-bg SMB. (See `docs/design/2026-07-08-smb-bg-status-bar.md`.)
 
 ## v60 — 2026-07-10 — SMB background status bar — Phase 4 sprite-0 split (WIP, off by default)
 

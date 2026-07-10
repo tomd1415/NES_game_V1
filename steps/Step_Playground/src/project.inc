@@ -19,6 +19,11 @@
 .define BG_WORLD_COLS          64
 .define BG_WORLD_ROWS          30
 .define BG_WORLD_ATTR_COLS     16
+; Rows the column streamer skips at the top (SMB bg status bar, sprite-0 split).
+; 0 in the stock baseline = feature off = byte-identical; the server overrides
+; this to 4 when the SMB background HUD is enabled.  Defined here so a direct
+; `make NES_ASM_SCROLL=1` build (no server codegen) still assembles scroll_asm.s.
+.define SCROLL_SKIP_TOP        0
 ; --- Player (advance_animation) ---
 .define PLAYER_W               2
 .define PLAYER_H               2
