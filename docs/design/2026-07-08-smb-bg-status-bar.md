@@ -4,11 +4,14 @@
 fixed background status bar, held stationary over the horizontally-scrolling
 playfield by a sprite-0-hit mid-frame scroll split (how real SMB does it).
 
-**Status:** BUILD IN PROGRESS (started 2026-07-09, engine → v58). User chose the full
-build (iterate the split via FCEUX) after the v57 HUD-digit cache confirmed the SMB
-"inconsistent speed" is this same frame budget. Gated behind `BW_SMB_HUD_BG` (off by
-default → byte-identical). Two blockers below still hold; Blocker 1 (top-4-rows) is
-accepted as opt-in.
+**Status:** ✅ DONE + SHIPPED ON BY DEFAULT for SMB (2026-07-10, engine v62). The
+sprite-0 split works on standard 2-screen AND the full doors/multi-bg showcase
+(FCEUX-validated here). `createSmb` now sets `smbhud.config.background = true`, so new
+SMB projects get the fixed bg status bar (steady 60fps, zero HUD flicker, freed OAM).
+Still gated behind `BW_SMB_HUD_BG` in the engine (a non-SMB / pre-v58 build emits
+nothing → goldens byte-identical). Blocker 1 (top-4-rows playfield shrink) is accepted:
+the SMB starter level keeps rows 0-3 as sky and all actors below row 13, so nothing
+clips. History below (Phases 1-5 + the multi-bg misread) kept for the record.
 
 ### Build progress (this is the working checklist)
 - [x] **Flag + glyph seeding (Phase 1).** `smbhud.config.background` → builder-modules
