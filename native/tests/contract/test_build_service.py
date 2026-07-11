@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import copy
 import importlib
 import sys
 from pathlib import Path
@@ -165,3 +167,60 @@ def test_server_build_orchestration_never_mutates_caller_project(monkeypatch) ->
     else:
         raise AssertionError("mutation probe did not stop build")
     assert project == {"marker": ["original"]}
+
+
+def minimal_build_body() -> dict:
+    pixels = [[0 for _ in range(8)] for _ in range(8)]
+    tiles = [{"pixels": copy.deepcopy(pixels), "name": ""} for _ in range(256)]
+    state = {
+        "name": "transport parity",
+        "version": 1,
+        "universal_bg": 0x21,
+        "sprites": [
+            {
+                "role": "player",
+                "name": "hero",
+                "width": 1,
+                "height": 1,
+                "cells": [[{"tile": 1, "palette": 0, "empty": False}]],
+            }
+        ],
+        "sprite_tiles": copy.deepcopy(tiles),
+        "bg_tiles": copy.deepcopy(tiles),
+        "sprite_palettes": [{"slots": [0x16, 0x27, 0x30]} for _ in range(4)],
+        "bg_palettes": [{"slots": [0x0F, 0x10, 0x30]} for _ in range(4)],
+        "animations": [],
+        "animation_assignments": {"walk": None, "jump": None},
+        "backgrounds": [
+            {
+                "name": "bg",
+                "dimensions": {"screens_x": 1, "screens_y": 1},
+                "nametable": [
+                    [{"tile": 0, "palette": 0} for _ in range(32)] for _ in range(30)
+                ],
+                "behaviour": [[0 for _ in range(32)] for _ in range(30)],
+            }
+        ],
+        "behaviour_types": [],
+        "selectedBgIdx": 0,
+        "builder": {"modules": {}},
+    }
+    return {
+        "state": state,
+        "playerSpriteIdx": 0,
+        "sceneSprites": [],
+        "playerStart": {"x": 60, "y": 120},
+        "mode": "browser",
+    }
+
+
+def test_direct_build_and_browser_transport_return_identical_rom() -> None:
+    body = minimal_build_body()
+    before = copy.deepcopy(body)
+    direct_rom, _log = playground_server._build_rom(body)
+    response = playground_server.run_play(body)
+    assert response["ok"] is True
+    assert response["stage"] == "built"
+    assert base64.b64decode(response["rom_b64"]) == direct_rom
+    assert response["size"] == len(direct_rom)
+    assert body == before
