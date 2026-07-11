@@ -35,6 +35,12 @@ wrong background.
 5. Convert more parts of the C code for game creation into assembly as last time this was done there
 was a massive improvement.
 6. Add more to the builder, including more fine tuning and the ability to be more specific to individual sprites and areas on the game. Have the ability to change the speed of the jump.
+   *Jump-speed done + verified 2026-07-11.* The 🎮 Style tab exposes **Jump speed**
+   (globals `jumpSpeedPx`, drives `BW_APPLY_JUMP_RISE`), **Jump height**, **Walk
+   speed** and **Gravity**. New `builder-tests/physics-globals.mjs` proves it
+   behaviourally: js=2 lifts the player 32px, js=6 lifts 84px (jsnes OAM), plus
+   codegen + clamp + byte-identical-when-off. (Broader per-sprite/area fine-tuning
+   remains open.)
 7. Include default sound fx in the audio section.
 8. Allow the user to set the default tempo for the audio and the ability to trigger tempo changes.
 9. Fix scrolling errors in vertical and 2 by 2 backgrounds.
@@ -151,6 +157,14 @@ was a massive improvement.
     so each door can send the player to a different spot and/or a different room.
     Covered by `perdoor.mjs` (two doors, different destinations).
 22. There should be the ability to change variables that affect the whole game, like gravity and similar in the builder section.
+    *Done + verified 2026-07-11 (Globals module, T1.6).* The 🎮 Style tab exposes
+    game-wide physics knobs — **Gravity** (`gravityPx`, enemy fall via
+    `BW_APPLY_GRAVITY` at `platformer.c:1789`), **Jump speed**, **Jump height**,
+    **Walk speed**, walk-**Bob** — emitted as `#define BW_*` overrides that are
+    byte-identical to the baseline when untouched. Now behaviourally guarded by
+    `builder-tests/physics-globals.mjs` (jump-speed measurably changes jump height;
+    codegen + clamping asserted). Note the label is honest: Gravity tunes *enemy*
+    fall, not the player — tunable *player* gravity would be a follow-up.
 23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
 24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
