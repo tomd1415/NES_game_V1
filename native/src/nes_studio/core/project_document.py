@@ -95,6 +95,26 @@ class ProjectDocument:
         grid = self._world_grid(self.state)
         return [[int(cell.get("tile", 0)) for cell in row[:32]] for row in grid[:30]]
 
+    def world_palettes(self) -> list[list[int]]:
+        grid = self._world_grid(self.state)
+        return [[int(cell.get("palette", 0)) & 3 for cell in row[:32]] for row in grid[:30]]
+
+    def world_behaviours(self) -> list[list[int]]:
+        background = self._selected_background()
+        behaviour = background.get("behaviour")
+        if not isinstance(behaviour, list):
+            behaviour = [[0 for _ in range(32)] for _ in range(30)]
+            background["behaviour"] = behaviour
+        if len(behaviour) < 30 or any(
+            not isinstance(row, list) or len(row) < 32 for row in behaviour[:30]
+        ):
+            raise ProjectFormatError("Selected background has no 32 by 30 behaviour map")
+        return [[int(value) & 0xFF for value in row[:32]] for row in behaviour[:30]]
+
+    def _selected_background(self) -> dict[str, Any]:
+        backgrounds = self.state["backgrounds"]
+        return backgrounds[self.state.get("selectedBgIdx", 0)]
+
     def set_world_tile(self, col: int, row: int, tile: int) -> None:
         if not 0 <= col < 32 or not 0 <= row < 30:
             raise IndexError(f"WORLD cell outside 32x30: {col}, {row}")
@@ -105,3 +125,31 @@ class ProjectDocument:
         if int(cell.get("tile", 0)) != tile:
             cell["tile"] = tile
             self.dirty = True
+
+    def set_world_palette(self, col: int, row: int, palette: int) -> None:
+        if not 0 <= palette <= 3:
+            raise ValueError(f"NES background palette must be 0..3: {palette}")
+        self._set_world_cell_field(col, row, "palette", palette)
+
+    def set_world_behaviour(self, col: int, row: int, behaviour: int) -> None:
+        if not 0 <= behaviour <= 0xFF:
+            raise ValueError(f"WORLD behaviour must be 0..255: {behaviour}")
+        self._validate_coordinates(col, row)
+        values = self.world_behaviours()
+        if values[row][col] != behaviour:
+            self._selected_background()["behaviour"][row][col] = behaviour
+            self.dirty = True
+
+    def _set_world_cell_field(self, col: int, row: int, field: str, value: int) -> None:
+        self._validate_coordinates(col, row)
+        cell = self._world_grid(self.state)[row][col]
+        if not isinstance(cell, dict):
+            raise ProjectFormatError(f"WORLD cell {col}, {row} is not an object")
+        if int(cell.get(field, 0)) != value:
+            cell[field] = value
+            self.dirty = True
+
+    @staticmethod
+    def _validate_coordinates(col: int, row: int) -> None:
+        if not 0 <= col < 32 or not 0 <= row < 30:
+            raise IndexError(f"WORLD cell outside 32x30: {col}, {row}")

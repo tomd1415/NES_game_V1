@@ -20,6 +20,8 @@ class WorldCanvas(QWidget):
     )
 
     cell_changed = Signal(int, int, int)
+    palette_changed = Signal(int, int, int)
+    behaviour_changed = Signal(int, int, int)
     cursor_changed = Signal(int, int)
     history_changed = Signal(bool, bool)
 
@@ -32,12 +34,16 @@ class WorldCanvas(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._cells = [[0 for _ in range(self.COLS)] for _ in range(self.ROWS)]
+        self._palettes = [[0 for _ in range(self.COLS)] for _ in range(self.ROWS)]
+        self._behaviours = [[0 for _ in range(self.COLS)] for _ in range(self.ROWS)]
         self._tool = "select"
         self._paint_value = 1
+        self._palette_value = 1
+        self._behaviour_value = 1
         self._hover: tuple[int, int] | None = None
-        self._undo: list[list[tuple[int, int, int, int]]] = []
-        self._redo: list[list[tuple[int, int, int, int]]] = []
-        self._stroke: list[tuple[int, int, int, int]] | None = None
+        self._undo: list[list[tuple[int, int, int, int, str]]] = []
+        self._redo: list[list[tuple[int, int, int, int, str]]] = []
+        self._stroke: list[tuple[int, int, int, int, str]] | None = None
         self._stroke_cells: set[tuple[int, int]] = set()
         self._seed_preview()
 
@@ -53,7 +59,7 @@ class WorldCanvas(QWidget):
         return QSize(640, 600)
 
     def set_tool(self, tool: str) -> None:
-        if tool not in {"select", "paint", "erase"}:
+        if tool not in {"select", "paint", "erase", "palette", "behaviour"}:
             raise ValueError(f"Unknown WORLD tool: {tool}")
         self._tool = tool
         self.setCursor(
@@ -68,6 +74,24 @@ class WorldCanvas(QWidget):
         self._validate_cell(col, row)
         return self._cells[row][col]
 
+    def palette_value(self, col: int, row: int) -> int:
+        self._validate_cell(col, row)
+        return self._palettes[row][col]
+
+    def behaviour_value(self, col: int, row: int) -> int:
+        self._validate_cell(col, row)
+        return self._behaviours[row][col]
+
+    def set_palette_value(self, value: int) -> None:
+        if not 0 <= value <= 3:
+            raise ValueError("NES background palette must be 0..3")
+        self._palette_value = value
+
+    def set_behaviour_value(self, value: int) -> None:
+        if not 0 <= value <= 0xFF:
+            raise ValueError("WORLD behaviour must be 0..255")
+        self._behaviour_value = value
+
     def load_tiles(self, tiles: list[list[int]]) -> None:
         if len(tiles) < self.ROWS or any(len(row) < self.COLS for row in tiles[: self.ROWS]):
             raise ValueError("WORLD tile data must be at least 32 by 30")
@@ -77,18 +101,31 @@ class WorldCanvas(QWidget):
         self.history_changed.emit(False, False)
         self.update()
 
+    def load_world(
+        self,
+        tiles: list[list[int]],
+        palettes: list[list[int]],
+        behaviours: list[list[int]],
+    ) -> None:
+        self.load_tiles(tiles)
+        for values, label in ((palettes, "palette"), (behaviours, "behaviour")):
+            if len(values) < self.ROWS or any(len(row) < self.COLS for row in values[: self.ROWS]):
+                raise ValueError(f"WORLD {label} data must be at least 32 by 30")
+        self._palettes = [list(map(int, row[: self.COLS])) for row in palettes[: self.ROWS]]
+        self._behaviours = [list(map(int, row[: self.COLS])) for row in behaviours[: self.ROWS]]
+
     def edit_cell(self, col: int, row: int) -> bool:
         """Apply the active tool; return whether the model changed."""
 
         self._validate_cell(col, row)
         if self._tool == "select":
             return False
-        value = self._paint_value if self._tool == "paint" else 0
-        if self._cells[row][col] == value:
+        target, value, signal = self._edit_target()
+        if target[row][col] == value:
             return False
-        before = self._cells[row][col]
-        self._cells[row][col] = value
-        change = (col, row, before, value)
+        before = target[row][col]
+        target[row][col] = value
+        change = (col, row, before, value, self._tool)
         if self._stroke is None:
             self._undo.append([change])
             self._redo.clear()
@@ -96,9 +133,16 @@ class WorldCanvas(QWidget):
         elif (col, row) not in self._stroke_cells:
             self._stroke.append(change)
             self._stroke_cells.add((col, row))
-        self.cell_changed.emit(col, row, value)
+        signal.emit(col, row, value)
         self.update(self._cell_rect(col, row))
         return True
+
+    def _edit_target(self):
+        if self._tool in {"paint", "erase"}:
+            return self._cells, self._paint_value if self._tool == "paint" else 0, self.cell_changed
+        if self._tool == "palette":
+            return self._palettes, self._palette_value, self.palette_changed
+        return self._behaviours, self._behaviour_value, self.behaviour_changed
 
     def begin_stroke(self) -> None:
         if self._stroke is None:
@@ -127,9 +171,10 @@ class WorldCanvas(QWidget):
         if not self._undo:
             return False
         stroke = self._undo.pop()
-        for col, row, before, _after in reversed(stroke):
-            self._cells[row][col] = before
-            self.cell_changed.emit(col, row, before)
+        for col, row, before, _after, tool in reversed(stroke):
+            target, signal = self._target_and_signal(tool)
+            target[row][col] = before
+            signal.emit(col, row, before)
         self._redo.append(stroke)
         self.history_changed.emit(self.can_undo, self.can_redo)
         self.update()
@@ -139,13 +184,21 @@ class WorldCanvas(QWidget):
         if not self._redo:
             return False
         stroke = self._redo.pop()
-        for col, row, _before, after in stroke:
-            self._cells[row][col] = after
-            self.cell_changed.emit(col, row, after)
+        for col, row, _before, after, tool in stroke:
+            target, signal = self._target_and_signal(tool)
+            target[row][col] = after
+            signal.emit(col, row, after)
         self._undo.append(stroke)
         self.history_changed.emit(self.can_undo, self.can_redo)
         self.update()
         return True
+
+    def _target_and_signal(self, tool: str):
+        if tool in {"paint", "erase"}:
+            return self._cells, self.cell_changed
+        if tool == "palette":
+            return self._palettes, self.palette_changed
+        return self._behaviours, self.behaviour_changed
 
     def _validate_cell(self, col: int, row: int) -> None:
         if not 0 <= col < self.COLS or not 0 <= row < self.ROWS:
@@ -174,7 +227,7 @@ class WorldCanvas(QWidget):
         for row, cells in enumerate(self._cells):
             for col, value in enumerate(cells):
                 rect = QRect(left + col * tile, top + row * tile, tile, tile)
-                painter.fillRect(rect, self.NES_COLOURS[value])
+                painter.fillRect(rect, self.NES_COLOURS[value % len(self.NES_COLOURS)])
 
         painter.setPen(QPen(QColor("#383858"), 1))
         for col in range(self.COLS + 1):

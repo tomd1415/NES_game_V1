@@ -64,3 +64,28 @@ def test_select_tool_does_not_mutate_and_invalid_cells_are_rejected() -> None:
         pass
     else:
         raise AssertionError("out-of-range WORLD edit did not fail")
+
+
+def test_palette_and_behaviour_edits_share_stroke_undo_history() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    tiles = [[0 for _ in range(32)] for _ in range(30)]
+    palettes = [[0 for _ in range(32)] for _ in range(30)]
+    behaviours = [[0 for _ in range(32)] for _ in range(30)]
+    canvas.load_world(tiles, palettes, behaviours)
+
+    canvas.set_palette_value(3)
+    canvas.set_tool("palette")
+    assert canvas.edit_cell(8, 9)
+    assert canvas.palette_value(8, 9) == 3
+    assert canvas.cell_value(8, 9) == 0
+
+    canvas.set_behaviour_value(7)
+    canvas.set_tool("behaviour")
+    assert canvas.edit_cell(8, 9)
+    assert canvas.behaviour_value(8, 9) == 7
+    assert canvas.undo()
+    assert canvas.behaviour_value(8, 9) == 0
+    assert canvas.palette_value(8, 9) == 3
+    assert canvas.undo()
+    assert canvas.palette_value(8, 9) == 0

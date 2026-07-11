@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -63,7 +64,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 640)
         self._create_menus()
         self.setCentralWidget(self._create_workspace())
-        self.world_canvas.load_tiles(self._document.world_tiles())
+        self._load_document_world()
         self._apply_theme()
         self.select_mode("WORLD")
         self._update_document_title()
@@ -136,7 +137,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(section)
         tool_group = QButtonGroup(self)
         tool_group.setExclusive(True)
-        for tool in ("select", "paint", "erase"):
+        for tool in ("select", "paint", "erase", "palette", "behaviour"):
             label = tool.title()
             button = QPushButton(label, dock)
             button.setObjectName(f"world{label}Button")
@@ -145,6 +146,32 @@ class MainWindow(QMainWindow):
             tool_group.addButton(button)
             self._tool_buttons[tool] = button
             layout.addWidget(button)
+
+        palette_label = QLabel("PALETTE (0–3)", dock)
+        palette_label.setObjectName("sectionLabel")
+        layout.addWidget(palette_label)
+        self.palette_value = QSpinBox(dock)
+        self.palette_value.setObjectName("worldPaletteValue")
+        self.palette_value.setRange(0, 3)
+        self.palette_value.setValue(1)
+        self.palette_value.setAccessibleName("WORLD palette value")
+        self.palette_value.valueChanged.connect(
+            lambda value: self.world_canvas.set_palette_value(value)
+        )
+        layout.addWidget(self.palette_value)
+
+        behaviour_label = QLabel("BEHAVIOUR (0–255)", dock)
+        behaviour_label.setObjectName("sectionLabel")
+        layout.addWidget(behaviour_label)
+        self.behaviour_value = QSpinBox(dock)
+        self.behaviour_value.setObjectName("worldBehaviourValue")
+        self.behaviour_value.setRange(0, 255)
+        self.behaviour_value.setValue(1)
+        self.behaviour_value.setAccessibleName("WORLD behaviour value")
+        self.behaviour_value.valueChanged.connect(
+            lambda value: self.world_canvas.set_behaviour_value(value)
+        )
+        layout.addWidget(self.behaviour_value)
         layout.addStretch(1)
         return dock
 
@@ -178,6 +205,8 @@ class MainWindow(QMainWindow):
         screen_layout.setContentsMargins(0, 0, 0, 0)
         self.world_canvas = WorldCanvas(screen)
         self.world_canvas.cell_changed.connect(self._world_cell_changed)
+        self.world_canvas.palette_changed.connect(self._world_palette_changed)
+        self.world_canvas.behaviour_changed.connect(self._world_behaviour_changed)
         self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
         self.world_canvas.history_changed.connect(self._world_history_changed)
         screen_layout.addWidget(self.world_canvas)
@@ -239,6 +268,8 @@ class MainWindow(QMainWindow):
         world_enabled = mode == "WORLD"
         for button in self._tool_buttons.values():
             button.setEnabled(world_enabled)
+        self.palette_value.setEnabled(world_enabled)
+        self.behaviour_value.setEnabled(world_enabled)
         self.world_canvas.setEnabled(world_enabled)
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
@@ -250,9 +281,27 @@ class MainWindow(QMainWindow):
 
     def _world_cell_changed(self, col: int, row: int, value: int) -> None:
         self._document.set_world_tile(col, row, value)
+        self._world_value_changed(f"tile {value}")
+
+    def _world_palette_changed(self, col: int, row: int, value: int) -> None:
+        self._document.set_world_palette(col, row, value)
+        self._world_value_changed(f"palette {value}")
+
+    def _world_behaviour_changed(self, col: int, row: int, value: int) -> None:
+        self._document.set_world_behaviour(col, row, value)
+        self._world_value_changed(f"behaviour {value}")
+
+    def _world_value_changed(self, description: str) -> None:
         self._autosave_timer.start()
         self._update_document_title()
-        self.statusBar().showMessage(f"WORLD cell ({col}, {row}) changed to tile {value}")
+        self.statusBar().showMessage(f"WORLD changed to {description}")
+
+    def _load_document_world(self) -> None:
+        self.world_canvas.load_world(
+            self._document.world_tiles(),
+            self._document.world_palettes(),
+            self._document.world_behaviours(),
+        )
 
     def _world_cursor_changed(self, col: int, row: int) -> None:
         self.statusBar().showMessage(f"WORLD cell ({col}, {row}) — {self.world_canvas.tool.title()} tool")
@@ -282,7 +331,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Could not open project", str(exc))
             return False
         self._document = document
-        self.world_canvas.load_tiles(document.world_tiles())
+        self._load_document_world()
         self._update_document_title()
         self.statusBar().showMessage(f"Opened {document.path}")
         return True
@@ -350,7 +399,7 @@ class MainWindow(QMainWindow):
             return False
         recovered.dirty = True
         self._document = recovered
-        self.world_canvas.load_tiles(recovered.world_tiles())
+        self._load_document_world()
         self._update_document_title()
         self.statusBar().showMessage("Recovered autosave — use Save Project As to keep it")
         return True
@@ -364,7 +413,7 @@ class MainWindow(QMainWindow):
         self._document = ProjectDocument.preview()
         self._document.state["name"] = "Untitled Game"
         self._document.dirty = True
-        self.world_canvas.load_tiles(self._document.world_tiles())
+        self._load_document_world()
         self._update_document_title()
         self.statusBar().showMessage("Created a new project — use Save Project As to keep it")
 
