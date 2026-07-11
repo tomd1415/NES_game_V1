@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(section)
         tool_group = QButtonGroup(self)
         tool_group.setExclusive(True)
-        for tool in ("select", "paint", "erase", "palette", "behaviour"):
+        for tool in ("select", "paint", "erase", "fill", "palette", "behaviour"):
             label = tool.title()
             button = QPushButton(label, dock)
             button.setObjectName(f"world{label}Button")

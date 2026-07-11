@@ -64,7 +64,7 @@ class WorldCanvas(QWidget):
         return QSize(640, 600)
 
     def set_tool(self, tool: str) -> None:
-        if tool not in {"select", "paint", "erase", "palette", "behaviour"}:
+        if tool not in {"select", "paint", "erase", "fill", "palette", "behaviour"}:
             raise ValueError(f"Unknown WORLD tool: {tool}")
         self._tool = tool
         self.setCursor(
@@ -137,6 +137,8 @@ class WorldCanvas(QWidget):
         if self._tool == "select":
             return False
         positions = [(col, row)]
+        if self._tool == "fill":
+            positions = self._contiguous_cells(col, row)
         if self._tool == "palette":
             left, top = (col // 2) * 2, (row // 2) * 2
             positions = [
@@ -153,6 +155,31 @@ class WorldCanvas(QWidget):
         if owns_stroke:
             self.end_stroke()
         return changed
+
+    def _contiguous_cells(self, col: int, row: int) -> list[tuple[int, int]]:
+        source = self._cells[row][col]
+        if source == self._paint_value:
+            return []
+        pending = [(col, row)]
+        found = {(col, row)}
+        while pending:
+            current_col, current_row = pending.pop()
+            for next_col, next_row in (
+                (current_col - 1, current_row),
+                (current_col + 1, current_row),
+                (current_col, current_row - 1),
+                (current_col, current_row + 1),
+            ):
+                position = (next_col, next_row)
+                if (
+                    position not in found
+                    and 0 <= next_col < self.COLS
+                    and 0 <= next_row < self.ROWS
+                    and self._cells[next_row][next_col] == source
+                ):
+                    found.add(position)
+                    pending.append(position)
+        return list(found)
 
     def _edit_one(self, col: int, row: int) -> bool:
         target, value, signal = self._edit_target()
@@ -175,8 +202,9 @@ class WorldCanvas(QWidget):
         return True
 
     def _edit_target(self):
-        if self._tool in {"paint", "erase"}:
-            return self._cells, self._paint_value if self._tool == "paint" else 0, self.cell_changed
+        if self._tool in {"paint", "erase", "fill"}:
+            value = 0 if self._tool == "erase" else self._paint_value
+            return self._cells, value, self.cell_changed
         if self._tool == "palette":
             return self._palettes, self._palette_value, self.palette_changed
         return self._behaviours, self._behaviour_value, self.behaviour_changed
@@ -233,7 +261,7 @@ class WorldCanvas(QWidget):
         return True
 
     def _target_and_signal(self, tool: str):
-        if tool in {"paint", "erase"}:
+        if tool in {"paint", "erase", "fill"}:
             return self._cells, self.cell_changed
         if tool == "palette":
             return self._palettes, self.palette_changed

@@ -190,3 +190,35 @@ def test_selected_tile_value_is_painted_and_reversible() -> None:
     assert canvas.cell_value(3, 4) == 0
     assert canvas.redo()
     assert canvas.cell_value(3, 4) == 173
+
+
+def test_fill_changes_only_contiguous_matching_tiles_in_one_undo_step() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    tiles = [[0 for _ in range(32)] for _ in range(30)]
+    for row in range(30):
+        tiles[row][3] = 9
+    tiles[1][1] = 9
+    palettes = [[0 for _ in range(32)] for _ in range(30)]
+    behaviours = [[0 for _ in range(32)] for _ in range(30)]
+    canvas.load_world(tiles, palettes, behaviours)
+    canvas.set_paint_value(6)
+    canvas.set_tool("fill")
+
+    assert canvas.edit_cell(0, 0)
+    assert canvas.cell_value(0, 0) == 6
+    assert canvas.cell_value(1, 1) == 9
+    assert canvas.cell_value(4, 0) == 0
+    assert canvas.undo()
+    assert canvas.cell_value(0, 0) == 0
+    assert canvas.cell_value(4, 0) == 0
+    assert not canvas.can_undo
+
+
+def test_fill_is_noop_when_region_already_has_selected_tile() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.set_paint_value(canvas.cell_value(0, 0))
+    canvas.set_tool("fill")
+    assert not canvas.edit_cell(0, 0)
+    assert not canvas.can_undo
