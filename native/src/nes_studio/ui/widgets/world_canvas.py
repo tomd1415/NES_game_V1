@@ -96,6 +96,11 @@ class WorldCanvas(QWidget):
             raise ValueError("NES background palette must be 0..3")
         self._palette_value = value
 
+    def set_paint_value(self, value: int) -> None:
+        if not 0 <= value <= 0xFF:
+            raise ValueError("NES tile index must be 0..255")
+        self._paint_value = value
+
     def set_behaviour_value(self, value: int) -> None:
         if not 0 <= value <= 0xFF:
             raise ValueError("WORLD behaviour must be 0..255")

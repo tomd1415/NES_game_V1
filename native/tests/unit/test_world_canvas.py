@@ -146,3 +146,17 @@ def test_keyboard_navigation_stays_inside_world_bounds() -> None:
     QTest.keyClick(canvas, Qt.Key.Key_Left)
     QTest.keyClick(canvas, Qt.Key.Key_Up)
     assert canvas.selected_cell == (0, 0)
+
+
+def test_selected_tile_value_is_painted_and_reversible() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.set_paint_value(173)
+    canvas.set_tool("paint")
+
+    assert canvas.edit_cell(3, 4)
+    assert canvas.cell_value(3, 4) == 173
+    assert canvas.undo()
+    assert canvas.cell_value(3, 4) == 0
+    assert canvas.redo()
+    assert canvas.cell_value(3, 4) == 173

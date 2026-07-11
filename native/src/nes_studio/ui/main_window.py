@@ -147,6 +147,19 @@ class MainWindow(QMainWindow):
             self._tool_buttons[tool] = button
             layout.addWidget(button)
 
+        tile_label = QLabel("TILE (0–255)", dock)
+        tile_label.setObjectName("sectionLabel")
+        layout.addWidget(tile_label)
+        self.tile_value = QSpinBox(dock)
+        self.tile_value.setObjectName("worldTileValue")
+        self.tile_value.setRange(0, 255)
+        self.tile_value.setValue(1)
+        self.tile_value.setAccessibleName("WORLD tile value")
+        self.tile_value.valueChanged.connect(
+            lambda value: self.world_canvas.set_paint_value(value)
+        )
+        layout.addWidget(self.tile_value)
+
         palette_label = QLabel("PALETTE (0–3)", dock)
         palette_label.setObjectName("sectionLabel")
         layout.addWidget(palette_label)
@@ -268,6 +281,7 @@ class MainWindow(QMainWindow):
         world_enabled = mode == "WORLD"
         for button in self._tool_buttons.values():
             button.setEnabled(world_enabled)
+        self.tile_value.setEnabled(world_enabled)
         self.palette_value.setEnabled(world_enabled)
         self.behaviour_value.setEnabled(world_enabled)
         self.world_canvas.setEnabled(world_enabled)
