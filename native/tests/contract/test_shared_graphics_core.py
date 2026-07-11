@@ -106,3 +106,44 @@ def test_palette_source_emitters_are_identical_through_server_adapters() -> None
     assert "const unsigned char palette_bytes[32]" in graphics.build_palettes_inc(state)
     assert '.segment "RODATA"' in graphics.build_palettes_asminc(state)
     assert state == before
+
+
+def blank_tiles() -> list[dict]:
+    return [
+        {"pixels": [[0 for _ in range(8)] for _ in range(8)], "name": ""}
+        for _ in range(256)
+    ]
+
+
+def test_complete_chr_generation_matches_server_for_dialogue_and_hud_seeding() -> None:
+    state = {
+        "sprite_tiles": blank_tiles(),
+        "bg_tiles": blank_tiles(),
+        "builder": {
+            "modules": {
+                "game": {"config": {"type": "smb"}},
+                "smbhud": {"enabled": True, "config": {"background": True}},
+                "dialogue": {"enabled": True},
+            }
+        },
+    }
+    core_state = copy.deepcopy(state)
+    server_state = copy.deepcopy(state)
+    core_chr = graphics.build_chr(core_state)
+    server_chr = playground_server.build_chr(server_state)
+    assert core_chr == server_chr
+    assert core_state == server_state
+    assert len(core_chr) == 8192
+    assert any(
+        pixel
+        for row in core_state["bg_tiles"][ord("A")]["pixels"]
+        for pixel in row
+    )
+
+
+def test_chr_generation_supports_legacy_pool_without_mutating_it() -> None:
+    state = {"tiles": blank_tiles()}
+    before = copy.deepcopy(state)
+    encoded = graphics.build_chr(state)
+    assert encoded[:4096] == encoded[4096:]
+    assert state == before

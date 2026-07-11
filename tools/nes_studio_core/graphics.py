@@ -171,3 +171,256 @@ def expand_metatiles(state: dict[str, Any]) -> dict[str, Any]:
             "screens_y": max(1, -(-rows // SCREEN_ROWS)),
         }
     return state
+
+
+_encode_pool = encode_tile_pool
+
+
+def _glyph(*rows):
+    """8 rows of up-to-8 chars -> an 8x8 pixel grid, padded/truncated.
+
+    Arc B box fix: a stroke ("#") is colour 1 (the readable text colour) and
+    every other pixel is colour **2** (the box body), NOT colour 0.  Colour 0 is
+    the shared universal_bg, so an all-0 box body matched the backdrop and the
+    scenery appeared to vanish; colour 2 is a dedicated box colour (navy) the
+    server seeds into BG palette 3, so the box reads as a distinct box on any
+    project.  Knock-on: the space glyph (`_glyph()` with no rows) becomes a
+    solid colour-2 tile — exactly the box-body fill the banner writes."""
+    out = []
+    for r in range(8):
+        row = rows[r] if r < len(rows) else ""
+        out.append([1 if c == "#" else 2 for c in row.ljust(8, ".")[:8]])
+    return out
+
+
+_DIALOGUE_FONT = {
+    " ": _glyph(),
+    "A": _glyph(".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "B": _glyph("####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."),
+    "C": _glyph(".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."),
+    "D": _glyph("####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."),
+    "E": _glyph("#####", "#....", "#....", "###..", "#....", "#....", "#####"),
+    "F": _glyph("#####", "#....", "#....", "###..", "#....", "#....", "#...."),
+    "G": _glyph(".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."),
+    "H": _glyph("#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "I": _glyph(".###.", "..#..", "..#..", "..#..", "..#..", "..#..", ".###."),
+    "J": _glyph("..###", "...#.", "...#.", "...#.", "#..#.", "#..#.", ".##.."),
+    "K": _glyph("#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"),
+    "L": _glyph("#....", "#....", "#....", "#....", "#....", "#....", "#####"),
+    "M": _glyph("#...#", "##.##", "#.#.#", "#...#", "#...#", "#...#", "#...#"),
+    "N": _glyph("#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#", "#...#"),
+    "O": _glyph(".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "P": _glyph("####.", "#...#", "#...#", "####.", "#....", "#....", "#...."),
+    "Q": _glyph(".###.", "#...#", "#...#", "#...#", "#.#.#", "#..#.", ".##.#"),
+    "R": _glyph("####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"),
+    "S": _glyph(".####", "#....", "#....", ".###.", "....#", "....#", "####."),
+    "T": _glyph("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."),
+    "U": _glyph("#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "V": _glyph("#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."),
+    "W": _glyph("#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"),
+    "X": _glyph("#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"),
+    "Y": _glyph("#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."),
+    "Z": _glyph("#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"),
+    "0": _glyph(".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."),
+    "1": _glyph("..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."),
+    "2": _glyph(".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"),
+    "3": _glyph("####.", "....#", "....#", ".###.", "....#", "....#", "####."),
+    "4": _glyph("...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."),
+    "5": _glyph("#####", "#....", "####.", "....#", "....#", "#...#", ".###."),
+    "6": _glyph(".###.", "#....", "#....", "####.", "#...#", "#...#", ".###."),
+    "7": _glyph("#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."),
+    "8": _glyph(".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."),
+    "9": _glyph(".###.", "#...#", "#...#", ".####", "....#", "....#", ".###."),
+    ".": _glyph("", "", "", "", "", ".##..", ".##.."),
+    ",": _glyph("", "", "", "", ".##..", ".##..", ".#..."),
+    "!": _glyph("..#..", "..#..", "..#..", "..#..", "..#..", "", "..#.."),
+    "?": _glyph(".###.", "#...#", "...#.", "..#..", "..#..", "", "..#.."),
+    "'": _glyph("..#..", "..#..", "..#..", "", "", "", ""),
+    "-": _glyph("", "", "", "#####", "", "", ""),
+    ":": _glyph("", ".##..", ".##..", "", ".##..", ".##..", ""),
+}
+
+
+def _pixels_blank(px):
+    """True if a tile's pixel grid is all zero (a paintable empty slot)."""
+    if not isinstance(px, list):
+        return True
+    for row in px:
+        if isinstance(row, list):
+            for p in row:
+                if p:
+                    return False
+    return True
+
+
+def _dialogue_module_enabled(state):
+    try:
+        mods = (state.get("builder") or {}).get("modules") or {}
+        return bool((mods.get("dialogue") or {}).get("enabled"))
+    except AttributeError:
+        return False
+
+
+# Arc B — reserved dialogue box palette.  When the dialogue module is on the
+# server overrides BG sub-palette 3 (the least-used "sky" default; matches
+# BW_DIALOG_PALETTE in builder-modules.js) so the dialogue box has a KNOWN
+# readable text colour independent of whatever art the pupil painted.  The
+# emitted palette row is [universal_bg, slot0, slot1, slot2] (colour 0 is the
+# shared universal_bg), and the font's "on" pixels are colour 1 == slot0 — so
+# slot0 is the text colour.  slot0 = 0x30 (white) → white text on the
+# universal_bg box body; slot1/slot2 reserved for a future border/accent.
+DIALOGUE_BG_PALETTE = 3
+# [colour1 = text, colour2 = box body, colour3 = spare].  colour1 = white text;
+# colour2 = navy box body (a dark colour that stays visible on light AND dark/
+# black backdrops, unlike colour 0 = the shared universal_bg which matched the
+# backdrop and made the scenery look like it vanished — the Arc B box fix).
+DIALOGUE_BG_PALETTE_SLOTS = [0x30, 0x01, 0x0F]
+
+
+def _palette_slots_for(state, group, i):
+    """Like _palette_slots, but substitutes the reserved dialogue palette for
+    BG sub-palette 3 when the dialogue module is on.  Used by the palette
+    emitters so the box text colour is guaranteed.  No-op when dialogue is off
+    (→ byte-identical baseline unaffected)."""
+    if (group == "bg_palettes" and i == DIALOGUE_BG_PALETTE
+            and _dialogue_module_enabled(state)):
+        return list(DIALOGUE_BG_PALETTE_SLOTS)
+    return _palette_slots(state, group, i)
+
+
+def _seed_dialogue_font(state):
+    """Fill blank bg tiles at the font's ASCII indices with the built-in
+    glyphs when the dialogue module is on.  Only blank slots are written, so
+    pupil art in an occupied slot is never overwritten (the dialogue-font
+    validator warns about that case separately).  Mutates the request-scoped
+    `state` in place; a no-op when dialogue is off, so non-dialogue ROMs are
+    unchanged (and the byte-identical baseline never runs this — it builds
+    Step_Playground via make, not build_chr)."""
+    if not _dialogue_module_enabled(state):
+        return
+    bg = state.get("bg_tiles")
+    if not isinstance(bg, list):
+        return
+    for ch, glyph in _DIALOGUE_FONT.items():
+        idx = ord(ch)
+        if not (0 <= idx < len(bg)):
+            continue
+        tile = bg[idx]
+        if not isinstance(tile, dict):
+            continue
+        if _pixels_blank(tile.get("pixels")):
+            tile["pixels"] = [row[:] for row in glyph]
+
+
+def _smbhud_enabled(state):
+    """True when the SMB HUD module is on (needs sprite digits seeded)."""
+    try:
+        m = state["builder"]["modules"]
+        if m.get("game", {}).get("config", {}).get("type") != "smb":
+            return False
+        return bool(m.get("smbhud", {}).get("enabled"))
+    except Exception:
+        return False
+
+
+def _seed_hud_digits(state):
+    """Seed the built-in 0-9 glyphs into blank SPRITE tiles at their ASCII
+    indices (48..57) when the SMB HUD is on, so the OAM digit read-out has art.
+    Mirrors _seed_dialogue_font but writes the sprite pool (the HUD draws OAM
+    sprites, which read the sprite pattern table, not the bg one).  A no-op when
+    the HUD is off, so non-HUD ROMs are unchanged."""
+    if not _smbhud_enabled(state):
+        return
+    sp = state.get("sprite_tiles")
+    if not isinstance(sp, list):
+        return
+    for d in "0123456789":
+        idx = ord(d)
+        if not (0 <= idx < len(sp)):
+            continue
+        tile = sp[idx]
+        if isinstance(tile, dict) and _pixels_blank(tile.get("pixels")):
+            tile["pixels"] = [row[:] for row in _DIALOGUE_FONT[d]]
+
+
+def _smbhud_bg_enabled(state):
+    """True when the SMB HUD is on AND set to the background-status-bar mode
+    (needs the 0-9 glyphs seeded into the BACKGROUND pattern table)."""
+    try:
+        m = state["builder"]["modules"]
+        if m.get("game", {}).get("config", {}).get("type") != "smb":
+            return False
+        hud = m.get("smbhud", {})
+        return bool(hud.get("enabled") and (hud.get("config") or {}).get("background"))
+    except Exception:
+        return False
+
+
+# Tile index (both pools) for the solid status-bar tile: an opaque background so
+# the sprite-0 split fires reliably, and the sprite-0 marker sprite itself.  58 is
+# just past the 0-9 digit glyphs (48-57) the bg HUD also seeds.
+BW_HUDBG_SOLID_TILE = 58
+
+
+def _seed_hud_digits_bg(state):
+    """Seed the built-in 0-9 glyphs into blank BACKGROUND tiles at their ASCII
+    indices (48..57) when the SMB HUD is in background mode, so the nametable
+    status bar can draw the read-out as background tiles (BW_SMB_HUD_BG). Same
+    indices as the dialogue font, so the two never conflict.  Also seeds a solid
+    opaque tile at BW_HUDBG_SOLID_TILE in BOTH pools — the bar background (so the
+    sprite-0 hit has an opaque bg pixel) and the sprite-0 marker.  A no-op
+    otherwise, so non-bg-HUD ROMs are byte-identical."""
+    if not _smbhud_bg_enabled(state):
+        return
+    bg = state.get("bg_tiles")
+    if not isinstance(bg, list):
+        return
+    for d in "0123456789":
+        idx = ord(d)
+        if not (0 <= idx < len(bg)):
+            continue
+        tile = bg[idx]
+        if isinstance(tile, dict) and _pixels_blank(tile.get("pixels")):
+            tile["pixels"] = [row[:] for row in _DIALOGUE_FONT[d]]
+    solid = [[1] * 8 for _ in range(8)]
+    # BG: fully solid (the bar background + the sprite-0 hit target).
+    if isinstance(bg, list) and 0 <= BW_HUDBG_SOLID_TILE < len(bg):
+        t = bg[BW_HUDBG_SOLID_TILE]
+        if isinstance(t, dict) and _pixels_blank(t.get("pixels")):
+            t["pixels"] = [row[:] for row in solid]
+    # SPRITE-0 marker: opaque ONLY in the bottom row, so the hit fires on that
+    # scanline (the strip's bottom) rather than the sprite's top — a clean split.
+    sp = state.get("sprite_tiles")
+    if isinstance(sp, list) and 0 <= BW_HUDBG_SOLID_TILE < len(sp):
+        t = sp[BW_HUDBG_SOLID_TILE]
+        if isinstance(t, dict) and _pixels_blank(t.get("pixels")):
+            t["pixels"] = [[0] * 8 for _ in range(7)] + [[1] * 8]
+
+
+def build_chr(state):
+    """Two independent 256-tile pools -> 8KB CHR.
+
+    Sprite pattern table lives at $0000 (first 4KB), background pattern
+    table at $1000 (second 4KB) -- matches PPU_CTRL bit 4 = 1 set by the
+    step's init code. Old saves with a single `tiles` pool fall back to
+    duplicating it across both tables so nothing breaks during migration.
+
+    When the dialogue module is on, a built-in font is seeded into blank bg
+    tile slots first (see _seed_dialogue_font) so dialogue text renders as
+    letters without the pupil painting a font.
+    """
+    _seed_dialogue_font(state)
+    _seed_hud_digits(state)
+    _seed_hud_digits_bg(state)
+    if "sprite_tiles" in state and "bg_tiles" in state:
+        return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
+             + _encode_pool(state["bg_tiles"], "bg_tiles")
+    if "tiles" in state:
+        # Legacy single pool: shared across both tables.
+        legacy = _encode_pool(state["tiles"], "tiles")
+        return legacy * 2
+    # No tile data yet (e.g. pupil opened the Code page before visiting
+    # Sprites/Backgrounds). Fall back to blank CHR so the build can still
+    # proceed; they'll hit the friendlier "No sprites defined yet" message
+    # from build_scene_inc if their code path needs sprite data.
+    return bytes(8192)

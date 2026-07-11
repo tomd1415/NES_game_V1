@@ -885,32 +885,8 @@ def _seed_hud_digits_bg(state):
 
 
 def build_chr(state):
-    """Two independent 256-tile pools -> 8KB CHR.
-
-    Sprite pattern table lives at $0000 (first 4KB), background pattern
-    table at $1000 (second 4KB) -- matches PPU_CTRL bit 4 = 1 set by the
-    step's init code. Old saves with a single `tiles` pool fall back to
-    duplicating it across both tables so nothing breaks during migration.
-
-    When the dialogue module is on, a built-in font is seeded into blank bg
-    tile slots first (see _seed_dialogue_font) so dialogue text renders as
-    letters without the pupil painting a font.
-    """
-    _seed_dialogue_font(state)
-    _seed_hud_digits(state)
-    _seed_hud_digits_bg(state)
-    if "sprite_tiles" in state and "bg_tiles" in state:
-        return _encode_pool(state["sprite_tiles"], "sprite_tiles") \
-             + _encode_pool(state["bg_tiles"], "bg_tiles")
-    if "tiles" in state:
-        # Legacy single pool: shared across both tables.
-        legacy = _encode_pool(state["tiles"], "tiles")
-        return legacy * 2
-    # No tile data yet (e.g. pupil opened the Code page before visiting
-    # Sprites/Backgrounds). Fall back to blank CHR so the build can still
-    # proceed; they'll hit the friendlier "No sprites defined yet" message
-    # from build_scene_inc if their code path needs sprite data.
-    return bytes(8192)
+    """Generate the complete dual-pool 8 KiB CHR artifact."""
+    return graphics_core.build_chr(state)
 
 
 def _active_nametable(state):
