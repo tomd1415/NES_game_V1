@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen
+from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 
@@ -44,11 +44,13 @@ class WorldCanvas(QWidget):
         self._palette_value = 1
         self._behaviour_value = 1
         self._hover: tuple[int, int] | None = None
+        self._selected = (0, 0)
         self._undo: list[list[tuple[int, int, int, int, str]]] = []
         self._redo: list[list[tuple[int, int, int, int, str]]] = []
         self._stroke: list[tuple[int, int, int, int, str]] | None = None
         self._stroke_cells: set[tuple[int, int]] = set()
         self._seed_preview()
+        self._update_accessible_cell()
 
     def _seed_preview(self) -> None:
         for row in range(24, self.ROWS):
@@ -85,6 +87,10 @@ class WorldCanvas(QWidget):
         self._validate_cell(col, row)
         return self._behaviours[row][col]
 
+    @property
+    def selected_cell(self) -> tuple[int, int]:
+        return self._selected
+
     def set_palette_value(self, value: int) -> None:
         if not 0 <= value <= 3:
             raise ValueError("NES background palette must be 0..3")
@@ -116,6 +122,8 @@ class WorldCanvas(QWidget):
                 raise ValueError(f"WORLD {label} data must be at least 32 by 30")
         self._palettes = [list(map(int, row[: self.COLS])) for row in palettes[: self.ROWS]]
         self._behaviours = [list(map(int, row[: self.COLS])) for row in behaviours[: self.ROWS]]
+        self._selected = (0, 0)
+        self._update_accessible_cell()
 
     def edit_cell(self, col: int, row: int) -> bool:
         """Apply the active tool; return whether the model changed."""
@@ -137,6 +145,8 @@ class WorldCanvas(QWidget):
             self._stroke.append(change)
             self._stroke_cells.add((col, row))
         signal.emit(col, row, value)
+        if (col, row) == self._selected:
+            self._update_accessible_cell()
         self.update(self._cell_rect(col, row).toAlignedRect())
         return True
 
@@ -180,6 +190,7 @@ class WorldCanvas(QWidget):
             signal.emit(col, row, before)
         self._redo.append(stroke)
         self.history_changed.emit(self.can_undo, self.can_redo)
+        self._update_accessible_cell()
         self.update()
         return True
 
@@ -193,6 +204,7 @@ class WorldCanvas(QWidget):
             signal.emit(col, row, after)
         self._undo.append(stroke)
         self.history_changed.emit(self.can_undo, self.can_redo)
+        self._update_accessible_cell()
         self.update()
         return True
 
@@ -202,6 +214,23 @@ class WorldCanvas(QWidget):
         if tool == "palette":
             return self._palettes, self.palette_changed
         return self._behaviours, self.behaviour_changed
+
+    def _select_cell(self, col: int, row: int) -> None:
+        self._validate_cell(col, row)
+        if self._selected != (col, row):
+            self._selected = (col, row)
+            self.cursor_changed.emit(col, row)
+        self._update_accessible_cell()
+        self.update()
+
+    def _update_accessible_cell(self) -> None:
+        col, row = self._selected
+        self.setAccessibleDescription(
+            f"Selected WORLD cell column {col}, row {row}; "
+            f"tile {self._cells[row][col]}, palette {self._palettes[row][col]}, "
+            f"behaviour {self._behaviours[row][col]}. "
+            "Use arrow keys to move and Space or Enter to apply the active tool."
+        )
 
     def _validate_cell(self, col: int, row: int) -> None:
         if not 0 <= col < self.COLS or not 0 <= row < self.ROWS:
@@ -253,14 +282,16 @@ class WorldCanvas(QWidget):
             y = top + row * tile
             painter.drawLine(QPointF(left, y), QPointF(left + self.COLS * tile, y))
 
-        if self._hover is not None:
+        highlight = self._hover if self._hover is not None else self._selected
+        if highlight is not None:
             painter.setPen(QPen(QColor("#f8f8f8"), 2))
-            painter.drawRect(self._cell_rect(*self._hover).adjusted(1, 1, -1, -1))
+            painter.drawRect(self._cell_rect(*highlight).adjusted(1, 1, -1, -1))
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
         if event.button() == Qt.MouseButton.LeftButton:
             cell = self._cell_at(event.position())
             if cell is not None:
+                self._select_cell(*cell)
                 self.begin_stroke()
                 self.edit_cell(*cell)
 
@@ -281,3 +312,23 @@ class WorldCanvas(QWidget):
     def leaveEvent(self, _event) -> None:  # noqa: N802 - Qt API
         self._hover = None
         self.update()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt API
+        col, row = self._selected
+        movement = {
+            Qt.Key.Key_Left: (-1, 0),
+            Qt.Key.Key_Right: (1, 0),
+            Qt.Key.Key_Up: (0, -1),
+            Qt.Key.Key_Down: (0, 1),
+        }.get(event.key())
+        if movement is not None:
+            next_col = min(self.COLS - 1, max(0, col + movement[0]))
+            next_row = min(self.ROWS - 1, max(0, row + movement[1]))
+            self._select_cell(next_col, next_row)
+            event.accept()
+            return
+        if event.key() in {Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter}:
+            self.edit_cell(col, row)
+            event.accept()
+            return
+        super().keyPressEvent(event)

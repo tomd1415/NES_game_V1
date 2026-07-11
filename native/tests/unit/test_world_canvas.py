@@ -11,6 +11,8 @@ sys.path.insert(0, str(NATIVE_ROOT / "src"))
 
 from nes_studio.application import create_application  # noqa: E402
 from nes_studio.ui.widgets.world_canvas import WorldCanvas  # noqa: E402
+from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 
 
 def test_world_canvas_paint_and_erase_change_only_the_selected_cell() -> None:
@@ -117,3 +119,30 @@ def test_coordinate_mapping_rejects_letterbox_margins() -> None:
     assert canvas.cell_at_position(58, 0) == (0, 0)
     assert canvas.cell_at_position(441.999, 359.999) == (31, 29)
     assert canvas.cell_at_position(442, 120) is None
+
+
+def test_keyboard_navigation_edits_selected_cell_and_describes_it() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.set_tool("paint")
+    canvas.show()
+    canvas.setFocus()
+
+    QTest.keyClick(canvas, Qt.Key.Key_Right)
+    QTest.keyClick(canvas, Qt.Key.Key_Down)
+    QTest.keyClick(canvas, Qt.Key.Key_Space)
+
+    assert canvas.selected_cell == (1, 1)
+    assert canvas.cell_value(1, 1) == 1
+    assert "column 1, row 1" in canvas.accessibleDescription()
+    assert "tile 1" in canvas.accessibleDescription()
+
+
+def test_keyboard_navigation_stays_inside_world_bounds() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.show()
+    canvas.setFocus()
+    QTest.keyClick(canvas, Qt.Key.Key_Left)
+    QTest.keyClick(canvas, Qt.Key.Key_Up)
+    assert canvas.selected_cell == (0, 0)
