@@ -28,8 +28,8 @@ const solid = (v) => Array.from({ length: 8 }, () => Array.from({ length: 8 }, (
 
 // A minimal platformer with a solid floor along the bottom two rows.
 function makeState(globalsCfg, jumpHeight) {
-  const s = window.StudioStarter.createPlatformer
-    ? window.StudioStarter.createPlatformer() : window.StudioStarter.createRunner();
+  const s = window.StudioStarter.createRunner();
+  s.builder.modules.game.config.type = 'platformer';   // basic platformer (BW_GAME_STYLE 0)
   const bg = s.backgrounds[0];
   s.bg_tiles[1] = { name: 'floor', pixels: solid(1) };
   const cols = bg.nametable[0].length;
@@ -55,6 +55,9 @@ function makeState(globalsCfg, jumpHeight) {
   assert(/#define BW_JUMP_SPEED_PX 6/.test(on), 'Jump speed 6 did not emit #define BW_JUMP_SPEED_PX 6');
   assert(/#define BW_APPLY_JUMP_RISE\(y\) \(y\) -= BW_JUMP_SPEED_PX/.test(on), 'globals did not override BW_APPLY_JUMP_RISE');
   assert(/#define BW_APPLY_GRAVITY\(y\) \(\(y\) \+= BW_GRAVITY_PX\)/.test(on), 'globals did not override BW_APPLY_GRAVITY');
+  // Gravity drives the PLAYER's fall too now: BW_PLAYER_GRAVITY = gravityPx + 1
+  // (gravity 4 -> 5). Default gravity 1 -> 2 keeps the historic fall byte-identical.
+  assert(/#define BW_PLAYER_GRAVITY 5/.test(on), 'Gravity 4 did not emit #define BW_PLAYER_GRAVITY 5 (player fall not wired)');
   // Values are clamped to the slider ranges (gravity 0-4, jump 1-6).
   const clamp = window.BuilderAssembler.assemble(
     makeState({ gravityPx: 99, jumpSpeedPx: 99, bobWhenWalking: false }, 14), tpl);
@@ -64,8 +67,11 @@ function makeState(globalsCfg, jumpHeight) {
 }
 
 // ---- Behaviour helpers ------------------------------------------------------
-async function buildRom(globalsCfg, jumpHeight) {
-  const srv = await H.startServer(18882, { PLAYGROUND_NO_ASM: '1' });
+// Build on the DEFAULT (ASM) engine — the one pupils ship — so we prove the
+// knobs work there, not just in the C fallback (engine v67: the ASM player now
+// reads JUMP_BUDGET / JUMP_SPEED / PLAYER_GRAVITY from project.inc).
+async function buildRom(globalsCfg, jumpHeight, env = {}) {
+  const srv = await H.startServer(18882, env);
   try {
     const s = makeState(globalsCfg, jumpHeight);
     const r = await H.buildRom(18882, {
@@ -77,37 +83,52 @@ async function buildRom(globalsCfg, jumpHeight) {
     return r.romBytes;
   } finally { await H.stopServer(srv.srv); }
 }
-// Settle on the floor, then hold UP and return { groundY, apexY, rise }.
+// Settle on the floor, hold UP, return the peak rise (px above the ground).
 function jumpRise(rom) {
   const emu = H.openRom(rom);
   emu.frames(60);
   const groundY = H.oamSprite(emu.nes, 0).y;
   emu.hold(H.BTN.UP);
   let apexY = groundY;
-  for (let i = 0; i < 40; i++) { emu.frames(1); const y = H.oamSprite(emu.nes, 0).y; if (y < apexY) apexY = y; }
+  for (let i = 0; i < 45; i++) { emu.frames(1); const y = H.oamSprite(emu.nes, 0).y; if (y < apexY) apexY = y; }
   emu.release(H.BTN.UP);
-  return { groundY, apexY, rise: groundY - apexY };
+  return groundY - apexY;
+}
+// Launch a big jump, find the apex, then measure how far the player falls over a
+// fixed window — bigger Gravity → falls further (the player's OWN fall now).
+function fallOverWindow(rom, windowFrames) {
+  const emu = H.openRom(rom);
+  emu.frames(60);
+  emu.hold(H.BTN.UP); emu.frames(24); emu.release(H.BTN.UP);   // long launch
+  let apexY = H.oamSprite(emu.nes, 0).y, prev = apexY;
+  for (let i = 0; i < 40; i++) { emu.frames(1); const y = H.oamSprite(emu.nes, 0).y; if (y < apexY) apexY = y; if (y > prev + 1) { prev = y; break; } prev = y; }
+  const startFall = H.oamSprite(emu.nes, 0).y;   // just past apex, now descending
+  emu.frames(windowFrames);
+  return H.oamSprite(emu.nes, 0).y - startFall;  // descent over the window
 }
 
-// ---- 2) Jump speed BEHAVIOURALLY changes jump height ------------------------
-// The player rise is driven by BW_APPLY_JUMP_RISE (y -= BW_JUMP_SPEED_PX), so a
-// bigger Jump speed lifts the player higher for the same Jump height budget.
-const slow = jumpRise(await buildRom({ gravityPx: 1, jumpSpeedPx: 2, bobWhenWalking: false }, 14));
-const fast = jumpRise(await buildRom({ gravityPx: 1, jumpSpeedPx: 6, bobWhenWalking: false }, 14));
-assert(slow.rise > 4, 'the slow jump barely rose (' + slow.rise + 'px) — jump not measured');
-assert(fast.rise > slow.rise + 20,
-  'a bigger Jump speed did not make the player jump meaningfully higher (slow rise=' + slow.rise + 'px, fast rise=' + fast.rise + 'px)');
-console.log('✓ Jump speed behaviourally changes jump height (js=2 rose ' + slow.rise + 'px, js=6 rose ' + fast.rise + 'px)');
+// ---- 2) Jump SPEED changes jump height ON THE ASM ENGINE --------------------
+const jsSlow = jumpRise(await buildRom({ gravityPx: 1, jumpSpeedPx: 2, bobWhenWalking: false }, 14));
+const jsFast = jumpRise(await buildRom({ gravityPx: 1, jumpSpeedPx: 6, bobWhenWalking: false }, 14));
+assert(jsSlow > 4, 'the slow jump barely rose (' + jsSlow + 'px) — jump not measured');
+assert(jsFast > jsSlow + 20,
+  'a bigger Jump speed did not make the player jump higher on the ASM engine (js=2 rose ' + jsSlow + 'px, js=6 rose ' + jsFast + 'px) — the ASM ignores JUMP_SPEED');
+console.log('✓ Jump speed works on the ASM engine (js=2 rose ' + jsSlow + 'px, js=6 rose ' + jsFast + 'px)');
 
-// ---- 3) Gravity: same override mechanism, applied to enemy fall ------------
-// Gravity drives BW_APPLY_GRAVITY, applied to falling scene sprites — enemies —
-// at platformer.c:1789 (`if (ss_y[i] < 232) BW_APPLY_GRAVITY(ss_y[i]);`), so it
-// governs enemy fall, not the player (which is why a player-fall probe can't see
-// it). The exact `#define BW_APPLY_GRAVITY(y) ((y) += BW_GRAVITY_PX)` override is
-// asserted in the codegen block above, and Jump proves that identical
-// override-a-macro mechanism produces real, measurable physics — so Gravity
-// reaching the same macro is covered without needing an enemy in-frame. A build
-// with an enemy present is exercised by round1-polish.mjs / smb-enemies.mjs.
-console.log('✓ Gravity uses the same BW_APPLY_GRAVITY override (asserted in codegen), applied to enemy fall at platformer.c:1789');
+// ---- 3) Jump HEIGHT changes jump height ON THE ASM ENGINE -------------------
+const jhLow = jumpRise(await buildRom({ gravityPx: 1, jumpSpeedPx: 3, bobWhenWalking: false }, 8));
+const jhHigh = jumpRise(await buildRom({ gravityPx: 1, jumpSpeedPx: 3, bobWhenWalking: false }, 24));
+assert(jhHigh > jhLow + 20,
+  'a bigger Jump height did not make the player jump higher on the ASM engine (jh=8 rose ' + jhLow + 'px, jh=24 rose ' + jhHigh + 'px) — the ASM ignores JUMP_BUDGET');
+console.log('✓ Jump height works on the ASM engine (jh=8 rose ' + jhLow + 'px, jh=24 rose ' + jhHigh + 'px)');
 
-console.log('\nGlobals physics (gravity + jump speed) behavioural regression complete.');
+// ---- 4) Player GRAVITY changes the PLAYER's fall ON THE ASM ENGINE ----------
+// The whole point of this change: Gravity now moves the player, not just enemies.
+const gLight = fallOverWindow(await buildRom({ gravityPx: 1, jumpSpeedPx: 4, bobWhenWalking: false }, 24), 8);
+const gHeavy = fallOverWindow(await buildRom({ gravityPx: 4, jumpSpeedPx: 4, bobWhenWalking: false }, 24), 8);
+assert(gLight > 4, 'the light-gravity fall was not measured (' + gLight + 'px)');
+assert(gHeavy > gLight + 8,
+  'a bigger Gravity did not make the PLAYER fall faster on the ASM engine (gravity 1 fell ' + gLight + 'px, gravity 4 fell ' + gHeavy + 'px) — player gravity not wired');
+console.log('✓ Gravity now moves the PLAYER on the ASM engine (g=1 fell ' + gLight + 'px, g=4 fell ' + gHeavy + 'px over 8 frames)');
+
+console.log('\nPlatformer physics (jump height + jump speed + player gravity) work on the shipped ASM engine.');

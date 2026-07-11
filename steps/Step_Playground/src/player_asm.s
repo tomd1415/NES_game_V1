@@ -487,7 +487,7 @@ h_sl:
     bne @d
     lda #1
     sta _jumping
-    lda #20
+    lda #JUMP_BUDGET             ; Jump height (project.inc; default 20 = byte-identical)
     sta _jmp_up
 @d:
     rts
@@ -732,7 +732,7 @@ h_sl:
 @r2:
     lda pyw
     sec
-    sbc #2
+    sbc #JUMP_SPEED             ; Jump speed = pixels risen per frame (default 2)
     sta pyw
     lda pyw+1
     sbc #0
@@ -830,7 +830,7 @@ h_sl:
     bne pu_pv
     jsr pl_jump
 pu_pv:
-    lda #2
+    lda #PLAYER_GRAVITY         ; Gravity = pixels the player falls per frame (default 2)
     sta fall_amt
     jsr pl_vmove
 .if PX_WIDE
@@ -987,7 +987,7 @@ pu_pv:
 @go:
     lda #1
     sta _jumping
-    lda #20
+    lda #JUMP_BUDGET             ; Jump height (project.inc; default 20 = byte-identical)
     sta _jmp_up
 @d:
     rts

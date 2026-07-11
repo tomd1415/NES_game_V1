@@ -100,7 +100,7 @@
     }
     if (p1) phys.appendChild(numField(ctx, 'Jump height', p1, 'jumpHeight', 1, 60, 'Frames of rise — bigger = higher. ~14 clears about 5 tiles with the SMB fall.'));
     phys.appendChild(numField(ctx, 'Jump speed (px/frame)', g, 'jumpSpeedPx', 1, 6, 'Pixels risen per frame. 3 gives a snappy SMB arc.'));
-    phys.appendChild(numField(ctx, 'Gravity (enemies)', g, 'gravityPx', 0, 4, 'How fast scene sprites fall.'));
+    phys.appendChild(numField(ctx, 'Gravity', g, 'gravityPx', 0, 4, 'How fast things fall — the player and the enemies. 0 = floaty moon-jump, 4 = heavy.'));
     if (!isSmb && p1) phys.appendChild(numField(ctx, 'Walk speed', p1, 'walkSpeed', 1, 8, 'Pixels moved per frame.'));
     // Bob (folded in from the old Globals menu).
     var bobW = el('label', { class: 'switch' });

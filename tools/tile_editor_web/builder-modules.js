@@ -240,12 +240,19 @@
       const j = (typeof c.jumpSpeedPx === 'number') ? c.jumpSpeedPx : 2;
       const clampedG = Math.max(0, Math.min(4, g | 0));
       const clampedJ = Math.max(1, Math.min(6, j | 0));
+      // The Gravity slider drives the PLAYER's fall too (not just enemies): the
+      // player's base fall is 2 px/frame, so player gravity = enemy gravity + 1
+      // (clamped 1..5) — default gravity 1 -> 2 (byte-identical), 0 -> floaty, 4
+      // -> heavy.  The hand-written ASM player reads the same value as
+      // PLAYER_GRAVITY from project.inc (server: _player_physics).
+      const playerGrav = Math.max(1, Math.min(5, clampedG + 1));
       template = A.appendToSlot(template, 'declarations', [
         '/* Builder Globals module — game-wide physics overrides. */',
         `#define BW_GRAVITY_PX ${clampedG}`,
         '#define BW_APPLY_GRAVITY(y) ((y) += BW_GRAVITY_PX)',
         `#define BW_JUMP_SPEED_PX ${clampedJ}`,
         '#define BW_APPLY_JUMP_RISE(y) (y) -= BW_JUMP_SPEED_PX',
+        `#define BW_PLAYER_GRAVITY ${playerGrav}`,
       ].join('\n'));
       // R-10: opt-in 1px walk bob.  Absent when off → the template's
       // #ifndef default (0) keeps the no-module ROM byte-identical.

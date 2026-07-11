@@ -402,6 +402,14 @@ unsigned char bw_scene_oam1 = 0;
 #define BW_APPLY_JUMP_RISE(y) (y) -= 2
 #endif
 
+/* Player fall rate (pixels/frame) — the Globals module's Gravity slider drives
+ * this too, not just enemy fall.  Default 2 matches the historic literal
+ * `py += 2`, so an untouched project is byte-identical.  The hand-written ASM
+ * player reads the same value as PLAYER_GRAVITY from project.inc. */
+#ifndef BW_PLAYER_GRAVITY
+#define BW_PLAYER_GRAVITY 2
+#endif
+
 /* R-10 — character bob.  The Builder's globals module writes
  * `#define BW_BOB_WHEN_WALKING 1` into the declarations slot above when the
  * pupil ticks "Bob up and down when walking".  Off by default so the no-module
@@ -1622,7 +1630,7 @@ void main(void) {
                  * (Gated on the smb style, so every other game is unchanged.) */
                 if (py < (WORLD_H_PX - 8)) py += 3;
 #else
-                if (py < (WORLD_H_PX - 8)) py += 2;
+                if (py < (WORLD_H_PX - 8)) py += BW_PLAYER_GRAVITY;
 #endif
                 jumping = 1;   // airborne (jump descent or walked off a ledge)
             }

@@ -33,6 +33,14 @@
 .define PLAYER_W               2
 .define PLAYER_H               2
 .define PLAYER_TILES_PER_FRAME 4      ; PLAYER_W * PLAYER_H
+; Tunable platformer physics (Style tab: Jump height / Jump speed / Gravity).
+; Defaults 20 / 2 / 2 match the historic hardcoded values so a direct
+; `make NES_ASM_PLAYER=1` build assembles byte-identically; the server overrides
+; them per /play from the player + Globals config.  The ASM player reads these
+; as immediates (`lda #JUMP_BUDGET` etc.) so the default ROM is unchanged.
+.define JUMP_BUDGET           20      ; jmp_up frames on take-off (= Jump height)
+.define JUMP_SPEED            2       ; pixels risen per frame (= Jump speed)
+.define PLAYER_GRAVITY        2       ; pixels the player falls per frame (= Gravity)
 ; --- Scene sprites (reaction_for bound) ---
 .define NUM_BEHAVIOUR_SPRITES  2
 .define NUM_STATIC_SPRITES     1

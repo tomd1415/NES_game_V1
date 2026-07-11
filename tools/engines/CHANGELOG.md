@@ -9,6 +9,37 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v67 — 2026-07-11 — Platformer physics sliders work on the shipped ASM engine (jump height/speed + player gravity)
+
+### Changed (feedback #22/#6 — the physics knobs finally take effect on the default engine; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+The Globals/Players physics sliders (Jump height / Jump speed / Gravity) were
+honoured only by the **C-fallback** engine — the hand-written 6502 player that
+ships by default (v43) hardcoded the jump budget (`lda #20`), rise (`sbc #2`) and
+fall (`fall_amt=2`), so a pupil moving the sliders on the real engine saw no
+change.  Now the ASM player reads them as immediates from `project.inc`, the same
+discipline as `SMB_*`/`RUNNER_*`/`RACER_*`:
+- **`JUMP_BUDGET`** (= Jump height) — `pl_jump` + `run_jump`.  Both the platformer
+  and runner C already set `jmp_up = jumpHeight`, so this *fixes a pre-existing
+  runner divergence* (ASM was stuck at 20 while the C used jumpHeight).
+- **`JUMP_SPEED`** (= Jump speed) — the shared `pl_vmove` rise.  Emitted as
+  `jumpSpeedPx` for game types **platformer + runner** (their C rise honours it);
+  **smb** keeps the historic 2 (its variable-height jump is tuned by the Speed
+  preset) and topdown/racer have no jump — so those stay byte-identical.
+- **`PLAYER_GRAVITY`** (= Gravity) — the `_plat_update` fall.  Gravity now moves
+  the **player**, not just enemies: `PLAYER_GRAVITY = gravityPx + 1` (default
+  1 → 2, matching the historic `py += 2`; 0 → floaty, 4 → heavy).  The C fall
+  gained `#define BW_PLAYER_GRAVITY` (default 2) driven by the same value.
+- Server: `_player_physics(state)` mirrors the JS Players/Globals clamps so the
+  ASM immediates == the C values (ASM ≡ C).  Committed `project.inc` carries the
+  20/2/2 defaults for direct-make builds.
+
+**Byte-identical at the defaults** (20/2/2 == the historic `lda #20`/`sbc #2`/
+`fall_amt=2`) — goldens + every asm-ab/asm-corpus/asm-player equivalence check
+unchanged.  Proven by `builder-tests/physics-globals.mjs` (now drives the DEFAULT
+ASM engine): Jump speed 2→6 lifts 28→84px, Jump height 8→24 lifts 24→72px, and
+Gravity 1→4 makes the player fall 16→40px in the same window.  (Runner/SMB player
+*gravity* stays their fixed feel — a possible follow-up.)
+
 ## v66 — 2026-07-11 — Level compression: apply to any multi-screen level (fit 5-8 screen detailed levels)
 
 ### Changed (feedback #10 follow-up — server codegen; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
