@@ -92,3 +92,17 @@ def test_palette_rows_are_identical_for_defaults_and_dialogue_override() -> None
     assert graphics.palette_rows(state, True)[3] == [0x21, 0x30, 0x01, 0x0F]
     del state["builder"]
     assert state == before
+
+
+def test_palette_source_emitters_are_identical_through_server_adapters() -> None:
+    state = {
+        "universal_bg": 0x0F,
+        "bg_palettes": [{"slots": [1, 2, 3]} for _ in range(4)],
+        "sprite_palettes": [{"slots": [0x11, 0x12, 0x13]} for _ in range(4)],
+    }
+    before = copy.deepcopy(state)
+    assert playground_server.build_palettes_inc(state) == graphics.build_palettes_inc(state)
+    assert playground_server.build_palettes_asminc(state) == graphics.build_palettes_asminc(state)
+    assert "const unsigned char palette_bytes[32]" in graphics.build_palettes_inc(state)
+    assert '.segment "RODATA"' in graphics.build_palettes_asminc(state)
+    assert state == before
