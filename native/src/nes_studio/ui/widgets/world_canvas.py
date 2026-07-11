@@ -136,6 +136,25 @@ class WorldCanvas(QWidget):
         self._validate_cell(col, row)
         if self._tool == "select":
             return False
+        positions = [(col, row)]
+        if self._tool == "palette":
+            left, top = (col // 2) * 2, (row // 2) * 2
+            positions = [
+                (cell_col, cell_row)
+                for cell_row in range(top, min(top + 2, self.ROWS))
+                for cell_col in range(left, min(left + 2, self.COLS))
+            ]
+        owns_stroke = len(positions) > 1 and self._stroke is None
+        if owns_stroke:
+            self.begin_stroke()
+        changed = False
+        for cell_col, cell_row in positions:
+            changed = self._edit_one(cell_col, cell_row) or changed
+        if owns_stroke:
+            self.end_stroke()
+        return changed
+
+    def _edit_one(self, col: int, row: int) -> bool:
         target, value, signal = self._edit_target()
         if target[row][col] == value:
             return False

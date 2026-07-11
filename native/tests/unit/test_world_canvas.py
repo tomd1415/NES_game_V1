@@ -79,7 +79,11 @@ def test_palette_and_behaviour_edits_share_stroke_undo_history() -> None:
     canvas.set_palette_value(3)
     canvas.set_tool("palette")
     assert canvas.edit_cell(8, 9)
-    assert canvas.palette_value(8, 9) == 3
+    assert {
+        canvas.palette_value(col, row)
+        for col in (8, 9)
+        for row in (8, 9)
+    } == {3}
     assert canvas.cell_value(8, 9) == 0
 
     canvas.set_behaviour_value(7)
@@ -90,7 +94,33 @@ def test_palette_and_behaviour_edits_share_stroke_undo_history() -> None:
     assert canvas.behaviour_value(8, 9) == 0
     assert canvas.palette_value(8, 9) == 3
     assert canvas.undo()
-    assert canvas.palette_value(8, 9) == 0
+    assert {
+        canvas.palette_value(col, row)
+        for col in (8, 9)
+        for row in (8, 9)
+    } == {0}
+
+
+def test_palette_edit_updates_one_nes_attribute_quadrant_in_one_history_step() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.set_palette_value(2)
+    canvas.set_tool("palette")
+
+    assert canvas.edit_cell(5, 7)
+    assert {
+        canvas.palette_value(col, row)
+        for col in (4, 5)
+        for row in (6, 7)
+    } == {2}
+    assert canvas.palette_value(6, 7) == 0
+    assert canvas.undo()
+    assert {
+        canvas.palette_value(col, row)
+        for col in (4, 5)
+        for row in (6, 7)
+    } == {0}
+    assert not canvas.can_undo
 
 
 def test_coordinate_mapping_is_exact_at_integer_and_fractional_scales() -> None:
