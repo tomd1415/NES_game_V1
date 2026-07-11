@@ -623,30 +623,11 @@ NUM_TILES = 256
 
 def tile_to_chr(pixels):
     """8x8 pixel grid (values 0-3) -> 16 NES CHR bytes (two bit-planes)."""
-    out = bytearray(16)
-    for r in range(8):
-        lo = 0
-        hi = 0
-        row = pixels[r]
-        for c in range(8):
-            p = row[c] & 3
-            bit = 7 - c
-            lo |= (p & 1) << bit
-            hi |= ((p >> 1) & 1) << bit
-        out[r] = lo
-        out[8 + r] = hi
-    return bytes(out)
+    return graphics_core.tile_to_chr(pixels)
 
 
 def _encode_pool(tiles, label):
-    if len(tiles) != NUM_TILES:
-        raise ValueError(f"expected {NUM_TILES} {label} tiles, got {len(tiles)}")
-    chunk = bytearray()
-    for t in tiles:
-        chunk += tile_to_chr(t["pixels"])
-    if len(chunk) != 4096:
-        raise ValueError(f"{label} pool came out {len(chunk)} bytes, expected 4096")
-    return bytes(chunk)
+    return graphics_core.encode_tile_pool(tiles, label)
 
 
 # --- Built-in dialogue font ------------------------------------------------
@@ -1000,13 +981,7 @@ def _palette_rows(state):
     so the C (build_palettes_inc) and asm (build_palettes_asminc) emitters can
     never disagree on the byte layout — they only differ in how they format
     these rows."""
-    ubg = int(state.get("universal_bg", 0x21)) & 0x3F
-    rows = []
-    for group in ("bg_palettes", "sprite_palettes"):
-        for i in range(4):
-            s = _palette_slots_for(state, group, i)
-            rows.append([ubg, s[0] & 0x3F, s[1] & 0x3F, s[2] & 0x3F])
-    return rows
+    return graphics_core.palette_rows(state, _dialogue_module_enabled(state))
 
 
 def build_palettes_inc(state):

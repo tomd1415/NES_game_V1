@@ -6,6 +6,52 @@ from typing import Any
 
 SCREEN_COLS = 32
 SCREEN_ROWS = 30
+NUM_TILES = 256
+
+
+def tile_to_chr(pixels: list[Any]) -> bytes:
+    """Encode one 8x8, four-colour tile as two NES bitplanes."""
+
+    if len(pixels) != 8 or any(not isinstance(row, list) or len(row) != 8 for row in pixels):
+        raise ValueError("NES tile pixels must be an 8 by 8 grid")
+    output = bytearray(16)
+    for row_index, row in enumerate(pixels):
+        low = 0
+        high = 0
+        for column, pixel in enumerate(row):
+            value = int(pixel) & 3
+            bit = 7 - column
+            low |= (value & 1) << bit
+            high |= ((value >> 1) & 1) << bit
+        output[row_index] = low
+        output[8 + row_index] = high
+    return bytes(output)
+
+
+def encode_tile_pool(tiles: list[Any], label: str = "tiles") -> bytes:
+    """Encode exactly one 256-tile, 4 KiB NES pattern table."""
+
+    if len(tiles) != NUM_TILES:
+        raise ValueError(f"expected {NUM_TILES} {label} tiles, got {len(tiles)}")
+    return b"".join(tile_to_chr(tile["pixels"]) for tile in tiles)
+
+
+def palette_rows(state: dict[str, Any], dialogue_enabled: bool = False) -> list[list[int]]:
+    """Return the eight hardware palette rows shared by C and ASM emitters."""
+
+    universal = int(state.get("universal_bg", 0x21)) & 0x3F
+    rows = []
+    for group in ("bg_palettes", "sprite_palettes"):
+        entries = state.get(group) or []
+        for index in range(4):
+            entry = entries[index] if index < len(entries) else None
+            slots = (entry or {}).get("slots") if isinstance(entry, dict) else None
+            if not isinstance(slots, (list, tuple)) or len(slots) < 3:
+                slots = (0x0F, 0x0F, 0x0F)
+            if dialogue_enabled and group == "bg_palettes" and index == 3:
+                slots = (0x30, 0x01, 0x0F)
+            rows.append([universal, *(int(value) & 0x3F for value in slots[:3])])
+    return rows
 
 
 def active_nametable(state: dict[str, Any]) -> list[Any]:

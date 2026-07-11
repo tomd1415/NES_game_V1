@@ -63,3 +63,32 @@ def test_importing_graphics_core_has_no_filesystem_side_effects(tmp_path: Path, 
     before = set(tmp_path.iterdir())
     importlib.reload(graphics)
     assert set(tmp_path.iterdir()) == before
+
+
+def test_chr_encoders_are_byte_identical_and_do_not_mutate_input() -> None:
+    pixels = [[(row + column) % 4 for column in range(8)] for row in range(8)]
+    tiles = [{"pixels": copy.deepcopy(pixels)} for _ in range(256)]
+    before = copy.deepcopy(tiles)
+    assert graphics.tile_to_chr(pixels) == playground_server.tile_to_chr(pixels)
+    assert graphics.encode_tile_pool(tiles, "test") == playground_server._encode_pool(
+        tiles, "test"
+    )
+    assert len(graphics.encode_tile_pool(tiles)) == 4096
+    assert tiles == before
+
+
+def test_palette_rows_are_identical_for_defaults_and_dialogue_override() -> None:
+    state = {
+        "universal_bg": 0x21,
+        "bg_palettes": [{"slots": [0x01, 0x42, 0x03]}],
+        "sprite_palettes": [{"slots": [0x11, 0x12, 0x13]}],
+    }
+    before = copy.deepcopy(state)
+    assert playground_server._palette_rows(state) == graphics.palette_rows(state)
+    assert graphics.palette_rows(state)[0] == [0x21, 0x01, 0x02, 0x03]
+
+    state["builder"] = {"modules": {"dialogue": {"enabled": True}}}
+    assert playground_server._palette_rows(state) == graphics.palette_rows(state, True)
+    assert graphics.palette_rows(state, True)[3] == [0x21, 0x30, 0x01, 0x0F]
+    del state["builder"]
+    assert state == before
