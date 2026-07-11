@@ -163,8 +163,16 @@ was a massive improvement.
     **Walk speed**, walk-**Bob** — emitted as `#define BW_*` overrides that are
     byte-identical to the baseline when untouched. Now behaviourally guarded by
     `builder-tests/physics-globals.mjs` (jump-speed measurably changes jump height;
-    codegen + clamping asserted). Note the label is honest: Gravity tunes *enemy*
-    fall, not the player — tunable *player* gravity would be a follow-up.
+    codegen + clamping asserted).
+    *Fixed properly 2026-07-11 (engine v67):* the sliders had only worked in the
+    C-fallback — the shipped **ASM** player hardcoded jump budget/rise/fall, so
+    pupils saw no effect. The ASM player now reads `JUMP_BUDGET` / `JUMP_SPEED` /
+    `PLAYER_GRAVITY` from project.inc; **Gravity now moves the player too** (not
+    just enemies: `PLAYER_GRAVITY = gravityPx + 1`), and Jump height/speed take
+    effect on the real engine. Byte-identical at defaults (goldens + asm-ab/corpus
+    unchanged); `physics-globals.mjs` now drives the DEFAULT ASM engine (js 2→6:
+    28→84px, jh 8→24: 24→72px, gravity 1→4: player falls 16→40px). Runner + SMB
+    keep their own fixed fall feel.
 23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
 24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
