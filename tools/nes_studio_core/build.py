@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -18,6 +19,14 @@ class BuildError(RuntimeError):
 
 class ToolchainError(BuildError):
     """The compiler process could not be started or timed out."""
+
+
+class GenerationError(ValueError):
+    """Project data could not be converted into generated build inputs."""
+
+
+class Cancelled(BuildError):
+    """A queued build was cancelled before producing an artifact."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +78,7 @@ class BuildService:
         semaphore: BoundedSemaphore | None = None,
         runner: Runner = subprocess.run,
         profile: BuildProfile = TRUSTED_LOCAL,
+        cancelled: Callable[[], bool] | None = None,
     ) -> None:
         self.step_directory = Path(step_directory)
         self.audio_engine_directory = (
@@ -77,6 +87,7 @@ class BuildService:
         self.semaphore = semaphore or BoundedSemaphore(1)
         self.runner = runner
         self.profile = profile
+        self.cancelled = cancelled or (lambda: False)
 
     def build_c(self, inputs: CBuildInputs) -> tuple[bytes, str]:
         with tempfile.TemporaryDirectory(prefix="nesgame_build_") as directory:
@@ -126,6 +137,11 @@ class BuildService:
             root,
             ignore=shutil.ignore_patterns("game.nes", "*.o", "*.map", "build"),
         )
+        # Installed resources may be mounted or packaged read-only. copytree
+        # preserves those modes, but generated sources must replace files in
+        # the disposable clone. Never chmod the source tree itself.
+        for path in (root, *root.rglob("*")):
+            path.chmod(path.stat().st_mode | stat.S_IWUSR)
         return root
 
     @staticmethod
@@ -138,8 +154,12 @@ class BuildService:
         (backgrounds / "level.nam").write_bytes(nam_bytes)
 
     def _run(self, root: Path, arguments: list[str]) -> tuple[bytes, str]:
+        if self.cancelled():
+            raise Cancelled("build cancelled before toolchain start")
         try:
             with self.semaphore:
+                if self.cancelled():
+                    raise Cancelled("build cancelled while waiting for toolchain")
                 result = self.runner(
                     arguments,
                     capture_output=True,
@@ -148,6 +168,8 @@ class BuildService:
                 )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ToolchainError(str(exc)) from exc
+        if self.cancelled():
+            raise Cancelled("build cancelled after toolchain completion")
         log = (result.stdout or "") + (result.stderr or "")
         log = log.replace(str(root) + "/", "").replace(str(root), "")
         if result.returncode != 0:

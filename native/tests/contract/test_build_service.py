@@ -224,3 +224,42 @@ def test_direct_build_and_browser_transport_return_identical_rom() -> None:
     assert base64.b64decode(response["rom_b64"]) == direct_rom
     assert response["size"] == len(direct_rom)
     assert body == before
+
+
+def test_cancelled_build_never_starts_toolchain(tmp_path: Path) -> None:
+    step = make_step(tmp_path)
+    started = []
+
+    def runner(*_args, **_kwargs):
+        started.append(True)
+        raise AssertionError("cancelled build started runner")
+
+    service = build.BuildService(step, runner=runner, cancelled=lambda: True)
+    try:
+        service.build_c(inputs())
+    except build.Cancelled as exc:
+        assert "cancelled" in str(exc)
+    else:
+        raise AssertionError("cancelled build was accepted")
+    assert started == []
+
+
+def test_build_copies_from_read_only_source_tree(tmp_path: Path) -> None:
+    step = make_step(tmp_path)
+    for path in [step, *step.rglob("*")]:
+        mode = path.stat().st_mode
+        path.chmod(mode & ~0o222)
+
+    def runner(arguments, **_kwargs):
+        root = Path(arguments[2])
+        assert (root / "src" / "main.c").read_text() == "custom"
+        (root / "game.nes").write_bytes(b"READONLY-SOURCE-ROM")
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    try:
+        service = build.BuildService(step, runner=runner)
+        rom, _log = service.build_c(inputs())
+        assert rom == b"READONLY-SOURCE-ROM"
+    finally:
+        for path in [step, *step.rglob("*")]:
+            path.chmod(path.stat().st_mode | 0o200)
