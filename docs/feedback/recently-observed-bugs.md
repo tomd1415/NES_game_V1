@@ -70,6 +70,19 @@ was a massive improvement.
     many different-looking columns — make it shorter or reuse repeated
     sections"). Guarded by `builder-tests/scroll-wide-too-varied.mjs`. Server-only
     (`playground_server.py`); no ROM-output change, goldens byte-identical.
+    *Follow-up fix 2026-07-11 (engine v66):* a pupil reported a **5-8 screen
+    detailed** level failing to build (`ld65: RODATA overflows ROM0 by 5950
+    bytes`) — compression only engaged **above 8 screens**, so a shorter but
+    detailed level got no help and overflowed on the raw path. v66 widens
+    compression to **any 1-tall multi-screen level** (`cols>32`) that packs down
+    (dedup fits a 1-byte index AND is smaller than raw); 1-screen stays raw
+    (byte-identical). Also made the dialogue box-restore read compression-aware
+    (`builder-modules.js`) and turned the raw `ld65` overflow into a
+    kid-readable "your game is too big + how to slim it" message shown in a
+    Studio modal (`studio.js`). Guarded by `scroll-narrow-compressed.mjs`
+    (6-screen C≡ASM). Goldens `1730448e` + `_rom-equiv` `0aed6e95` unchanged.
+    **NB the live site runs on a separate host — it needs `main` deployed + the
+    Python server restarted to pick this up.**
 11. Add the ability to make a 'Geometry Dash' style game. This has been requested by many of the younger pupils and making this as easy as possible would be very helpful.
     *Largely covered:* the **runner** style is an auto-scroller with tap-to-jump
     and an instant restart when the player touches a spike tile — the Geometry
