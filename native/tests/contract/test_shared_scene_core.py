@@ -95,3 +95,24 @@ def test_animation_resolution_filters_shape_and_clamps_fps() -> None:
     assert playground_server._resolve_animation(state, "walk", 1, 1) == resolved
     assert scene.resolve_animation(state, "jump", 1, 1) is None
     assert state == before
+
+
+def test_asm_scene_emitter_is_identical_through_server_adapter() -> None:
+    state = {
+        "sprites": [
+            {**sprite(1, 2, 1), "role": "player"},
+            {**sprite(10), "role": "enemy", "flying": True},
+        ],
+        "animations": [{"id": 4, "frames": [0], "fps": 12}],
+        "animation_assignments": {"walk": 4},
+        "backgrounds": [{"dimensions": {"screens_x": 2, "screens_y": 1}}],
+    }
+    placed = [{"spriteIdx": 1, "x": 400, "y": 999}]
+    before = copy.deepcopy(state)
+    generated = scene.build_scene_asminc(state, 0, placed, 60, 120)
+    assert playground_server.build_scene_asminc(state, 0, placed, 60, 120) == generated
+    assert ".define WALK_FRAME_COUNT 1" in generated
+    assert "ss_x:      .byte 144" in generated
+    assert "ss_y:      .byte 239" in generated
+    assert "ss_role:   .byte 2" in generated
+    assert state == before
