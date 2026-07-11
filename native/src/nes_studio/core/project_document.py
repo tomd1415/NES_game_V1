@@ -84,11 +84,20 @@ class ProjectDocument:
         index = state.get("selectedBgIdx", 0)
         if not isinstance(index, int) or not 0 <= index < len(backgrounds):
             raise ProjectFormatError("Selected background index is invalid")
-        grid = backgrounds[index].get("nametable")
+        background = backgrounds[index]
+        if not isinstance(background, dict):
+            raise ProjectFormatError("Selected background is not an object")
+        grid = background.get("nametable")
         if not isinstance(grid, list) or len(grid) < 30:
             raise ProjectFormatError("Selected background has no 30-row nametable")
         if any(not isinstance(row, list) or len(row) < 32 for row in grid[:30]):
             raise ProjectFormatError("Selected background has no 32-column nametable")
+        for row_index, row in enumerate(grid[:30]):
+            for col_index, cell in enumerate(row[:32]):
+                if not isinstance(cell, dict):
+                    raise ProjectFormatError(
+                        f"WORLD cell {col_index}, {row_index} is not an object"
+                    )
         return grid
 
     def world_tiles(self) -> list[list[int]]:
@@ -115,12 +124,11 @@ class ProjectDocument:
         return backgrounds[self.state.get("selectedBgIdx", 0)]
 
     def set_world_tile(self, col: int, row: int, tile: int) -> None:
-        if not 0 <= col < 32 or not 0 <= row < 30:
-            raise IndexError(f"WORLD cell outside 32x30: {col}, {row}")
+        if not 0 <= tile <= 0xFF:
+            raise ValueError(f"NES tile index must be 0..255: {tile}")
+        self._validate_coordinates(col, row)
         grid = self._world_grid(self.state)
         cell = grid[row][col]
-        if not isinstance(cell, dict):
-            raise ProjectFormatError(f"WORLD cell {col}, {row} is not an object")
         if int(cell.get("tile", 0)) != tile:
             cell["tile"] = tile
             self.dirty = True

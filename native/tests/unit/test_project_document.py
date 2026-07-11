@@ -88,3 +88,35 @@ def test_missing_behaviour_map_is_created_lazily() -> None:
     document.set_world_behaviour(31, 29, 255)
     assert document.world_behaviours()[29][31] == 255
     assert document.dirty
+
+
+def test_malformed_background_and_cells_report_project_format_errors() -> None:
+    malformed_background = project_state()
+    malformed_background["backgrounds"][0] = None
+    try:
+        ProjectDocument.from_json(json.dumps(malformed_background))
+    except ProjectFormatError as exc:
+        assert "background is not an object" in str(exc)
+    else:
+        raise AssertionError("non-object background was accepted")
+
+    malformed_cell = project_state()
+    malformed_cell["backgrounds"][0]["nametable"][2][3] = 7
+    try:
+        ProjectDocument.from_json(json.dumps(malformed_cell))
+    except ProjectFormatError as exc:
+        assert "WORLD cell 3, 2" in str(exc)
+    else:
+        raise AssertionError("non-object WORLD cell was accepted")
+
+
+def test_native_tile_edits_reject_indices_outside_chr_bank() -> None:
+    document = ProjectDocument.from_json(json.dumps(project_state()))
+    for invalid in (-1, 256):
+        try:
+            document.set_world_tile(0, 0, invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid tile index {invalid} was accepted")
+    assert not document.dirty
