@@ -2654,20 +2654,26 @@ def _dedup_columns(tiles, cols, rows):
 def _bg_compression(state):
     """Decide whether the selected bg's tiles are column-compressed, and how.
 
-    Compress only *wide 1-tall* worlds (>8 screens = >256 cols) whose dedup fits
-    a 1-byte index (<256 unique columns).  Narrower / tall worlds stay on the
-    raw `bg_world_tiles` path (byte-identical; the raw path already fits <=8
-    screens, and tall scroll is capped at 2 screens).  Returns
+    Compress ANY 1-tall world wider than one screen (>32 cols) when the dedup
+    both fits a 1-byte index (<256 unique columns) AND is actually smaller than
+    the raw array.  (v66: was gated to >8 screens = >256 cols, which left a
+    *detailed* 5-8 screen level overflowing NROM on the raw path with no help;
+    real hand-painted levels repeat columns heavily — sky, flat floor, repeated
+    blocks — so compressing them shrinks the ROM and lets them fit.)  A 1-screen
+    world (32 cols) stays raw so its ROM is byte-identical to the baseline; tall
+    worlds (rows>30) stay raw (tall scroll is capped at 2 screens).  Returns
     (compress: bool, uniq: int, col_index: bytes|None, col_data: bytes|None).
     """
     tiles, attrs, cols, rows, acols, arows = _world_nametable(state)
-    if rows == 30 and cols > 256:
+    if rows == 30 and cols > 32:
         col_index, col_data, uniq = _dedup_columns(tiles, cols, rows)
-        if uniq < 256:
+        # Compressed size = unique-column data + a 1-byte index per world column.
+        # Only compress when it fits a 1-byte index and genuinely shrinks the ROM.
+        if uniq < 256 and (uniq * rows + cols) < (cols * rows):
             return True, uniq, bytes(col_index), bytes(col_data)
-        # Wide world (>8 screens) with too many distinct columns to index in one
-        # byte.  It can't compress AND a raw >8-screen array overflows NROM, so
-        # return the real uniq (>=256) as a signal for _guard_world_fits().
+        # Couldn't compress usefully.  Return the real uniq so _guard_world_fits
+        # can reject a *wide* (>8 screen) un-compressible world with a clear
+        # message (a raw >8-screen array always overflows NROM).
         return False, uniq, None, None
     return False, 0, None, None
 
@@ -2677,19 +2683,24 @@ def _guard_world_fits(state):
     kid-friendly message instead of a Python traceback (500) or an obscure
     "memory area overflow" linker error.
 
-    The one case we can prove up front: a world more than 8 screens wide whose
-    columns are too varied to column-deduplicate into a 1-byte index (>=256
-    unique columns).  Such a world can neither compress nor fit as a raw
-    ~1KB/screen array, so building it always fails — better to say why."""
-    compress, uniq, _ci, _cd = _bg_compression(state)
-    if not compress and uniq >= 256:
-        raise BuildError(
-            "This level is too big to fit on the cartridge. It is more than 8 "
-            "screens wide and has too many different-looking columns "
-            f"({uniq}) for the console's tiny memory — the limit is 255. "
-            "Try making the level a bit shorter, or reuse more repeated "
-            "sections (flat floor, repeated blocks) so columns can be shared."
-        )
+    The one case we can prove up front: a world more than 8 screens wide (>256
+    cols) that also can't column-compress (too many distinct columns for a
+    1-byte index, or not compressible enough).  A raw >8-screen array always
+    overflows NROM, so such a world can never build — better to say why.  A
+    world of 8 screens or fewer is NOT rejected here: it may fit raw, and if it
+    doesn't the linker overflow is turned into a friendly message downstream."""
+    _tiles, _attrs, cols, rows, _ac, _ar = _world_nametable(state)
+    if rows == 30 and cols > 256:
+        compress, uniq, _ci, _cd = _bg_compression(state)
+        if not compress:
+            raise BuildError(
+                "This level is too big to fit on the cartridge. It is more than "
+                "8 screens wide and its columns are too varied to pack down "
+                f"({uniq} different columns — the compressor needs fewer than "
+                "256 and works best with lots of repeats). Try making it "
+                "shorter, or reuse more repeated sections (flat floor, repeated "
+                "blocks) so columns can be shared."
+            )
 
 
 def build_bg_world_c(state):

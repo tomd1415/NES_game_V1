@@ -9,6 +9,40 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v66 — 2026-07-11 — Level compression: apply to any multi-screen level (fit 5-8 screen detailed levels)
+
+### Changed (feedback #10 follow-up — server codegen; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+A pupil's ~5-8 screen *detailed* level overflowed NROM on `/play`
+(`ld65: Segment 'RODATA' overflows memory area 'ROM0' by 5950 bytes`) because
+the v64/v65 column-compression only engaged **above 8 screens** (>256 cols) —
+below that a raw ~1KB/screen array was always emitted, even when the level
+repeated columns heavily and would have packed down easily.
+
+- **Server (`playground_server.py`, not snapshotted — codegen only):**
+  `_bg_compression` now compresses **any 1-tall world wider than one screen**
+  (`cols > 32`) when the dedup both fits a 1-byte index (<256 unique columns)
+  **and** is actually smaller than the raw array (`uniq*rows + cols <
+  cols*rows`). A 1-screen world stays raw (byte-identical to the baseline);
+  tall worlds stay raw (tall scroll is capped at 2 screens).
+- `_guard_world_fits` now only rejects a **>8-screen** world that can't compress
+  (a raw >8-screen array always overflows); a ≤8-screen world is never
+  pre-rejected — it may fit raw, and if it doesn't the linker overflow is turned
+  into a friendly "your game is too big + how to slim it" message.
+- The compression **format and both decoders (`scroll.c`, `scroll_asm.s`) are
+  unchanged from v64/v65** — this only widens *when* they engage, so no
+  snapshotted engine source changed (the version bump records the codegen
+  contract change; server codegen is versioned via git per the E-V2 note in
+  `snapshot-engine.mjs`).
+- Behaviourally identical + lossless: a level that already fit still fits (its
+  ROM is the same or smaller); the decode is byte-identical (verified C≡ASM).
+
+**Proven:** `builder-tests/scroll-narrow-compressed.mjs` (a 6-screen level now
+routes through the compressed decoder and C≡ASM nametables match — a NEW <256-col
+regime for the ASM path), alongside the existing `scroll-wide-compressed.mjs`
+(12-screen) and `scroll-wide-too-varied.mjs` (graceful reject). Stock/template
+goldens are direct-`make` (`SCROLL_COMPRESSED 0`) and `_rom-equiv` is a 1×1
+fixture, so all byte-identical hashes are unchanged.
+
 ## v65 — 2026-07-10 — Level compression Phase 2: ASM decoder (dormant, byte-identical)
 
 ### Added (feedback #10 — the shipped ASM engine now decodes the dedup format; dormant → byte-identical)
