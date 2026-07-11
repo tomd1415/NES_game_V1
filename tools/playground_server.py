@@ -26,7 +26,6 @@ then browse http://127.0.0.1:8765/sprites.html  (or let the VSCode task
 from __future__ import annotations
 
 import base64
-import copy
 import http.server
 import json
 import os
@@ -53,6 +52,7 @@ from nes_studio_core import scene as scene_core
 from nes_studio_core import build as build_core
 from nes_studio_core import play as play_core
 from nes_studio_core import project as project_core
+from nes_studio_core import preparation as preparation_core
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
@@ -1595,50 +1595,19 @@ def _build_rom(body):
     we flip the 4-screen-VRAM bit in the iNES header so emulators
     allocate four distinct nametables (Phase 4.4).
     """
-    source_state = body.get("state")
-    if not isinstance(source_state, dict):
-        raise ValueError("missing 'state' in request body")
-    # Generators seed dialogue/HUD glyphs, expand metatiles and bake racer
-    # frames. Those are request-local build products and must never mutate the
-    # caller's canonical project document.
-    state = copy.deepcopy(source_state)
+    parameters = preparation_core.parse_request(body)
+    state = parameters.state
     # Arc E §1 (E1-0): expand any 16x16-metatile backgrounds into ordinary 8x8
     # nametable/behaviour grids before anything reads them.  No-op for 8x8.
     _expand_metatiles(state)
 
-    custom_main_c = body.get("customMainC")
-    if custom_main_c is not None and not isinstance(custom_main_c, str):
-        raise ValueError("'customMainC' must be a string if provided")
-    if isinstance(custom_main_c, str) and not custom_main_c.strip():
-        custom_main_c = None
-
-    custom_main_asm = body.get("customMainAsm")
-    if custom_main_asm is not None and not isinstance(custom_main_asm, str):
-        raise ValueError("'customMainAsm' must be a string if provided")
-    if isinstance(custom_main_asm, str) and not custom_main_asm.strip():
-        custom_main_asm = None
-
-    if custom_main_c and custom_main_asm:
-        raise ValueError("send only one of 'customMainC' or 'customMainAsm' per request")
-
-    player_idx = int(body.get("playerSpriteIdx", 0))
-    scene_sprites = body.get("sceneSprites") or []
-    start = body.get("playerStart") or {}
-    start_x = int(start.get("x", 60))
-    start_y = int(start.get("y", 120))
-
-    # Optional Player 2 (Phase B chunk 5).  Both fields must be present
-    # and the idx must point at a second sprite; otherwise the ROM is
-    # built as single-player.  The server always emits PLAYER2_ENABLED
-    # so the template's #if gates have something defined to evaluate.
-    raw_idx2 = body.get("playerSpriteIdx2")
-    start2 = body.get("playerStart2") or {}
-    try:
-        player_idx2 = int(raw_idx2) if raw_idx2 is not None else -1
-    except (TypeError, ValueError):
-        player_idx2 = -1
-    start_x2 = int(start2.get("x", 180)) if start2 else 180
-    start_y2 = int(start2.get("y", 120)) if start2 else 120
+    custom_main_c = parameters.custom_main_c
+    custom_main_asm = parameters.custom_main_asm
+    player_idx = parameters.player_index
+    player_idx2 = parameters.player_index_2
+    scene_sprites = parameters.scene_sprites
+    start_x, start_y = parameters.start_x, parameters.start_y
+    start_x2, start_y2 = parameters.start_x_2, parameters.start_y_2
 
     # E3-3: bake the racer's rotated car frames into spare CHR slots (mutates the
     # sprite pool) before encoding it.  No-op for non-racer games → byte-identical.
@@ -1661,23 +1630,9 @@ def _build_rom(body):
     # main.c links against `audio_default_music` *and*
     # `audio_sfx_data` symbols.  Small validation: must be strings,
     # capped at 64 KB each so a runaway upload can't eat memory.
-    AUDIO_MAX_BYTES = 64 * 1024
-    audio_songs = body.get("audioSongsAsm")
-    audio_sfx   = body.get("audioSfxAsm")
-    if audio_songs is not None:
-        if not isinstance(audio_songs, str):
-            raise ValueError("'audioSongsAsm' must be a string if provided")
-        if len(audio_songs.encode("utf-8")) > AUDIO_MAX_BYTES:
-            raise ValueError(f"'audioSongsAsm' too large (>{AUDIO_MAX_BYTES} bytes)")
-        if not audio_songs.strip():
-            audio_songs = None
-    if audio_sfx is not None:
-        if not isinstance(audio_sfx, str):
-            raise ValueError("'audioSfxAsm' must be a string if provided")
-        if len(audio_sfx.encode("utf-8")) > AUDIO_MAX_BYTES:
-            raise ValueError(f"'audioSfxAsm' too large (>{AUDIO_MAX_BYTES} bytes)")
-        if not audio_sfx.strip():
-            audio_sfx = None
+    audio = preparation_core.normalize_audio(
+        body, songs_stub=_AUTO_SONGS_STUB_ASM, sfx_stub=_AUTO_SFX_STUB_ASM
+    )
     # main.c imports both `audio_default_music` and `audio_sfx_data`
     # symbols — without them the link fails.  Pre-2026-04-27 we
     # required pupils to upload BOTH a song and an sfx pack before
@@ -1694,13 +1649,11 @@ def _build_rom(body):
     # has a single null entry — pupils get whatever asset they
     # uploaded plus a no-op for the other side.
     audio_kwargs = {}
-    if audio_songs and not audio_sfx:
-        audio_sfx = _AUTO_SFX_STUB_ASM
-    elif audio_sfx and not audio_songs:
-        audio_songs = _AUTO_SONGS_STUB_ASM
-    if audio_songs and audio_sfx:
-        audio_kwargs = {"audio_songs_asm": audio_songs,
-                        "audio_sfx_asm":   audio_sfx}
+    if audio.songs_asm and audio.sfx_asm:
+        audio_kwargs = {
+            "audio_songs_asm": audio.songs_asm,
+            "audio_sfx_asm": audio.sfx_asm,
+        }
 
     if custom_main_asm is not None:
         pal_asm = build_palettes_asminc(state)
@@ -1720,150 +1673,28 @@ def _build_rom(body):
     bg_world_c = build_bg_world_c(state)
     project_inc = build_project_inc(state, player_idx, scene_sprites, start_y, player_idx2)
 
-    # The universal hand-written 6502 engine is only linked when the main.c is
-    # KNOWN ASM-ready: the stock main.c (custom_main_c is None) or a
-    # template-derived one carrying the NES_ASM_READY_V1 marker (read_controller/
-    # write_palettes gated behind NES_ASM_LEAF + exported palette_bytes).  A
-    # bespoke customMainC (e.g. the audio.html preview) lacks the marker and is
-    # built as pure C, so it can define those helpers itself without a clash.
-    asm_ready = custom_main_c is None or ("NES_ASM_READY_V1" in custom_main_c)
-    # A build is "scroll" (multi-screen) when the painted world exceeds one
-    # nametable — matches scroll.c's `BG_WORLD_COLS > 32 || BG_WORLD_ROWS > 30`
-    # gate.  Only then is it safe to link the NES_ASM_SCROLL functions.
-    _, _, _world_cols, _world_rows, _, _ = _world_nametable(state)
-    is_scroll = _world_cols > 32 or _world_rows > 30
-
-    # Scene-sprite DRAW loop on hand-written 6502 (Phase 2a). SHIPPED BY DEFAULT
-    # (engine v31) for the shapes it handles: it does only the PLAIN draw path, so
-    # it needs no tagged scene animation; it calls world_to_screen_x/y, so it needs
-    # a scroll build (which pulls in NES_ASM_SCROLL); and it needs >=1 scene sprite
-    # (scene_asm.s resolves the ss_* arrays only when scene.inc emits them).
-    # Projects outside that envelope (1x1/non-scroll, animated sprites, or no scene
-    # sprites) keep the C draw loop. Proven pixel-identical to the C by
-    # asm-scene.mjs (palette + OAM + nametables, incl. the SS_POS_WIDE u16 render).
-    # PLAYGROUND_NO_ASM=1 is the kill switch (below).
-    num_static = len(scene_sprites or [])
-    has_scene_anim = any(
+    _, _, world_columns, world_rows, _, _ = _world_nametable(state)
+    has_scene_animation = any(
         _resolve_tagged_animation(state, role, style) is not None
-        for (role, style) in (("enemy", "walk"), ("enemy", "idle"), ("pickup", "idle"))
+        for role, style in (("enemy", "walk"), ("enemy", "idle"), ("pickup", "idle"))
     )
-    nes_asm_scene = bool(
-        asm_ready and is_scroll and num_static > 0 and not has_scene_anim
-    )
-    # Scene-sprite AI on hand-written 6502 (Phase 2b): the generic ai_update loop
-    # (walker/chaser/flyer/patrol) + the bw_sprite_blocked probe. SHIPPED BY
-    # DEFAULT (engine v30) — enabled whenever the client emitted the AI tables
-    # (ss_ai_type[...]), which builder-modules.js does only when the project has
-    # at least one walker/chaser/flyer/patrol. Gating on the tables' PRESENCE is
-    # required, not optional: ai_asm.s `.import`s _ss_ai_type/state/speed/aux/home,
-    # so forcing NES_ASM_AI on a table-less build (no AI enemies, or the stock
-    # main.c) would fail to link. Proven byte-behaviour-identical to the C AI by
-    # the asm-ai{,-wide,-corpus} A/B suites (~1.2x faster + smaller — asm-ai-bench).
-    # PLAYGROUND_NO_ASM=1 falls back to the pure-C AI (kill switch, below).
-    nes_asm_ai = bool(
-        asm_ready and custom_main_c is not None and "ss_ai_type[" in custom_main_c
-    )
-    # Player update on hand-written 6502 (Phase 2c). SHIPPED BY DEFAULT (engine v43)
-    # for SINGLE-PLAYER builds: all six single-player models (top-down, platformer,
-    # SMB, auto-runner, racer P1) are A/B-proven byte-behaviour-identical to the C
-    # (asm-player.mjs) and flag-off byte-identical. TWO-PLAYER builds stay on the C
-    # for now — the P2 second actors aren't on ASM yet — unless PLAYGROUND_ASM_PLAYER
-    # is set (force-on incl. 2P, for the P2 A/B). PLAYGROUND_NO_ASM=1 is the kill
-    # switch (skips all asm flags below). The models are detected in the client
-    # main.c: top-down emits
-    # `#define BW_GAME_STYLE 1`; a plain platformer emits NO BW_GAME_STYLE define
-    # (it defaults to 0) and NO BW_SMB_JUMP; runner/racer are 2/3 and SMB carries
-    # BW_SMB_JUMP (plat_update does NOT cover SMB physics). Both px/py widths are
-    # handled (a PX_WIDE .if picks u8 vs u16). The C player blocks are #if'd out
-    # only under NES_ASM_PLAYER, so flag off is byte-identical.
-    # Match REAL defines (line-anchored via the leading newline) — the template
-    # carries an explanatory comment containing the text `#define BW_GAME_STYLE 1`
-    # in every build, so a bare substring test would false-match for platformer/SMB.
-    _cmc = custom_main_c or ""
-    _asm_player_topdown = "\n#define BW_GAME_STYLE 1" in _cmc
-    _asm_player_smb = "\n#define BW_SMB_JUMP" in _cmc
-    # Auto-runner (Phase 2c): style 2 -> run_update. It MUST be a scroll build (the
-    # ASM runner section is gated `.if PX_WIDE` because it imports _cam_x, which
-    # scroll.c defines only for a multi-screen world); a runner always is one.
-    _asm_player_runner = ("\n#define BW_GAME_STYLE 2" in _cmc) and is_scroll
-    # Top-down racer (Phase 2c): style 3 -> racer_update (P1 car). Always a scroll
-    # build (racer_update uses u16 px/py); its own NES_ASM_RACER gate because it
-    # imports the racer-only globals a non-racer build never defines.
-    _asm_player_racer = ("\n#define BW_GAME_STYLE 3" in _cmc) and is_scroll
-    _asm_player_platformer = (
-        "\n#define BW_GAME_STYLE 1" not in _cmc
-        and "\n#define BW_GAME_STYLE 2" not in _cmc
-        and "\n#define BW_GAME_STYLE 3" not in _cmc
-        and not _asm_player_smb
-    )
-    # 2-player detection (mirrors build_scene_inc's p2_active). As of engine v50 the
-    # P2 second actors ALSO ship on ASM by default (all four styles A/B-proven
-    # identical to the C), so a 2P build gets P1 on ASM here + P2 on ASM via the
-    # nes_asm_player2 gate below. (_p2_ok is retired — 2P is no longer excluded.)
-    _p2_sprites = state.get("sprites") or []
-    player2_enabled = (player_idx2 is not None and player_idx2 >= 0
-                       and player_idx2 != player_idx and player_idx2 < len(_p2_sprites))
-    # NB a 2-PLAYER auto-runner (style 2) uses the pure-C 2p-runner path (both cars
-    # auto-run + jump + ghost-on-death, restart when both die — see platformer.c),
-    # so it engages NEITHER NES_ASM_PLAYER (P1) nor NES_ASM_PLAYER2 (P2). The 1p
-    # runner keeps the ASM run_update. (Chosen: C for the niche 2p runner keeps the
-    # proven 1p ASM run_update untouched.)
-    nes_asm_player = bool(
-        asm_ready and custom_main_c is not None
-        and (_asm_player_topdown or _asm_player_platformer
-             or (_asm_player_runner and not player2_enabled))
-    )
-    # SMB (Phase 2c 5b): style 0 + BW_SMB_JUMP — smb_update (accel/skid + ladder/
-    # jump + variable-cut + gravity). Distinct from plat_update (which does NOT
-    # cover SMB physics), so it's its own gate; NES_ASM_SMB=1 IMPLIES NES_ASM_PLAYER
-    # in the Makefile (links player_asm.s + -D's out the C blocks) and additionally
-    # passes `-D NES_ASM_SMB` to ca65 so player_asm.s compiles its SMB section.
-    nes_asm_smb = bool(
-        asm_ready and custom_main_c is not None
-        and _asm_player_smb
-    )
-    # Racer (Phase 2c): style 3 — racer_update. NES_ASM_RACER=1 IMPLIES NES_ASM_PLAYER
-    # in the Makefile and passes `-D NES_ASM_RACER` to ca65 so player_asm.s compiles
-    # its racer section (racer_update + the racer-only globals it imports).
-    nes_asm_racer = bool(
-        asm_ready and custom_main_c is not None
-        and _asm_player_racer
-    )
-    # Player-2 second actor (Phase 2c). NES_ASM_PLAYER2=1 IMPLIES NES_ASM_PLAYER and
-    # passes `-D NES_ASM_PLAYER2` to ca65 so player_asm.s compiles its P2 section
-    # (p2_* procs + the P2-only globals). SHIPPED BY DEFAULT (engine v50) for any
-    # 2-player build of a covered style (top-down/racer/platformer) — those P2 second
-    # actors are A/B-proven byte-behaviour-identical to the C. PLAYGROUND_NO_ASM=1
-    # remains the whole-engine kill switch. The 2-player RUNNER is excluded: it uses
-    # the pure-C 2p-runner path (both cars auto-run; see nes_asm_player above).
-    nes_asm_player2 = bool(
-        asm_ready and custom_main_c is not None and player2_enabled
-        and (_asm_player_topdown or _asm_player_racer or _asm_player_platformer)
-    )
-    # Player OAM DRAW loop (Phase 2d). NES_ASM_PDRAW=1 links pdraw_asm.s
-    # (draw_player + draw_player2 under NES_ASM_PLAYER2) and -D's out the plain C P1
-    # and P2 draw loops in main.c. Generic (works for any player — it reads
-    # anim_tiles/anim_attrs/anim_base + the fixed player2_tiles/attrs), needs a
-    # scroll build (calls world_to_screen_x/y). SHIPPED BY DEFAULT (engine v54): the
-    # OAM A/B (asm-player.mjs) proves C-draw ≡ ASM-draw byte-for-byte in the shadow
-    # buffer, and the draw is the same pre-vblank work as the C. Only scroll builds
-    # with a custom main.c engage it; the stock/golden + 1-screen _rom-equiv fixtures
-    # are outside that envelope, so both goldens stay byte-identical. PLAYGROUND_
-    # NO_ASM=1 remains the whole-engine kill switch (skips this with everything else).
-    nes_asm_pdraw = bool(
-        asm_ready and custom_main_c is not None and is_scroll
-        and not os.environ.get("PLAYGROUND_NO_PDRAW")   # granular kill switch (draw only)
+    features = preparation_core.select_asm_features(
+        parameters,
+        world_columns=world_columns,
+        world_rows=world_rows,
+        has_scene_animation=has_scene_animation,
+        disable_player_draw=bool(os.environ.get("PLAYGROUND_NO_PDRAW")),
     )
 
     if custom_main_c is not None:
         return _maybe_patch(_build_in_tempdir(
             custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
             collision_h, behaviour_c, bg_world_h, bg_world_c,
-            nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
-            nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
-            nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
-            nes_asm_racer=nes_asm_racer, nes_asm_player2=nes_asm_player2,
-            nes_asm_pdraw=nes_asm_pdraw,
+            nes_asm_leaf=features.leaf, nes_asm_scroll=features.scroll,
+            nes_asm_scene=features.scene, nes_asm_ai=features.ai,
+            nes_asm_player=features.player, nes_asm_smb=features.smb,
+            nes_asm_racer=features.racer, nes_asm_player2=features.player2,
+            nes_asm_pdraw=features.player_draw,
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -1871,10 +1702,10 @@ def _build_rom(body):
     return _maybe_patch(_build_in_tempdir(
         None, chr_bytes, nam_bytes, pal_src, scene_src,
         collision_h, behaviour_c, bg_world_h, bg_world_c,
-        nes_asm_leaf=asm_ready, nes_asm_scroll=(is_scroll and asm_ready),
-        nes_asm_scene=nes_asm_scene, nes_asm_ai=nes_asm_ai,
-        nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
-            nes_asm_racer=nes_asm_racer, nes_asm_player2=nes_asm_player2,
+        nes_asm_leaf=features.leaf, nes_asm_scroll=features.scroll,
+        nes_asm_scene=features.scene, nes_asm_ai=features.ai,
+        nes_asm_player=features.player, nes_asm_smb=features.smb,
+        nes_asm_racer=features.racer, nes_asm_player2=features.player2,
         project_inc=project_inc, **audio_kwargs,
     ))
 
