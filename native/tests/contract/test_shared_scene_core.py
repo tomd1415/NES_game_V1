@@ -116,3 +116,42 @@ def test_asm_scene_emitter_is_identical_through_server_adapter() -> None:
     assert "ss_y:      .byte 239" in generated
     assert "ss_role:   .byte 2" in generated
     assert state == before
+
+
+def test_c_scene_emitter_matches_server_for_multiplayer_animations_and_spawn() -> None:
+    state = {
+        "sprites": [
+            {**sprite(1, 2, 1), "role": "player"},
+            {**sprite(10), "role": "enemy", "flying": True},
+            {**sprite(20), "role": "player"},
+        ],
+        "animations": [
+            {"id": 4, "frames": [0], "fps": 12},
+            {"id": 5, "frames": [1], "fps": 8, "role": "enemy", "style": "walk"},
+        ],
+        "animation_assignments": {"walk": 4, "attack": 4},
+        "backgrounds": [
+            {
+                "dimensions": {"screens_x": 2, "screens_y": 1},
+                "nametable": [[{"tile": 0, "palette": 0} for _ in range(64)] for _ in range(30)],
+            }
+        ],
+        "builder": {
+            "modules": {
+                "spawn": {"enabled": True, "config": {"spriteIdx": 1}},
+                "damage": {
+                    "enabled": True,
+                    "config": {"spawnOnHit": True, "spawnSpriteIdx": 1},
+                },
+            }
+        },
+    }
+    placed = [{"spriteIdx": 1, "x": 400, "y": 100}]
+    before = copy.deepcopy(state)
+    generated = scene.build_scene_inc(state, 0, placed, 60, 120, 2, 180, 120)
+    assert playground_server.build_scene_inc(state, 0, placed, 60, 120, 2, 180, 120) == generated
+    assert "#define PLAYER2_ENABLED 1" in generated
+    assert "#define SPAWN0_W 1" in generated
+    assert "#define SPAWN1_W 1" in generated
+    assert "SS_LINKAGE unsigned int ss_x[1]" in generated
+    assert state == before
