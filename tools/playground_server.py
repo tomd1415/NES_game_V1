@@ -2064,18 +2064,7 @@ def _behaviour_map_for_bg(bg, cols, rows):
     maps for multi-bg door swaps) calls this once per bg with the
     project's world dimensions to get a consistent layout across all
     rooms."""
-    out = bytearray(cols * rows)
-    grid = (bg or {}).get("behaviour") or []
-    for r in range(rows):
-        row = grid[r] if r < len(grid) else []
-        base = r * cols
-        for c in range(cols):
-            try:
-                v = int(row[c]) if c < len(row) else 0
-            except (TypeError, ValueError):
-                v = 0
-            out[base + c] = v & 0x07  # only ids 0..7 are valid
-    return bytes(out)
+    return collision_core.behaviour_map_for_background(bg, cols, rows)
 
 
 def _sprite_reaction_table(state):
@@ -2085,18 +2074,7 @@ def _sprite_reaction_table(state):
     Missing entries default to REACT_IGNORE so an incomplete project still
     builds cleanly.
     """
-    sprites = state.get("sprites") or []
-    reactions = state.get("behaviour_reactions") or []
-    n = len(sprites)
-    out = bytearray(n * 8)
-    for i in range(n):
-        rmap = reactions[i] if i < len(reactions) else {}
-        if not isinstance(rmap, dict):
-            rmap = {}
-        for slot_id in range(8):
-            verb = rmap.get(str(slot_id)) or rmap.get(slot_id) or "ignore"
-            out[i * 8 + slot_id] = REACTION_VERB_IDS.get(str(verb), 0)
-    return bytes(out), n
+    return collision_core.sprite_reaction_table(state)
 
 
 def build_collision_h(state):

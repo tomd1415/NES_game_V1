@@ -44,3 +44,36 @@ def test_collision_core_import_has_no_filesystem_side_effects(tmp_path: Path, mo
     before = set(tmp_path.iterdir())
     importlib.reload(collision)
     assert set(tmp_path.iterdir()) == before
+
+
+def test_behaviour_map_encoder_matches_server_and_tolerates_bad_cells() -> None:
+    background = {
+        "behaviour": [
+            [1, 2, "bad", 11],
+            [7],
+        ]
+    }
+    before = copy.deepcopy(background)
+    encoded = collision.behaviour_map_for_background(background, 4, 3)
+    assert encoded == bytes((1, 2, 0, 3, 7, 0, 0, 0, 0, 0, 0, 0))
+    assert playground_server._behaviour_map_for_bg(background, 4, 3) == encoded
+    assert background == before
+
+
+def test_sprite_reaction_table_matches_server_and_is_input_immutable() -> None:
+    state = {
+        "sprites": [{}, {}],
+        "behaviour_reactions": [
+            {"1": "block", 3: "land_top", "7": "unknown"},
+            "malformed",
+        ],
+    }
+    before = copy.deepcopy(state)
+    table, count = collision.sprite_reaction_table(state)
+    assert count == 2
+    assert len(table) == 16
+    assert table[1] == collision.REACTION_VERB_IDS["block"]
+    assert table[3] == collision.REACTION_VERB_IDS["land_top"]
+    assert table[7] == 0
+    assert playground_server._sprite_reaction_table(state) == (table, count)
+    assert state == before

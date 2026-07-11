@@ -17,6 +17,16 @@ BUILTIN_BEHAVIOUR_NAMES = {
     6: "LADDER",
 }
 
+REACTION_VERB_IDS = {
+    "ignore": 0,
+    "block": 1,
+    "land": 2,
+    "land_top": 3,
+    "bounce": 4,
+    "exit": 5,
+    "call_handler": 6,
+}
+
 
 def sanitise_behaviour_name(name: Any, slot_id: int) -> str:
     if slot_id in BUILTIN_BEHAVIOUR_NAMES:
@@ -66,6 +76,44 @@ def behaviour_world_dims(state: dict[str, Any]) -> tuple[int, int]:
     screens_x = max(1, int(dimensions.get("screens_x") or 1))
     screens_y = max(1, int(dimensions.get("screens_y") or 1))
     return SCREEN_COLS * screens_x, SCREEN_ROWS * screens_y
+
+
+def behaviour_map_for_background(
+    background: dict[str, Any] | None, columns: int, rows: int
+) -> bytes:
+    output = bytearray(columns * rows)
+    grid = (background or {}).get("behaviour") or []
+    for row_index in range(rows):
+        row = grid[row_index] if row_index < len(grid) else []
+        base = row_index * columns
+        for column in range(columns):
+            try:
+                value = int(row[column]) if column < len(row) else 0
+            except (TypeError, ValueError):
+                value = 0
+            output[base + column] = value & 0x07
+    return bytes(output)
+
+
+def sprite_reaction_table(state: dict[str, Any]) -> tuple[bytes, int]:
+    sprites = state.get("sprites") or []
+    reactions = state.get("behaviour_reactions") or []
+    count = len(sprites)
+    output = bytearray(count * 8)
+    for sprite_index in range(count):
+        reaction_map = reactions[sprite_index] if sprite_index < len(reactions) else {}
+        if not isinstance(reaction_map, dict):
+            reaction_map = {}
+        for behaviour_id in range(8):
+            verb = (
+                reaction_map.get(str(behaviour_id))
+                or reaction_map.get(behaviour_id)
+                or "ignore"
+            )
+            output[sprite_index * 8 + behaviour_id] = REACTION_VERB_IDS.get(
+                str(verb), 0
+            )
+    return bytes(output), count
 
 
 def build_collision_h(state: dict[str, Any]) -> str:
