@@ -49,6 +49,7 @@ from nes_studio_core import graphics as graphics_core
 from nes_studio_core import collision as collision_core
 from nes_studio_core import world as world_core
 from nes_studio_core import scene as scene_core
+from nes_studio_core import build as build_core
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
@@ -609,6 +610,12 @@ AUTH_RATE = accounts.RateLimiter(
 # concurrent compiles with a semaphore sized to the machine.
 _BUILD_MAX = max(2, min(8, (os.cpu_count() or 2)))
 BUILD_SEM = threading.BoundedSemaphore(_BUILD_MAX)
+BUILD_SERVICE = build_core.BuildService(
+    STEP_DIR,
+    audio_engine_directory=AUDIO_ENGINE_DIR,
+    semaphore=BUILD_SEM,
+    profile=build_core.SANDBOXED_REMOTE,
+)
 
 # fceux availability is probed once at startup (not per request).  Browser
 # mode is the default; only pupils on the offline workstation build need
@@ -2027,41 +2034,16 @@ clean:
 
 
 def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_asm):
-    with tempfile.TemporaryDirectory(prefix="nesgame_build_asm_") as td:
-        tmp_root = pathlib.Path(td) / "Step_Playground"
-        shutil.copytree(
-            STEP_DIR, tmp_root,
-            ignore=shutil.ignore_patterns("game.nes", "*.o", "*.map", "build"),
-        )
-        # Nuke the stock C main and its includes so the pupil's asm build
-        # is self-contained; the generated .asminc siblings take their place.
-        for orphan in ("main.c", "scene.inc", "palettes.inc"):
-            (tmp_root / "src" / orphan).unlink(missing_ok=True)
-        (tmp_root / "src" / "main.s").write_text(custom_main_asm)
-        (tmp_root / "src" / "scene.asminc").write_text(scene_asm)
-        (tmp_root / "src" / "palettes.asminc").write_text(pal_asm)
-        (tmp_root / "assets" / "sprites").mkdir(parents=True, exist_ok=True)
-        (tmp_root / "assets" / "backgrounds").mkdir(parents=True, exist_ok=True)
-        (tmp_root / "assets" / "sprites" / "game.chr").write_bytes(chr_bytes)
-        (tmp_root / "assets" / "backgrounds" / "level.nam").write_bytes(nam_bytes)
-        (tmp_root / "Makefile").write_text(ASM_MAKEFILE)
-
-        with BUILD_SEM:
-            build = subprocess.run(
-                ["make", "-C", str(tmp_root)],
-                capture_output=True, text=True,
-            )
-        build_log = (build.stdout or "") + (build.stderr or "")
-        build_log = build_log.replace(str(tmp_root) + "/", "").replace(str(tmp_root), "")
-        if build.returncode != 0:
-            raise BuildError(build_log)
-
-        rom_path = tmp_root / "game.nes"
-        if not rom_path.exists():
-            raise BuildError(build_log + "\ngame.nes missing after build")
-        rom_bytes = rom_path.read_bytes()
-
-    return rom_bytes, build_log
+    return BUILD_SERVICE.build_asm(
+        build_core.AsmBuildInputs(
+            custom_main=custom_main_asm,
+            chr_bytes=chr_bytes,
+            nam_bytes=nam_bytes,
+            palettes_source=pal_asm,
+            scene_source=scene_asm,
+        ),
+        ASM_MAKEFILE,
+    )
 
 
 def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
@@ -2069,102 +2051,41 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       audio_songs_asm=None, audio_sfx_asm=None,
                       nes_asm_leaf=False, nes_asm_scroll=False,
                       nes_asm_scene=False, nes_asm_ai=False,
-                      nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False, nes_asm_player2=False,
-                      nes_asm_pdraw=False,
-                      project_inc=None):
-    # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
-    # asset files never touch the shared tree — used for EVERY build now (the
-    # pupil's `customMainC` and the default stock build alike), so concurrent
-    # Plays run in parallel (bounded by BUILD_SEM) and leave no build-dirt.
-    # `custom_main=None` keeps the stock main.c the copytree brought in.
-    with tempfile.TemporaryDirectory(prefix="nesgame_build_") as td:
-        tmp_root = pathlib.Path(td) / "Step_Playground"
-        shutil.copytree(
-            STEP_DIR, tmp_root,
-            ignore=shutil.ignore_patterns("game.nes", "*.o", "*.map", "build"),
+                      nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False,
+                      nes_asm_player2=False, nes_asm_pdraw=False, project_inc=None):
+    flags = []
+    if not os.environ.get("PLAYGROUND_NO_ASM"):
+        for enabled, flag in (
+            (nes_asm_leaf, "NES_ASM_LEAF=1"),
+            (nes_asm_scroll, "NES_ASM_SCROLL=1"),
+            (nes_asm_scene, "NES_ASM_SCENE=1"),
+            (nes_asm_ai, "NES_ASM_AI=1"),
+        ):
+            if enabled:
+                flags.append(flag)
+        if nes_asm_smb:
+            flags.append("NES_ASM_SMB=1")
+        elif nes_asm_racer:
+            flags.append("NES_ASM_RACER=1")
+        elif nes_asm_player:
+            flags.append("NES_ASM_PLAYER=1")
+        if nes_asm_player2:
+            flags.append("NES_ASM_PLAYER2=1")
+        if nes_asm_pdraw:
+            flags.append("NES_ASM_PDRAW=1")
+    return BUILD_SERVICE.build_c(
+        build_core.CBuildInputs(
+            custom_main=custom_main, chr_bytes=chr_bytes, nam_bytes=nam_bytes,
+            palettes_source=pal_src, scene_source=scene_src,
+            collision_header=collision_h, behaviour_source=behaviour_c,
+            world_header=bg_world_h, world_source=bg_world_c,
+            project_inc=project_inc, audio_songs_asm=audio_songs_asm,
+            audio_sfx_asm=audio_sfx_asm, asm_flags=tuple(flags),
         )
-        if custom_main is not None:
-            (tmp_root / "src" / "main.c").write_text(custom_main)
-
-        (tmp_root / "assets" / "sprites").mkdir(parents=True, exist_ok=True)
-        (tmp_root / "assets" / "backgrounds").mkdir(parents=True, exist_ok=True)
-        (tmp_root / "assets" / "sprites" / "game.chr").write_bytes(chr_bytes)
-        (tmp_root / "assets" / "backgrounds" / "level.nam").write_bytes(nam_bytes)
-        (tmp_root / "src" / "scene.inc").write_text(scene_src)
-        # Per-project ASM constants for the hand-written 6502 modules (Phase 1).
-        if project_inc:
-            (tmp_root / "src" / "project.inc").write_text(project_inc)
-        (tmp_root / "src" / "palettes.inc").write_text(pal_src)
-        (tmp_root / "src" / "collision.h").write_text(collision_h)
-        (tmp_root / "src" / "behaviour.c").write_text(behaviour_c)
-        (tmp_root / "src" / "bg_world.h").write_text(bg_world_h)
-        (tmp_root / "src" / "bg_world.c").write_text(bg_world_c)
-
-        # Phase 4.3 — audio.  The clone of STEP_DIR always starts with no audio
-        # files, so only stage them when the project ships a song + sfx blob;
-        # default-off keeps the byte-identical-baseline test honest.
-        make_args = ["make", "-C", str(tmp_root)]
-        # Universal hand-written 6502 engine (asm-lab).  NES_ASM_LEAF
-        # (read_controller, write_palettes) is project-independent, so it ships
-        # for every build; NES_ASM_SCROLL (world_to_screen_x/y, scroll_follow,
-        # scroll_apply_ppu) only for multi-screen builds — a 1x1 ROM's empty
-        # scroll.c defines no cam_x for scroll_asm.s to link against.  These are
-        # proven behaviourally identical to the C in asm-lab/ and let the engine
-        # hold 60fps where pure C dropped frames.  Set PLAYGROUND_NO_ASM=1 to fall
-        # back to the pure-C engine (kill switch).
-        if not os.environ.get("PLAYGROUND_NO_ASM"):
-            if nes_asm_leaf:
-                make_args.append("NES_ASM_LEAF=1")
-            if nes_asm_scroll:
-                make_args.append("NES_ASM_SCROLL=1")
-            if nes_asm_scene:                       # Phase 2a — scene-draw loop
-                make_args.append("NES_ASM_SCENE=1")
-            if nes_asm_ai:                          # Phase 2b — scene AI helpers
-                make_args.append("NES_ASM_AI=1")
-            if nes_asm_smb:                         # Phase 2c 5b — SMB player (implies PLAYER)
-                make_args.append("NES_ASM_SMB=1")
-            elif nes_asm_racer:                     # Phase 2c — racer player (implies PLAYER)
-                make_args.append("NES_ASM_RACER=1")
-            elif nes_asm_player:                    # Phase 2c — player update (top-down/platformer/runner)
-                make_args.append("NES_ASM_PLAYER=1")
-            if nes_asm_player2:                     # Phase 2c — P2 second actor (implies PLAYER; combines with P1)
-                make_args.append("NES_ASM_PLAYER2=1")
-            if nes_asm_pdraw:                       # Phase 2d — P1 OAM draw loop (independent of the player-update flags)
-                make_args.append("NES_ASM_PDRAW=1")
-        if audio_songs_asm and audio_sfx_asm:
-            (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
-            (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))
-            make_args.append("USE_AUDIO=1")
-            # Override the Makefile's relative `../../tools/audio/famistudio`
-            # default with the real path — the tempdir clone of STEP_DIR
-            # has no `tools/` sibling, so the relative form would 404.
-            make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
-
-        # Cap concurrent compiles (each is CPU-heavy) so a class pressing Play
-        # together doesn't spawn dozens of cc65 processes at once.
-        with BUILD_SEM:
-            build = subprocess.run(
-                make_args,
-                capture_output=True, text=True,
-            )
-        build_log = (build.stdout or "") + (build.stderr or "")
-        # Strip the tempdir prefix out of diagnostics so clickable error
-        # locations in the editor read as "src/main.c(42): Error ..." rather
-        # than an unreachable /tmp/... path.
-        build_log = build_log.replace(str(tmp_root) + "/", "").replace(str(tmp_root), "")
-        if build.returncode != 0:
-            raise BuildError(build_log)
-
-        rom_path = tmp_root / "game.nes"
-        if not rom_path.exists():
-            raise BuildError(build_log + "\ngame.nes missing after build")
-        rom_bytes = rom_path.read_bytes()
-
-    return rom_bytes, build_log
+    )
 
 
-class BuildError(RuntimeError):
-    """cc65 build failed — .args[0] is the full build log."""
+BuildError = build_core.BuildError
 
 
 # ---------------------------------------------------------------------------
