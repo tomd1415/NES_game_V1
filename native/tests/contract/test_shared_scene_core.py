@@ -49,3 +49,49 @@ def test_scene_core_import_has_no_filesystem_side_effects(tmp_path: Path, monkey
     before = set(tmp_path.iterdir())
     importlib.reload(scene)
     assert set(tmp_path.iterdir()) == before
+
+
+def sprite(tile: int, width: int = 1, height: int = 1) -> dict:
+    return {
+        "width": width,
+        "height": height,
+        "cells": [
+            [
+                {
+                    "tile": tile + row * width + column,
+                    "palette": 2,
+                    "priority": row == 0,
+                    "flipH": column == 0,
+                    "flipV": False,
+                }
+                for column in range(width)
+            ]
+            for row in range(height)
+        ],
+    }
+
+
+def test_cell_and_sprite_encoders_match_server_adapters() -> None:
+    value = {"tile": 0x123, "palette": 6, "priority": True, "flipH": True, "flipV": True}
+    assert scene.cell_tile(value) == 0x23 == playground_server.cell_tile(value)
+    assert scene.cell_attribute(value) == 0xE2 == playground_server.cell_attr(value)
+    encoded = scene.flatten_sprite(sprite(10, 2, 2))
+    assert playground_server._flatten_sprite(sprite(10, 2, 2)) == encoded
+    assert encoded[0] == [10, 11, 12, 13]
+
+
+def test_animation_resolution_filters_shape_and_clamps_fps() -> None:
+    state = {
+        "sprites": [sprite(1), sprite(2), sprite(3, 2, 1)],
+        "animations": [{"id": 7, "frames": [0, 2, 99, 1], "fps": 100}],
+        "animation_assignments": {"walk": 7},
+    }
+    before = copy.deepcopy(state)
+    resolved = scene.resolve_animation(state, "walk", 1, 1)
+    assert resolved is not None
+    frames, fps = resolved
+    assert frames == [state["sprites"][0], state["sprites"][1]]
+    assert fps == 60
+    assert playground_server._resolve_animation(state, "walk", 1, 1) == resolved
+    assert scene.resolve_animation(state, "jump", 1, 1) is None
+    assert state == before

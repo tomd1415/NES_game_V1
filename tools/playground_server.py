@@ -1174,22 +1174,11 @@ def build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y):
 
 
 def cell_tile(cell):
-    if cell.get("empty"):
-        return 0
-    return int(cell.get("tile", 0)) & 0xFF
+    return scene_core.cell_tile(cell)
 
 
 def cell_attr(cell):
-    if cell.get("empty"):
-        return 0
-    attr = int(cell.get("palette", 0)) & 3
-    if cell.get("priority"):
-        attr |= 0x20
-    if cell.get("flipH"):
-        attr |= 0x40
-    if cell.get("flipV"):
-        attr |= 0x80
-    return attr & 0xFF
+    return scene_core.cell_attribute(cell)
 
 
 def _resolve_animation(state, kind, pw, ph):
@@ -1199,29 +1188,7 @@ def _resolve_animation(state, kind, pw, ph):
     so the player's footprint in C is a fixed W*H. Frames that don't
     match are dropped (server-side defensive — the editor also warns).
     """
-    assigns = state.get("animation_assignments") or {}
-    anim_id = assigns.get(kind)
-    if anim_id is None:
-        return None
-    anims = state.get("animations") or []
-    anim = next((a for a in anims if a.get("id") == anim_id), None)
-    if not anim:
-        return None
-    frames = anim.get("frames") or []
-    if not frames:
-        return None
-    sprites = state.get("sprites") or []
-    good = []
-    for fi in frames:
-        if not (0 <= fi < len(sprites)):
-            continue
-        sp = sprites[fi]
-        if int(sp.get("width", 0)) == pw and int(sp.get("height", 0)) == ph:
-            good.append(sp)
-    if not good:
-        return None
-    fps = max(1, min(60, int(anim.get("fps", 8) or 8)))
-    return good, fps
+    return scene_core.resolve_animation(state, kind, pw, ph)
 
 
 def _as_sprite_int(v):
@@ -1336,11 +1303,7 @@ def _resolve_tagged_animation(state, role, style):
 
 def _flatten_sprite(sp):
     """Flatten a sprite's cells (row-major) into (tiles, attrs) byte lists."""
-    w = int(sp["width"])
-    h = int(sp["height"])
-    tiles = [cell_tile(sp["cells"][r][c]) for r in range(h) for c in range(w)]
-    attrs = [cell_attr(sp["cells"][r][c]) for r in range(h) for c in range(w)]
-    return tiles, attrs
+    return scene_core.flatten_sprite(sp)
 
 
 # --- E3-3: top-down racer auto-rotated car art -----------------------------
