@@ -48,6 +48,7 @@ from urllib.parse import unquote, urlparse
 from nes_studio_core import graphics as graphics_core
 from nes_studio_core import collision as collision_core
 from nes_studio_core import world as world_core
+from nes_studio_core import scene as scene_core
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
@@ -1009,12 +1010,7 @@ def _scene_world_bounds(state):
     positions are clamped to these so a sprite can sit anywhere in a
     multi-screen level, not just the first screen.  Shared by the C and asm
     scene emitters so they can never disagree on the clamp."""
-    bgs = state.get("backgrounds") or []
-    bg = bgs[selected_bg_idx_safe(state)] if bgs else {}
-    dims = (bg.get("dimensions") or {}) if isinstance(bg, dict) else {}
-    world_w = ((int(dims.get("screens_x", 1)) or 1)) * 256
-    world_h = ((int(dims.get("screens_y", 1)) or 1)) * 240
-    return world_w, world_h
+    return scene_core.world_bounds(state)
 
 
 def _scene_sprite_xy(item, world_w, world_h):
@@ -1025,9 +1021,7 @@ def _scene_sprite_xy(item, world_w, world_h):
     projects the asm path targets this is identical to the old `& 0xFF`; the
     only change is that out-of-range positions now clamp to the world edge
     instead of wrapping around — matching the C path's long-standing clamp."""
-    x = max(0, min(world_w - 1, int(item.get("x", 0))))
-    y = max(0, min(world_h - 1, int(item.get("y", 0))))
-    return x, y
+    return scene_core.sprite_position(item, world_w, world_h)
 
 
 def build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y):
@@ -1510,26 +1504,20 @@ def _inject_racer_rotation(state, player_idx):
 # `.define ROLE_<NAME> <code>` — so the two tables can no longer drift (they
 # used to be duplicated verbatim).  Order = numeric code; HUD is the Phase B
 # chunk-A addition (tagged sprites drive the HUD render).
-ROLE_TABLE = [
-    ("PLAYER", 0), ("NPC", 1), ("ENEMY", 2), ("ITEM", 3), ("TOOL", 4),
-    ("POWERUP", 5), ("PICKUP", 6), ("PROJECTILE", 7), ("DECORATION", 8),
-    ("OTHER", 9), ("HUD", 10),
-]
-ROLE_CODES = {name.lower(): code for name, code in ROLE_TABLE}
+ROLE_TABLE = scene_core.ROLE_TABLE
+ROLE_CODES = scene_core.ROLE_CODES
 # Width that aligns the code column exactly as the original hand-written tables
 # did (longest token is "ROLE_PROJECTILE"), so the emitted bytes are unchanged.
-_ROLE_TOKEN_WIDTH = max(len("ROLE_" + name) for name, _ in ROLE_TABLE)
+_ROLE_TOKEN_WIDTH = scene_core.ROLE_TOKEN_WIDTH
 
 
 def _role_defs(directive):
     """Role table as `<directive> ROLE_<NAME> <code>` lines (`.define`/`#define`)."""
-    return [f"{directive} {('ROLE_' + name).ljust(_ROLE_TOKEN_WIDTH)} {code}"
-            for name, code in ROLE_TABLE]
+    return scene_core.role_definitions(directive)
 
 
 def _role_code(sp):
-    role = (sp.get("role") or "other").lower()
-    return ROLE_CODES.get(role, ROLE_CODES["other"])
+    return scene_core.role_code(sp)
 
 
 def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
