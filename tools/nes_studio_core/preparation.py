@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .build import GenerationError
+from . import build as build_core
+from . import collision, graphics, project, scene, world
 
 AUDIO_MAX_BYTES = 64 * 1024
 
@@ -153,3 +155,140 @@ def select_asm_features(
         and (topdown or racer_style or platformer),
         player_draw=asm_ready and has_custom_c and scroll and not disable_player_draw,
     )
+
+
+class ProjectBuilder:
+    """Convert a project request into generated inputs and compile its ROM."""
+
+    def __init__(
+        self,
+        build_service: build_core.BuildService,
+        *,
+        asm_makefile: str,
+        songs_stub: str,
+        sfx_stub: str,
+    ) -> None:
+        self.build_service = build_service
+        self.asm_makefile = asm_makefile
+        self.songs_stub = songs_stub
+        self.sfx_stub = sfx_stub
+
+    def build(
+        self,
+        body: dict[str, Any],
+        *,
+        disable_all_asm: bool = False,
+        disable_player_draw: bool = False,
+    ) -> tuple[bytes, str]:
+        parameters = parse_request(body)
+        state = parameters.state
+        graphics.expand_metatiles(state)
+        graphics._inject_racer_rotation(state, parameters.player_index)
+        chr_bytes = graphics.build_chr(state)
+        nam_bytes = graphics.build_nam(state)
+        audio = normalize_audio(
+            body, songs_stub=self.songs_stub, sfx_stub=self.sfx_stub
+        )
+        dialogue = graphics._dialogue_module_enabled(state)
+
+        if parameters.custom_main_asm is not None:
+            result = self.build_service.build_asm(
+                build_core.AsmBuildInputs(
+                    custom_main=parameters.custom_main_asm,
+                    chr_bytes=chr_bytes,
+                    nam_bytes=nam_bytes,
+                    palettes_source=graphics.build_palettes_asminc(state, dialogue),
+                    scene_source=scene.build_scene_asminc(
+                        state,
+                        parameters.player_index,
+                        parameters.scene_sprites,
+                        parameters.start_x,
+                        parameters.start_y,
+                    ),
+                ),
+                self.asm_makefile,
+            )
+            return self._patch_if_needed(state, result)
+
+        _, _, world_columns, world_rows, _, _ = world.world_nametable(state)
+        has_scene_animation = any(
+            scene._resolve_tagged_animation(state, role, style) is not None
+            for role, style in (
+                ("enemy", "walk"),
+                ("enemy", "idle"),
+                ("pickup", "idle"),
+            )
+        )
+        features = select_asm_features(
+            parameters,
+            world_columns=world_columns,
+            world_rows=world_rows,
+            has_scene_animation=has_scene_animation,
+            disable_player_draw=disable_player_draw,
+        )
+        flags = () if disable_all_asm else self._asm_flags(features)
+        result = self.build_service.build_c(
+            build_core.CBuildInputs(
+                custom_main=parameters.custom_main_c,
+                chr_bytes=chr_bytes,
+                nam_bytes=nam_bytes,
+                palettes_source=graphics.build_palettes_inc(state, dialogue),
+                scene_source=scene.build_scene_inc(
+                    state,
+                    parameters.player_index,
+                    parameters.scene_sprites,
+                    parameters.start_x,
+                    parameters.start_y,
+                    parameters.player_index_2,
+                    parameters.start_x_2,
+                    parameters.start_y_2,
+                ),
+                collision_header=collision.build_collision_h(state),
+                behaviour_source=collision.build_behaviour_c(state),
+                world_header=world.build_bg_world_h(state),
+                world_source=world.build_bg_world_c(state),
+                project_inc=project.build_project_inc(
+                    state,
+                    parameters.player_index,
+                    parameters.scene_sprites,
+                    parameters.start_y,
+                    parameters.player_index_2,
+                ),
+                audio_songs_asm=audio.songs_asm,
+                audio_sfx_asm=audio.sfx_asm,
+                asm_flags=flags,
+            )
+        )
+        return self._patch_if_needed(state, result)
+
+    @staticmethod
+    def _asm_flags(features: AsmFeatures) -> tuple[str, ...]:
+        flags = []
+        for enabled, flag in (
+            (features.leaf, "NES_ASM_LEAF=1"),
+            (features.scroll, "NES_ASM_SCROLL=1"),
+            (features.scene, "NES_ASM_SCENE=1"),
+            (features.ai, "NES_ASM_AI=1"),
+        ):
+            if enabled:
+                flags.append(flag)
+        if features.smb:
+            flags.append("NES_ASM_SMB=1")
+        elif features.racer:
+            flags.append("NES_ASM_RACER=1")
+        elif features.player:
+            flags.append("NES_ASM_PLAYER=1")
+        if features.player2:
+            flags.append("NES_ASM_PLAYER2=1")
+        if features.player_draw:
+            flags.append("NES_ASM_PDRAW=1")
+        return tuple(flags)
+
+    @staticmethod
+    def _patch_if_needed(
+        state: dict[str, Any], result: tuple[bytes, str]
+    ) -> tuple[bytes, str]:
+        rom, log = result
+        if world.project_needs_four_screen(state):
+            rom = world.patch_ines_four_screen(rom)
+        return rom, log

@@ -1181,136 +1181,18 @@ def _patch_ines_four_screen(rom_bytes):
 
 
 def _build_rom(body):
-    """Generate + compile the ROM. Returns (rom_bytes, build_log) or raises.
-
-    Three paths, chosen by the request body:
-
-    * ``customMainAsm`` present -> asm tempdir build.  The Playground step
-      tree is cloned, main.c is removed, the pupil's main.s lands in its
-      place, and a minimal asm-only Makefile is written alongside it.
-      scene.asminc + palettes.asminc are generated to feed `.include`.
-    * ``customMainC`` present   -> C tempdir build (original 3b/3c path).
-    * neither                   -> in-place build against the shared
-      STEP_DIR using the stock main.c template.  Used by the native /
-      offline workflow.
-
-    After whichever path runs, if the project needs vertical scroll
-    we flip the 4-screen-VRAM bit in the iNES header so emulators
-    allocate four distinct nametables (Phase 4.4).
-    """
-    parameters = preparation_core.parse_request(body)
-    state = parameters.state
-    # Arc E §1 (E1-0): expand any 16x16-metatile backgrounds into ordinary 8x8
-    # nametable/behaviour grids before anything reads them.  No-op for 8x8.
-    _expand_metatiles(state)
-
-    custom_main_c = parameters.custom_main_c
-    custom_main_asm = parameters.custom_main_asm
-    player_idx = parameters.player_index
-    player_idx2 = parameters.player_index_2
-    scene_sprites = parameters.scene_sprites
-    start_x, start_y = parameters.start_x, parameters.start_y
-    start_x2, start_y2 = parameters.start_x_2, parameters.start_y_2
-
-    # E3-3: bake the racer's rotated car frames into spare CHR slots (mutates the
-    # sprite pool) before encoding it.  No-op for non-racer games → byte-identical.
-    _inject_racer_rotation(state, player_idx)
-
-    chr_bytes = build_chr(state)
-    nam_bytes = build_nam(state)
-
-    needs_four_screen = _project_needs_four_screen(state)
-
-    def _maybe_patch(result):
-        rom_bytes, build_log = result
-        if needs_four_screen:
-            rom_bytes = _patch_ines_four_screen(rom_bytes)
-        return rom_bytes, build_log
-
-    # Phase 4.3 — optional audio assets.  The browser-side audio
-    # editor passes the FamiStudio-exported `.s` blobs in here.
-    # Both must be present for USE_AUDIO=1 to flip on, since
-    # main.c links against `audio_default_music` *and*
-    # `audio_sfx_data` symbols.  Small validation: must be strings,
-    # capped at 64 KB each so a runaway upload can't eat memory.
-    audio = preparation_core.normalize_audio(
-        body, songs_stub=_AUTO_SONGS_STUB_ASM, sfx_stub=_AUTO_SFX_STUB_ASM
+    """Generate and compile a ROM through the transport-independent core."""
+    builder = preparation_core.ProjectBuilder(
+        BUILD_SERVICE,
+        asm_makefile=ASM_MAKEFILE,
+        songs_stub=_AUTO_SONGS_STUB_ASM,
+        sfx_stub=_AUTO_SFX_STUB_ASM,
     )
-    # main.c imports both `audio_default_music` and `audio_sfx_data`
-    # symbols — without them the link fails.  Pre-2026-04-27 we
-    # required pupils to upload BOTH a song and an sfx pack before
-    # audio engaged at all, and asymmetric uploads silently fell
-    # back to no-audio.  Pupil-reported (2026-04-27): pupils
-    # uploading just a song expected music to play and got silence
-    # because the editor quietly dropped audio entirely.
-    #
-    # Fix: when only one side is provided, auto-stub the other so
-    # the link succeeds and the audio engine engages.  The stubs
-    # below are the minimum-viable blobs (lifted from audio.mjs's
-    # STUB_*_ASM constants which the smoke suite already proves
-    # compile + link).  The stub song is silent, the stub sfx pack
-    # has a single null entry — pupils get whatever asset they
-    # uploaded plus a no-op for the other side.
-    audio_kwargs = {}
-    if audio.songs_asm and audio.sfx_asm:
-        audio_kwargs = {
-            "audio_songs_asm": audio.songs_asm,
-            "audio_sfx_asm": audio.sfx_asm,
-        }
-
-    if custom_main_asm is not None:
-        pal_asm = build_palettes_asminc(state)
-        scene_asm = build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y)
-        return _maybe_patch(_build_asm_in_tempdir(
-            custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_asm,
-        ))
-
-    pal_src = build_palettes_inc(state)
-    scene_src = build_scene_inc(
-        state, player_idx, scene_sprites, start_x, start_y,
-        player_idx2=player_idx2, start_x2=start_x2, start_y2=start_y2,
-    )
-    collision_h = build_collision_h(state)
-    behaviour_c = build_behaviour_c(state)
-    bg_world_h = build_bg_world_h(state)
-    bg_world_c = build_bg_world_c(state)
-    project_inc = build_project_inc(state, player_idx, scene_sprites, start_y, player_idx2)
-
-    _, _, world_columns, world_rows, _, _ = _world_nametable(state)
-    has_scene_animation = any(
-        _resolve_tagged_animation(state, role, style) is not None
-        for role, style in (("enemy", "walk"), ("enemy", "idle"), ("pickup", "idle"))
-    )
-    features = preparation_core.select_asm_features(
-        parameters,
-        world_columns=world_columns,
-        world_rows=world_rows,
-        has_scene_animation=has_scene_animation,
+    return builder.build(
+        body,
+        disable_all_asm=bool(os.environ.get("PLAYGROUND_NO_ASM")),
         disable_player_draw=bool(os.environ.get("PLAYGROUND_NO_PDRAW")),
     )
-
-    if custom_main_c is not None:
-        return _maybe_patch(_build_in_tempdir(
-            custom_main_c, chr_bytes, nam_bytes, pal_src, scene_src,
-            collision_h, behaviour_c, bg_world_h, bg_world_c,
-            nes_asm_leaf=features.leaf, nes_asm_scroll=features.scroll,
-            nes_asm_scene=features.scene, nes_asm_ai=features.ai,
-            nes_asm_player=features.player, nes_asm_smb=features.smb,
-            nes_asm_racer=features.racer, nes_asm_player2=features.player2,
-            nes_asm_pdraw=features.player_draw,
-            project_inc=project_inc, **audio_kwargs,
-        ))
-    # Default (no custom source): build the stock main.c in its own temp dir
-    # too — isolated + dirt-free.
-    return _maybe_patch(_build_in_tempdir(
-        None, chr_bytes, nam_bytes, pal_src, scene_src,
-        collision_h, behaviour_c, bg_world_h, bg_world_c,
-        nes_asm_leaf=features.leaf, nes_asm_scroll=features.scroll,
-        nes_asm_scene=features.scene, nes_asm_ai=features.ai,
-        nes_asm_player=features.player, nes_asm_smb=features.smb,
-        nes_asm_racer=features.racer, nes_asm_player2=features.player2,
-        project_inc=project_inc, **audio_kwargs,
-    ))
 
 
 # Minimal Makefile for the asm-only build path.  No cc65 step; main.s and

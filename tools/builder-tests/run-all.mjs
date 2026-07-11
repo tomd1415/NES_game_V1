@@ -206,14 +206,16 @@ check('invariant: ladder climb checks target-cell behaviour in both templates', 
 check('invariant: playground_server.py native launch uses _play_latest.nes', () => {
   const body = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'),
                                'utf8');
+  const playCore = fs.readFileSync(path.join(ROOT, 'tools', 'nes_studio_core', 'play.py'),
+                                   'utf8');
   if (!/_play_latest\.nes/.test(body)) {
     throw new Error('native launch path must write to _play_latest.nes');
   }
   // The pre-fix bug was `Popen([FCEUX_PATH, STEP_DIR / "game.nes"])`.
   // After the fix, Popen is given `latest_rom`.  Catch the regression
   // by requiring the current shape.
-  if (!/Popen\(\s*\[\s*FCEUX_PATH\s*,\s*str\(latest_rom\)/s.test(body)) {
-    throw new Error('native launch should Popen FCEUX_PATH with latest_rom, not a stale path');
+  if (!/self\.launcher\(\s*\[self\.native_executable,\s*str\(self\.native_rom_path\)\]/s.test(playCore)) {
+    throw new Error('native PlayService should launch its injected executable with the staged ROM');
   }
 }) || (anyFail = true);
 
@@ -224,15 +226,18 @@ check('invariant: playground_server.py native launch uses _play_latest.nes', () 
 // This fails loudly if a future rename in one emitter silently desyncs the
 // other (it does NOT force feature parity — that gap is by design).
 check('invariant: asm + C scene emitters share role codes + ss_* identifiers', () => {
-  const py = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
+  const py = fs.readFileSync(path.join(ROOT, 'tools', 'nes_studio_core', 'scene.py'), 'utf8');
   // 1) Role codes come from ONE source rendered into both paths (T7.6a):
   //    a single ROLE_TABLE, and both emitters call _role_defs().
   if (!/ROLE_TABLE\s*=\s*\[/.test(py)) {
     throw new Error('ROLE_TABLE single-source role table missing (did T7.6a regress?)');
   }
-  if ((py.match(/_role_defs\(/g) || []).length < 3) {
-    // 1 def + 2 call sites (asm ".define", C "#define").
-    throw new Error('both scene emitters must render roles via _role_defs() — a path stopped using it');
+  if ((py.match(/role_definitions\(/g) || []).length < 2 ||
+      !/_role_defs\s*=\s*role_definitions/.test(py) ||
+      !/_role_defs\("#define"\)/.test(py)) {
+    // Definition + direct ASM call; the established C body uses the
+    // compatibility alias while both live in this one core module.
+    throw new Error('both scene emitters must render roles via role_definitions() — a path stopped using it');
   }
   // The 11 role names must all be present in the shared table.
   for (const role of ['PLAYER', 'NPC', 'ENEMY', 'ITEM', 'TOOL', 'POWERUP',
@@ -524,9 +529,9 @@ check('invariant: Builder scene preview renders with only a Player sprite', () =
 // text to match it, and a validator warns about characters outside the font.
 // Guard all three so the fix can't silently regress.
 check('invariant: dialogue ships a built-in font + uppercases + warns on unsupported chars', () => {
-  const server = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
-  if (!/_seed_dialogue_font\(/.test(server) || !/_DIALOGUE_FONT/.test(server)) {
-    throw new Error('playground_server.py no longer seeds a dialogue font — dialogue on a ' +
+  const graphics = fs.readFileSync(path.join(ROOT, 'tools', 'nes_studio_core', 'graphics.py'), 'utf8');
+  if (!/_seed_dialogue_font\(/.test(graphics) || !/_DIALOGUE_FONT/.test(graphics)) {
+    throw new Error('graphics core no longer seeds a dialogue font — dialogue on a ' +
       'project with no painted font will show garbage again (web-feedback bug 31)');
   }
   const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
@@ -542,14 +547,14 @@ check('invariant: dialogue ships a built-in font + uppercases + warns on unsuppo
 }) || (anyFail = true);
 
 // 2026-06-18 — the dialogue font character set is defined in THREE places that
-// must agree: `_DIALOGUE_FONT` (playground_server.py — the actual CHR font),
+// must agree: `_DIALOGUE_FONT` (graphics.py — the actual CHR font),
 // `DIALOGUE_GLYPH_CHARS` (index.html — the editor's reserved-letter-tile
 // marking), and `SUPPORTED` (builder-validators.js — the unsupported-char
 // warning).  The editor set omits space (the blank background tile); the other
 // two include it.  Guard that the NON-SPACE sets are identical so they can't
 // silently drift (e.g. adding a glyph to the font but not reserving its tile).
 check('invariant: dialogue font char set agrees across server, editor + validator', () => {
-  const server = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
+  const server = fs.readFileSync(path.join(ROOT, 'tools', 'nes_studio_core', 'graphics.py'), 'utf8');
   const idx = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
   const val = fs.readFileSync(path.join(WEB, 'builder-validators.js'), 'utf8');
   const serverChars = new Set();

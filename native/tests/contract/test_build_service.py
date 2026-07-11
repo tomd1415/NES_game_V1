@@ -159,7 +159,11 @@ def test_server_build_orchestration_never_mutates_caller_project(monkeypatch) ->
         state["marker"].append("generated")
         raise RuntimeError("stop after mutation probe")
 
-    monkeypatch.setattr(playground_server, "_expand_metatiles", mutate_then_stop)
+    monkeypatch.setattr(
+        playground_server.preparation_core.graphics,
+        "expand_metatiles",
+        mutate_then_stop,
+    )
     try:
         playground_server._build_rom({"state": project})
     except RuntimeError as exc:
