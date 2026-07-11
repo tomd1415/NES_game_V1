@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import sys
 from pathlib import Path
@@ -119,4 +120,34 @@ def test_native_tile_edits_reject_indices_outside_chr_bank() -> None:
             pass
         else:
             raise AssertionError(f"invalid tile index {invalid} was accepted")
+    assert not document.dirty
+
+
+def test_multiple_backgrounds_can_be_selected_without_losing_room_data() -> None:
+    state = project_state()
+    second = copy.deepcopy(state["backgrounds"][0])
+    second["name"] = "cave"
+    second["nametable"][0][0]["tile"] = 23
+    state["backgrounds"].append(second)
+    document = ProjectDocument.from_json(json.dumps(state))
+
+    assert document.background_names() == ["room", "cave"]
+    assert document.world_tiles()[0][0] == 0
+    document.select_background(1)
+    assert document.selected_background_index == 1
+    assert document.world_tiles()[0][0] == 23
+    assert document.dirty
+
+
+def test_selecting_malformed_background_is_rejected_without_switching() -> None:
+    state = project_state()
+    state["backgrounds"].append({"name": "broken", "nametable": []})
+    document = ProjectDocument.from_json(json.dumps(state))
+    try:
+        document.select_background(1)
+    except ProjectFormatError:
+        pass
+    else:
+        raise AssertionError("malformed background was selected")
+    assert document.selected_background_index == 0
     assert not document.dirty

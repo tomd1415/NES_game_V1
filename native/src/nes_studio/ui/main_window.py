@@ -9,6 +9,7 @@ from PySide6.QtCore import QIODevice, QSaveFile, QStandardPaths, QTimer, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QFrame,
     QFileDialog,
     QHBoxLayout,
@@ -131,6 +132,15 @@ class MainWindow(QMainWindow):
         self.mode_help.setObjectName("modeHelp")
         self.mode_help.setWordWrap(True)
         layout.addWidget(self.mode_help)
+
+        background_label = QLabel("BACKGROUND", dock)
+        background_label.setObjectName("sectionLabel")
+        layout.addWidget(background_label)
+        self.background_selector = QComboBox(dock)
+        self.background_selector.setObjectName("worldBackgroundSelector")
+        self.background_selector.setAccessibleName("WORLD background")
+        self.background_selector.currentIndexChanged.connect(self._select_background)
+        layout.addWidget(self.background_selector)
 
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
@@ -285,6 +295,7 @@ class MainWindow(QMainWindow):
         self.palette_value.setEnabled(world_enabled)
         self.behaviour_value.setEnabled(world_enabled)
         self.world_canvas.setEnabled(world_enabled)
+        self.background_selector.setEnabled(world_enabled)
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
@@ -311,11 +322,33 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"WORLD changed to {description}")
 
     def _load_document_world(self) -> None:
+        self._sync_background_selector()
         self.world_canvas.load_world(
             self._document.world_tiles(),
             self._document.world_palettes(),
             self._document.world_behaviours(),
         )
+
+    def _sync_background_selector(self) -> None:
+        self.background_selector.blockSignals(True)
+        self.background_selector.clear()
+        self.background_selector.addItems(self._document.background_names())
+        self.background_selector.setCurrentIndex(self._document.selected_background_index)
+        self.background_selector.blockSignals(False)
+
+    def _select_background(self, index: int) -> None:
+        if index < 0 or index == self._document.selected_background_index:
+            return
+        try:
+            self._document.select_background(index)
+        except (IndexError, ProjectFormatError) as exc:
+            QMessageBox.critical(self, "Could not open background", str(exc))
+            self._sync_background_selector()
+            return
+        self._load_document_world()
+        self._autosave_timer.start()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Opened WORLD background {self._document.background_names()[index]}")
 
     def _world_cursor_changed(self, col: int, row: int) -> None:
         self.statusBar().showMessage(f"WORLD cell ({col}, {row}) — {self.world_canvas.tool.title()} tool")

@@ -73,6 +73,30 @@ class ProjectDocument:
     def name(self) -> str:
         return str(self.state.get("name") or "Untitled")
 
+    @property
+    def selected_background_index(self) -> int:
+        return int(self.state.get("selectedBgIdx", 0))
+
+    def background_names(self) -> list[str]:
+        backgrounds = self.state.get("backgrounds") or []
+        return [
+            str(background.get("name") or f"Room {index + 1}")
+            if isinstance(background, dict)
+            else f"Room {index + 1}"
+            for index, background in enumerate(backgrounds)
+        ]
+
+    def select_background(self, index: int) -> None:
+        backgrounds = self.state.get("backgrounds")
+        if not isinstance(backgrounds, list) or not 0 <= index < len(backgrounds):
+            raise IndexError(f"Background index outside project: {index}")
+        candidate = copy.deepcopy(self.state)
+        candidate["selectedBgIdx"] = index
+        self._world_grid(candidate)
+        if self.selected_background_index != index:
+            self.state["selectedBgIdx"] = index
+            self.dirty = True
+
     def snapshot(self) -> dict[str, Any]:
         return copy.deepcopy(self.state)
 
