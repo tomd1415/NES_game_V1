@@ -77,3 +77,27 @@ def test_sprite_reaction_table_matches_server_and_is_input_immutable() -> None:
     assert table[7] == 0
     assert playground_server._sprite_reaction_table(state) == (table, count)
     assert state == before
+
+
+def test_behaviour_c_is_identical_through_server_adapter() -> None:
+    state = sample_state()
+    state["backgrounds"][0]["behaviour"] = [[1, 2], [3, 4]]
+    state["backgrounds"][1]["behaviour"] = [[7, 6], [5, 4]]
+    state["behaviour_reactions"] = [
+        {"1": "block", "3": "land_top"},
+        {"4": "exit", "6": "call_handler"},
+    ]
+    before = copy.deepcopy(state)
+    generated = collision.build_behaviour_c(state)
+    assert playground_server.build_behaviour_c(state) == generated
+    assert "active_behaviour_map = behaviour_map_1" in generated
+    assert "case 1: active_behaviour_map = behaviour_map_1" in generated
+    assert "const unsigned char sprite_reactions[16]" in generated
+    assert state == before
+
+
+def test_behaviour_c_emits_linkable_stubs_for_empty_project() -> None:
+    generated = collision.build_behaviour_c({})
+    assert "behaviour_map_0[960]" in generated
+    assert "const unsigned char sprite_reactions[8]" in generated
+    assert "sprite_idx >= 1" in generated
