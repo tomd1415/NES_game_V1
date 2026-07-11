@@ -26,6 +26,7 @@ then browse http://127.0.0.1:8765/sprites.html  (or let the VSCode task
 from __future__ import annotations
 
 import base64
+import copy
 import http.server
 import json
 import os
@@ -1716,9 +1717,13 @@ def _build_rom(body):
     we flip the 4-screen-VRAM bit in the iNES header so emulators
     allocate four distinct nametables (Phase 4.4).
     """
-    state = body.get("state")
-    if not isinstance(state, dict):
+    source_state = body.get("state")
+    if not isinstance(source_state, dict):
         raise ValueError("missing 'state' in request body")
+    # Generators seed dialogue/HUD glyphs, expand metatiles and bake racer
+    # frames. Those are request-local build products and must never mutate the
+    # caller's canonical project document.
+    state = copy.deepcopy(source_state)
     # Arc E §1 (E1-0): expand any 16x16-metatile backgrounds into ordinary 8x8
     # nametable/behaviour grids before anything reads them.  No-op for 8x8.
     _expand_metatiles(state)

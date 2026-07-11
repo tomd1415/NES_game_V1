@@ -10,6 +10,7 @@ TOOLS_ROOT = REPOSITORY_ROOT / "tools"
 sys.path.insert(0, str(TOOLS_ROOT))
 
 from nes_studio_core import build  # noqa: E402
+import playground_server  # noqa: E402
 
 
 def make_step(root: Path) -> Path:
@@ -147,3 +148,20 @@ def test_audio_staging_preserves_existing_config_or_adds_guarded_prelude() -> No
     staged = build.stage_audio_asm("source")
     assert staged.endswith("source")
     assert ".ifndef FAMISTUDIO_CFG_C_BINDINGS" in staged
+
+
+def test_server_build_orchestration_never_mutates_caller_project(monkeypatch) -> None:
+    project = {"marker": ["original"]}
+
+    def mutate_then_stop(state):
+        state["marker"].append("generated")
+        raise RuntimeError("stop after mutation probe")
+
+    monkeypatch.setattr(playground_server, "_expand_metatiles", mutate_then_stop)
+    try:
+        playground_server._build_rom({"state": project})
+    except RuntimeError as exc:
+        assert str(exc) == "stop after mutation probe"
+    else:
+        raise AssertionError("mutation probe did not stop build")
+    assert project == {"marker": ["original"]}
