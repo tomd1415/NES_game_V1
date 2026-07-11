@@ -51,6 +51,7 @@ from nes_studio_core import collision as collision_core
 from nes_studio_core import world as world_core
 from nes_studio_core import scene as scene_core
 from nes_studio_core import build as build_core
+from nes_studio_core import play as play_core
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
@@ -2232,69 +2233,12 @@ def _resolve_engine_versions(body):
 
 
 def run_play(body):
-    # mode: "browser" (default) returns ROM bytes for jsnes to run in the
-    # tab; "native" launches fceux on the server's desktop (only useful for
-    # the offline single-user workflow).  "native" auto-falls-back to
-    # browser behaviour with a warning if fceux isn't on PATH.
-    mode = (body.get("mode") or "browser").lower()
     target_engine, current_engine = _resolve_engine_versions(body)
-
-    started = time.time()
-    try:
-        rom_bytes, build_log = _build_rom(body)
-    except BuildError as e:
-        return {"ok": False, "stage": "build", "log": str(e),
-                "build_time_ms": int((time.time() - started) * 1000)}
-    except Exception as e:
-        return {"ok": False, "stage": "generate",
-                "log": f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}",
-                "build_time_ms": int((time.time() - started) * 1000)}
-
-    built_epoch = time.time()
-    result = {"ok": True, "log": build_log, "size": len(rom_bytes),
-              "built_epoch": built_epoch,
-              "built_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(built_epoch)),
-              "build_time_ms": int((built_epoch - started) * 1000),
-              "engineVersion": target_engine, "engineLatest": current_engine}
-
-    if mode == "native":
-        if not FCEUX_PATH:
-            result["stage"] = "launched-browser-fallback"
-            result["warning"] = "fceux is not installed on the server; returning ROM for in-browser play instead."
-            result["rom_b64"] = base64.b64encode(rom_bytes).decode("ascii")
-            return result
-        # Write the just-built ROM to a dedicated path before launching
-        # fceux.  The customMainC / customMainAsm paths above build in a
-        # throwaway tempdir and return bytes — they do NOT update
-        # STEP_DIR / "game.nes", so earlier revisions of this branch
-        # launched fceux against whatever stale ROM `make` happened to
-        # leave there (usually the stock build without the pupil's
-        # changes).  Using a dedicated "_play_latest.nes" avoids
-        # clobbering any stock game.nes the pupil may rely on for
-        # offline work.
-        latest_rom = STEP_DIR / "_play_latest.nes"
-        try:
-            latest_rom.write_bytes(rom_bytes)
-        except Exception as e:
-            return {"ok": False, "stage": "launch",
-                    "log": build_log + f"\nfailed to stage ROM for fceux: {e}"}
-        try:
-            subprocess.Popen(
-                [FCEUX_PATH, str(latest_rom)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-        except Exception as e:
-            return {"ok": False, "stage": "launch",
-                    "log": build_log + f"\nfailed to launch fceux: {e}"}
-        result["stage"] = "launched-native"
-        return result
-
-    # Browser mode: stream the ROM back, let jsnes run it in the tab.
-    result["stage"] = "built"
-    result["rom_b64"] = base64.b64encode(rom_bytes).decode("ascii")
-    return result
+    return play_core.PlayService(
+        _build_rom,
+        native_executable=FCEUX_PATH,
+        native_rom_path=STEP_DIR / "_play_latest.nes",
+    ).run(body, target_engine=target_engine, current_engine=current_engine)
 
 
 # ---------------------------------------------------------------------------
