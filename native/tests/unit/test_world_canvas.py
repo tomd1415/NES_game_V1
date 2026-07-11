@@ -89,3 +89,31 @@ def test_palette_and_behaviour_edits_share_stroke_undo_history() -> None:
     assert canvas.palette_value(8, 9) == 3
     assert canvas.undo()
     assert canvas.palette_value(8, 9) == 0
+
+
+def test_coordinate_mapping_is_exact_at_integer_and_fractional_scales() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+
+    canvas.resize(256, 240)
+    assert canvas.cell_at_position(0, 0) == (0, 0)
+    assert canvas.cell_at_position(7.999, 7.999) == (0, 0)
+    assert canvas.cell_at_position(8, 8) == (1, 1)
+    assert canvas.cell_at_position(255.999, 239.999) == (31, 29)
+    assert canvas.cell_at_position(256, 240) is None
+
+    canvas.resize(384, 360)
+    assert canvas.cell_at_position(11.999, 11.999) == (0, 0)
+    assert canvas.cell_at_position(12, 12) == (1, 1)
+    assert canvas.cell_at_position(383.999, 359.999) == (31, 29)
+
+
+def test_coordinate_mapping_rejects_letterbox_margins() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.resize(500, 360)
+    # The 384-pixel-wide NES image is centred inside 58-pixel side margins.
+    assert canvas.cell_at_position(57.999, 120) is None
+    assert canvas.cell_at_position(58, 0) == (0, 0)
+    assert canvas.cell_at_position(441.999, 359.999) == (31, 29)
+    assert canvas.cell_at_position(442, 120) is None

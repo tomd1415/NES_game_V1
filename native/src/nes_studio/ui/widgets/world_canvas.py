@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
+import math
+
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -12,6 +14,7 @@ class WorldCanvas(QWidget):
 
     COLS = 32
     ROWS = 30
+    TILE_PIXELS = 8
     NES_COLOURS = (
         QColor("#181828"),
         QColor("#4878d8"),
@@ -134,7 +137,7 @@ class WorldCanvas(QWidget):
             self._stroke.append(change)
             self._stroke_cells.add((col, row))
         signal.emit(col, row, value)
-        self.update(self._cell_rect(col, row))
+        self.update(self._cell_rect(col, row).toAlignedRect())
         return True
 
     def _edit_target(self):
@@ -204,21 +207,34 @@ class WorldCanvas(QWidget):
         if not 0 <= col < self.COLS or not 0 <= row < self.ROWS:
             raise IndexError(f"WORLD cell outside {self.COLS}x{self.ROWS}: {col}, {row}")
 
-    def _grid_geometry(self) -> tuple[int, int, int]:
-        tile = max(1, min(self.width() // self.COLS, self.height() // self.ROWS))
+    def _grid_geometry(self) -> tuple[float, float, float]:
+        scale = max(
+            1 / self.TILE_PIXELS,
+            min(
+                self.width() / (self.COLS * self.TILE_PIXELS),
+                self.height() / (self.ROWS * self.TILE_PIXELS),
+            ),
+        )
+        tile = self.TILE_PIXELS * scale
         width, height = tile * self.COLS, tile * self.ROWS
-        return tile, (self.width() - width) // 2, (self.height() - height) // 2
+        return tile, (self.width() - width) / 2, (self.height() - height) / 2
 
-    def _cell_at(self, point: QPoint) -> tuple[int, int] | None:
+    def _cell_at(self, point: QPointF) -> tuple[int, int] | None:
         tile, left, top = self._grid_geometry()
-        col, row = (point.x() - left) // tile, (point.y() - top) // tile
+        col = math.floor((point.x() - left) / tile)
+        row = math.floor((point.y() - top) / tile)
         if 0 <= col < self.COLS and 0 <= row < self.ROWS:
             return col, row
         return None
 
-    def _cell_rect(self, col: int, row: int) -> QRect:
+    def cell_at_position(self, x: float, y: float) -> tuple[int, int] | None:
+        """Map widget coordinates to a WORLD cell without scale rounding."""
+
+        return self._cell_at(QPointF(x, y))
+
+    def _cell_rect(self, col: int, row: int) -> QRectF:
         tile, left, top = self._grid_geometry()
-        return QRect(left + col * tile, top + row * tile, tile, tile)
+        return QRectF(left + col * tile, top + row * tile, tile, tile)
 
     def paintEvent(self, _event) -> None:  # noqa: N802 - Qt API
         painter = QPainter(self)
@@ -226,16 +242,16 @@ class WorldCanvas(QWidget):
         tile, left, top = self._grid_geometry()
         for row, cells in enumerate(self._cells):
             for col, value in enumerate(cells):
-                rect = QRect(left + col * tile, top + row * tile, tile, tile)
+                rect = QRectF(left + col * tile, top + row * tile, tile, tile)
                 painter.fillRect(rect, self.NES_COLOURS[value % len(self.NES_COLOURS)])
 
         painter.setPen(QPen(QColor("#383858"), 1))
         for col in range(self.COLS + 1):
             x = left + col * tile
-            painter.drawLine(x, top, x, top + self.ROWS * tile)
+            painter.drawLine(QPointF(x, top), QPointF(x, top + self.ROWS * tile))
         for row in range(self.ROWS + 1):
             y = top + row * tile
-            painter.drawLine(left, y, left + self.COLS * tile, y)
+            painter.drawLine(QPointF(left, y), QPointF(left + self.COLS * tile, y))
 
         if self._hover is not None:
             painter.setPen(QPen(QColor("#f8f8f8"), 2))
@@ -243,7 +259,7 @@ class WorldCanvas(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
         if event.button() == Qt.MouseButton.LeftButton:
-            cell = self._cell_at(event.position().toPoint())
+            cell = self._cell_at(event.position())
             if cell is not None:
                 self.begin_stroke()
                 self.edit_cell(*cell)
@@ -253,7 +269,7 @@ class WorldCanvas(QWidget):
             self.end_stroke()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
-        cell = self._cell_at(event.position().toPoint())
+        cell = self._cell_at(event.position())
         if cell != self._hover:
             self._hover = cell
             self.update()
