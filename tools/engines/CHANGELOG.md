@@ -9,6 +9,24 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v68 — 2026-07-11 — Runner (Geo Dash) player gravity: fix ASM/C divergence + make it tunable
+
+### Changed (follow-up to v67 — goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+v67 wired `PLAYER_GRAVITY` into the basic platformer's ASM fall (`_plat_update`)
+but not the runner's (`run_update`, `fall_amt = lda #2`).  The single-player
+runner *shares the platformer C vertical block*, whose fall v67 changed to
+`BW_PLAYER_GRAVITY` — so at non-default Gravity the runner's C fell at
+`gravityPx + 1` while its ASM stayed at 2 (a divergence the default-config
+asm-ab/asm-corpus suite didn't catch).  `run_update` now reads `PLAYER_GRAVITY`
+too, so the runner's ASM fall == its C fall again, and **Gravity now tunes the
+runner (Geo Dash) player's fall** as well as the platformer's.
+
+**Byte-identical at the default** (Gravity 1 → `PLAYER_GRAVITY` 2 → `lda #2` == the
+historic immediate) — goldens + all A/B equivalence checks unchanged.  Guarded by
+`physics-globals.mjs`, which now scans OAM for the runner's falling player and
+asserts the per-frame fall rate matches C and rises with Gravity (g1=2/frame,
+g4=5/frame, ASM==C).  (SMB keeps its own fixed fall feel, `fall_amt=3`.)
+
 ## v67 — 2026-07-11 — Platformer physics sliders work on the shipped ASM engine (jump height/speed + player gravity)
 
 ### Changed (feedback #22/#6 — the physics knobs finally take effect on the default engine; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)

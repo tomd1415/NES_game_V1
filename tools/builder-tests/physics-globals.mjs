@@ -131,4 +131,51 @@ assert(gHeavy > gLight + 8,
   'a bigger Gravity did not make the PLAYER fall faster on the ASM engine (gravity 1 fell ' + gLight + 'px, gravity 4 fell ' + gHeavy + 'px) — player gravity not wired');
 console.log('✓ Gravity now moves the PLAYER on the ASM engine (g=1 fell ' + gLight + 'px, g=4 fell ' + gHeavy + 'px over 8 frames)');
 
-console.log('\nPlatformer physics (jump height + jump speed + player gravity) work on the shipped ASM engine.');
+// ---- 5) Runner (Geo Dash) gravity: tunable + C == ASM ----------------------
+// The single-player runner shares the platformer vertical block, so its C fall
+// honours Gravity (BW_PLAYER_GRAVITY) — the ASM run_update must match (v68 fix;
+// v67 left it hardcoded, diverging at non-default gravity). Build a runner and
+// scan OAM for the falling player (its player sprite isn't OAM 0), asserting the
+// per-frame fall rate matches C and rises with Gravity.
+function runnerState(grav) {
+  const s = window.StudioStarter.createRunner();
+  const bg = s.backgrounds[0];
+  s.bg_tiles[1] = { name: 'floor', pixels: solid(1) };
+  for (let c = 0; c < bg.nametable[0].length; c++) { bg.nametable[29][c] = { tile: 1, palette: 0 }; bg.behaviour[29][c] = 1; }
+  s.builder.modules.globals = { enabled: true, config: { gravityPx: grav, jumpSpeedPx: 2, bobWhenWalking: false } };
+  const p1 = s.builder.modules.players.submodules.player1.config;
+  p1.jumpHeight = 20; p1.startX = 120; p1.startY = 60;
+  return s;
+}
+async function runnerFallRate(grav, env) {
+  const srv = await H.startServer(18882, env);
+  try {
+    const s = runnerState(grav);
+    const r = await H.buildRom(18882, {
+      state: s, playerSpriteIdx: 0, playerStart: { x: 120, y: 60 }, sceneSprites: [],
+      mode: 'browser', customMainC: window.BuilderAssembler.assemble(s, tpl),
+      targetEngine: globalThis.NES_TARGET_ENGINE,
+    });
+    assert(r.ok, 'runner build failed (stage ' + r.stage + '): ' + String(r.log || '').slice(-200));
+    const emu = H.openRom(r.romBytes);
+    emu.frames(20);
+    emu.hold(H.BTN.A); emu.frames(2); emu.release(H.BTN.A);   // tap-jump then fall
+    let prev = null, best = 0;
+    for (let i = 0; i < 20; i++) {
+      emu.frames(1);
+      const cur = []; for (let sp = 0; sp < 8; sp++) { const o = H.oamSprite(emu.nes, sp); cur.push(o.y < 240 ? o.y : null); }
+      if (prev) for (let sp = 0; sp < 8; sp++) { if (prev[sp] != null && cur[sp] != null) { const d = cur[sp] - prev[sp]; if (d > 0 && d < 20 && d > best) best = d; } }
+      prev = cur;
+    }
+    return best;
+  } finally { await H.stopServer(srv.srv); }
+}
+const rG1a = await runnerFallRate(1, {});
+const rG4a = await runnerFallRate(4, {});
+const rG4c = await runnerFallRate(4, { PLAYGROUND_NO_ASM: '1' });
+assert(rG1a === 2, 'runner default gravity should fall 2 px/frame on the ASM engine (got ' + rG1a + ')');
+assert(rG4a > rG1a, 'a bigger Gravity did not speed the runner player\'s fall on the ASM engine (g1=' + rG1a + ', g4=' + rG4a + ')');
+assert(rG4a === rG4c, 'runner fall diverges between the ASM and C engines at gravity 4 (ASM=' + rG4a + ', C=' + rG4c + ') — the run_update fall is not wired to PLAYER_GRAVITY');
+console.log('✓ Runner (Geo Dash) gravity works + matches C (g=1 falls ' + rG1a + '/frame, g=4 falls ' + rG4a + '/frame, ASM==C)');
+
+console.log('\nPlatformer + runner physics (jump height + jump speed + player gravity) work on the shipped ASM engine.');

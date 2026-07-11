@@ -1018,7 +1018,7 @@ pu_pv:
     bne @rv
     jsr run_jump
 @rv:
-    lda #2
+    lda #PLAYER_GRAVITY         ; Gravity (default 2); matches the runner's C fall
     sta fall_amt
     jsr pl_vmove
 .if PX_WIDE
