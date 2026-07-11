@@ -424,3 +424,169 @@ def build_chr(state):
     # proceed; they'll hit the friendlier "No sprites defined yet" message
     # from build_scene_inc if their code path needs sprite data.
     return bytes(8192)
+
+
+def cell_tile(cell: dict[str, Any]) -> int:
+    if cell.get("empty"):
+        return 0
+    return int(cell.get("tile", 0)) & 0xFF
+
+
+def cell_attr(cell: dict[str, Any]) -> int:
+    if cell.get("empty"):
+        return 0
+    attribute = int(cell.get("palette", 0)) & 3
+    if cell.get("priority"):
+        attribute |= 0x20
+    if cell.get("flipH"):
+        attribute |= 0x40
+    if cell.get("flipV"):
+        attribute |= 0x80
+    return attribute & 0xFF
+
+
+RACER_ROT_FRAMES = 8
+# E3-5 flip-sharing: the NES OAM attr can H/V-flip a tile, so the 8 headings need
+# only 3 UNIQUE drawn frames — E (right, 0°), SE (down-right, 45°), S (down, 90°)
+# — and the other 5 are those mirrored.  Cuts the car's rotation CHR from 32
+# tiles to 12.  Each entry: (source frame, flipH, flipV).  (For a left-facing car
+# we MIRROR the right one, not rotate it 180°, so its roof stays up.)
+RACER_ROT_UNIQUE = 3
+_RACER_FRAME_SRC = [
+    (0, False, False),  # 0 E  (right)   — drawn
+    (1, False, False),  # 1 SE           — drawn
+    (2, False, False),  # 2 S  (down)    — drawn
+    (1, True,  False),  # 3 SW = SE H-flip
+    (0, True,  False),  # 4 W  = E  H-flip
+    (1, True,  True),   # 5 NW = SE H+V-flip
+    (2, False, True),   # 6 N  = S  V-flip
+    (1, False, True),   # 7 NE = SE V-flip
+]
+
+def _pool_pixels(pool, idx):
+    t = pool[idx] if (isinstance(pool, list) and 0 <= idx < len(pool)) else None
+    px = t.get("pixels") if isinstance(t, dict) else None
+    if not (isinstance(px, list) and len(px) == 8 and all(isinstance(r, list) and len(r) == 8 for r in px)):
+        return [[0] * 8 for _ in range(8)]
+    return px
+
+def _assemble_player_image(sp, pool):
+    """Player car as a (ph*8)×(pw*8) pixel grid, honouring per-cell flips."""
+    pw, ph = int(sp["width"]), int(sp["height"])
+    W, H = pw * 8, ph * 8
+    img = [[0] * W for _ in range(H)]
+    cells = sp["cells"]
+    for cr in range(ph):
+        for cc in range(pw):
+            cell = cells[cr][cc]
+            px = _pool_pixels(pool, cell_tile(cell))
+            attr = cell_attr(cell)
+            fh, fv = bool(attr & 0x40), bool(attr & 0x80)
+            for y in range(8):
+                sy = 7 - y if fv else y
+                for x in range(8):
+                    sx = 7 - x if fh else x
+                    img[cr * 8 + y][cc * 8 + x] = px[sy][sx] & 3
+    return img, W, H
+
+def _rotate_image(img, W, H, deg):
+    """Nearest-neighbour clockwise rotation (screen coords, y down) about the
+    centre; samples off the source are transparent (0)."""
+    import math
+    rad = math.radians(deg)
+    cs, sn = math.cos(rad), math.sin(rad)
+    cx, cy = (W - 1) / 2.0, (H - 1) / 2.0
+    out = [[0] * W for _ in range(H)]
+    for dy in range(H):
+        oy = dy - cy
+        for dx in range(W):
+            ox = dx - cx
+            sx = int(round(cx + ox * cs + oy * sn))
+            sy = int(round(cy - ox * sn + oy * cs))
+            if 0 <= sx < W and 0 <= sy < H:
+                out[dy][dx] = img[sy][sx]
+    return out
+
+def _inject_racer_rotation(state, player_idx):
+    """For a racer game, bake 8 rotated car frames into spare sprite-CHR slots
+    and stash their tile indices in state['_racer_rot'] for build_scene_inc.
+    Mutates state['sprite_tiles'] in place, so it MUST run before build_chr."""
+    game = (((state.get("builder") or {}).get("modules") or {}).get("game") or {}).get("config") or {}
+    if game.get("type") != "racer":
+        return
+    sprites = state.get("sprites") or []
+    if not (isinstance(player_idx, int) and 0 <= player_idx < len(sprites)):
+        return
+    pool = state.get("sprite_tiles")
+    if not (isinstance(pool, list) and len(pool) == NUM_TILES):
+        return
+    sp = sprites[player_idx]
+    try:
+        pw, ph = int(sp["width"]), int(sp["height"])
+    except (KeyError, TypeError, ValueError):
+        return
+    if pw <= 0 or ph <= 0:
+        return
+    need = RACER_ROT_UNIQUE * pw * ph
+    # Free = blank AND not referenced by ANY sprite cell, so we never clobber a
+    # tile some sprite uses (even a blank one used as a transparent quadrant).
+    # Tile 0 is the canonical transparent tile — always keep it.
+    referenced = {0}
+    for s in sprites:
+        for row in (s.get("cells") or []):
+            for cell in row:
+                referenced.add(cell_tile(cell))
+    free = [i for i in range(NUM_TILES)
+            if i not in referenced and _pixels_blank(_pool_pixels(pool, i))]
+    if len(free) < need:
+        return  # not enough CHR room — engine falls back to the un-rotated car
+    img, W, H = _assemble_player_image(sp, pool)
+    # Bake the 3 unique frames (E 0°, SE 45°, S 90°) into spare slots.
+    unique = []   # unique[u] = list of pw*ph pool tile indices, row-major
+    k = 0
+    for u in range(RACER_ROT_UNIQUE):
+        rimg = _rotate_image(img, W, H, u * 45.0)
+        fr = []
+        for cr in range(ph):
+            for cc in range(pw):
+                idx = free[k]; k += 1
+                sub = [[rimg[cr * 8 + y][cc * 8 + x] for x in range(8)] for y in range(8)]
+                if isinstance(pool[idx], dict):
+                    pool[idx]["pixels"] = sub
+                else:
+                    pool[idx] = {"pixels": sub}
+                fr.append(idx)
+        unique.append(fr)
+    # Build the 8-frame (tile, attr) table from the 3 unique frames, mirroring the
+    # 5 derived headings via H/V flip (with the tile positions swapped to match).
+    tiles, attrs = [], []
+    for src, fh, fv in _RACER_FRAME_SRC:
+        fr = unique[src]
+        attr = (0x40 if fh else 0) | (0x80 if fv else 0)
+        for r in range(ph):
+            for c in range(pw):
+                sr = (ph - 1 - r) if fv else r
+                sc = (pw - 1 - c) if fh else c
+                tiles.append(fr[sr * pw + sc])
+                attrs.append(attr)
+    state["_racer_rot"] = {"tiles": tiles, "attrs": attrs,
+                           "frames": RACER_ROT_FRAMES, "w": pw, "h": ph}
+
+    # E3-5 lap HUD: seed 0-9 digit glyphs into 10 more spare slots so the engine
+    # can draw the current lap number.  The font glyph uses colour 2 for its
+    # background (the dialogue box body); a HUD sprite wants it transparent, so we
+    # keep the stroke (colour 1) and map everything else to 0.  Skipped (HUD off)
+    # if there isn't room — rotation has first claim on the free slots.
+    digits = "0123456789"
+    if len(free) - k >= len(digits):
+        dig_idx = []
+        for ch in digits:
+            g = _DIALOGUE_FONT.get(ch) or _glyph()
+            sub = [[1 if g[y][x] == 1 else 0 for x in range(8)] for y in range(8)]
+            idx = free[k]; k += 1
+            if isinstance(pool[idx], dict):
+                pool[idx]["pixels"] = sub
+            else:
+                pool[idx] = {"pixels": sub}
+            dig_idx.append(idx)
+        state["_racer_digits"] = dig_idx

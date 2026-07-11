@@ -147,3 +147,27 @@ def test_chr_generation_supports_legacy_pool_without_mutating_it() -> None:
     encoded = graphics.build_chr(state)
     assert encoded[:4096] == encoded[4096:]
     assert state == before
+
+
+def test_racer_rotation_injection_matches_server_and_preserves_referenced_tiles() -> None:
+    pool = blank_tiles()
+    pool[5]["pixels"] = [[1 for _ in range(8)] for _ in range(8)]
+    state = {
+        "sprites": [
+            {
+                "width": 1,
+                "height": 1,
+                "cells": [[{"tile": 5, "palette": 0, "empty": False}]],
+            }
+        ],
+        "sprite_tiles": pool,
+        "builder": {"modules": {"game": {"config": {"type": "racer"}}}},
+    }
+    core_state = copy.deepcopy(state)
+    server_state = copy.deepcopy(state)
+    graphics._inject_racer_rotation(core_state, 0)
+    playground_server._inject_racer_rotation(server_state, 0)
+    assert core_state == server_state
+    assert core_state["sprite_tiles"][5] == state["sprite_tiles"][5]
+    assert len(core_state["_racer_rot"]["tiles"]) == 8
+    assert len(core_state["_racer_digits"]) == 10
