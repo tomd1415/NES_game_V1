@@ -49,3 +49,24 @@ def test_world_core_import_has_no_filesystem_side_effects(tmp_path: Path, monkey
     before = set(tmp_path.iterdir())
     importlib.reload(world)
     assert set(tmp_path.iterdir()) == before
+
+
+def test_four_screen_detection_and_header_patch_match_server_adapters() -> None:
+    vertical = sample_world()
+    horizontal = copy.deepcopy(vertical)
+    horizontal["backgrounds"][0]["dimensions"]["screens_y"] = 1
+    assert world.project_needs_four_screen(vertical)
+    assert not world.project_needs_four_screen(horizontal)
+    assert playground_server._project_needs_four_screen(vertical)
+
+    rom = b"NES\x1a" + bytes((2, 1, 0x03)) + bytes(9) + b"payload"
+    patched = world.patch_ines_four_screen(rom)
+    assert patched[6] == 0x0B
+    assert patched[:6] == rom[:6]
+    assert patched[7:] == rom[7:]
+    assert playground_server._patch_ines_four_screen(rom) == patched
+
+
+def test_four_screen_patch_leaves_non_ines_data_unchanged() -> None:
+    for payload in (b"", b"short", bytes(16), b"NOPE" + bytes(20)):
+        assert world.patch_ines_four_screen(payload) == payload

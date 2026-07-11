@@ -2287,22 +2287,7 @@ def _project_needs_four_screen(state):
     `load_world_bg` and `scroll_stream`'s vertical block, which already
     address `$2800/$2C00` correctly assuming NT2/NT3 are distinct.
     """
-    if not isinstance(state, dict):
-        return False
-    bgs = state.get("backgrounds") or []
-    if not isinstance(bgs, list):
-        return False
-    for bg in bgs:
-        if not isinstance(bg, dict):
-            continue
-        dims = bg.get("dimensions") or {}
-        try:
-            sy = int(dims.get("screens_y") or 1)
-        except (TypeError, ValueError):
-            sy = 1
-        if sy > 1:
-            return True
-    return False
+    return world_core.project_needs_four_screen(state)
 
 
 def _patch_ines_four_screen(rom_bytes):
@@ -2313,13 +2298,7 @@ def _patch_ines_four_screen(rom_bytes):
     toolchain.  Patching the produced ROM in-place is reliable, costs
     one byte to mutate, and lets the regression suite sha1 a stable
     output."""
-    if not rom_bytes or len(rom_bytes) < 16:
-        return rom_bytes
-    if rom_bytes[0:4] != b"NES\x1a":
-        return rom_bytes
-    header = bytearray(rom_bytes[:16])
-    header[6] |= 0x08
-    return bytes(header) + rom_bytes[16:]
+    return world_core.patch_ines_four_screen(rom_bytes)
 
 
 def _build_rom(body):

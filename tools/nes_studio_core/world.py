@@ -144,3 +144,30 @@ def build_bg_world_c(state: dict[str, Any]) -> str:
     )
     lines += ["", "#endif", ""]
     return "\n".join(lines)
+
+
+def project_needs_four_screen(state: Any) -> bool:
+    if not isinstance(state, dict):
+        return False
+    backgrounds = state.get("backgrounds") or []
+    if not isinstance(backgrounds, list):
+        return False
+    for background in backgrounds:
+        if not isinstance(background, dict):
+            continue
+        dimensions = background.get("dimensions") or {}
+        try:
+            screens_y = int(dimensions.get("screens_y") or 1)
+        except (TypeError, ValueError):
+            screens_y = 1
+        if screens_y > 1:
+            return True
+    return False
+
+
+def patch_ines_four_screen(rom_bytes: bytes) -> bytes:
+    if not rom_bytes or len(rom_bytes) < 16 or rom_bytes[:4] != b"NES\x1a":
+        return rom_bytes
+    header = bytearray(rom_bytes[:16])
+    header[6] |= 0x08
+    return bytes(header) + rom_bytes[16:]
