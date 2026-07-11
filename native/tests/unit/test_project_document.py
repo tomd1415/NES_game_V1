@@ -80,5 +80,11 @@ def test_missing_behaviour_map_is_created_lazily() -> None:
     state = project_state()
     del state["backgrounds"][0]["behaviour"]
     document = ProjectDocument.from_json(json.dumps(state))
+    before = document.snapshot()
+    assert document.world_behaviours()[0][0] == 0
+    assert document.state == before
+    assert not document.dirty
+
     document.set_world_behaviour(31, 29, 255)
     assert document.world_behaviours()[29][31] == 255
+    assert document.dirty

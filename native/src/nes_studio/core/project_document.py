@@ -103,8 +103,7 @@ class ProjectDocument:
         background = self._selected_background()
         behaviour = background.get("behaviour")
         if not isinstance(behaviour, list):
-            behaviour = [[0 for _ in range(32)] for _ in range(30)]
-            background["behaviour"] = behaviour
+            return [[0 for _ in range(32)] for _ in range(30)]
         if len(behaviour) < 30 or any(
             not isinstance(row, list) or len(row) < 32 for row in behaviour[:30]
         ):
@@ -137,7 +136,10 @@ class ProjectDocument:
         self._validate_coordinates(col, row)
         values = self.world_behaviours()
         if values[row][col] != behaviour:
-            self._selected_background()["behaviour"][row][col] = behaviour
+            background = self._selected_background()
+            if not isinstance(background.get("behaviour"), list):
+                background["behaviour"] = values
+            background["behaviour"][row][col] = behaviour
             self.dirty = True
 
     def _set_world_cell_field(self, col: int, row: int, field: str, value: int) -> None:
