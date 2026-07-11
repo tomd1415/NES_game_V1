@@ -1,0 +1,99 @@
+"""Pure project-to-NES graphics transformations."""
+
+from __future__ import annotations
+
+from typing import Any
+
+SCREEN_COLS = 32
+SCREEN_ROWS = 30
+
+
+def active_nametable(state: dict[str, Any]) -> list[Any]:
+    backgrounds = state.get("backgrounds")
+    if isinstance(backgrounds, list) and backgrounds:
+        index = state.get("selectedBgIdx", 0) or 0
+        if not isinstance(index, int) or not 0 <= index < len(backgrounds):
+            index = 0
+        background = backgrounds[index] or {}
+        nametable = background.get("nametable")
+        if isinstance(nametable, list):
+            return nametable
+    return state.get("nametable") or []
+
+
+def nametable_bytes(nametable: list[Any]) -> bytes:
+    tiles = bytearray(SCREEN_COLS * SCREEN_ROWS)
+    for row_index in range(SCREEN_ROWS):
+        row = nametable[row_index] if row_index < len(nametable) else []
+        for column in range(SCREEN_COLS):
+            cell = row[column] if column < len(row) else None
+            if cell:
+                tiles[row_index * SCREEN_COLS + column] = int(cell.get("tile", 0)) & 0xFF
+    attributes = bytearray(64)
+    for attribute_row in range(8):
+        for attribute_column in range(8):
+            value = 0
+            for quadrant in range(4):
+                quadrant_row = (quadrant >> 1) & 1
+                quadrant_column = quadrant & 1
+                tile_row = attribute_row * 4 + quadrant_row * 2
+                tile_column = attribute_column * 4 + quadrant_column * 2
+                palette = 0
+                if (
+                    tile_row < len(nametable)
+                    and tile_column < len(nametable[tile_row])
+                    and isinstance(nametable[tile_row][tile_column], dict)
+                ):
+                    palette = int(nametable[tile_row][tile_column].get("palette", 0)) & 3
+                value |= palette << (quadrant * 2)
+            attributes[attribute_row * 8 + attribute_column] = value
+    return bytes(tiles) + bytes(attributes)
+
+
+def build_nam(state: dict[str, Any]) -> bytes:
+    return nametable_bytes(active_nametable(state))
+
+
+def expand_metatile_background(background: dict[str, Any]) -> tuple[list[list[dict[str, int]]], list[list[int]]]:
+    metatiles = background.get("metatiles") or []
+    metatile_map = background.get("mtmap") or []
+    rows = len(metatile_map)
+    columns = max((len(row) for row in metatile_map if isinstance(row, list)), default=0)
+    nametable = [[{"tile": 0, "palette": 0} for _ in range(columns * 2)] for _ in range(rows * 2)]
+    behaviour = [[0 for _ in range(columns * 2)] for _ in range(rows * 2)]
+    quadrants = ((0, 0), (0, 1), (1, 0), (1, 1))
+    for map_row in range(rows):
+        row = metatile_map[map_row] if isinstance(metatile_map[map_row], list) else []
+        for map_column, metatile_id in enumerate(row):
+            if not isinstance(metatile_id, int) or not 0 <= metatile_id < len(metatiles):
+                continue
+            metatile = metatiles[metatile_id] or {}
+            source_tiles = metatile.get("tiles") or []
+            palette = int(metatile.get("palette", 0)) & 3
+            collision = int(metatile.get("behaviour", 0)) & 0xFF
+            for index, (row_offset, column_offset) in enumerate(quadrants):
+                tile = int(source_tiles[index]) & 0xFF if index < len(source_tiles) else 0
+                row_index = map_row * 2 + row_offset
+                column = map_column * 2 + column_offset
+                nametable[row_index][column] = {"tile": tile, "palette": palette}
+                behaviour[row_index][column] = collision
+    return nametable, behaviour
+
+
+def expand_metatiles(state: dict[str, Any]) -> dict[str, Any]:
+    backgrounds = state.get("backgrounds") if isinstance(state, dict) else None
+    if not isinstance(backgrounds, list):
+        return state
+    for background in backgrounds:
+        if not isinstance(background, dict) or (background.get("tileMode") or "8x8") != "16x16":
+            continue
+        nametable, behaviour = expand_metatile_background(background)
+        background["nametable"] = nametable
+        background["behaviour"] = behaviour
+        rows = len(nametable)
+        columns = len(nametable[0]) if nametable else 0
+        background["dimensions"] = {
+            "screens_x": max(1, -(-columns // SCREEN_COLS)),
+            "screens_y": max(1, -(-rows // SCREEN_ROWS)),
+        }
+    return state
