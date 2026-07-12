@@ -472,7 +472,7 @@ class ProjectDocument:
         if config.get(key) != value: config[key] = value; self.dirty = True
 
     def set_damage_option(self, key: str, value: int | bool) -> None:
-        valid = (key == "amount" and isinstance(value, int) and 1 <= value <= 9) or (key == "invincibilityFrames" and isinstance(value, int) and 0 <= value <= 120) or (key == "checkpoints" and isinstance(value, bool))
+        valid = (key == "amount" and isinstance(value, int) and 1 <= value <= 9) or (key == "invincibilityFrames" and isinstance(value, int) and 0 <= value <= 120) or (key in {"respawnHp", "stompBounce"} and isinstance(value, int) and 1 <= value <= (9 if key == "respawnHp" else 30)) or (key in {"checkpoints", "stompDefeat"} and isinstance(value, bool))
         if not valid: raise ValueError("Invalid damage option")
         builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
         modules = builder.setdefault("modules", {}) if isinstance(builder, dict) else {}
