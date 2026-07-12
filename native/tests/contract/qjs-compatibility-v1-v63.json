@@ -1,0 +1,449 @@
+{
+  "schema": 1,
+  "runtime": "PySide6 QJSEngine",
+  "reference": "Node vm",
+  "fixture": "representative hostile-string project",
+  "versions": [
+    {
+      "version": 1,
+      "status": "pass",
+      "qjs_sha256": "369b9b21611b98e8ec8a94d414ed273d7c611a88d8ba14e31234c4be14dd9d75",
+      "node_sha256": "369b9b21611b98e8ec8a94d414ed273d7c611a88d8ba14e31234c4be14dd9d75",
+      "error": ""
+    },
+    {
+      "version": 2,
+      "status": "pass",
+      "qjs_sha256": "369b9b21611b98e8ec8a94d414ed273d7c611a88d8ba14e31234c4be14dd9d75",
+      "node_sha256": "369b9b21611b98e8ec8a94d414ed273d7c611a88d8ba14e31234c4be14dd9d75",
+      "error": ""
+    },
+    {
+      "version": 3,
+      "status": "pass",
+      "qjs_sha256": "a4cea8b151da09d4b2d96e857a2dd1b60938e1eb3aced54b613baff5c5eef5ff",
+      "node_sha256": "a4cea8b151da09d4b2d96e857a2dd1b60938e1eb3aced54b613baff5c5eef5ff",
+      "error": ""
+    },
+    {
+      "version": 4,
+      "status": "pass",
+      "qjs_sha256": "a4cea8b151da09d4b2d96e857a2dd1b60938e1eb3aced54b613baff5c5eef5ff",
+      "node_sha256": "a4cea8b151da09d4b2d96e857a2dd1b60938e1eb3aced54b613baff5c5eef5ff",
+      "error": ""
+    },
+    {
+      "version": 5,
+      "status": "pass",
+      "qjs_sha256": "d78cb026a554861f24f1e0c5900b217e1c875a8e5cd1c2fdd19c861687e15518",
+      "node_sha256": "d78cb026a554861f24f1e0c5900b217e1c875a8e5cd1c2fdd19c861687e15518",
+      "error": ""
+    },
+    {
+      "version": 6,
+      "status": "pass",
+      "qjs_sha256": "e916886b288baad26dd026bfe196983aa95ecfbd30a90db57010c5be4bef35ba",
+      "node_sha256": "e916886b288baad26dd026bfe196983aa95ecfbd30a90db57010c5be4bef35ba",
+      "error": ""
+    },
+    {
+      "version": 7,
+      "status": "pass",
+      "qjs_sha256": "b5a998ad6bcd2a634df79a93854aae75c92c7a4e210496e040fdaf63a1260914",
+      "node_sha256": "b5a998ad6bcd2a634df79a93854aae75c92c7a4e210496e040fdaf63a1260914",
+      "error": ""
+    },
+    {
+      "version": 8,
+      "status": "pass",
+      "qjs_sha256": "b5a998ad6bcd2a634df79a93854aae75c92c7a4e210496e040fdaf63a1260914",
+      "node_sha256": "b5a998ad6bcd2a634df79a93854aae75c92c7a4e210496e040fdaf63a1260914",
+      "error": ""
+    },
+    {
+      "version": 9,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 10,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 11,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 12,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 13,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 14,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 15,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 16,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 17,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 18,
+      "status": "pass",
+      "qjs_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "node_sha256": "e13e55855300a22590e2bb358265ba1851d886c5ec58f76bd05cf16f892adfc0",
+      "error": ""
+    },
+    {
+      "version": 19,
+      "status": "pass",
+      "qjs_sha256": "f10c66d11b2cb7282c42ffb06c006ab1c915109e7066e5f1583f3db9b27d6803",
+      "node_sha256": "f10c66d11b2cb7282c42ffb06c006ab1c915109e7066e5f1583f3db9b27d6803",
+      "error": ""
+    },
+    {
+      "version": 20,
+      "status": "pass",
+      "qjs_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "node_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "error": ""
+    },
+    {
+      "version": 21,
+      "status": "pass",
+      "qjs_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "node_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "error": ""
+    },
+    {
+      "version": 22,
+      "status": "pass",
+      "qjs_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "node_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "error": ""
+    },
+    {
+      "version": 23,
+      "status": "pass",
+      "qjs_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "node_sha256": "c02416310011c14d9e38368ad6ca4e16224b3d8db5db02bf772bb90aa54f0f52",
+      "error": ""
+    },
+    {
+      "version": 24,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 25,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 26,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 27,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 28,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 29,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 30,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 31,
+      "status": "pass",
+      "qjs_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "node_sha256": "f678708ba9bdec9b17b4b259d0285762f94ff871ee2a4467fab5951cd7671cd6",
+      "error": ""
+    },
+    {
+      "version": 32,
+      "status": "pass",
+      "qjs_sha256": "d53015612ab1a192592a900550593b2f7b14b922af8d0a13e7b5377053a33f2c",
+      "node_sha256": "d53015612ab1a192592a900550593b2f7b14b922af8d0a13e7b5377053a33f2c",
+      "error": ""
+    },
+    {
+      "version": 33,
+      "status": "pass",
+      "qjs_sha256": "d53015612ab1a192592a900550593b2f7b14b922af8d0a13e7b5377053a33f2c",
+      "node_sha256": "d53015612ab1a192592a900550593b2f7b14b922af8d0a13e7b5377053a33f2c",
+      "error": ""
+    },
+    {
+      "version": 34,
+      "status": "pass",
+      "qjs_sha256": "d53015612ab1a192592a900550593b2f7b14b922af8d0a13e7b5377053a33f2c",
+      "node_sha256": "d53015612ab1a192592a900550593b2f7b14b922af8d0a13e7b5377053a33f2c",
+      "error": ""
+    },
+    {
+      "version": 35,
+      "status": "pass",
+      "qjs_sha256": "69042c2046b165c55c59c9ab36fc2b313fe4f399f58480862d3ddddd8f0671c3",
+      "node_sha256": "69042c2046b165c55c59c9ab36fc2b313fe4f399f58480862d3ddddd8f0671c3",
+      "error": ""
+    },
+    {
+      "version": 36,
+      "status": "pass",
+      "qjs_sha256": "69042c2046b165c55c59c9ab36fc2b313fe4f399f58480862d3ddddd8f0671c3",
+      "node_sha256": "69042c2046b165c55c59c9ab36fc2b313fe4f399f58480862d3ddddd8f0671c3",
+      "error": ""
+    },
+    {
+      "version": 37,
+      "status": "pass",
+      "qjs_sha256": "69042c2046b165c55c59c9ab36fc2b313fe4f399f58480862d3ddddd8f0671c3",
+      "node_sha256": "69042c2046b165c55c59c9ab36fc2b313fe4f399f58480862d3ddddd8f0671c3",
+      "error": ""
+    },
+    {
+      "version": 38,
+      "status": "pass",
+      "qjs_sha256": "52459c4badf38369de938bdd4c9bf772479003747b2aab8f98c9593297349445",
+      "node_sha256": "52459c4badf38369de938bdd4c9bf772479003747b2aab8f98c9593297349445",
+      "error": ""
+    },
+    {
+      "version": 39,
+      "status": "pass",
+      "qjs_sha256": "52459c4badf38369de938bdd4c9bf772479003747b2aab8f98c9593297349445",
+      "node_sha256": "52459c4badf38369de938bdd4c9bf772479003747b2aab8f98c9593297349445",
+      "error": ""
+    },
+    {
+      "version": 40,
+      "status": "pass",
+      "qjs_sha256": "3d489f674763ade6f3f39b97f1b04d529b9913e682323ba8e72a03cea9fe0311",
+      "node_sha256": "3d489f674763ade6f3f39b97f1b04d529b9913e682323ba8e72a03cea9fe0311",
+      "error": ""
+    },
+    {
+      "version": 41,
+      "status": "pass",
+      "qjs_sha256": "3d489f674763ade6f3f39b97f1b04d529b9913e682323ba8e72a03cea9fe0311",
+      "node_sha256": "3d489f674763ade6f3f39b97f1b04d529b9913e682323ba8e72a03cea9fe0311",
+      "error": ""
+    },
+    {
+      "version": 42,
+      "status": "pass",
+      "qjs_sha256": "039c4c159779cda98f56638e8ffdfe0add2752747046788ea7fe8be61551ee9a",
+      "node_sha256": "039c4c159779cda98f56638e8ffdfe0add2752747046788ea7fe8be61551ee9a",
+      "error": ""
+    },
+    {
+      "version": 43,
+      "status": "pass",
+      "qjs_sha256": "039c4c159779cda98f56638e8ffdfe0add2752747046788ea7fe8be61551ee9a",
+      "node_sha256": "039c4c159779cda98f56638e8ffdfe0add2752747046788ea7fe8be61551ee9a",
+      "error": ""
+    },
+    {
+      "version": 44,
+      "status": "pass",
+      "qjs_sha256": "039c4c159779cda98f56638e8ffdfe0add2752747046788ea7fe8be61551ee9a",
+      "node_sha256": "039c4c159779cda98f56638e8ffdfe0add2752747046788ea7fe8be61551ee9a",
+      "error": ""
+    },
+    {
+      "version": 45,
+      "status": "pass",
+      "qjs_sha256": "4e0487e7509bd3e7e20f223c27294c5d821ad4e7c648b4bceace2a3adfd331f9",
+      "node_sha256": "4e0487e7509bd3e7e20f223c27294c5d821ad4e7c648b4bceace2a3adfd331f9",
+      "error": ""
+    },
+    {
+      "version": 46,
+      "status": "pass",
+      "qjs_sha256": "4e0487e7509bd3e7e20f223c27294c5d821ad4e7c648b4bceace2a3adfd331f9",
+      "node_sha256": "4e0487e7509bd3e7e20f223c27294c5d821ad4e7c648b4bceace2a3adfd331f9",
+      "error": ""
+    },
+    {
+      "version": 47,
+      "status": "pass",
+      "qjs_sha256": "32346066e6b8138f6222a4fcb97b0eee2aa5b6079a3f11044a3567cd9379d46a",
+      "node_sha256": "32346066e6b8138f6222a4fcb97b0eee2aa5b6079a3f11044a3567cd9379d46a",
+      "error": ""
+    },
+    {
+      "version": 48,
+      "status": "pass",
+      "qjs_sha256": "19a85830cf50a0c174f54de2f5e7c87b78c12a93c592e7f9b57ec76cb5db1168",
+      "node_sha256": "19a85830cf50a0c174f54de2f5e7c87b78c12a93c592e7f9b57ec76cb5db1168",
+      "error": ""
+    },
+    {
+      "version": 49,
+      "status": "pass",
+      "qjs_sha256": "7dc63960af977e6d50cf02183947f55be97e1a111e6fffae91b912a89e2ee8e4",
+      "node_sha256": "7dc63960af977e6d50cf02183947f55be97e1a111e6fffae91b912a89e2ee8e4",
+      "error": ""
+    },
+    {
+      "version": 50,
+      "status": "pass",
+      "qjs_sha256": "7dc63960af977e6d50cf02183947f55be97e1a111e6fffae91b912a89e2ee8e4",
+      "node_sha256": "7dc63960af977e6d50cf02183947f55be97e1a111e6fffae91b912a89e2ee8e4",
+      "error": ""
+    },
+    {
+      "version": 51,
+      "status": "pass",
+      "qjs_sha256": "6b5fb88a863b55820d8bb328c2ba4972e25381142aedd83a4332e168ea90f5a9",
+      "node_sha256": "6b5fb88a863b55820d8bb328c2ba4972e25381142aedd83a4332e168ea90f5a9",
+      "error": ""
+    },
+    {
+      "version": 52,
+      "status": "pass",
+      "qjs_sha256": "c611b8316d74b2ccb561877c56d7e4cfa2fc4bca323a989dc7941f79f8eaaa6e",
+      "node_sha256": "c611b8316d74b2ccb561877c56d7e4cfa2fc4bca323a989dc7941f79f8eaaa6e",
+      "error": ""
+    },
+    {
+      "version": 53,
+      "status": "pass",
+      "qjs_sha256": "adc4d073a7f87d53b4b9d51a4aa1d2f4507c6b00be198ec71a793b88f81ce766",
+      "node_sha256": "adc4d073a7f87d53b4b9d51a4aa1d2f4507c6b00be198ec71a793b88f81ce766",
+      "error": ""
+    },
+    {
+      "version": 54,
+      "status": "pass",
+      "qjs_sha256": "adc4d073a7f87d53b4b9d51a4aa1d2f4507c6b00be198ec71a793b88f81ce766",
+      "node_sha256": "adc4d073a7f87d53b4b9d51a4aa1d2f4507c6b00be198ec71a793b88f81ce766",
+      "error": ""
+    },
+    {
+      "version": 55,
+      "status": "pass",
+      "qjs_sha256": "ff440cb9b8f13b0cb9b136b0bc04689c0664893955dfa52a17723d0a377fb0ef",
+      "node_sha256": "ff440cb9b8f13b0cb9b136b0bc04689c0664893955dfa52a17723d0a377fb0ef",
+      "error": ""
+    },
+    {
+      "version": 56,
+      "status": "pass",
+      "qjs_sha256": "76c27958bb0317efdb533bf974e00c514c337a7d60228e0266d2b80edd4a27df",
+      "node_sha256": "76c27958bb0317efdb533bf974e00c514c337a7d60228e0266d2b80edd4a27df",
+      "error": ""
+    },
+    {
+      "version": 57,
+      "status": "pass",
+      "qjs_sha256": "7d0d1266a94cf0f36ddfedd1f3bbc18767c46bf5070812827f5af93cea31d129",
+      "node_sha256": "7d0d1266a94cf0f36ddfedd1f3bbc18767c46bf5070812827f5af93cea31d129",
+      "error": ""
+    },
+    {
+      "version": 58,
+      "status": "pass",
+      "qjs_sha256": "7d0d1266a94cf0f36ddfedd1f3bbc18767c46bf5070812827f5af93cea31d129",
+      "node_sha256": "7d0d1266a94cf0f36ddfedd1f3bbc18767c46bf5070812827f5af93cea31d129",
+      "error": ""
+    },
+    {
+      "version": 59,
+      "status": "pass",
+      "qjs_sha256": "1d55c0585bc25a529a7f310462da3a2010a9066d9abe6777c8c286944d5c7cdc",
+      "node_sha256": "1d55c0585bc25a529a7f310462da3a2010a9066d9abe6777c8c286944d5c7cdc",
+      "error": ""
+    },
+    {
+      "version": 60,
+      "status": "pass",
+      "qjs_sha256": "ffd2565d68059b1107a97ead555fc5e1689e0eb0c40313f3b046df5517481c79",
+      "node_sha256": "ffd2565d68059b1107a97ead555fc5e1689e0eb0c40313f3b046df5517481c79",
+      "error": ""
+    },
+    {
+      "version": 61,
+      "status": "pass",
+      "qjs_sha256": "f7d55e2dd2207bcd7e87af6542cd8d6a45b82c8bff49cca4a3a424ac1a831d6a",
+      "node_sha256": "f7d55e2dd2207bcd7e87af6542cd8d6a45b82c8bff49cca4a3a424ac1a831d6a",
+      "error": ""
+    },
+    {
+      "version": 62,
+      "status": "pass",
+      "qjs_sha256": "f7d55e2dd2207bcd7e87af6542cd8d6a45b82c8bff49cca4a3a424ac1a831d6a",
+      "node_sha256": "f7d55e2dd2207bcd7e87af6542cd8d6a45b82c8bff49cca4a3a424ac1a831d6a",
+      "error": ""
+    },
+    {
+      "version": 63,
+      "status": "pass",
+      "qjs_sha256": "1cd8d8538c71d24574b896583495d43bc765a60fa5864710c3ad4879b0e47038",
+      "node_sha256": "1cd8d8538c71d24574b896583495d43bc765a60fa5864710c3ad4879b0e47038",
+      "error": ""
+    }
+  ]
+}

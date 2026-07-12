@@ -1,7 +1,12 @@
 """Isolated JavaScript code-generation compatibility bridge."""
 
 from .runtime import CodegenError, CodegenResult, CodegenRuntime
-from .differential import CodegenDifferential, DifferentialResult
+from .differential import (
+    CodegenDifferential,
+    DifferentialResult,
+    SnapshotResult,
+    compare_engine_snapshots,
+)
 
 __all__ = [
     "CodegenDifferential",
@@ -9,4 +14,6 @@ __all__ = [
     "CodegenResult",
     "CodegenRuntime",
     "DifferentialResult",
+    "SnapshotResult",
+    "compare_engine_snapshots",
 ]

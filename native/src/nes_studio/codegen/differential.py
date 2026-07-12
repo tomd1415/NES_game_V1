@@ -13,7 +13,7 @@ from .runtime import CodegenRuntime
 
 ASSEMBLE_EXPRESSION = (
     "BuilderAssembler.assemble("
-    "Object.assign({}, project, {builder: BuilderDefaults()}), template)"
+    "Object.assign({}, project, {builder: project.builder || BuilderDefaults()}), template)"
 )
 
 _NODE_RUNNER = r"""
@@ -53,14 +53,22 @@ class DifferentialResult:
     node_sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class SnapshotResult:
+    version: int
+    matched: bool
+    qjs_sha256: str
+    node_sha256: str
+    error: str = ""
+
+
 class CodegenDifferential:
     def __init__(self, source_root: str | Path, *, node: str = "node") -> None:
         self.source_root = Path(source_root).resolve()
         self.node = node
 
     def compare(self, project: dict[str, Any]) -> DifferentialResult:
-        web = self.source_root / "tools" / "tile_editor_web"
-        scripts = [web / "builder-assembler.js", web / "builder-modules.js"]
+        web, scripts = self._sources()
         template = (web / "builder-templates" / "platformer.c").read_text(encoding="utf-8")
         runtime = CodegenRuntime(self.source_root)
         relative_scripts = [path.relative_to(self.source_root) for path in scripts]
@@ -79,6 +87,21 @@ class CodegenDifferential:
             qjs_sha256=_sha256(qjs),
             node_sha256=_sha256(node),
         )
+
+    def default_builder(self) -> dict[str, Any]:
+        _web, scripts = self._sources()
+        runtime = CodegenRuntime(self.source_root)
+        value = runtime.evaluate(
+            [path.relative_to(self.source_root) for path in scripts],
+            "BuilderDefaults()",
+        ).value
+        if not isinstance(value, dict):
+            raise TypeError("BuilderDefaults() did not return an object")
+        return value
+
+    def _sources(self) -> tuple[Path, list[Path]]:
+        web = self.source_root / "tools" / "tile_editor_web"
+        return web, [web / "builder-assembler.js", web / "builder-modules.js"]
 
     def _node_generate(
         self, scripts: list[Path], template: str, project: dict[str, Any]
@@ -100,6 +123,31 @@ class CodegenDifferential:
         if process.returncode != 0:
             raise RuntimeError(process.stderr or process.stdout or "Node codegen failed")
         return json.loads(process.stdout)["value"]
+
+
+def compare_engine_snapshots(
+    repository_root: str | Path,
+    project: dict[str, Any],
+    *,
+    node: str = "node",
+) -> tuple[SnapshotResult, ...]:
+    root = Path(repository_root).resolve()
+    results = []
+    for version in range(1, 64):
+        snapshot = root / "tools" / "engines" / f"v{version}"
+        try:
+            result = CodegenDifferential(snapshot, node=node).compare(project)
+            results.append(
+                SnapshotResult(
+                    version,
+                    result.matched,
+                    result.qjs_sha256,
+                    result.node_sha256,
+                )
+            )
+        except Exception as exc:
+            results.append(SnapshotResult(version, False, "", "", f"{type(exc).__name__}: {exc}"))
+    return tuple(results)
 
 
 def _sha256(source: str) -> str:

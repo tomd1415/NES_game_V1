@@ -4,13 +4,14 @@ import sys
 import json
 import os
 import subprocess
+import copy
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 NATIVE_ROOT = REPOSITORY_ROOT / "native"
 sys.path.insert(0, str(NATIVE_ROOT / "src"))
 
-from nes_studio.codegen import CodegenDifferential  # noqa: E402
+from nes_studio.codegen import CodegenDifferential, compare_engine_snapshots  # noqa: E402
 
 
 def representative_project() -> dict:
@@ -71,3 +72,36 @@ def test_headless_codegen_cli_reports_machine_readable_match(tmp_path: Path) -> 
     payload = json.loads(process.stdout)
     assert payload["matched"] is True
     assert payload["qjs_sha256"] == payload["node_sha256"]
+
+
+def test_all_v1_to_v63_snapshots_are_byte_identical_in_qjs_and_node() -> None:
+    results = compare_engine_snapshots(REPOSITORY_ROOT, representative_project())
+    assert [result.version for result in results] == list(range(1, 64))
+    failures = [result for result in results if not result.matched]
+    assert failures == []
+    assert all(result.qjs_sha256 == result.node_sha256 for result in results)
+    report = json.loads(
+        (Path(__file__).with_name("qjs-compatibility-v1-v63.json")).read_text()
+    )
+    recorded = report["versions"]
+    assert [entry["version"] for entry in recorded] == list(range(1, 64))
+    assert [entry["qjs_sha256"] for entry in recorded] == [
+        result.qjs_sha256 for result in results
+    ]
+    assert all(entry["status"] == "pass" for entry in recorded)
+
+
+def test_hostile_dialogue_strings_and_repeated_runs_are_identical() -> None:
+    differential = CodegenDifferential(REPOSITORY_ROOT)
+    project = representative_project()
+    project["builder"] = differential.default_builder()
+    dialogue = project["builder"]["modules"]["dialogue"]
+    dialogue["enabled"] = True
+    dialogue["config"]["text"] = "'\"\\\n</script>${value} Ω 😀"
+    before = copy.deepcopy(project)
+    first = differential.compare(project)
+    second = differential.compare(project)
+    assert first.matched and second.matched
+    assert first.qjs_source == second.qjs_source
+    assert first.qjs_sha256 == second.qjs_sha256
+    assert project == before
