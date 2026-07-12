@@ -405,7 +405,12 @@ class MainWindow(QMainWindow):
         self.tile_editor.setObjectName("tileEditor")
         tile_layout = QVBoxLayout(self.tile_editor)
         selector_row = QHBoxLayout()
-        selector_row.addWidget(QLabel("BACKGROUND TILE", self.tile_editor))
+        self.tile_bank = QComboBox(self.tile_editor)
+        self.tile_bank.setObjectName("tileBankSelector")
+        self.tile_bank.addItem("Background", "bg")
+        self.tile_bank.addItem("Sprite", "sprite")
+        self.tile_bank.currentIndexChanged.connect(self._refresh_tile_editor)
+        selector_row.addWidget(self.tile_bank)
         self.tile_selector = QSpinBox(self.tile_editor)
         self.tile_selector.setObjectName("backgroundTileSelector")
         self.tile_selector.setRange(0, 255)
@@ -715,7 +720,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"SP{palette} palette slot {slot + 1} set to 0x{colour:02X}")
 
     def _refresh_tile_editor(self, _index: int | None = None) -> None:
-        pixels = self._document.background_tile_pixels(self.tile_selector.value())
+        pixels = self._tile_pixels()
         colours = ("#181828", "#4878d8", "#78d878", "#f8d878")
         for row in range(8):
             for column in range(8):
@@ -726,8 +731,11 @@ class MainWindow(QMainWindow):
 
     def _cycle_tile_pixel(self, column: int, row: int) -> None:
         index = self.tile_selector.value()
-        value = (self._document.background_tile_pixels(index)[row][column] + 1) & 3
-        self._document.set_background_tile_pixel(index, column, row, value)
+        value = (self._tile_pixels()[row][column] + 1) & 3
+        if self.tile_bank.currentData() == "sprite":
+            self._document.set_sprite_tile_pixel(index, column, row, value)
+        else:
+            self._document.set_background_tile_pixel(index, column, row, value)
         self._refresh_tile_editor()
         self._session.schedule_save()
         self._update_document_title()
@@ -735,11 +743,19 @@ class MainWindow(QMainWindow):
 
     def _transform_tile(self, operation: str) -> None:
         index = self.tile_selector.value()
-        self._document.transform_background_tile(index, operation)
+        if self.tile_bank.currentData() == "sprite":
+            self._document.transform_sprite_tile(index, operation)
+        else:
+            self._document.transform_background_tile(index, operation)
         self._refresh_tile_editor()
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Applied {operation.replace('_', ' ')} to tile 0x{index:02X}")
+
+    def _tile_pixels(self) -> list[list[int]]:
+        if self.tile_bank.currentData() == "sprite":
+            return self._document.sprite_tile_pixels(self.tile_selector.value())
+        return self._document.background_tile_pixels(self.tile_selector.value())
 
     def _refresh_sprite_editor(self, selected: int | None = None) -> None:
         current = self.sprite_list.currentRow() if selected is None else selected

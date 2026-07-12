@@ -143,6 +143,15 @@ def test_sprite_cell_edits_use_the_oam_tile_palette_and_empty_shape() -> None:
     }
 
 
+def test_sprite_tiles_are_independent_from_background_tiles() -> None:
+    document = ProjectDocument.preview()
+    document.set_background_tile_pixel(7, 3, 4, 1)
+    document.set_sprite_tile_pixel(7, 3, 4, 2)
+    document.transform_sprite_tile(7, "flip_h")
+    assert document.background_tile_pixels(7)[4][3] == 1
+    assert document.sprite_tile_pixels(7)[4][4] == 2
+
+
 def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:
     document = ProjectDocument.preview()
     assert document.add_animation("Walk", fps=12, frames=[0, 1]) == 0

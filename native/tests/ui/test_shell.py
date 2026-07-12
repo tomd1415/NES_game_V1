@@ -107,6 +107,11 @@ class NativeShellTests(unittest.TestCase):
         window.tile_selector.setValue(7)
         window._tile_pixel_buttons[4 * 8 + 3].click()
         self.assertEqual(window._document.background_tile_pixels(7)[4][3], 1)
+        window.tile_bank.setCurrentIndex(1)
+        window._tile_pixel_buttons[4 * 8 + 3].click()
+        self.assertEqual(window._document.sprite_tile_pixels(7)[4][3], 1)
+        self.assertEqual(window._document.background_tile_pixels(7)[4][3], 1)
+        window.tile_bank.setCurrentIndex(0)
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "project.json"
             window.select_mode("WORLD")

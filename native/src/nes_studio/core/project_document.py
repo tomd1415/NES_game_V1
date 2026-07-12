@@ -151,10 +151,19 @@ class ProjectDocument:
     def background_tile_pixels(self, index: int) -> list[list[int]]:
         return self._tile_pixels("bg_tiles", index)
 
+    def sprite_tile_pixels(self, index: int) -> list[list[int]]:
+        return self._tile_pixels("sprite_tiles", index)
+
     def set_background_tile_pixel(self, index: int, column: int, row: int, value: int) -> None:
+        self._set_tile_pixel("bg_tiles", index, column, row, value)
+
+    def set_sprite_tile_pixel(self, index: int, column: int, row: int, value: int) -> None:
+        self._set_tile_pixel("sprite_tiles", index, column, row, value)
+
+    def _set_tile_pixel(self, group: str, index: int, column: int, row: int, value: int) -> None:
         if not 0 <= value <= 3:
             raise ValueError("NES tile pixel must be 0..3")
-        pixels = self._ensure_tile_pixels("bg_tiles", index)
+        pixels = self._ensure_tile_pixels(group, index)
         if not 0 <= column < 8 or not 0 <= row < 8:
             raise IndexError("NES tile pixel coordinates must be 0..7")
         if pixels[row][column] != value:
@@ -162,7 +171,13 @@ class ProjectDocument:
             self.dirty = True
 
     def transform_background_tile(self, index: int, operation: str) -> None:
-        pixels = self._ensure_tile_pixels("bg_tiles", index)
+        self._transform_tile("bg_tiles", index, operation)
+
+    def transform_sprite_tile(self, index: int, operation: str) -> None:
+        self._transform_tile("sprite_tiles", index, operation)
+
+    def _transform_tile(self, group: str, index: int, operation: str) -> None:
+        pixels = self._ensure_tile_pixels(group, index)
         if operation == "clear":
             transformed = [[0 for _ in range(8)] for _ in range(8)]
         elif operation == "flip_h":
