@@ -131,6 +131,57 @@ class ProjectDocument:
             self.state["selectedBgIdx"] = index
             self.dirty = True
 
+    def add_background(self, name: str, *, duplicate_selected: bool = False) -> int:
+        """Add a blank room or a deep copy of the selected room and select it."""
+
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("Background name cannot be empty")
+        backgrounds = self.state.get("backgrounds")
+        if not isinstance(backgrounds, list):
+            raise ProjectFormatError("Project has no editable backgrounds")
+        if duplicate_selected:
+            background = copy.deepcopy(self._selected_background())
+            background["name"] = normalized
+        else:
+            background = {
+                "name": normalized,
+                "dimensions": {"screens_x": 1, "screens_y": 1},
+                "nametable": [
+                    [{"tile": 0, "palette": 0} for _ in range(32)] for _ in range(30)
+                ],
+                "behaviour": [[0 for _ in range(32)] for _ in range(30)],
+            }
+        backgrounds.append(background)
+        self.state["selectedBgIdx"] = len(backgrounds) - 1
+        self.dirty = True
+        return len(backgrounds) - 1
+
+    def rename_background(self, index: int, name: str) -> None:
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("Background name cannot be empty")
+        backgrounds = self.state.get("backgrounds")
+        if not isinstance(backgrounds, list) or not 0 <= index < len(backgrounds):
+            raise IndexError(f"Background index outside project: {index}")
+        background = backgrounds[index]
+        if not isinstance(background, dict):
+            raise ProjectFormatError("Selected background is not an object")
+        if background.get("name") != normalized:
+            background["name"] = normalized
+            self.dirty = True
+
+    def delete_background(self, index: int) -> None:
+        backgrounds = self.state.get("backgrounds")
+        if not isinstance(backgrounds, list) or not 0 <= index < len(backgrounds):
+            raise IndexError(f"Background index outside project: {index}")
+        if len(backgrounds) == 1:
+            raise ValueError("A project must keep at least one background")
+        del backgrounds[index]
+        selected = self.selected_background_index
+        self.state["selectedBgIdx"] = min(selected - (1 if index < selected else 0), len(backgrounds) - 1)
+        self.dirty = True
+
     def snapshot(self) -> dict[str, Any]:
         return copy.deepcopy(self.state)
 

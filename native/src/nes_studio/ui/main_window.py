@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QFileDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -176,6 +177,19 @@ class MainWindow(QMainWindow):
         self.background_selector.setAccessibleName("WORLD background")
         self.background_selector.currentIndexChanged.connect(self._select_background)
         layout.addWidget(self.background_selector)
+        background_actions = QHBoxLayout()
+        for label, callback in (
+            ("New", self._new_background),
+            ("Duplicate", self._duplicate_background),
+            ("Rename", self._rename_background),
+            ("Delete", self._delete_background),
+        ):
+            button = QPushButton(label, dock)
+            button.setObjectName(f"worldBackground{label}Button")
+            button.setAccessibleName(f"{label} WORLD background")
+            button.clicked.connect(callback)
+            background_actions.addWidget(button)
+        layout.addLayout(background_actions)
 
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
@@ -390,6 +404,62 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Opened WORLD background {self._document.background_names()[index]}")
+
+    def _new_background(self) -> None:
+        self._create_background(duplicate=False)
+
+    def _duplicate_background(self) -> None:
+        self._create_background(duplicate=True)
+
+    def _create_background(self, *, duplicate: bool) -> None:
+        suggested = (
+            f"{self._document.background_names()[self._document.selected_background_index]} copy"
+            if duplicate
+            else f"Room {len(self._document.background_names()) + 1}"
+        )
+        name, accepted = QInputDialog.getText(self, "WORLD background", "Name:", text=suggested)
+        if not accepted:
+            return
+        try:
+            index = self._document.add_background(name, duplicate_selected=duplicate)
+        except (ValueError, ProjectFormatError) as exc:
+            QMessageBox.warning(self, "Could not create background", str(exc))
+            return
+        self._load_document_world()
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Created WORLD background {self._document.background_names()[index]}")
+
+    def _rename_background(self) -> None:
+        index = self._document.selected_background_index
+        name, accepted = QInputDialog.getText(
+            self, "Rename WORLD background", "Name:", text=self._document.background_names()[index]
+        )
+        if not accepted:
+            return
+        try:
+            self._document.rename_background(index, name)
+        except (ValueError, IndexError, ProjectFormatError) as exc:
+            QMessageBox.warning(self, "Could not rename background", str(exc))
+            return
+        self._sync_background_selector()
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Renamed WORLD background to {self._document.background_names()[index]}")
+
+    def _delete_background(self) -> None:
+        index = self._document.selected_background_index
+        if len(self._document.background_names()) == 1:
+            QMessageBox.information(self, "WORLD background", "A project must keep at least one background.")
+            return
+        name = self._document.background_names()[index]
+        if QMessageBox.question(self, "Delete WORLD background", f"Delete {name}?") != QMessageBox.StandardButton.Yes:
+            return
+        self._document.delete_background(index)
+        self._load_document_world()
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Deleted WORLD background {name}")
 
     def _world_cursor_changed(self, col: int, row: int) -> None:
         self.statusBar().showMessage(f"WORLD cell ({col}, {row}) — {self.world_canvas.tool.title()} tool")
