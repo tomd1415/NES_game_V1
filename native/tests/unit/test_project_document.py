@@ -64,6 +64,19 @@ def test_preview_document_is_canonical_and_editable() -> None:
     assert document.world_tiles()[24][0] == 2
 
 
+def test_universal_background_is_a_valid_build_relevant_project_field() -> None:
+    document = ProjectDocument.preview()
+    assert document.universal_background == 0x21
+    document.set_universal_background(0x0F)
+    assert document.state["universal_bg"] == 0x0F
+    try:
+        document.set_universal_background(0x40)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid NES backdrop colour was accepted")
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

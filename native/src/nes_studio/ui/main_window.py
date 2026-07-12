@@ -242,6 +242,17 @@ class MainWindow(QMainWindow):
         self.attribute_toggle.setObjectName("worldAttributeGuidesToggle")
         self.attribute_toggle.toggled.connect(self._set_world_grid_options)
         layout.addWidget(self.attribute_toggle)
+        backdrop_label = QLabel("UNIVERSAL BACKDROP", dock)
+        backdrop_label.setObjectName("sectionLabel")
+        layout.addWidget(backdrop_label)
+        self.universal_background = QSpinBox(dock)
+        self.universal_background.setObjectName("universalBackgroundValue")
+        self.universal_background.setRange(0, 0x3F)
+        self.universal_background.setDisplayIntegerBase(16)
+        self.universal_background.setPrefix("0x")
+        self.universal_background.setAccessibleName("Universal NES background colour")
+        self.universal_background.valueChanged.connect(self._set_universal_background)
+        layout.addWidget(self.universal_background)
 
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
@@ -448,6 +459,9 @@ class MainWindow(QMainWindow):
             checkbox.blockSignals(True)
             checkbox.setChecked(value)
             checkbox.blockSignals(False)
+        self.universal_background.blockSignals(True)
+        self.universal_background.setValue(self._document.universal_background)
+        self.universal_background.blockSignals(False)
         self.world_canvas.load_world(
             self._document.world_tiles(self._world_screen_x, self._world_screen_y),
             self._document.world_palettes(self._world_screen_x, self._world_screen_y),
@@ -468,6 +482,12 @@ class MainWindow(QMainWindow):
         self._document.set_world_grid_options(show_grid=show_grid, show_attributes=show_attributes)
         self._session.schedule_save()
         self._update_document_title()
+
+    def _set_universal_background(self, colour: int) -> None:
+        self._document.set_universal_background(colour)
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Universal backdrop set to 0x{colour:02X}")
 
     def _sync_background_selector(self) -> None:
         self.background_selector.blockSignals(True)

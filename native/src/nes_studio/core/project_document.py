@@ -120,6 +120,21 @@ class ProjectDocument:
             for index, background in enumerate(backgrounds)
         ]
 
+    @property
+    def universal_background(self) -> int:
+        value = self.state.get("universal_bg", 0x21)
+        try:
+            return int(value) & 0x3F
+        except (TypeError, ValueError):
+            return 0x21
+
+    def set_universal_background(self, colour: int) -> None:
+        if not 0 <= colour <= 0x3F:
+            raise ValueError("NES universal background colour must be 0x00..0x3F")
+        if self.universal_background != colour or "universal_bg" not in self.state:
+            self.state["universal_bg"] = colour
+            self.dirty = True
+
     def world_grid_options(self) -> tuple[bool, bool]:
         native_ui = self.state.get("nativeUi")
         world = native_ui.get("world") if isinstance(native_ui, dict) else None

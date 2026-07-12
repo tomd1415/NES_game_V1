@@ -55,6 +55,8 @@ class NativeShellTests(unittest.TestCase):
         self.assertEqual(window._document.world_tiles(0, 0)[0][0], 0)
         window.world_layout.setCurrentIndex(0)
         self.assertEqual(window._document.background_dimensions(), (1, 1))
+        window.universal_background.setValue(0x0F)
+        self.assertEqual(window._document.universal_background, 0x0F)
         window.world_canvas.edit_cell(2, 2)
         self.assertTrue(window.undo_action.isEnabled())
         window._undo_world()
