@@ -216,6 +216,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.metatile_mode_button)
         self.metatile_list = QListWidget(dock)
         self.metatile_list.setObjectName("metatileList")
+        self.metatile_list.currentRowChanged.connect(self._select_metatile)
         layout.addWidget(self.metatile_list)
         metatile_actions = QHBoxLayout()
         add_metatile = QPushButton("New block", dock)
@@ -225,6 +226,12 @@ class MainWindow(QMainWindow):
         remove_metatile.clicked.connect(self._delete_metatile)
         metatile_actions.addWidget(remove_metatile)
         layout.addLayout(metatile_actions)
+        self.metatile_tiles = [QSpinBox(dock) for _ in range(4)]
+        for index, control in enumerate(self.metatile_tiles):
+            control.setRange(0, 255); control.setPrefix(f"Block tile {index}: "); control.valueChanged.connect(self._update_metatile); layout.addWidget(control)
+        self.metatile_palette, self.metatile_behaviour = QSpinBox(dock), QSpinBox(dock)
+        for control, maximum, prefix in ((self.metatile_palette, 3, "Block palette: "), (self.metatile_behaviour, 255, "Block behaviour: ")):
+            control.setRange(0, maximum); control.setPrefix(prefix); control.valueChanged.connect(self._update_metatile); layout.addWidget(control)
         viewport_label = QLabel("EDIT SCREEN", dock)
         viewport_label.setObjectName("sectionLabel")
         layout.addWidget(viewport_label)
@@ -1314,6 +1321,7 @@ class MainWindow(QMainWindow):
         if metatile:
             for index, block in enumerate(self._document.state["backgrounds"][self._document.selected_background_index].get("metatiles") or []):
                 self.metatile_list.addItem(f"Block {index}: {block.get('tiles', [0, 0, 0, 0])}")
+        self._select_metatile(self.metatile_list.currentRow())
 
     def _toggle_metatile_mode(self) -> None:
         if self._document.background_tile_mode() == "16x16":
@@ -1333,6 +1341,19 @@ class MainWindow(QMainWindow):
     def _delete_metatile(self) -> None:
         if self._document.delete_metatile(self.metatile_list.currentRow()):
             self._session.schedule_save(); self._refresh_metatile_mode(); self._update_document_title()
+
+    def _select_metatile(self, index: int) -> None:
+        blocks = self._document.state["backgrounds"][self._document.selected_background_index].get("metatiles") or []
+        block = blocks[index] if 0 <= index < len(blocks) else None
+        controls = self.metatile_tiles + [self.metatile_palette, self.metatile_behaviour]
+        values = (block.get("tiles", [0, 0, 0, 0]) + [block.get("palette", 0), block.get("behaviour", 0)]) if block else [0] * 6
+        for control, value in zip(controls, values): control.blockSignals(True); control.setValue(value); control.setEnabled(block is not None); control.blockSignals(False)
+
+    def _update_metatile(self, _value: int) -> None:
+        index = self.metatile_list.currentRow()
+        if index >= 0:
+            self._document.set_metatile(index, tiles=[control.value() for control in self.metatile_tiles], palette=self.metatile_palette.value(), behaviour=self.metatile_behaviour.value())
+            self._session.schedule_save(); self._refresh_metatile_mode(); self.metatile_list.setCurrentRow(index); self._update_document_title()
 
     def _new_background(self) -> None:
         self._create_background(duplicate=False)
