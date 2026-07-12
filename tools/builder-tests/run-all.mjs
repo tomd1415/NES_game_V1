@@ -264,6 +264,23 @@ check("invariant: play-pipeline.js capabilities() probes /health", () => {
   }
 }) || (anyFail = true);
 
+// Guard: the C engine template must be fetched with an engine-version cache key.
+// Without it a bumped engine can serve a stale platformer.c from an HTTP/proxy
+// cache while the version reads current — the "ROM still flickers after the
+// engine was fixed" trap (v69 debugging).  The `?v=` + version stamp makes a new
+// engine a new URL that can't resolve to an older cached template.
+check("invariant: play-pipeline.js version-stamps the template fetch", () => {
+  const body = fs.readFileSync(path.join(WEB, 'play-pipeline.js'), 'utf8');
+  if (!/builder-templates\/platformer\.c['"]\s*\+\s*\(\s*ev/.test(body)) {
+    throw new Error('loadTemplate() must cache-bust the template with the engine ' +
+      "version (fetch 'builder-templates/platformer.c' + (ev ? '?v='+ev : '')) — " +
+      'else a stale cached template survives an engine bump.');
+  }
+  if (!/NES_ENGINE_VERSION/.test(body)) {
+    throw new Error('loadTemplate() must derive the cache key from NES_ENGINE_VERSION.');
+  }
+}) || (anyFail = true);
+
 // Guard: scroll.c's streaming blocks must not contain bare `continue`
 // statements.  When the one-per-vblank cap turned the outer `while`s
 // into `if`s, the leftover `continue`s became a compile error for any
