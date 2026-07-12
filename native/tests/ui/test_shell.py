@@ -65,6 +65,9 @@ class NativeShellTests(unittest.TestCase):
         self.assertEqual(window.mode_title.text(), "CHARS")
         self.assertTrue(window._mode_buttons["CHARS"].isChecked())
         self.assertFalse(window._tool_buttons["paint"].isEnabled())
+        window.select_mode("CODE")
+        self.assertEqual(window.editor_stack.currentWidget(), window.code_preview)
+        self.assertIn("#include", window.code_preview.toPlainText())
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "project.json"
             window.select_mode("WORLD")

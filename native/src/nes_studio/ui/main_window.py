@@ -20,14 +20,17 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QPlainTextEdit,
     QSizePolicy,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ..core.resources import ResourceLocator
+from ..codegen.differential import CodegenDifferential
 from ..core.project_document import ProjectDocument, ProjectFormatError
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
 from ..persistence.manager import StorageManager
@@ -344,14 +347,23 @@ class MainWindow(QMainWindow):
         screen.setObjectName("nesScreen")
         screen_layout = QVBoxLayout(screen)
         screen_layout.setContentsMargins(0, 0, 0, 0)
-        self.world_canvas = WorldCanvas(screen)
+        self.editor_stack = QStackedWidget(screen)
+        self.editor_stack.setObjectName("editorStack")
+        self.world_canvas = WorldCanvas(self.editor_stack)
         self.world_canvas.cell_changed.connect(self._world_cell_changed)
         self.world_canvas.palette_changed.connect(self._world_palette_changed)
         self.world_canvas.behaviour_changed.connect(self._world_behaviour_changed)
         self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
         self.world_canvas.history_changed.connect(self._world_history_changed)
         self.world_canvas.grid_options_changed.connect(self._world_grid_shortcut_changed)
-        screen_layout.addWidget(self.world_canvas)
+        self.editor_stack.addWidget(self.world_canvas)
+        self.code_preview = QPlainTextEdit(self.editor_stack)
+        self.code_preview.setObjectName("codePreview")
+        self.code_preview.setReadOnly(True)
+        self.code_preview.setAccessibleName("Generated C source preview")
+        self.code_preview.setPlainText("Select CODE to generate a preview.")
+        self.editor_stack.addWidget(self.code_preview)
+        screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
         return stage
@@ -415,8 +427,28 @@ class MainWindow(QMainWindow):
         self.behaviour_value.setEnabled(world_enabled)
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
+        self.editor_stack.setCurrentWidget(self.world_canvas if mode != "CODE" else self.code_preview)
+        if mode == "CODE":
+            self._refresh_code_preview()
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
+
+    def _refresh_code_preview(self) -> None:
+        if not self._resource_locator.source_checkout:
+            self.code_preview.setPlainText(
+                "Generated source preview is unavailable: this installation lacks the immutable engine bundle."
+            )
+            return
+        try:
+            generated = CodegenDifferential(self._resource_locator.root).assemble(
+                self._document.snapshot()
+            )
+        except Exception as exc:
+            self.code_preview.setPlainText(f"Could not generate C source:\n\n{exc}")
+            self.statusBar().showMessage("Could not generate CODE preview")
+            return
+        self.code_preview.setPlainText(generated)
+        self.statusBar().showMessage("Generated current project C source")
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)
