@@ -294,6 +294,52 @@ class ProjectDocument:
         frames.append(sprite_index)
         self.dirty = True
 
+    def update_animation(self, animation_index: int, *, name: str | None = None, fps: int | None = None) -> None:
+        animation = self._animation_at(animation_index)
+        changed = False
+        if name is not None:
+            if not name.strip():
+                raise ValueError("Animation needs a name")
+            if animation.get("name") != name.strip():
+                animation["name"] = name.strip()
+                changed = True
+        if fps is not None:
+            if not 1 <= fps <= 60:
+                raise ValueError("Animation FPS must be 1..60")
+            if animation.get("fps") != fps:
+                animation["fps"] = fps
+                changed = True
+        if changed:
+            self.dirty = True
+
+    def remove_animation_frame(self, animation_index: int) -> None:
+        animation = self._animation_at(animation_index)
+        frames = animation.get("frames")
+        if not isinstance(frames, list) or not frames:
+            raise ValueError("Animation has no frames to remove")
+        frames.pop()
+        self.dirty = True
+
+    def delete_animation(self, animation_index: int) -> None:
+        animation = self._animation_at(animation_index)
+        identifier = animation.get("id")
+        animations = self.state.get("animations") or []
+        animations.pop(animation_index)
+        assignments = self._animation_assignments()
+        for key in ("walk", "jump", "attack"):
+            if assignments.get(key) == identifier:
+                assignments[key] = None
+        self.dirty = True
+
+    def set_animation_assignment(self, kind: str, animation_index: int | None) -> None:
+        if kind not in {"walk", "jump", "attack"}:
+            raise ValueError("Unknown animation assignment")
+        identifier = None if animation_index is None else self._animation_at(animation_index).get("id")
+        assignments = self._animation_assignments()
+        if assignments.get(kind) != identifier:
+            assignments[kind] = identifier
+            self.dirty = True
+
     def set_game_style(self, style: str) -> None:
         if style not in {"platformer", "topdown", "runner", "racer", "smb"}:
             raise ValueError("Unknown game style")
@@ -314,6 +360,21 @@ class ProjectDocument:
             sprites = []
             self.state["sprites"] = sprites
         return sprites
+
+    def _animation_at(self, index: int) -> dict[str, Any]:
+        animations = self.state.get("animations") or []
+        if not 0 <= index < len(animations) or not isinstance(animations[index], dict):
+            raise IndexError("Animation index outside project")
+        return animations[index]
+
+    def _animation_assignments(self) -> dict[str, Any]:
+        assignments = self.state.setdefault("animation_assignments", {})
+        if not isinstance(assignments, dict):
+            assignments = {}
+            self.state["animation_assignments"] = assignments
+        for key in ("walk", "jump", "attack"):
+            assignments.setdefault(key, None)
+        return assignments
 
     def _sprite_at(self, index: int) -> dict[str, Any]:
         sprites = self._sprites()

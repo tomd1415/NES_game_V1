@@ -486,7 +486,35 @@ class MainWindow(QMainWindow):
         self.animation_list = QListWidget(self.chars_editor)
         self.animation_list.setObjectName("animationList")
         self.animation_list.setAccessibleName("Project animations")
+        self.animation_list.currentRowChanged.connect(self._select_animation)
         chars_layout.addWidget(self.animation_list)
+        animation_actions = QHBoxLayout()
+        self.animation_add_frame_button = QPushButton("Add sprite frame", self.chars_editor)
+        self.animation_add_frame_button.setObjectName("addAnimationFrameButton")
+        self.animation_add_frame_button.clicked.connect(self._append_selected_sprite_frame)
+        animation_actions.addWidget(self.animation_add_frame_button)
+        self.animation_remove_frame_button = QPushButton("Remove last frame", self.chars_editor)
+        self.animation_remove_frame_button.setObjectName("removeAnimationFrameButton")
+        self.animation_remove_frame_button.clicked.connect(self._remove_last_animation_frame)
+        animation_actions.addWidget(self.animation_remove_frame_button)
+        self.animation_delete_button = QPushButton("Delete animation", self.chars_editor)
+        self.animation_delete_button.setObjectName("deleteAnimationButton")
+        self.animation_delete_button.clicked.connect(self._delete_animation)
+        animation_actions.addWidget(self.animation_delete_button)
+        chars_layout.addLayout(animation_actions)
+        self.animation_fps = QSpinBox(self.chars_editor)
+        self.animation_fps.setObjectName("animationFps")
+        self.animation_fps.setRange(1, 60)
+        self.animation_fps.setPrefix("FPS ")
+        self.animation_fps.valueChanged.connect(self._set_animation_fps)
+        chars_layout.addWidget(self.animation_fps)
+        self.animation_assignments: dict[str, QComboBox] = {}
+        for kind in ("walk", "jump", "attack"):
+            selector = QComboBox(self.chars_editor)
+            selector.setObjectName(f"{kind}AnimationSelector")
+            selector.currentIndexChanged.connect(lambda _value, kind=kind: self._set_animation_assignment(kind))
+            self.animation_assignments[kind] = selector
+            chars_layout.addWidget(selector)
         self.editor_stack.addWidget(self.chars_editor)
         self.rules_editor = QFrame(self.editor_stack)
         self.rules_editor.setObjectName("rulesEditor")
@@ -754,22 +782,87 @@ class MainWindow(QMainWindow):
         if not accepted:
             return
         try:
-            self._document.add_animation(name)
+            index = self._document.add_animation(name, frames=[self.sprite_list.currentRow()] if self.sprite_list.currentRow() >= 0 else [])
         except ValueError as exc:
             QMessageBox.warning(self, "Could not create animation", str(exc))
             return
         self._session.schedule_save()
-        self._refresh_animation_list()
+        self._refresh_animation_list(index)
         self._update_document_title()
         self.statusBar().showMessage(f"Created animation {name.strip()}")
 
-    def _refresh_animation_list(self) -> None:
+    def _select_animation(self, index: int) -> None:
+        animations = self._document.state.get("animations") or []
+        animation = animations[index] if 0 <= index < len(animations) and isinstance(animations[index], dict) else None
+        self.animation_fps.blockSignals(True)
+        self.animation_fps.setValue(int(animation.get("fps", 8)) if animation else 8)
+        self.animation_fps.blockSignals(False)
+        has_animation = animation is not None
+        self.animation_add_frame_button.setEnabled(has_animation and self.sprite_list.currentRow() >= 0)
+        self.animation_remove_frame_button.setEnabled(bool(animation and animation.get("frames")))
+        self.animation_delete_button.setEnabled(has_animation)
+
+    def _refresh_animation_list(self, selected: int | None = None) -> None:
+        if selected is None:
+            selected = self.animation_list.currentRow()
         self.animation_list.clear()
         for animation in self._document.state.get("animations") or []:
             if isinstance(animation, dict):
                 self.animation_list.addItem(
                     f"{animation.get('name') or 'Animation'} — {animation.get('fps', 8)} fps ({len(animation.get('frames') or [])} frames)"
                 )
+        self.animation_list.setCurrentRow(selected if 0 <= selected < self.animation_list.count() else -1)
+        animations = self._document.state.get("animations") or []
+        assignments = self._document.state.get("animation_assignments") or {}
+        for kind, selector in self.animation_assignments.items():
+            selector.blockSignals(True)
+            selector.clear()
+            selector.addItem(f"{kind.title()}: (none)", None)
+            for index, animation in enumerate(animations):
+                if isinstance(animation, dict):
+                    selector.addItem(f"{kind.title()}: {animation.get('name') or 'Animation'}", index)
+            assigned = assignments.get(kind) if isinstance(assignments, dict) else None
+            selected_index = next((index for index, animation in enumerate(animations) if isinstance(animation, dict) and animation.get("id") == assigned), -1)
+            selector.setCurrentIndex(selected_index + 1)
+            selector.blockSignals(False)
+
+    def _append_selected_sprite_frame(self) -> None:
+        animation, sprite = self.animation_list.currentRow(), self.sprite_list.currentRow()
+        if animation >= 0 and sprite >= 0:
+            self._document.append_animation_frame(animation, sprite)
+            self._session.schedule_save()
+            self._refresh_animation_list(animation)
+
+    def _remove_last_animation_frame(self) -> None:
+        animation = self.animation_list.currentRow()
+        if animation < 0:
+            return
+        try:
+            self._document.remove_animation_frame(animation)
+        except ValueError:
+            return
+        self._session.schedule_save()
+        self._refresh_animation_list(animation)
+
+    def _delete_animation(self) -> None:
+        animation = self.animation_list.currentRow()
+        if animation >= 0:
+            self._document.delete_animation(animation)
+            self._session.schedule_save()
+            self._refresh_animation_list(animation)
+
+    def _set_animation_fps(self, fps: int) -> None:
+        animation = self.animation_list.currentRow()
+        if animation >= 0:
+            self._document.update_animation(animation, fps=fps)
+            self._session.schedule_save()
+            self._refresh_animation_list(animation)
+
+    def _set_animation_assignment(self, kind: str) -> None:
+        selector = self.animation_assignments[kind]
+        self._document.set_animation_assignment(kind, selector.currentData())
+        self._session.schedule_save()
+        self._update_document_title()
 
     def _refresh_rules_editor(self) -> None:
         builder = self._document.state.get("builder") or {}

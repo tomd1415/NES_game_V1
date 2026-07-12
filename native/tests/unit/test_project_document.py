@@ -152,6 +152,22 @@ def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:
     assert document.state["animations"][0]["frames"] == [0, 1, sprite]
 
 
+def test_animation_editing_and_assignments_keep_the_web_project_contract() -> None:
+    document = ProjectDocument.preview()
+    sprite = document.add_sprite("Hero")
+    walk = document.add_animation("Walk", frames=[sprite])
+    jump = document.add_animation("Jump", fps=10)
+    document.update_animation(walk, name="Walk cycle", fps=12)
+    document.set_animation_assignment("walk", walk)
+    document.set_animation_assignment("jump", jump)
+    document.remove_animation_frame(walk)
+    assert document.state["animations"][walk] == {"id": 1, "name": "Walk cycle", "fps": 12, "frames": []}
+    assert document.state["animation_assignments"] == {"walk": 1, "jump": 2, "attack": None}
+    document.delete_animation(walk)
+    assert document.state["animation_assignments"]["walk"] is None
+    assert document.state["animations"] == [{"id": 2, "name": "Jump", "fps": 10, "frames": []}]
+
+
 def test_game_style_uses_the_shared_builder_game_config() -> None:
     document = ProjectDocument.preview()
     document.set_game_style("racer")
