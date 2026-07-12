@@ -45,10 +45,13 @@ class WorldCanvas(QWidget):
         self._behaviour_value = 1
         self._hover: tuple[int, int] | None = None
         self._selected = (0, 0)
+        self._selection = (0, 0, 0, 0)
+        self._selection_anchor: tuple[int, int] | None = None
+        self._clipboard: list[list[tuple[int, int, int]]] | None = None
         self._undo: list[list[tuple[int, int, int, int, str]]] = []
         self._redo: list[list[tuple[int, int, int, int, str]]] = []
         self._stroke: list[tuple[int, int, int, int, str]] | None = None
-        self._stroke_cells: set[tuple[int, int]] = set()
+        self._stroke_cells: set[tuple[int, int, str]] = set()
         self._seed_preview()
         self._update_accessible_cell()
 
@@ -128,6 +131,7 @@ class WorldCanvas(QWidget):
         self._palettes = [list(map(int, row[: self.COLS])) for row in palettes[: self.ROWS]]
         self._behaviours = [list(map(int, row[: self.COLS])) for row in behaviours[: self.ROWS]]
         self._selected = (0, 0)
+        self._selection = (0, 0, 0, 0)
         self._update_accessible_cell()
 
     def edit_cell(self, col: int, row: int) -> bool:
@@ -154,6 +158,43 @@ class WorldCanvas(QWidget):
             changed = self._edit_one(cell_col, cell_row) or changed
         if owns_stroke:
             self.end_stroke()
+        return changed
+
+    @property
+    def has_clipboard(self) -> bool:
+        return self._clipboard is not None
+
+    @property
+    def selection(self) -> tuple[int, int, int, int]:
+        return self._selection
+
+    def copy_selection(self) -> bool:
+        left, top, right, bottom = self._selection
+        self._clipboard = [
+            [
+                (self._cells[row][col], self._palettes[row][col], self._behaviours[row][col])
+                for col in range(left, right + 1)
+            ]
+            for row in range(top, bottom + 1)
+        ]
+        return True
+
+    def paste_selection(self, col: int | None = None, row: int | None = None) -> bool:
+        if self._clipboard is None:
+            return False
+        target_col, target_row = self._selected if col is None or row is None else (col, row)
+        self._validate_cell(target_col, target_row)
+        self.begin_stroke()
+        changed = False
+        for row_offset, values in enumerate(self._clipboard):
+            for col_offset, (tile, palette, behaviour) in enumerate(values):
+                destination_col, destination_row = target_col + col_offset, target_row + row_offset
+                if destination_col >= self.COLS or destination_row >= self.ROWS:
+                    continue
+                changed = self._record_value(destination_col, destination_row, "tile", tile) or changed
+                changed = self._record_value(destination_col, destination_row, "palette", palette) or changed
+                changed = self._record_value(destination_col, destination_row, "behaviour", behaviour) or changed
+        self.end_stroke()
         return changed
 
     def _contiguous_cells(self, col: int, row: int) -> list[tuple[int, int]]:
@@ -185,21 +226,32 @@ class WorldCanvas(QWidget):
         target, value, signal = self._edit_target()
         if target[row][col] == value:
             return False
+        return self._record_value(col, row, self._history_tool(), value)
+
+    def _record_value(self, col: int, row: int, tool: str, value: int) -> bool:
+        target, signal = self._target_and_signal(tool)
+        if target[row][col] == value:
+            return False
         before = target[row][col]
         target[row][col] = value
-        change = (col, row, before, value, self._tool)
+        change = (col, row, before, value, tool)
         if self._stroke is None:
             self._undo.append([change])
             self._redo.clear()
             self.history_changed.emit(True, False)
-        elif (col, row) not in self._stroke_cells:
+        elif (col, row, tool) not in self._stroke_cells:
             self._stroke.append(change)
-            self._stroke_cells.add((col, row))
+            self._stroke_cells.add((col, row, tool))
         signal.emit(col, row, value)
         if (col, row) == self._selected:
             self._update_accessible_cell()
         self.update(self._cell_rect(col, row).toAlignedRect())
         return True
+
+    def _history_tool(self) -> str:
+        if self._tool in {"paint", "erase", "fill"}:
+            return "tile"
+        return self._tool
 
     def _edit_target(self):
         if self._tool in {"paint", "erase", "fill"}:
@@ -261,7 +313,7 @@ class WorldCanvas(QWidget):
         return True
 
     def _target_and_signal(self, tool: str):
-        if tool in {"paint", "erase", "fill"}:
+        if tool in {"paint", "erase", "fill", "tile"}:
             return self._cells, self.cell_changed
         if tool == "palette":
             return self._palettes, self.palette_changed
@@ -273,6 +325,13 @@ class WorldCanvas(QWidget):
             self._selected = (col, row)
             self.cursor_changed.emit(col, row)
         self._update_accessible_cell()
+        self.update()
+
+    def _set_selection(self, anchor: tuple[int, int], current: tuple[int, int]) -> None:
+        self._selection = (
+            min(anchor[0], current[0]), min(anchor[1], current[1]),
+            max(anchor[0], current[0]), max(anchor[1], current[1]),
+        )
         self.update()
 
     def _update_accessible_cell(self) -> None:
@@ -338,17 +397,27 @@ class WorldCanvas(QWidget):
         if highlight is not None:
             painter.setPen(QPen(QColor("#f8f8f8"), 2))
             painter.drawRect(self._cell_rect(*highlight).adjusted(1, 1, -1, -1))
+        left, top, right, bottom = self._selection
+        painter.setPen(QPen(QColor("#78d8d8"), 2))
+        painter.drawRect(
+            self._cell_rect(left, top).united(self._cell_rect(right, bottom)).adjusted(1, 1, -1, -1)
+        )
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
         if event.button() == Qt.MouseButton.LeftButton:
             cell = self._cell_at(event.position())
             if cell is not None:
                 self._select_cell(*cell)
+                if self._tool == "select":
+                    self._selection_anchor = cell
+                    self._set_selection(cell, cell)
+                    return
                 self.begin_stroke()
                 self.edit_cell(*cell)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
         if event.button() == Qt.MouseButton.LeftButton:
+            self._selection_anchor = None
             self.end_stroke()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
@@ -359,7 +428,10 @@ class WorldCanvas(QWidget):
             if cell is not None:
                 self.cursor_changed.emit(*cell)
         if cell is not None and event.buttons() & Qt.MouseButton.LeftButton:
-            self.edit_cell(*cell)
+            if self._tool == "select" and self._selection_anchor is not None:
+                self._set_selection(self._selection_anchor, cell)
+            else:
+                self.edit_cell(*cell)
 
     def leaveEvent(self, _event) -> None:  # noqa: N802 - Qt API
         self._hover = None
@@ -383,4 +455,13 @@ class WorldCanvas(QWidget):
             self.edit_cell(col, row)
             event.accept()
             return
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if event.key() == Qt.Key.Key_C:
+                self.copy_selection()
+                event.accept()
+                return
+            if event.key() == Qt.Key.Key_V:
+                self.paste_selection()
+                event.accept()
+                return
         super().keyPressEvent(event)

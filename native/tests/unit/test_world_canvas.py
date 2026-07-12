@@ -222,3 +222,23 @@ def test_fill_is_noop_when_region_already_has_selected_tile() -> None:
     canvas.set_tool("fill")
     assert not canvas.edit_cell(0, 0)
     assert not canvas.can_undo
+
+
+def test_region_copy_paste_preserves_tile_palette_and_behaviour_in_one_undo_step() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    tiles = [[0 for _ in range(32)] for _ in range(30)]
+    palettes = [[0 for _ in range(32)] for _ in range(30)]
+    behaviours = [[0 for _ in range(32)] for _ in range(30)]
+    tiles[1][1], palettes[1][1], behaviours[1][1] = 17, 2, 9
+    tiles[1][2], palettes[1][2], behaviours[1][2] = 18, 3, 10
+    canvas.load_world(tiles, palettes, behaviours)
+    canvas._set_selection((1, 1), (2, 1))
+    assert canvas.copy_selection()
+    canvas._select_cell(5, 4)
+    assert canvas.paste_selection()
+    assert (canvas.cell_value(5, 4), canvas.palette_value(5, 4), canvas.behaviour_value(5, 4)) == (17, 2, 9)
+    assert (canvas.cell_value(6, 4), canvas.palette_value(6, 4), canvas.behaviour_value(6, 4)) == (18, 3, 10)
+    assert canvas.undo()
+    assert (canvas.cell_value(5, 4), canvas.palette_value(5, 4), canvas.behaviour_value(5, 4)) == (0, 0, 0)
+    assert (canvas.cell_value(6, 4), canvas.palette_value(6, 4), canvas.behaviour_value(6, 4)) == (0, 0, 0)

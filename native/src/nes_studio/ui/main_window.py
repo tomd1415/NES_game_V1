@@ -221,6 +221,18 @@ class MainWindow(QMainWindow):
         self.world_screen_y.valueChanged.connect(self._select_world_screen)
         viewport.addWidget(self.world_screen_y)
         layout.addLayout(viewport)
+        clipboard_actions = QHBoxLayout()
+        copy_button = QPushButton("Copy", dock)
+        copy_button.setObjectName("worldCopyButton")
+        copy_button.setAccessibleName("Copy selected WORLD region")
+        copy_button.clicked.connect(self._copy_world_region)
+        clipboard_actions.addWidget(copy_button)
+        paste_button = QPushButton("Paste", dock)
+        paste_button.setObjectName("worldPasteButton")
+        paste_button.setAccessibleName("Paste WORLD region at selected cell")
+        paste_button.clicked.connect(self._paste_world_region)
+        clipboard_actions.addWidget(paste_button)
+        layout.addLayout(clipboard_actions)
 
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
@@ -389,6 +401,17 @@ class MainWindow(QMainWindow):
         self.world_canvas.set_tool(tool)
         self._tool_buttons[tool].setChecked(True)
         self.statusBar().showMessage(f"WORLD {tool.title()} tool — click or drag on the NES screen")
+
+    def _copy_world_region(self) -> None:
+        self.world_canvas.copy_selection()
+        left, top, right, bottom = self.world_canvas.selection
+        self.statusBar().showMessage(f"Copied WORLD region {right - left + 1} × {bottom - top + 1}")
+
+    def _paste_world_region(self) -> None:
+        if self.world_canvas.paste_selection():
+            self.statusBar().showMessage("Pasted WORLD region")
+        else:
+            self.statusBar().showMessage("Nothing to paste — copy a WORLD region first")
 
     def _world_cell_changed(self, col: int, row: int, value: int) -> None:
         self._document.set_world_tile(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
