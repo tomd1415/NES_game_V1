@@ -488,6 +488,16 @@ class MainWindow(QMainWindow):
         self.animation_list.setAccessibleName("Project animations")
         chars_layout.addWidget(self.animation_list)
         self.editor_stack.addWidget(self.chars_editor)
+        self.rules_editor = QFrame(self.editor_stack)
+        self.rules_editor.setObjectName("rulesEditor")
+        rules_layout = QVBoxLayout(self.rules_editor)
+        rules_layout.addWidget(QLabel("GAME STYLE", self.rules_editor))
+        self.game_style = QComboBox(self.rules_editor)
+        self.game_style.setObjectName("gameStyleSelector")
+        self.game_style.addItems(["platformer", "topdown", "runner", "racer", "smb"])
+        self.game_style.currentTextChanged.connect(self._set_game_style)
+        rules_layout.addWidget(self.game_style)
+        self.editor_stack.addWidget(self.rules_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
@@ -553,7 +563,7 @@ class MainWindow(QMainWindow):
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
         self.editor_stack.setCurrentWidget(
-            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.world_canvas
+            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.rules_editor if mode == "RULES" else self.world_canvas
         )
         if mode == "CODE":
             self._refresh_code_preview()
@@ -564,6 +574,8 @@ class MainWindow(QMainWindow):
         if mode == "CHARS":
             self._refresh_sprite_editor()
             self._refresh_animation_list()
+        if mode == "RULES":
+            self._refresh_rules_editor()
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
@@ -758,6 +770,18 @@ class MainWindow(QMainWindow):
                 self.animation_list.addItem(
                     f"{animation.get('name') or 'Animation'} — {animation.get('fps', 8)} fps ({len(animation.get('frames') or [])} frames)"
                 )
+
+    def _refresh_rules_editor(self) -> None:
+        builder = self._document.state.get("builder") or {}
+        style = (((builder.get("modules") or {}).get("game") or {}).get("config") or {}).get("type", "platformer")
+        self.game_style.blockSignals(True)
+        self.game_style.setCurrentText(style if style in {"platformer", "topdown", "runner", "racer", "smb"} else "platformer")
+        self.game_style.blockSignals(False)
+
+    def _set_game_style(self, style: str) -> None:
+        self._document.set_game_style(style)
+        self._session.schedule_save()
+        self._update_document_title()
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)
