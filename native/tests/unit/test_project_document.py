@@ -152,6 +152,16 @@ def test_sprite_tiles_are_independent_from_background_tiles() -> None:
     assert document.sprite_tile_pixels(7)[4][4] == 2
 
 
+def test_duplicate_tiles_copies_into_the_first_available_slot_per_bank() -> None:
+    document = ProjectDocument.preview()
+    document.set_background_tile_pixel(7, 0, 0, 3)
+    document.set_sprite_tile_pixel(7, 0, 0, 2)
+    assert document.duplicate_background_tile(7) == 0
+    assert document.duplicate_sprite_tile(7) == 0
+    assert document.background_tile_pixels(0)[0][0] == 3
+    assert document.sprite_tile_pixels(0)[0][0] == 2
+
+
 def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:
     document = ProjectDocument.preview()
     assert document.add_animation("Walk", fps=12, frames=[0, 1]) == 0

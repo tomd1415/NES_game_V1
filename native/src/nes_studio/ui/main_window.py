@@ -457,6 +457,10 @@ class MainWindow(QMainWindow):
             button.setObjectName(f"tile{operation.title().replace('_', '')}Button")
             button.clicked.connect(lambda _checked=False, operation=operation: self._transform_tile(operation))
             tile_operations.addWidget(button)
+        duplicate_button = QPushButton("Duplicate", self.tile_editor)
+        duplicate_button.setObjectName("duplicateTileButton")
+        duplicate_button.clicked.connect(self._duplicate_tile)
+        tile_operations.addWidget(duplicate_button)
         tile_layout.addLayout(tile_operations)
         tile_grid = QGridLayout()
         tile_grid.setSpacing(1)
@@ -783,6 +787,17 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Applied {operation.replace('_', ' ')} to tile 0x{index:02X}")
+
+    def _duplicate_tile(self) -> None:
+        try:
+            index = self._document.duplicate_sprite_tile(self.tile_selector.value()) if self.tile_bank.currentData() == "sprite" else self._document.duplicate_background_tile(self.tile_selector.value())
+        except ValueError as exc:
+            QMessageBox.information(self, "Duplicate tile", str(exc))
+            return
+        self.tile_selector.setValue(index)
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Duplicated tile into 0x{index:02X}")
 
     def _tile_pixels(self) -> list[list[int]]:
         if self.tile_bank.currentData() == "sprite":

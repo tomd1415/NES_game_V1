@@ -176,6 +176,21 @@ class ProjectDocument:
     def transform_sprite_tile(self, index: int, operation: str) -> None:
         self._transform_tile("sprite_tiles", index, operation)
 
+    def duplicate_background_tile(self, index: int) -> int:
+        return self._duplicate_tile("bg_tiles", index)
+
+    def duplicate_sprite_tile(self, index: int) -> int:
+        return self._duplicate_tile("sprite_tiles", index)
+
+    def _duplicate_tile(self, group: str, index: int) -> int:
+        source = copy.deepcopy(self._tile_pixels(group, index))
+        target = next((candidate for candidate in range(256) if candidate != index and all(value == 0 for row in self._tile_pixels(group, candidate) for value in row)), None)
+        if target is None:
+            raise ValueError("No empty tile slot is available")
+        self._ensure_tile_pixels(group, target)[:] = source
+        self.dirty = True
+        return target
+
     def _transform_tile(self, group: str, index: int, operation: str) -> None:
         pixels = self._ensure_tile_pixels(group, index)
         if operation == "clear":

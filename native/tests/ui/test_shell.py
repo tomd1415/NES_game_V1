@@ -119,6 +119,10 @@ class NativeShellTests(unittest.TestCase):
         self.assertEqual(window._document.sprite_tile_pixels(7)[4][3], 1)
         self.assertEqual(window._document.background_tile_pixels(7)[4][3], 1)
         window.tile_bank.setCurrentIndex(0)
+        window.tile_selector.setValue(7)
+        window.findChild(object, "duplicateTileButton").click()
+        self.assertEqual(window.tile_selector.value(), 0)
+        self.assertEqual(window._document.background_tile_pixels(0)[4][3], 1)
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "project.json"
             window.select_mode("WORLD")
