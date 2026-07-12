@@ -126,6 +126,14 @@ def test_sprite_lifecycle_supports_roles_flying_and_deep_duplicate() -> None:
     assert document.sprite_names() == ["Buddy"]
 
 
+def test_sprite_resize_preserves_existing_cells_and_marks_new_cells_empty() -> None:
+    document = ProjectDocument.preview()
+    sprite = document.add_sprite("Hero")
+    document.resize_sprite(sprite, 2, 2)
+    assert document.state["sprites"][sprite]["cells"][0][0]["empty"] is False
+    assert document.state["sprites"][sprite]["cells"][1][1]["empty"] is True
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

@@ -238,6 +238,24 @@ class ProjectDocument:
             sprite["flying"] = bool(flying)
             self.dirty = True
 
+    def resize_sprite(self, index: int, width: int, height: int) -> None:
+        if not 1 <= width <= 8 or not 1 <= height <= 8:
+            raise ValueError("Sprite dimensions must be 1..8 tiles")
+        sprite = self._sprite_at(index)
+        cells = sprite.get("cells") if isinstance(sprite.get("cells"), list) else []
+        resized = [
+            [
+                copy.deepcopy(cells[row][column])
+                if row < len(cells) and isinstance(cells[row], list) and column < len(cells[row]) and isinstance(cells[row][column], dict)
+                else {"tile": 0, "palette": 0, "empty": True}
+                for column in range(width)
+            ]
+            for row in range(height)
+        ]
+        if sprite.get("width") != width or sprite.get("height") != height or sprite.get("cells") != resized:
+            sprite["width"], sprite["height"], sprite["cells"] = width, height, resized
+            self.dirty = True
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):

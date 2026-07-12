@@ -457,6 +457,18 @@ class MainWindow(QMainWindow):
         self.sprite_flying = QCheckBox("Flying (ignore gravity)", self.chars_editor)
         self.sprite_flying.toggled.connect(self._set_sprite_flying)
         chars_layout.addWidget(self.sprite_flying)
+        dimensions = QHBoxLayout()
+        self.sprite_width = QSpinBox(self.chars_editor)
+        self.sprite_width.setRange(1, 8)
+        self.sprite_width.setPrefix("W ")
+        self.sprite_width.valueChanged.connect(self._resize_sprite)
+        dimensions.addWidget(self.sprite_width)
+        self.sprite_height = QSpinBox(self.chars_editor)
+        self.sprite_height.setRange(1, 8)
+        self.sprite_height.setPrefix("H ")
+        self.sprite_height.valueChanged.connect(self._resize_sprite)
+        dimensions.addWidget(self.sprite_height)
+        chars_layout.addLayout(dimensions)
         self.editor_stack.addWidget(self.chars_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
@@ -622,6 +634,8 @@ class MainWindow(QMainWindow):
         enabled = index >= 0 and index < len(self._document.sprite_names())
         self.sprite_role.setEnabled(enabled)
         self.sprite_flying.setEnabled(enabled)
+        self.sprite_width.setEnabled(enabled)
+        self.sprite_height.setEnabled(enabled)
         if not enabled:
             return
         sprite = self._document.state["sprites"][index]
@@ -631,6 +645,10 @@ class MainWindow(QMainWindow):
         self.sprite_flying.blockSignals(True)
         self.sprite_flying.setChecked(bool(sprite.get("flying", False)))
         self.sprite_flying.blockSignals(False)
+        for control, value in ((self.sprite_width, int(sprite.get("width") or 1)), (self.sprite_height, int(sprite.get("height") or 1))):
+            control.blockSignals(True)
+            control.setValue(min(8, max(1, value)))
+            control.blockSignals(False)
 
     def _new_sprite(self) -> None:
         name, accepted = QInputDialog.getText(self, "New sprite", "Name:", text="Sprite")
@@ -675,6 +693,12 @@ class MainWindow(QMainWindow):
         index = self.sprite_list.currentRow()
         if index >= 0:
             self._document.set_sprite_flying(index, flying)
+            self._session.schedule_save()
+
+    def _resize_sprite(self, _value: int) -> None:
+        index = self.sprite_list.currentRow()
+        if index >= 0:
+            self._document.resize_sprite(index, self.sprite_width.value(), self.sprite_height.value())
             self._session.schedule_save()
 
     def _select_world_tool(self, tool: str) -> None:
