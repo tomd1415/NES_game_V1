@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .migrations import CURRENT_SCHEMA_VERSION, migrate_project
-from .editing import promote_background_to_metatiles
+from .editing import delete_metatile, promote_background_to_metatiles
 
 
 class ProjectFormatError(ValueError):
@@ -762,6 +762,19 @@ class ProjectDocument:
             background.pop("metatiles", None)
             background.pop("mtmap", None)
             self.dirty = True
+
+    def add_metatile(self) -> int:
+        if self.background_tile_mode() != "16x16":
+            raise ValueError("Promote the background to 16×16 blocks first")
+        blocks = self._selected_background().setdefault("metatiles", [])
+        blocks.append({"tiles": [0, 0, 0, 0], "palette": 0, "behaviour": 0})
+        self.dirty = True
+        return len(blocks) - 1
+
+    def delete_metatile(self, index: int) -> bool:
+        deleted = delete_metatile(self._selected_background(), index)
+        if deleted: self.dirty = True
+        return deleted
 
     def set_background_dimensions(self, screens_x: int, screens_y: int) -> None:
         if (screens_x, screens_y) not in {(1, 1), (2, 1), (1, 2), (2, 2)}:

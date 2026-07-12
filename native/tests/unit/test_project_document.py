@@ -177,6 +177,13 @@ def test_background_can_promote_and_revert_the_shared_metatile_shape() -> None:
     assert document.background_tile_mode() == "8x8"
 
 
+def test_metatile_library_can_add_and_delete_blocks() -> None:
+    document = ProjectDocument.preview()
+    document.promote_selected_background_to_metatiles()
+    block = document.add_metatile()
+    assert document.delete_metatile(block)
+
+
 def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:
     document = ProjectDocument.preview()
     assert document.add_animation("Walk", fps=12, frames=[0, 1]) == 0
