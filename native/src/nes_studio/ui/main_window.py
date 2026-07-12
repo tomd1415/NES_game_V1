@@ -32,6 +32,7 @@ from ..persistence.manager import StorageManager
 from ..persistence.portability import AtomicExportError, export_project, import_project
 from ..persistence.session import ProjectSession
 from ..integrations.direct_build import DirectBuildController, NativeBuildResult
+from ..integrations.fceux import EmulatorLaunchError, FceuxLauncher
 from .diagnostics import DiagnosticsDialog
 from .widgets.world_canvas import WorldCanvas
 
@@ -69,6 +70,7 @@ class MainWindow(QMainWindow):
         self._mode_buttons: dict[str, QPushButton] = {}
         self._tool_buttons: dict[str, QPushButton] = {}
         self._build_controller = DirectBuildController(resource_locator)
+        self._fceux = FceuxLauncher.discover()
         self._build_thread: QThread | None = None
         self._build_worker: _BuildWorker | None = None
         self._last_rom: bytes | None = None
@@ -98,7 +100,11 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self.select_mode("WORLD")
         self._update_document_title()
-        self.statusBar().showMessage("Native workspace ready — preview milestone")
+        self.statusBar().showMessage(
+            "Native workspace ready"
+            if self._fceux is not None
+            else "Native workspace ready — FCEUX not found; ROM export remains available"
+        )
 
     def _create_workspace(self) -> QWidget:
         root = QWidget(self)
@@ -244,6 +250,12 @@ class MainWindow(QMainWindow):
         self.play_button.setAccessibleDescription("Build the current project in a background worker")
         self.play_button.clicked.connect(self._build_rom)
         toolbar.addWidget(self.play_button)
+        self.launch_button = QPushButton("▶ PLAY", stage)
+        self.launch_button.setObjectName("launchButton")
+        self.launch_button.setAccessibleDescription("Launch the latest built ROM in FCEUX")
+        self.launch_button.setEnabled(False)
+        self.launch_button.clicked.connect(self._launch_last_rom)
+        toolbar.addWidget(self.launch_button)
         layout.addLayout(toolbar)
 
         television = QFrame(stage)
@@ -466,6 +478,8 @@ class MainWindow(QMainWindow):
     def _build_succeeded(self, result: NativeBuildResult) -> None:
         self._last_rom = result.rom
         self.export_rom_action.setEnabled(True)
+        self.launch_button.setEnabled(self._fceux is not None)
+        self.play_action.setEnabled(self._fceux is not None)
         self.statusBar().showMessage(f"Built ROM ({len(result.rom):,} bytes) — ready to export")
 
     def _build_failed(self, message: str) -> None:
@@ -493,6 +507,19 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Could not export ROM", destination.errorString())
             return
         self.statusBar().showMessage(f"Exported ROM to {path}")
+
+    def _launch_last_rom(self) -> None:
+        if self._last_rom is None or self._fceux is None:
+            self.statusBar().showMessage("FCEUX is not installed — export the ROM and open it manually")
+            return
+        try:
+            target = self._fceux.launch(
+                self._last_rom, self._storage.data_root / "roms" / "latest.nes"
+            )
+        except EmulatorLaunchError as exc:
+            QMessageBox.critical(self, "Could not launch FCEUX", str(exc))
+            return
+        self.statusBar().showMessage(f"Launched FCEUX with {target}")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
         self._snapshot_timer.stop()
@@ -635,7 +662,10 @@ class MainWindow(QMainWindow):
         build_action = QAction("&Build ROM", self)
         build_action.triggered.connect(self._build_rom)
         build_menu.addAction(build_action)
-        self._add_placeholder(build_menu, "&Play")
+        self.play_action = QAction("&Play in FCEUX", self)
+        self.play_action.setEnabled(False)
+        self.play_action.triggered.connect(self._launch_last_rom)
+        build_menu.addAction(self.play_action)
 
         help_menu = self.menuBar().addMenu("&Help")
         about_action = QAction("&About NES Studio", self)
