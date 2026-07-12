@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from PySide6.QtCore import QCoreApplication, QObject, Slot
+from PySide6.QtCore import QObject, Slot
 from PySide6.QtQml import QJSEngine, QJSValue
+from PySide6.QtWidgets import QApplication
 
 
 class CodegenError(RuntimeError):
@@ -49,6 +50,8 @@ class _ConsoleBridge(QObject):
 
 _CONSOLE_SHIM = r"""
 var globalThis = this;
+var window = this;
+var self = this;
 globalThis.console = {};
 for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
   globalThis.console[level] = (...args) => {
@@ -60,6 +63,8 @@ for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
   };
 }
 """
+
+_application: QApplication | None = None
 
 
 class CodegenRuntime:
@@ -81,7 +86,10 @@ class CodegenRuntime:
         *,
         globals: dict[str, Any] | None = None,
     ) -> CodegenResult:
-        QCoreApplication.instance() or QCoreApplication([])
+        global _application
+        _application = QApplication.instance() or QApplication(
+            ["nes-studio-codegen", "-platform", "offscreen"]
+        )
         engine = QJSEngine()
         bridge = _ConsoleBridge()
         engine.globalObject().setProperty("__codegenConsole", engine.newQObject(bridge))
