@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .migrations import CURRENT_SCHEMA_VERSION, migrate_project
+from .editing import promote_background_to_metatiles
 
 
 class ProjectFormatError(ValueError):
@@ -744,6 +745,23 @@ class ProjectDocument:
             return int(dimensions["screens_x"]), int(dimensions["screens_y"])
         except (KeyError, TypeError, ValueError) as exc:
             raise ProjectFormatError("Background dimensions are invalid") from exc
+
+    def background_tile_mode(self) -> str:
+        return str(self._selected_background().get("tileMode") or "8x8")
+
+    def promote_selected_background_to_metatiles(self) -> None:
+        background = self._selected_background()
+        if self.background_tile_mode() != "16x16":
+            promote_background_to_metatiles(background)
+            self.dirty = True
+
+    def revert_selected_background_to_tiles(self) -> None:
+        background = self._selected_background()
+        if self.background_tile_mode() == "16x16":
+            background["tileMode"] = "8x8"
+            background.pop("metatiles", None)
+            background.pop("mtmap", None)
+            self.dirty = True
 
     def set_background_dimensions(self, screens_x: int, screens_y: int) -> None:
         if (screens_x, screens_y) not in {(1, 1), (2, 1), (1, 2), (2, 2)}:
