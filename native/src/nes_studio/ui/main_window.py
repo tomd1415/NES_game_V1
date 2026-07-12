@@ -628,6 +628,13 @@ class MainWindow(QMainWindow):
         self.attack_button.addItems(["none", "a", "b"])
         self.attack_button.currentTextChanged.connect(lambda value: self._set_player_option("attackButton", value))
         rules_layout.addWidget(self.attack_button)
+        rules_layout.addWidget(QLabel("GLOBAL PHYSICS", self.rules_editor))
+        self.global_options: dict[str, QSpinBox] = {}
+        for key, label, minimum, maximum in (("gravityPx", "Gravity", 0, 4), ("jumpSpeedPx", "Jump speed", 1, 6)):
+            control = QSpinBox(self.rules_editor); control.setRange(minimum, maximum); control.setPrefix(f"{label}: "); control.valueChanged.connect(lambda value, key=key: self._set_global_option(key, value)); self.global_options[key] = control; rules_layout.addWidget(control)
+        self.walk_bob = QCheckBox("Bob when walking", self.rules_editor)
+        self.walk_bob.toggled.connect(lambda value: self._set_global_option("bobWhenWalking", value))
+        rules_layout.addWidget(self.walk_bob)
         self.editor_stack.addWidget(self.rules_editor)
         self.sound_editor = QFrame(self.editor_stack)
         self.sound_editor.setObjectName("soundEditor")
@@ -1108,6 +1115,10 @@ class MainWindow(QMainWindow):
         self.attack_button.blockSignals(True)
         self.attack_button.setCurrentText(str(player_config.get("attackButton", "none")))
         self.attack_button.blockSignals(False)
+        globals_config = (((builder.get("modules") or {}).get("globals") or {}).get("config") or {})
+        for key, default in (("gravityPx", 1), ("jumpSpeedPx", 2)):
+            self.global_options[key].blockSignals(True); self.global_options[key].setValue(int(globals_config.get(key, default))); self.global_options[key].blockSignals(False)
+        self.walk_bob.blockSignals(True); self.walk_bob.setChecked(bool(globals_config.get("bobWhenWalking", False))); self.walk_bob.blockSignals(False)
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
@@ -1121,6 +1132,11 @@ class MainWindow(QMainWindow):
 
     def _set_player_option(self, key: str, value: int | str) -> None:
         self._document.set_player_option(key, value)
+        self._session.schedule_save()
+        self._update_document_title()
+
+    def _set_global_option(self, key: str, value: int | bool) -> None:
+        self._document.set_global_option(key, value)
         self._session.schedule_save()
         self._update_document_title()
 

@@ -102,6 +102,9 @@ class NativeShellTests(unittest.TestCase):
         player_config = window._document.state["builder"]["modules"]["players"]["submodules"]["player1"]["config"]
         self.assertEqual(player_config["startX"], 88)
         self.assertEqual(player_config["attackButton"], "a")
+        window.global_options["gravityPx"].setValue(3)
+        window.walk_bob.setChecked(True)
+        self.assertEqual(window._document.state["builder"]["modules"]["globals"]["config"]["gravityPx"], 3)
         window._document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")
         window.select_mode("SOUND")
         self.assertEqual(window.editor_stack.currentWidget(), window.sound_editor)
