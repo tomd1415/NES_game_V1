@@ -1191,6 +1191,10 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Nothing to paste — copy a WORLD region first")
 
     def _world_cell_changed(self, col: int, row: int, value: int) -> None:
+        if self._document.background_tile_mode() == "16x16" and self.metatile_list.currentRow() >= 0:
+            self._document.stamp_metatile(col + self._world_screen_x * 32, row + self._world_screen_y * 30, self.metatile_list.currentRow())
+            self._world_value_changed("metatile")
+            return
         self._document.set_world_tile(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
         default_behaviour = self._document.background_tile_default_behaviour(value)
         if default_behaviour is not None and self.world_canvas.tool in {"paint", "fill"}:

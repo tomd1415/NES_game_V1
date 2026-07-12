@@ -185,6 +185,8 @@ def test_metatile_library_can_add_and_delete_blocks() -> None:
     block = document.add_metatile()
     document.set_metatile(block, tiles=[1, 2, 3, 4], palette=2, behaviour=7)
     assert document.state["backgrounds"][0]["metatiles"][block] == {"tiles": [1, 2, 3, 4], "palette": 2, "behaviour": 7}
+    document.stamp_metatile(4, 6, block)
+    assert document.state["backgrounds"][0]["mtmap"][3][2] == block
 
 
 def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:

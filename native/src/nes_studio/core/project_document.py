@@ -791,6 +791,21 @@ class ProjectDocument:
             block["behaviour"] = behaviour
         self.dirty = True
 
+    def stamp_metatile(self, column: int, row: int, identifier: int) -> None:
+        background = self._selected_background()
+        blocks = background.get("metatiles") or []
+        if self.background_tile_mode() != "16x16" or not 0 <= identifier < len(blocks): raise ValueError("Unknown metatile")
+        map_row, map_column = row // 2, column // 2
+        mtmap = background.get("mtmap") or []
+        if not 0 <= map_row < len(mtmap) or not isinstance(mtmap[map_row], list) or not 0 <= map_column < len(mtmap[map_row]): raise IndexError("Metatile coordinates outside world")
+        mtmap[map_row][map_column] = identifier
+        block = blocks[identifier]
+        tiles, palette, behaviour = block.get("tiles") or [0, 0, 0, 0], int(block.get("palette") or 0), int(block.get("behaviour") or 0)
+        for offset, (dy, dx) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
+            background["nametable"][map_row * 2 + dy][map_column * 2 + dx] = {"tile": int(tiles[offset]) if offset < len(tiles) else 0, "palette": palette}
+            background["behaviour"][map_row * 2 + dy][map_column * 2 + dx] = behaviour
+        self.dirty = True
+
     def set_background_dimensions(self, screens_x: int, screens_y: int) -> None:
         if (screens_x, screens_y) not in {(1, 1), (2, 1), (1, 2), (2, 2)}:
             raise ValueError("WORLD layout must be 1×1, 2×1, 1×2, or 2×2")
