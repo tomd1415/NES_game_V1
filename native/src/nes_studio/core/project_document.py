@@ -294,6 +294,20 @@ class ProjectDocument:
         frames.append(sprite_index)
         self.dirty = True
 
+    def set_game_style(self, style: str) -> None:
+        if style not in {"platformer", "topdown", "runner", "racer", "smb"}:
+            raise ValueError("Unknown game style")
+        builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
+        modules = builder.setdefault("modules", {}) if isinstance(builder, dict) else {}
+        if not isinstance(modules, dict):
+            modules = {}; builder["modules"] = modules
+        game = modules.setdefault("game", {"enabled": True, "config": {}})
+        if not isinstance(game, dict): game = {}; modules["game"] = game
+        config = game.setdefault("config", {})
+        if not isinstance(config, dict): config = {}; game["config"] = config
+        if config.get("type") != style:
+            config["type"] = style; self.dirty = True
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):
