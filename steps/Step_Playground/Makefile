@@ -55,6 +55,19 @@ AUDIO_OBJS = $(BUILD)/famistudio_crt0.o $(BUILD)/famistudio_engine.o $(BUILD)/au
 CFLAGS    += -DUSE_AUDIO=1
 endif
 
+# SMB background status bar (sprite-0 split): its PPU push runs from the NMI so
+# the strip renders on time regardless of frame load (see src/hud_crt0.s +
+# hud_present() in main.c).  HUD_NMI=1 (the playground server sets it when the
+# bg status bar is enabled) links hud_crt0.o, which REPLACES whichever crt0 would
+# otherwise link — cc65's stock crt0, or famistudio_crt0.o when audio is also on
+# (famistudio_update keeps ticking from the main loop, so no audio coupling is
+# lost).  Off by default -> non-HUD ROMs keep their existing crt0, byte-identical.
+HUD_NMI ?= 0
+ifeq ($(HUD_NMI),1)
+AUDIO_OBJS := $(filter-out $(BUILD)/famistudio_crt0.o,$(AUDIO_OBJS))
+HUD_OBJS = $(BUILD)/hud_crt0.o
+endif
+
 # Hand-written 6502 scroll helpers (asm-lab integration).  Off by default so the
 # ROM is byte-identical to the pure-C engine.  NES_ASM_SCROLL=1 links
 # src/scroll_asm.s (world_to_screen_x/y) and -D's out the matching C bodies in
@@ -179,7 +192,7 @@ endif
 
 C_OBJ   = $(patsubst src/%.c,$(BUILD)/%.o,$(C_SRC))
 ASM_OBJ = $(patsubst src/%.s,$(BUILD)/%.o,$(ASM_SRC))
-OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS)
+OBJECTS = $(C_OBJ) $(ASM_OBJ) $(AUDIO_OBJS) $(HUD_OBJS)
 
 .PHONY: all clean run rebuild-run
 
