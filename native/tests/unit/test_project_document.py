@@ -178,6 +178,15 @@ def test_game_style_uses_the_shared_builder_game_config() -> None:
     assert document.state["builder"]["modules"]["game"]["config"]["racerLaps"] == 7
 
 
+def test_player_options_use_the_shared_builder_player_one_config() -> None:
+    document = ProjectDocument.preview()
+    document.set_player_option("startX", 88)
+    document.set_player_option("attackButton", "a")
+    assert document.state["builder"]["modules"]["players"]["submodules"]["player1"] == {
+        "enabled": True, "config": {"startX": 88, "attackButton": "a"},
+    }
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

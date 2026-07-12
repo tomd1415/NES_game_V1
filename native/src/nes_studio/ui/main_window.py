@@ -540,6 +540,26 @@ class MainWindow(QMainWindow):
             control.valueChanged.connect(lambda value, key=key: self._set_game_option(key, value))
             self.game_options[key] = control
             rules_layout.addWidget(control)
+        rules_layout.addWidget(QLabel("PLAYER 1", self.rules_editor))
+        self.player_options: dict[str, QSpinBox] = {}
+        for key, label, minimum, maximum in (
+            ("startX", "Start X", 0, 240), ("startY", "Start Y", 16, 200),
+            ("walkSpeed", "Walk speed", 1, 4), ("jumpHeight", "Jump height", 8, 40),
+            ("maxHp", "Max HP", 0, 9),
+        ):
+            control = QSpinBox(self.rules_editor)
+            control.setObjectName(f"player{key[0].upper()}{key[1:]}Control")
+            control.setAccessibleName(label)
+            control.setPrefix(f"{label}: ")
+            control.setRange(minimum, maximum)
+            control.valueChanged.connect(lambda value, key=key: self._set_player_option(key, value))
+            self.player_options[key] = control
+            rules_layout.addWidget(control)
+        self.attack_button = QComboBox(self.rules_editor)
+        self.attack_button.setObjectName("attackButtonSelector")
+        self.attack_button.addItems(["none", "a", "b"])
+        self.attack_button.currentTextChanged.connect(lambda value: self._set_player_option("attackButton", value))
+        rules_layout.addWidget(self.attack_button)
         self.editor_stack.addWidget(self.rules_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
@@ -891,6 +911,17 @@ class MainWindow(QMainWindow):
             control.blockSignals(True)
             control.setValue(int(config.get(key, default)))
             control.blockSignals(False)
+        player = (((builder.get("modules") or {}).get("players") or {}).get("submodules") or {}).get("player1") or {}
+        player_config = player.get("config") if isinstance(player, dict) else {}
+        player_config = player_config if isinstance(player_config, dict) else {}
+        for key, default in (("startX", 60), ("startY", 120), ("walkSpeed", 1), ("jumpHeight", 20), ("maxHp", 0)):
+            control = self.player_options[key]
+            control.blockSignals(True)
+            control.setValue(int(player_config.get(key, default)))
+            control.blockSignals(False)
+        self.attack_button.blockSignals(True)
+        self.attack_button.setCurrentText(str(player_config.get("attackButton", "none")))
+        self.attack_button.blockSignals(False)
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
@@ -899,6 +930,11 @@ class MainWindow(QMainWindow):
 
     def _set_game_option(self, key: str, value: int) -> None:
         self._document.set_game_option(key, value)
+        self._session.schedule_save()
+        self._update_document_title()
+
+    def _set_player_option(self, key: str, value: int | str) -> None:
+        self._document.set_player_option(key, value)
         self._session.schedule_save()
         self._update_document_title()
 

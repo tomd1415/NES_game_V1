@@ -83,6 +83,11 @@ class NativeShellTests(unittest.TestCase):
         window.game_style.setCurrentText("racer")
         window.game_options["racerTopSpeed"].setValue(4)
         self.assertEqual(window._document.state["builder"]["modules"]["game"]["config"]["racerTopSpeed"], 4)
+        window.player_options["startX"].setValue(88)
+        window.attack_button.setCurrentText("a")
+        player_config = window._document.state["builder"]["modules"]["players"]["submodules"]["player1"]["config"]
+        self.assertEqual(player_config["startX"], 88)
+        self.assertEqual(player_config["attackButton"], "a")
         window.select_mode("CODE")
         self.assertEqual(window.editor_stack.currentWidget(), window.code_preview)
         self.assertIn("#include", window.code_preview.toPlainText())

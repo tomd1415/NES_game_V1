@@ -375,6 +375,32 @@ class ProjectDocument:
             config[key] = value
             self.dirty = True
 
+    def set_player_option(self, key: str, value: int | str) -> None:
+        ranges = {
+            "startX": (0, 240), "startY": (16, 200), "walkSpeed": (1, 4),
+            "jumpHeight": (8, 40), "maxHp": (0, 9),
+        }
+        valid = (key in ranges and isinstance(value, int) and ranges[key][0] <= value <= ranges[key][1]) or (
+            key == "attackButton" and value in {"none", "a", "b"}
+        )
+        if not valid:
+            raise ValueError("Invalid player option")
+        builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
+        modules = builder.setdefault("modules", {}) if isinstance(builder, dict) else {}
+        if not isinstance(modules, dict):
+            modules = {}; builder["modules"] = modules
+        players = modules.setdefault("players", {"enabled": True, "config": {"count": 1}, "submodules": {}})
+        if not isinstance(players, dict): players = {}; modules["players"] = players
+        submodules = players.setdefault("submodules", {})
+        if not isinstance(submodules, dict): submodules = {}; players["submodules"] = submodules
+        player = submodules.setdefault("player1", {"enabled": True, "config": {}})
+        if not isinstance(player, dict): player = {}; submodules["player1"] = player
+        config = player.setdefault("config", {})
+        if not isinstance(config, dict): config = {}; player["config"] = config
+        if config.get(key) != value:
+            config[key] = value
+            self.dirty = True
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):
