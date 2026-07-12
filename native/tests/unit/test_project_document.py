@@ -134,6 +134,15 @@ def test_sprite_resize_preserves_existing_cells_and_marks_new_cells_empty() -> N
     assert document.state["sprites"][sprite]["cells"][1][1]["empty"] is True
 
 
+def test_sprite_cell_edits_use_the_oam_tile_palette_and_empty_shape() -> None:
+    document = ProjectDocument.preview()
+    sprite = document.add_sprite("Hero")
+    document.set_sprite_cell(sprite, 0, 0, tile=42, palette=3)
+    assert document.state["sprites"][sprite]["cells"][0][0] == {
+        "tile": 42, "palette": 3, "empty": False,
+    }
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)
