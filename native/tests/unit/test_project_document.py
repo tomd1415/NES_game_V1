@@ -171,7 +171,11 @@ def test_animation_editing_and_assignments_keep_the_web_project_contract() -> No
 def test_game_style_uses_the_shared_builder_game_config() -> None:
     document = ProjectDocument.preview()
     document.set_game_style("racer")
+    document.set_game_option("racerTopSpeed", 4)
+    document.set_game_option("racerLaps", 7)
     assert document.state["builder"]["modules"]["game"]["config"]["type"] == "racer"
+    assert document.state["builder"]["modules"]["game"]["config"]["racerTopSpeed"] == 4
+    assert document.state["builder"]["modules"]["game"]["config"]["racerLaps"] == 7
 
 
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:

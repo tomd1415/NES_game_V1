@@ -525,6 +525,21 @@ class MainWindow(QMainWindow):
         self.game_style.addItems(["platformer", "topdown", "runner", "racer", "smb"])
         self.game_style.currentTextChanged.connect(self._set_game_style)
         rules_layout.addWidget(self.game_style)
+        self.game_options: dict[str, QSpinBox] = {}
+        for key, label, minimum, maximum in (
+            ("autoscrollSpeed", "Runner scroll speed", 1, 4),
+            ("racerTopSpeed", "Racer top speed", 1, 4),
+            ("racerLaps", "Racer laps", 1, 9),
+            ("racerCheckpoints", "Racer checkpoints", 1, 2),
+        ):
+            control = QSpinBox(self.rules_editor)
+            control.setObjectName(f"{key}Control")
+            control.setAccessibleName(label)
+            control.setPrefix(f"{label}: ")
+            control.setRange(minimum, maximum)
+            control.valueChanged.connect(lambda value, key=key: self._set_game_option(key, value))
+            self.game_options[key] = control
+            rules_layout.addWidget(control)
         self.editor_stack.addWidget(self.rules_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
@@ -866,13 +881,24 @@ class MainWindow(QMainWindow):
 
     def _refresh_rules_editor(self) -> None:
         builder = self._document.state.get("builder") or {}
-        style = (((builder.get("modules") or {}).get("game") or {}).get("config") or {}).get("type", "platformer")
+        config = ((builder.get("modules") or {}).get("game") or {}).get("config") or {}
+        style = config.get("type", "platformer")
         self.game_style.blockSignals(True)
         self.game_style.setCurrentText(style if style in {"platformer", "topdown", "runner", "racer", "smb"} else "platformer")
         self.game_style.blockSignals(False)
+        for key, default in (("autoscrollSpeed", 2), ("racerTopSpeed", 3), ("racerLaps", 3), ("racerCheckpoints", 1)):
+            control = self.game_options[key]
+            control.blockSignals(True)
+            control.setValue(int(config.get(key, default)))
+            control.blockSignals(False)
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
+        self._session.schedule_save()
+        self._update_document_title()
+
+    def _set_game_option(self, key: str, value: int) -> None:
+        self._document.set_game_option(key, value)
         self._session.schedule_save()
         self._update_document_title()
 
