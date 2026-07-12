@@ -147,6 +147,9 @@ def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:
     document = ProjectDocument.preview()
     assert document.add_animation("Walk", fps=12, frames=[0, 1]) == 0
     assert document.state["animations"][0] == {"id": 1, "name": "Walk", "fps": 12, "frames": [0, 1]}
+    sprite = document.add_sprite("Hero")
+    document.append_animation_frame(0, sprite)
+    assert document.state["animations"][0]["frames"] == [0, 1, sprite]
 
 
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:

@@ -281,6 +281,19 @@ class ProjectDocument:
         self.dirty = True
         return len(animations) - 1
 
+    def append_animation_frame(self, animation_index: int, sprite_index: int) -> None:
+        animations = self.state.get("animations") or []
+        if not 0 <= animation_index < len(animations) or not 0 <= sprite_index < len(self._sprites()):
+            raise IndexError("Animation or sprite index outside project")
+        animation = animations[animation_index]
+        if not isinstance(animation, dict):
+            raise ValueError("Animation is malformed")
+        frames = animation.setdefault("frames", [])
+        if not isinstance(frames, list):
+            frames = []; animation["frames"] = frames
+        frames.append(sprite_index)
+        self.dirty = True
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):
