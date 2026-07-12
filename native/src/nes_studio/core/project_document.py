@@ -160,6 +160,22 @@ class ProjectDocument:
             pixels[row][column] = value
             self.dirty = True
 
+    def transform_background_tile(self, index: int, operation: str) -> None:
+        pixels = self._ensure_tile_pixels("bg_tiles", index)
+        if operation == "clear":
+            transformed = [[0 for _ in range(8)] for _ in range(8)]
+        elif operation == "flip_h":
+            transformed = [list(reversed(row)) for row in pixels]
+        elif operation == "flip_v":
+            transformed = list(reversed([list(row) for row in pixels]))
+        elif operation == "rotate":
+            transformed = [[pixels[7 - column][row] for column in range(8)] for row in range(8)]
+        else:
+            raise ValueError(f"Unknown tile transformation: {operation}")
+        if pixels != transformed:
+            pixels[:] = transformed
+            self.dirty = True
+
     def _tile_pixels(self, group: str, index: int) -> list[list[int]]:
         if not 0 <= index < 256:
             raise IndexError("NES tile index must be 0..255")

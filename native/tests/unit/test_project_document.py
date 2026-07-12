@@ -99,6 +99,19 @@ def test_background_tile_pixels_are_lazily_initialized_and_editable() -> None:
     assert len(document.state["bg_tiles"]) == 256
 
 
+def test_background_tile_transforms_are_canonical_and_reversible_by_callers() -> None:
+    document = ProjectDocument.preview()
+    document.set_background_tile_pixel(4, 0, 0, 1)
+    document.set_background_tile_pixel(4, 7, 0, 2)
+    document.transform_background_tile(4, "flip_h")
+    assert document.background_tile_pixels(4)[0][0] == 2
+    assert document.background_tile_pixels(4)[0][7] == 1
+    document.transform_background_tile(4, "rotate")
+    assert document.background_tile_pixels(4)[0][7] == 2
+    document.transform_background_tile(4, "clear")
+    assert document.background_tile_pixels(4) == [[0] * 8 for _ in range(8)]
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

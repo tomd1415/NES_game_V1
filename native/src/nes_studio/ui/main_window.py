@@ -414,6 +414,13 @@ class MainWindow(QMainWindow):
         self.tile_selector.valueChanged.connect(self._refresh_tile_editor)
         selector_row.addWidget(self.tile_selector)
         tile_layout.addLayout(selector_row)
+        tile_operations = QHBoxLayout()
+        for label, operation in (("Clear", "clear"), ("Flip H", "flip_h"), ("Flip V", "flip_v"), ("Rotate", "rotate")):
+            button = QPushButton(label, self.tile_editor)
+            button.setObjectName(f"tile{operation.title().replace('_', '')}Button")
+            button.clicked.connect(lambda _checked=False, operation=operation: self._transform_tile(operation))
+            tile_operations.addWidget(button)
+        tile_layout.addLayout(tile_operations)
         tile_grid = QGridLayout()
         tile_grid.setSpacing(1)
         self._tile_pixel_buttons: list[QPushButton] = []
@@ -564,6 +571,14 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Tile 0x{index:02X} pixel {column}, {row} set to {value}")
+
+    def _transform_tile(self, operation: str) -> None:
+        index = self.tile_selector.value()
+        self._document.transform_background_tile(index, operation)
+        self._refresh_tile_editor()
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Applied {operation.replace('_', ' ')} to tile 0x{index:02X}")
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)
