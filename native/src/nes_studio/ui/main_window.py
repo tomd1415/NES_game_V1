@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QInputDialog,
     QLabel,
+    QListWidget,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -435,6 +436,28 @@ class MainWindow(QMainWindow):
                 tile_grid.addWidget(button, row, column)
         tile_layout.addLayout(tile_grid)
         self.editor_stack.addWidget(self.tile_editor)
+        self.chars_editor = QFrame(self.editor_stack)
+        self.chars_editor.setObjectName("charsEditor")
+        chars_layout = QVBoxLayout(self.chars_editor)
+        chars_layout.addWidget(QLabel("SPRITES", self.chars_editor))
+        self.sprite_list = QListWidget(self.chars_editor)
+        self.sprite_list.setObjectName("spriteList")
+        self.sprite_list.currentRowChanged.connect(self._select_sprite)
+        chars_layout.addWidget(self.sprite_list)
+        sprite_actions = QHBoxLayout()
+        for label, callback in (("New", self._new_sprite), ("Duplicate", self._duplicate_sprite), ("Rename", self._rename_sprite), ("Delete", self._delete_sprite)):
+            button = QPushButton(label, self.chars_editor)
+            button.clicked.connect(callback)
+            sprite_actions.addWidget(button)
+        chars_layout.addLayout(sprite_actions)
+        self.sprite_role = QComboBox(self.chars_editor)
+        self.sprite_role.addItems(["player", "npc", "enemy", "item", "tool", "powerup", "pickup", "projectile", "decoration", "hud", "other"])
+        self.sprite_role.currentTextChanged.connect(self._set_sprite_role)
+        chars_layout.addWidget(self.sprite_role)
+        self.sprite_flying = QCheckBox("Flying (ignore gravity)", self.chars_editor)
+        self.sprite_flying.toggled.connect(self._set_sprite_flying)
+        chars_layout.addWidget(self.sprite_flying)
+        self.editor_stack.addWidget(self.chars_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
@@ -500,7 +523,7 @@ class MainWindow(QMainWindow):
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
         self.editor_stack.setCurrentWidget(
-            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.world_canvas
+            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.world_canvas
         )
         if mode == "CODE":
             self._refresh_code_preview()
@@ -508,6 +531,8 @@ class MainWindow(QMainWindow):
             self._refresh_palette_editor()
         if mode == "TILES":
             self._refresh_tile_editor()
+        if mode == "CHARS":
+            self._refresh_sprite_editor()
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
@@ -579,6 +604,78 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Applied {operation.replace('_', ' ')} to tile 0x{index:02X}")
+
+    def _refresh_sprite_editor(self, selected: int | None = None) -> None:
+        current = self.sprite_list.currentRow() if selected is None else selected
+        self.sprite_list.blockSignals(True)
+        self.sprite_list.clear()
+        for index, name in enumerate(self._document.sprite_names()):
+            sprite = self._document.state["sprites"][index]
+            self.sprite_list.addItem(f"{name} ({sprite.get('role', 'other')})")
+        self.sprite_list.setCurrentRow(
+            max(0, min(current, self.sprite_list.count() - 1)) if self.sprite_list.count() else -1
+        )
+        self.sprite_list.blockSignals(False)
+        self._select_sprite(self.sprite_list.currentRow())
+
+    def _select_sprite(self, index: int) -> None:
+        enabled = index >= 0 and index < len(self._document.sprite_names())
+        self.sprite_role.setEnabled(enabled)
+        self.sprite_flying.setEnabled(enabled)
+        if not enabled:
+            return
+        sprite = self._document.state["sprites"][index]
+        self.sprite_role.blockSignals(True)
+        self.sprite_role.setCurrentText(str(sprite.get("role") or "other"))
+        self.sprite_role.blockSignals(False)
+        self.sprite_flying.blockSignals(True)
+        self.sprite_flying.setChecked(bool(sprite.get("flying", False)))
+        self.sprite_flying.blockSignals(False)
+
+    def _new_sprite(self) -> None:
+        name, accepted = QInputDialog.getText(self, "New sprite", "Name:", text="Sprite")
+        if accepted:
+            self._refresh_sprite_editor(self._document.add_sprite(name))
+            self._session.schedule_save()
+
+    def _duplicate_sprite(self) -> None:
+        index = self.sprite_list.currentRow()
+        if index < 0:
+            return
+        name, accepted = QInputDialog.getText(self, "Duplicate sprite", "Name:", text=f"{self._document.sprite_names()[index]} copy")
+        if accepted:
+            self._refresh_sprite_editor(self._document.duplicate_sprite(index, name))
+            self._session.schedule_save()
+
+    def _rename_sprite(self) -> None:
+        index = self.sprite_list.currentRow()
+        if index < 0:
+            return
+        name, accepted = QInputDialog.getText(self, "Rename sprite", "Name:", text=self._document.sprite_names()[index])
+        if accepted:
+            self._document.rename_sprite(index, name)
+            self._refresh_sprite_editor(index)
+            self._session.schedule_save()
+
+    def _delete_sprite(self) -> None:
+        index = self.sprite_list.currentRow()
+        if index >= 0:
+            self._document.delete_sprite(index)
+            self._refresh_sprite_editor(index)
+            self._session.schedule_save()
+
+    def _set_sprite_role(self, role: str) -> None:
+        index = self.sprite_list.currentRow()
+        if index >= 0:
+            self._document.set_sprite_role(index, role)
+            self._refresh_sprite_editor(index)
+            self._session.schedule_save()
+
+    def _set_sprite_flying(self, flying: bool) -> None:
+        index = self.sprite_list.currentRow()
+        if index >= 0:
+            self._document.set_sprite_flying(index, flying)
+            self._session.schedule_save()
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)

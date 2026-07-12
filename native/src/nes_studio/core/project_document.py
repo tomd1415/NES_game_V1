@@ -176,6 +176,81 @@ class ProjectDocument:
             pixels[:] = transformed
             self.dirty = True
 
+    def sprite_names(self) -> list[str]:
+        sprites = self.state.get("sprites")
+        return [str(sprite.get("name") or f"Sprite {index + 1}") if isinstance(sprite, dict) else f"Sprite {index + 1}" for index, sprite in enumerate(sprites or [])]
+
+    def add_sprite(self, name: str, *, role: str = "other") -> int:
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("Sprite name cannot be empty")
+        sprites = self.state.setdefault("sprites", [])
+        if not isinstance(sprites, list):
+            sprites = []
+            self.state["sprites"] = sprites
+        sprites.append({
+            "name": normalized, "role": role, "width": 1, "height": 1,
+            "cells": [[{"tile": 0, "palette": 0, "empty": False}]], "flying": False,
+        })
+        self.dirty = True
+        return len(sprites) - 1
+
+    def duplicate_sprite(self, index: int, name: str) -> int:
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("Sprite name cannot be empty")
+        sprites = self._sprites()
+        if not 0 <= index < len(sprites) or not isinstance(sprites[index], dict):
+            raise IndexError("Sprite index outside project")
+        duplicate = copy.deepcopy(sprites[index])
+        duplicate["name"] = normalized
+        sprites.append(duplicate)
+        self.dirty = True
+        return len(sprites) - 1
+
+    def rename_sprite(self, index: int, name: str) -> None:
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("Sprite name cannot be empty")
+        sprite = self._sprite_at(index)
+        if sprite.get("name") != normalized:
+            sprite["name"] = normalized
+            self.dirty = True
+
+    def delete_sprite(self, index: int) -> None:
+        sprites = self._sprites()
+        if not 0 <= index < len(sprites):
+            raise IndexError("Sprite index outside project")
+        del sprites[index]
+        self.dirty = True
+
+    def set_sprite_role(self, index: int, role: str) -> None:
+        if role not in {"player", "npc", "enemy", "item", "tool", "powerup", "pickup", "projectile", "decoration", "hud", "other"}:
+            raise ValueError("Unknown sprite role")
+        sprite = self._sprite_at(index)
+        if sprite.get("role") != role:
+            sprite["role"] = role
+            self.dirty = True
+
+    def set_sprite_flying(self, index: int, flying: bool) -> None:
+        sprite = self._sprite_at(index)
+        if bool(sprite.get("flying", False)) != bool(flying):
+            sprite["flying"] = bool(flying)
+            self.dirty = True
+
+    def _sprites(self) -> list[Any]:
+        sprites = self.state.setdefault("sprites", [])
+        if not isinstance(sprites, list):
+            sprites = []
+            self.state["sprites"] = sprites
+        return sprites
+
+    def _sprite_at(self, index: int) -> dict[str, Any]:
+        sprites = self._sprites()
+        if not 0 <= index < len(sprites) or not isinstance(sprites[index], dict):
+            raise IndexError("Sprite index outside project")
+        return sprites[index]
+
     def _tile_pixels(self, group: str, index: int) -> list[list[int]]:
         if not 0 <= index < 256:
             raise IndexError("NES tile index must be 0..255")

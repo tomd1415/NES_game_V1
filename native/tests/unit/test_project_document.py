@@ -112,6 +112,20 @@ def test_background_tile_transforms_are_canonical_and_reversible_by_callers() ->
     assert document.background_tile_pixels(4) == [[0] * 8 for _ in range(8)]
 
 
+def test_sprite_lifecycle_supports_roles_flying_and_deep_duplicate() -> None:
+    document = ProjectDocument.preview()
+    first = document.add_sprite("Hero", role="player")
+    document.set_sprite_flying(first, True)
+    document.set_background_tile_pixel(0, 0, 0, 2)
+    duplicate = document.duplicate_sprite(first, "Hero copy")
+    document.rename_sprite(duplicate, "Buddy")
+    assert document.sprite_names() == ["Hero", "Buddy"]
+    assert document.state["sprites"][0]["flying"] is True
+    assert document.state["sprites"][1]["role"] == "player"
+    document.delete_sprite(0)
+    assert document.sprite_names() == ["Buddy"]
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)
