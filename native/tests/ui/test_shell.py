@@ -68,6 +68,10 @@ class NativeShellTests(unittest.TestCase):
         window.select_mode("CODE")
         self.assertEqual(window.editor_stack.currentWidget(), window.code_preview)
         self.assertIn("#include", window.code_preview.toPlainText())
+        window.select_mode("PALS")
+        self.assertEqual(window.editor_stack.currentWidget(), window.palette_editor)
+        window._background_palette_controls[0].setValue(0x2A)
+        self.assertEqual(window._document.background_palette(0)[0], 0x2A)
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "project.json"
             window.select_mode("WORLD")

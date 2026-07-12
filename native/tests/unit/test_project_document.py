@@ -77,6 +77,14 @@ def test_universal_background_is_a_valid_build_relevant_project_field() -> None:
         raise AssertionError("invalid NES backdrop colour was accepted")
 
 
+def test_background_palette_slots_are_normalized_and_preserve_the_shared_backdrop() -> None:
+    document = ProjectDocument.preview()
+    assert document.background_palette(0) == (0x0F, 0x0F, 0x0F)
+    document.set_background_palette_slot(2, 1, 0x2A)
+    assert document.background_palette(2) == (0x0F, 0x2A, 0x0F)
+    assert document.universal_background == 0x21
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

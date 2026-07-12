@@ -135,6 +135,40 @@ class ProjectDocument:
             self.state["universal_bg"] = colour
             self.dirty = True
 
+    def background_palette(self, index: int) -> tuple[int, int, int]:
+        if not 0 <= index < 4:
+            raise IndexError("Background palette index must be 0..3")
+        palettes = self.state.get("bg_palettes")
+        entry = palettes[index] if isinstance(palettes, list) and index < len(palettes) else None
+        slots = entry.get("slots") if isinstance(entry, dict) else None
+        values = slots if isinstance(slots, list) and len(slots) >= 3 else [0x0F, 0x0F, 0x0F]
+        return tuple(int(value) & 0x3F for value in values[:3])
+
+    def set_background_palette_slot(self, palette: int, slot: int, colour: int) -> None:
+        if not 0 <= palette < 4 or not 0 <= slot < 3:
+            raise IndexError("Background palette and slot must be in range")
+        if not 0 <= colour <= 0x3F:
+            raise ValueError("NES palette colour must be 0x00..0x3F")
+        palettes = self.state.setdefault("bg_palettes", [])
+        if not isinstance(palettes, list):
+            palettes = []
+            self.state["bg_palettes"] = palettes
+        while len(palettes) < 4:
+            palettes.append({"slots": [0x0F, 0x0F, 0x0F]})
+        entry = palettes[palette]
+        if not isinstance(entry, dict):
+            entry = {}
+            palettes[palette] = entry
+        slots = entry.get("slots")
+        if not isinstance(slots, list):
+            slots = list(self.background_palette(palette))
+            entry["slots"] = slots
+        while len(slots) < 3:
+            slots.append(0x0F)
+        if int(slots[slot]) != colour:
+            slots[slot] = colour
+            self.dirty = True
+
     def world_grid_options(self) -> tuple[bool, bool]:
         native_ui = self.state.get("nativeUi")
         world = native_ui.get("world") if isinstance(native_ui, dict) else None

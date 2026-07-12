@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QFileDialog,
     QHBoxLayout,
+    QGridLayout,
     QInputDialog,
     QLabel,
     QMainWindow,
@@ -363,6 +364,26 @@ class MainWindow(QMainWindow):
         self.code_preview.setAccessibleName("Generated C source preview")
         self.code_preview.setPlainText("Select CODE to generate a preview.")
         self.editor_stack.addWidget(self.code_preview)
+        self.palette_editor = QFrame(self.editor_stack)
+        self.palette_editor.setObjectName("paletteEditor")
+        palette_layout = QGridLayout(self.palette_editor)
+        palette_layout.addWidget(QLabel("BACKGROUND PALETTES — slot 0 uses the universal backdrop", self.palette_editor), 0, 0, 1, 4)
+        self._background_palette_controls: list[QSpinBox] = []
+        for palette in range(4):
+            palette_layout.addWidget(QLabel(f"BG{palette}", self.palette_editor), palette + 1, 0)
+            for slot in range(3):
+                control = QSpinBox(self.palette_editor)
+                control.setRange(0, 0x3F)
+                control.setDisplayIntegerBase(16)
+                control.setPrefix("0x")
+                control.setObjectName(f"backgroundPalette{palette}Slot{slot + 1}")
+                control.setAccessibleName(f"Background palette {palette} colour slot {slot + 1}")
+                control.valueChanged.connect(
+                    lambda value, palette=palette, slot=slot: self._set_background_palette_slot(palette, slot, value)
+                )
+                self._background_palette_controls.append(control)
+                palette_layout.addWidget(control, palette + 1, slot + 1)
+        self.editor_stack.addWidget(self.palette_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
@@ -427,9 +448,13 @@ class MainWindow(QMainWindow):
         self.behaviour_value.setEnabled(world_enabled)
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
-        self.editor_stack.setCurrentWidget(self.world_canvas if mode != "CODE" else self.code_preview)
+        self.editor_stack.setCurrentWidget(
+            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.world_canvas
+        )
         if mode == "CODE":
             self._refresh_code_preview()
+        if mode == "PALS":
+            self._refresh_palette_editor()
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
@@ -449,6 +474,20 @@ class MainWindow(QMainWindow):
             return
         self.code_preview.setPlainText(generated)
         self.statusBar().showMessage("Generated current project C source")
+
+    def _refresh_palette_editor(self) -> None:
+        for palette in range(4):
+            for slot, colour in enumerate(self._document.background_palette(palette)):
+                control = self._background_palette_controls[palette * 3 + slot]
+                control.blockSignals(True)
+                control.setValue(colour)
+                control.blockSignals(False)
+
+    def _set_background_palette_slot(self, palette: int, slot: int, colour: int) -> None:
+        self._document.set_background_palette_slot(palette, slot, colour)
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"BG{palette} palette slot {slot + 1} set to 0x{colour:02X}")
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)
