@@ -143,6 +143,12 @@ def test_sprite_cell_edits_use_the_oam_tile_palette_and_empty_shape() -> None:
     }
 
 
+def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:
+    document = ProjectDocument.preview()
+    assert document.add_animation("Walk", fps=12, frames=[0, 1]) == 0
+    assert document.state["animations"][0] == {"id": 1, "name": "Walk", "fps": 12, "frames": [0, 1]}
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

@@ -269,6 +269,18 @@ class ProjectDocument:
             cell.update({"tile": tile, "palette": palette, "empty": False})
             self.dirty = True
 
+    def add_animation(self, name: str, *, fps: int = 8, frames: list[int] | None = None) -> int:
+        if not name.strip() or not 1 <= fps <= 60:
+            raise ValueError("Animation needs a name and FPS 1..60")
+        animations = self.state.setdefault("animations", [])
+        if not isinstance(animations, list):
+            animations = []; self.state["animations"] = animations
+        identifier = int(self.state.get("nextAnimationId") or 1)
+        self.state["nextAnimationId"] = identifier + 1
+        animations.append({"id": identifier, "name": name.strip(), "fps": fps, "frames": list(frames or [])})
+        self.dirty = True
+        return len(animations) - 1
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):
