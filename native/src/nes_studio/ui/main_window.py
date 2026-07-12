@@ -656,9 +656,9 @@ class MainWindow(QMainWindow):
         for text, done in (
             ("Launch a real Qt application", True),
             ("Build the Studio workspace", True),
-            ("Open a local project", False),
-            ("Paint a WORLD tile", False),
-            ("Build and export a ROM", False),
+            ("Open and save local projects", True),
+            ("Paint WORLD tiles and entities", True),
+            ("Build and export a ROM", True),
         ):
             item = QLabel(("✓  " if done else "○  ") + text, panel)
             item.setObjectName("questComplete" if done else "questPending")
@@ -690,7 +690,7 @@ class MainWindow(QMainWindow):
                 "CODE": "Inspect or edit the generated C and 6502 assembly source.",
             }[mode]
         )
-        self.statusBar().showMessage(f"{mode.title()} mode selected — editor controls coming next")
+        self.statusBar().showMessage(f"{mode.title()} mode selected")
         world_enabled = mode == "WORLD"
         for button in self._tool_buttons.values():
             button.setEnabled(world_enabled)
