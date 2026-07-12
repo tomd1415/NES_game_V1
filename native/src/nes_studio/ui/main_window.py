@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, QTimer, Qt
+from PySide6.QtCore import QIODevice, QObject, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -31,11 +31,32 @@ from ..metadata import APP_DISPLAY_NAME, APP_VERSION
 from ..persistence.manager import StorageManager
 from ..persistence.portability import AtomicExportError, export_project, import_project
 from ..persistence.session import ProjectSession
+from ..integrations.direct_build import DirectBuildController, NativeBuildResult
 from .diagnostics import DiagnosticsDialog
 from .widgets.world_canvas import WorldCanvas
 
 
 MODE_NAMES = ("WORLD", "CHARS", "TILES", "PALS", "RULES", "SOUND", "CODE")
+
+
+class _BuildWorker(QObject):
+    succeeded = Signal(object)
+    failed = Signal(str)
+    finished = Signal()
+
+    def __init__(self, controller: DirectBuildController, document: ProjectDocument) -> None:
+        super().__init__()
+        self.controller = controller
+        self.document = document
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            self.succeeded.emit(self.controller.build(self.document))
+        except Exception as exc:  # surfaced in the desktop UI, not an event-loop traceback
+            self.failed.emit(str(exc))
+        finally:
+            self.finished.emit()
 
 
 class MainWindow(QMainWindow):
@@ -47,6 +68,10 @@ class MainWindow(QMainWindow):
         self._diagnostics: DiagnosticsDialog | None = None
         self._mode_buttons: dict[str, QPushButton] = {}
         self._tool_buttons: dict[str, QPushButton] = {}
+        self._build_controller = DirectBuildController(resource_locator)
+        self._build_thread: QThread | None = None
+        self._build_worker: _BuildWorker | None = None
+        self._last_rom: bytes | None = None
         data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
         )
@@ -214,11 +239,11 @@ class MainWindow(QMainWindow):
         self.live_badge.setObjectName("liveBadge")
         toolbar.addWidget(self.live_badge)
         toolbar.addStretch(1)
-        play = QPushButton("▶ PLAY", stage)
-        play.setObjectName("playButton")
-        play.setEnabled(False)
-        play.setAccessibleDescription("ROM build and Play will be enabled after build-core extraction")
-        toolbar.addWidget(play)
+        self.play_button = QPushButton("▶ BUILD ROM", stage)
+        self.play_button.setObjectName("playButton")
+        self.play_button.setAccessibleDescription("Build the current project in a background worker")
+        self.play_button.clicked.connect(self._build_rom)
+        toolbar.addWidget(self.play_button)
         layout.addLayout(toolbar)
 
         television = QFrame(stage)
@@ -418,6 +443,57 @@ class MainWindow(QMainWindow):
                 self._session.project_id, self._document.to_json(), reason="auto_30s"
             )
 
+    def _build_rom(self) -> None:
+        if self._build_thread is not None:
+            return
+        detached = ProjectDocument.from_json(self._document.to_json())
+        worker = _BuildWorker(self._build_controller, detached)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.succeeded.connect(self._build_succeeded)
+        worker.failed.connect(self._build_failed)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._build_finished)
+        self._build_thread = thread
+        self._build_worker = worker
+        self.play_button.setEnabled(False)
+        self.statusBar().showMessage("Building ROM in a background worker…")
+        thread.start()
+
+    def _build_succeeded(self, result: NativeBuildResult) -> None:
+        self._last_rom = result.rom
+        self.export_rom_action.setEnabled(True)
+        self.statusBar().showMessage(f"Built ROM ({len(result.rom):,} bytes) — ready to export")
+
+    def _build_failed(self, message: str) -> None:
+        self.statusBar().showMessage(f"ROM build failed: {message}")
+
+    def _build_finished(self) -> None:
+        self._build_thread = None
+        self._build_worker = None
+        self.play_button.setEnabled(True)
+
+    def _export_built_rom(self) -> None:
+        if self._last_rom is None:
+            return
+        path, _filter = QFileDialog.getSaveFileName(self, "Export NES ROM", "game.nes", "NES ROM (*.nes)")
+        if not path:
+            return
+        if not path.casefold().endswith(".nes"):
+            path += ".nes"
+        destination = QSaveFile(path)
+        if not destination.open(QIODevice.OpenModeFlag.WriteOnly):
+            QMessageBox.critical(self, "Could not export ROM", destination.errorString())
+            return
+        if destination.write(self._last_rom) != len(self._last_rom) or not destination.commit():
+            destination.cancelWriting()
+            QMessageBox.critical(self, "Could not export ROM", destination.errorString())
+            return
+        self.statusBar().showMessage(f"Exported ROM to {path}")
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
         self._snapshot_timer.stop()
         self._flush_autosave()
@@ -527,7 +603,10 @@ class MainWindow(QMainWindow):
         recover_action.setObjectName("recoverAutosaveAction")
         recover_action.triggered.connect(self._recover_autosave)
         file_menu.addAction(recover_action)
-        self._add_placeholder(file_menu, "Export &ROM…")
+        self.export_rom_action = QAction("Export Built &ROM…", self)
+        self.export_rom_action.setEnabled(False)
+        self.export_rom_action.triggered.connect(self._export_built_rom)
+        file_menu.addAction(self.export_rom_action)
         file_menu.addSeparator()
         exit_action = QAction("E&xit", self)
         exit_action.triggered.connect(self.close)
@@ -553,7 +632,9 @@ class MainWindow(QMainWindow):
         view_menu.addAction(diagnostics_action)
 
         build_menu = self.menuBar().addMenu("&Build")
-        self._add_placeholder(build_menu, "&Build ROM")
+        build_action = QAction("&Build ROM", self)
+        build_action.triggered.connect(self._build_rom)
+        build_menu.addAction(build_action)
         self._add_placeholder(build_menu, "&Play")
 
         help_menu = self.menuBar().addMenu("&Help")
