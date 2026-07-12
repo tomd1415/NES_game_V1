@@ -97,7 +97,7 @@ def test_malformed_background_and_cells_report_project_format_errors() -> None:
     try:
         ProjectDocument.from_json(json.dumps(malformed_background))
     except ProjectFormatError as exc:
-        assert "background is not an object" in str(exc)
+        assert "backgrounds[0]: must be an object" in str(exc)
     else:
         raise AssertionError("non-object background was accepted")
 
@@ -106,7 +106,7 @@ def test_malformed_background_and_cells_report_project_format_errors() -> None:
     try:
         ProjectDocument.from_json(json.dumps(malformed_cell))
     except ProjectFormatError as exc:
-        assert "WORLD cell 3, 2" in str(exc)
+        assert "backgrounds[0].nametable[2][3]" in str(exc)
     else:
         raise AssertionError("non-object WORLD cell was accepted")
 
@@ -139,15 +139,67 @@ def test_multiple_backgrounds_can_be_selected_without_losing_room_data() -> None
     assert document.dirty
 
 
-def test_selecting_malformed_background_is_rejected_without_switching() -> None:
+def test_malformed_unselected_background_is_rejected_during_import() -> None:
     state = project_state()
     state["backgrounds"].append({"name": "broken", "nametable": []})
-    document = ProjectDocument.from_json(json.dumps(state))
     try:
-        document.select_background(1)
-    except ProjectFormatError:
+        ProjectDocument.from_json(json.dumps(state))
+    except ProjectFormatError as exc:
+        assert "backgrounds[1].nametable" in str(exc)
+    else:
+        raise AssertionError("malformed unselected background was accepted")
+
+
+def test_legacy_single_nametable_and_tile_pool_are_migrated_additively() -> None:
+    table = [
+        [{"tile": 0, "palette": 0} for _ in range(32)] for _ in range(30)
+    ]
+    legacy = {
+        "name": "legacy",
+        "nametable": table,
+        "tiles": [{"pixels": [[0] * 8 for _ in range(8)]}],
+        "future": {"preserve": True},
+    }
+    document = ProjectDocument.from_json(json.dumps(legacy))
+    assert document.state["version"] == 1
+    assert document.state["selectedBgIdx"] == 0
+    assert document.state["backgrounds"][0]["nametable"] == table
+    assert document.state["backgrounds"][0]["dimensions"] == {
+        "screens_x": 1,
+        "screens_y": 1,
+    }
+    assert document.state["bg_tiles"] == legacy["tiles"]
+    assert document.state["sprite_tiles"] == legacy["tiles"]
+    assert document.state["bg_tiles"] is not document.state["sprite_tiles"]
+    assert document.state["future"] == {"preserve": True}
+
+
+def test_immutable_snapshot_is_stable_and_detached_from_later_edits() -> None:
+    document = ProjectDocument.from_json(json.dumps(project_state()))
+    snapshot = document.immutable_snapshot()
+    before = snapshot.state()
+    document.set_world_tile(0, 0, 99)
+    assert snapshot.state() == before
+    assert snapshot.state()["backgrounds"][0]["nametable"][0][0]["tile"] == 0
+    assert len(snapshot.sha256) == 64
+
+
+def test_engine_version_upgrade_and_explicit_downgrade_rules() -> None:
+    document = ProjectDocument.from_json(json.dumps(project_state()))
+    assert document.engine_version == 1
+    document.set_engine_version(63, current=63)
+    assert document.engine_version == 63
+    try:
+        document.set_engine_version(62, current=63)
+    except ValueError as exc:
+        assert "explicit confirmation" in str(exc)
+    else:
+        raise AssertionError("implicit engine downgrade was accepted")
+    document.set_engine_version(62, current=63, allow_downgrade=True)
+    assert document.engine_version == 62
+    try:
+        document.set_engine_version(64, current=63)
+    except ValueError:
         pass
     else:
-        raise AssertionError("malformed background was selected")
-    assert document.selected_background_index == 0
-    assert not document.dirty
+        raise AssertionError("future engine version was accepted")

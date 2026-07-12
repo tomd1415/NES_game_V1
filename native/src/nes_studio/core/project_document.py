@@ -4,13 +4,42 @@ from __future__ import annotations
 
 import copy
 import json
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .migrations import CURRENT_SCHEMA_VERSION, migrate_project
+
 
 class ProjectFormatError(ValueError):
     """Raised when a project cannot provide an editable WORLD grid."""
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationIssue:
+    path: str
+    message: str
+    severity: str = "error"
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectSnapshot:
+    json_bytes: bytes
+    sha256: str
+    engine_version: int
+
+    @classmethod
+    def from_state(cls, state: dict[str, Any]) -> "ProjectSnapshot":
+        payload = _json_bytes(state)
+        return cls(
+            payload,
+            hashlib.sha256(payload).hexdigest(),
+            max(1, int(state.get("engineVersion") or 1)),
+        )
+
+    def state(self) -> dict[str, Any]:
+        return json.loads(self.json_bytes)
 
 
 @dataclass(slots=True)
@@ -37,7 +66,7 @@ class ProjectDocument:
         return cls(
             state={
                 "name": "Native Preview",
-                "version": 2,
+                "version": CURRENT_SCHEMA_VERSION,
                 "selectedBgIdx": 0,
                 "backgrounds": [
                     {
@@ -58,8 +87,13 @@ class ProjectDocument:
             raise ProjectFormatError(f"Invalid project JSON: {exc}") from exc
         if not isinstance(state, dict):
             raise ProjectFormatError("Project JSON must contain an object at the top level")
-        cls._world_grid(state)
-        return cls(state=state, path=path)
+        migration = migrate_project(state)
+        issues = cls.validate(migration.state)
+        errors = [issue for issue in issues if issue.severity == "error"]
+        if errors:
+            first = errors[0]
+            raise ProjectFormatError(f"{first.path}: {first.message}")
+        return cls(state=migration.state, path=path)
 
     @classmethod
     def open(cls, path: str | Path) -> "ProjectDocument":
@@ -67,7 +101,7 @@ class ProjectDocument:
         return cls.from_json(project_path.read_bytes(), project_path)
 
     def to_json(self) -> bytes:
-        return (json.dumps(self.state, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+        return _json_bytes(self.state)
 
     @property
     def name(self) -> str:
@@ -99,6 +133,95 @@ class ProjectDocument:
 
     def snapshot(self) -> dict[str, Any]:
         return copy.deepcopy(self.state)
+
+    def immutable_snapshot(self) -> ProjectSnapshot:
+        return ProjectSnapshot.from_state(self.state)
+
+    @property
+    def engine_version(self) -> int:
+        return max(1, int(self.state.get("engineVersion") or 1))
+
+    def set_engine_version(
+        self, version: int, *, current: int, allow_downgrade: bool = False
+    ) -> None:
+        if not 1 <= version <= current:
+            raise ValueError(f"Engine version must be 1..{current}: {version}")
+        if version < self.engine_version and not allow_downgrade:
+            raise ValueError("Engine downgrade requires explicit confirmation")
+        if version != self.engine_version:
+            self.state["engineVersion"] = version
+            self.dirty = True
+
+    @classmethod
+    def validate(cls, state: dict[str, Any]) -> tuple[ValidationIssue, ...]:
+        issues = []
+        version = state.get("version")
+        if not isinstance(version, int) or version < 1:
+            issues.append(ValidationIssue("version", "must be a positive integer"))
+        elif version > CURRENT_SCHEMA_VERSION:
+            issues.append(
+                ValidationIssue(
+                    "version",
+                    f"future schema {version} is preserved but only schema {CURRENT_SCHEMA_VERSION} is understood",
+                    "warning",
+                )
+            )
+        backgrounds = state.get("backgrounds")
+        if not isinstance(backgrounds, list) or not backgrounds:
+            issues.append(ValidationIssue("backgrounds", "must contain at least one background"))
+            return tuple(issues)
+        selected = state.get("selectedBgIdx")
+        if not isinstance(selected, int) or not 0 <= selected < len(backgrounds):
+            issues.append(ValidationIssue("selectedBgIdx", "is outside the background list"))
+        for bg_index, background in enumerate(backgrounds):
+            prefix = f"backgrounds[{bg_index}]"
+            if not isinstance(background, dict):
+                issues.append(ValidationIssue(prefix, "must be an object"))
+                continue
+            dimensions = background.get("dimensions")
+            if not isinstance(dimensions, dict):
+                issues.append(ValidationIssue(prefix + ".dimensions", "must be an object"))
+                continue
+            try:
+                screens_x = int(dimensions.get("screens_x"))
+                screens_y = int(dimensions.get("screens_y"))
+            except (TypeError, ValueError):
+                screens_x = screens_y = 0
+            if screens_x < 1 or screens_y < 1:
+                issues.append(ValidationIssue(prefix + ".dimensions", "screen counts must be positive"))
+                continue
+            required_columns, required_rows = screens_x * 32, screens_y * 30
+            grid = background.get("nametable")
+            if not isinstance(grid, list) or len(grid) < required_rows:
+                issues.append(ValidationIssue(prefix + ".nametable", f"needs {required_rows} rows"))
+                continue
+            for row_index, row in enumerate(grid[:required_rows]):
+                if not isinstance(row, list) or len(row) < required_columns:
+                    issues.append(
+                        ValidationIssue(
+                            f"{prefix}.nametable[{row_index}]",
+                            f"needs {required_columns} columns",
+                        )
+                    )
+                    continue
+                for column, cell in enumerate(row[:required_columns]):
+                    if not isinstance(cell, dict):
+                        issues.append(
+                            ValidationIssue(
+                                f"{prefix}.nametable[{row_index}][{column}]",
+                                "must be an object",
+                            )
+                        )
+                        continue
+                    try:
+                        tile, palette = int(cell.get("tile", 0)), int(cell.get("palette", 0))
+                    except (TypeError, ValueError):
+                        tile = palette = -1
+                    if not 0 <= tile <= 255:
+                        issues.append(ValidationIssue(f"{prefix}.nametable[{row_index}][{column}].tile", "must be 0..255"))
+                    if not 0 <= palette <= 3:
+                        issues.append(ValidationIssue(f"{prefix}.nametable[{row_index}][{column}].palette", "must be 0..3"))
+        return tuple(issues)
 
     @staticmethod
     def _world_grid(state: dict[str, Any]) -> list[list[dict[str, Any]]]:
@@ -187,3 +310,7 @@ class ProjectDocument:
     def _validate_coordinates(col: int, row: int) -> None:
         if not 0 <= col < 32 or not 0 <= row < 30:
             raise IndexError(f"WORLD cell outside 32x30: {col}, {row}")
+
+
+def _json_bytes(state: dict[str, Any]) -> bytes:
+    return (json.dumps(state, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
