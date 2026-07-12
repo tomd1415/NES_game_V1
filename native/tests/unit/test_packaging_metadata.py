@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import configparser
 import sys
+import tomllib
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -49,6 +50,17 @@ class PackagingMetadataTests(unittest.TestCase):
         for path in xml_paths:
             with self.subTest(path=path):
                 ET.parse(path)
+
+    def test_native_package_declares_the_shared_direct_build_core(self) -> None:
+        metadata = tomllib.loads((NATIVE_ROOT / "pyproject.toml").read_text("utf-8"))
+        dependencies = metadata["project"]["dependencies"]
+        self.assertTrue(
+            any(dependency.startswith("nes-studio-build-core") for dependency in dependencies)
+        )
+        core_metadata = tomllib.loads(
+            (REPOSITORY_ROOT / "tools" / "pyproject.toml").read_text("utf-8")
+        )
+        self.assertEqual(core_metadata["project"]["name"], "nes-studio-build-core")
 
 
 if __name__ == "__main__":
