@@ -462,6 +462,12 @@ class MainWindow(QMainWindow):
         duplicate_button.clicked.connect(self._duplicate_tile)
         tile_operations.addWidget(duplicate_button)
         tile_layout.addLayout(tile_operations)
+        self.tile_default_behaviour = QSpinBox(self.tile_editor)
+        self.tile_default_behaviour.setObjectName("tileDefaultBehaviour")
+        self.tile_default_behaviour.setRange(0, 255)
+        self.tile_default_behaviour.setPrefix("Default behaviour: ")
+        self.tile_default_behaviour.valueChanged.connect(self._set_tile_default_behaviour)
+        tile_layout.addWidget(self.tile_default_behaviour)
         tile_grid = QGridLayout()
         tile_grid.setSpacing(1)
         self._tile_pixel_buttons: list[QPushButton] = []
@@ -764,6 +770,10 @@ class MainWindow(QMainWindow):
                 button = self._tile_pixel_buttons[row * 8 + column]
                 button.setText(str(value))
                 button.setStyleSheet(f"background: {colours[value]}; color: #080810; padding: 0;")
+        self.tile_default_behaviour.blockSignals(True)
+        self.tile_default_behaviour.setValue(self._document.background_tile_default_behaviour(self.tile_selector.value()) or 0)
+        self.tile_default_behaviour.setEnabled(self.tile_bank.currentData() != "sprite")
+        self.tile_default_behaviour.blockSignals(False)
 
     def _cycle_tile_pixel(self, column: int, row: int) -> None:
         index = self.tile_selector.value()
@@ -798,6 +808,12 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Duplicated tile into 0x{index:02X}")
+
+    def _set_tile_default_behaviour(self, value: int) -> None:
+        if self.tile_bank.currentData() != "sprite":
+            self._document.set_background_tile_metadata(self.tile_selector.value(), default_behaviour=value)
+            self._session.schedule_save()
+            self._update_document_title()
 
     def _tile_pixels(self) -> list[list[int]]:
         if self.tile_bank.currentData() == "sprite":
@@ -1153,6 +1169,9 @@ class MainWindow(QMainWindow):
 
     def _world_cell_changed(self, col: int, row: int, value: int) -> None:
         self._document.set_world_tile(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
+        default_behaviour = self._document.background_tile_default_behaviour(value)
+        if default_behaviour is not None and self.world_canvas.tool in {"paint", "fill"}:
+            self._document.set_world_behaviour(col + self._world_screen_x * 32, row + self._world_screen_y * 30, default_behaviour)
         self._world_value_changed(f"tile {value}")
 
     def _world_palette_changed(self, col: int, row: int, value: int) -> None:

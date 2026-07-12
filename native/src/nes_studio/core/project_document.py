@@ -182,6 +182,21 @@ class ProjectDocument:
     def duplicate_sprite_tile(self, index: int) -> int:
         return self._duplicate_tile("sprite_tiles", index)
 
+    def set_background_tile_metadata(self, index: int, *, name: str | None = None, default_behaviour: int | None = None) -> None:
+        if default_behaviour is not None and not 0 <= default_behaviour <= 255:
+            raise ValueError("Default behaviour must be 0..255")
+        self._ensure_tile_pixels("bg_tiles", index)
+        tile = self.state["bg_tiles"][index]
+        changed = False
+        if name is not None and tile.get("name") != name.strip(): tile["name"] = name.strip(); changed = True
+        if default_behaviour is not None and tile.get("defaultBehaviour") != default_behaviour: tile["defaultBehaviour"] = default_behaviour; changed = True
+        if changed: self.dirty = True
+
+    def background_tile_default_behaviour(self, index: int) -> int | None:
+        tiles = self.state.get("bg_tiles") or []
+        value = tiles[index].get("defaultBehaviour") if 0 <= index < len(tiles) and isinstance(tiles[index], dict) else None
+        return value if isinstance(value, int) and 0 <= value <= 255 else None
+
     def _duplicate_tile(self, group: str, index: int) -> int:
         source = copy.deepcopy(self._tile_pixels(group, index))
         target = next((candidate for candidate in range(256) if candidate != index and all(value == 0 for row in self._tile_pixels(group, candidate) for value in row)), None)
