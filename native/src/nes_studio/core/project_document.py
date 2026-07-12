@@ -339,15 +339,23 @@ class ProjectDocument:
                     )
         return grid
 
-    def world_tiles(self) -> list[list[int]]:
+    def world_tiles(self, screen_x: int = 0, screen_y: int = 0) -> list[list[int]]:
         grid = self._world_grid(self.state)
-        return [[int(cell.get("tile", 0)) for cell in row[:32]] for row in grid[:30]]
+        left, top = self._screen_origin(screen_x, screen_y)
+        return [
+            [int(cell.get("tile", 0)) for cell in row[left : left + 32]]
+            for row in grid[top : top + 30]
+        ]
 
-    def world_palettes(self) -> list[list[int]]:
+    def world_palettes(self, screen_x: int = 0, screen_y: int = 0) -> list[list[int]]:
         grid = self._world_grid(self.state)
-        return [[int(cell.get("palette", 0)) & 3 for cell in row[:32]] for row in grid[:30]]
+        left, top = self._screen_origin(screen_x, screen_y)
+        return [
+            [int(cell.get("palette", 0)) & 3 for cell in row[left : left + 32]]
+            for row in grid[top : top + 30]
+        ]
 
-    def world_behaviours(self) -> list[list[int]]:
+    def world_behaviours(self, screen_x: int = 0, screen_y: int = 0) -> list[list[int]]:
         background = self._selected_background()
         behaviour = background.get("behaviour")
         if not isinstance(behaviour, list):
@@ -356,7 +364,11 @@ class ProjectDocument:
             not isinstance(row, list) or len(row) < 32 for row in behaviour[:30]
         ):
             raise ProjectFormatError("Selected background has no 32 by 30 behaviour map")
-        return [[int(value) & 0xFF for value in row[:32]] for row in behaviour[:30]]
+        left, top = self._screen_origin(screen_x, screen_y)
+        return [
+            [int(value) & 0xFF for value in row[left : left + 32]]
+            for row in behaviour[top : top + 30]
+        ]
 
     def _selected_background(self) -> dict[str, Any]:
         return self._background_at(self.selected_background_index)
@@ -389,12 +401,14 @@ class ProjectDocument:
         if not 0 <= behaviour <= 0xFF:
             raise ValueError(f"WORLD behaviour must be 0..255: {behaviour}")
         self._validate_coordinates(col, row)
-        values = self.world_behaviours()
-        if values[row][col] != behaviour:
-            background = self._selected_background()
-            if not isinstance(background.get("behaviour"), list):
-                background["behaviour"] = values
-            background["behaviour"][row][col] = behaviour
+        background = self._selected_background()
+        values = background.get("behaviour")
+        if not isinstance(values, list):
+            screens_x, screens_y = self.background_dimensions()
+            values = [[0 for _ in range(screens_x * 32)] for _ in range(screens_y * 30)]
+            background["behaviour"] = values
+        if int(values[row][col]) != behaviour:
+            values[row][col] = behaviour
             self.dirty = True
 
     def _set_world_cell_field(self, col: int, row: int, field: str, value: int) -> None:
@@ -406,10 +420,16 @@ class ProjectDocument:
             cell[field] = value
             self.dirty = True
 
-    @staticmethod
-    def _validate_coordinates(col: int, row: int) -> None:
-        if not 0 <= col < 32 or not 0 <= row < 30:
-            raise IndexError(f"WORLD cell outside 32x30: {col}, {row}")
+    def _screen_origin(self, screen_x: int, screen_y: int) -> tuple[int, int]:
+        columns, rows = self.background_dimensions()
+        if not 0 <= screen_x < columns or not 0 <= screen_y < rows:
+            raise IndexError(f"WORLD screen outside {columns}x{rows}: {screen_x}, {screen_y}")
+        return screen_x * 32, screen_y * 30
+
+    def _validate_coordinates(self, col: int, row: int) -> None:
+        screens_x, screens_y = self.background_dimensions()
+        if not 0 <= col < screens_x * 32 or not 0 <= row < screens_y * 30:
+            raise IndexError(f"WORLD cell outside {screens_x * 32}x{screens_y * 30}: {col}, {row}")
 
 
 def _json_bytes(state: dict[str, Any]) -> bytes:

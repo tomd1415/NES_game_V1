@@ -45,3 +45,15 @@ def test_layout_resize_preserves_top_left_data_and_initializes_new_screens() -> 
     document.set_background_dimensions(1, 1)
     assert document.background_dimensions() == (1, 1)
     assert document.world_tiles()[29][31] == 77
+
+
+def test_each_scrolling_world_screen_reads_and_writes_its_global_coordinates() -> None:
+    document = ProjectDocument.preview()
+    document.set_background_dimensions(2, 2)
+    document.set_world_tile(32, 30, 44)
+    document.set_world_palette(63, 59, 3)
+    document.set_world_behaviour(32, 30, 9)
+    assert document.world_tiles(1, 1)[0][0] == 44
+    assert document.world_palettes(1, 1)[29][31] == 3
+    assert document.world_behaviours(1, 1)[0][0] == 9
+    assert document.world_tiles(0, 0)[0][0] == 0

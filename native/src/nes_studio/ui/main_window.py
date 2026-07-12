@@ -86,6 +86,8 @@ class MainWindow(QMainWindow):
             project = self._storage.create_starter("scratch", name="Native Preview")
             self._session = self._storage.open_session(project.project_id)
         self._document = self._session.document
+        self._world_screen_x = 0
+        self._world_screen_y = 0
         self._snapshot_timer = QTimer(self)
         self._snapshot_timer.setInterval(30_000)
         self._snapshot_timer.timeout.connect(self._snapshot_if_changed)
@@ -202,6 +204,23 @@ class MainWindow(QMainWindow):
         self.world_layout.addItem("2 × 2", (2, 2))
         self.world_layout.currentIndexChanged.connect(self._set_world_layout)
         layout.addWidget(self.world_layout)
+        viewport_label = QLabel("EDIT SCREEN", dock)
+        viewport_label.setObjectName("sectionLabel")
+        layout.addWidget(viewport_label)
+        viewport = QHBoxLayout()
+        self.world_screen_x = QSpinBox(dock)
+        self.world_screen_x.setObjectName("worldScreenX")
+        self.world_screen_x.setPrefix("X ")
+        self.world_screen_x.setAccessibleName("WORLD screen horizontal position")
+        self.world_screen_x.valueChanged.connect(self._select_world_screen)
+        viewport.addWidget(self.world_screen_x)
+        self.world_screen_y = QSpinBox(dock)
+        self.world_screen_y.setObjectName("worldScreenY")
+        self.world_screen_y.setPrefix("Y ")
+        self.world_screen_y.setAccessibleName("WORLD screen vertical position")
+        self.world_screen_y.valueChanged.connect(self._select_world_screen)
+        viewport.addWidget(self.world_screen_y)
+        layout.addLayout(viewport)
 
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
@@ -372,15 +391,15 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"WORLD {tool.title()} tool — click or drag on the NES screen")
 
     def _world_cell_changed(self, col: int, row: int, value: int) -> None:
-        self._document.set_world_tile(col, row, value)
+        self._document.set_world_tile(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
         self._world_value_changed(f"tile {value}")
 
     def _world_palette_changed(self, col: int, row: int, value: int) -> None:
-        self._document.set_world_palette(col, row, value)
+        self._document.set_world_palette(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
         self._world_value_changed(f"palette {value}")
 
     def _world_behaviour_changed(self, col: int, row: int, value: int) -> None:
-        self._document.set_world_behaviour(col, row, value)
+        self._document.set_world_behaviour(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
         self._world_value_changed(f"behaviour {value}")
 
     def _world_value_changed(self, description: str) -> None:
@@ -391,9 +410,9 @@ class MainWindow(QMainWindow):
     def _load_document_world(self) -> None:
         self._sync_background_selector()
         self.world_canvas.load_world(
-            self._document.world_tiles(),
-            self._document.world_palettes(),
-            self._document.world_behaviours(),
+            self._document.world_tiles(self._world_screen_x, self._world_screen_y),
+            self._document.world_palettes(self._world_screen_x, self._world_screen_y),
+            self._document.world_behaviours(self._world_screen_x, self._world_screen_y),
         )
 
     def _sync_background_selector(self) -> None:
@@ -412,6 +431,25 @@ class MainWindow(QMainWindow):
                 self.world_layout.setCurrentIndex(index)
                 break
         self.world_layout.blockSignals(False)
+        screens_x, screens_y = dimensions
+        self._world_screen_x = min(self._world_screen_x, screens_x - 1)
+        self._world_screen_y = min(self._world_screen_y, screens_y - 1)
+        for widget, maximum, value in (
+            (self.world_screen_x, screens_x - 1, self._world_screen_x),
+            (self.world_screen_y, screens_y - 1, self._world_screen_y),
+        ):
+            widget.blockSignals(True)
+            widget.setRange(0, maximum)
+            widget.setValue(value)
+            widget.blockSignals(False)
+
+    def _select_world_screen(self, _value: int) -> None:
+        self._world_screen_x = self.world_screen_x.value()
+        self._world_screen_y = self.world_screen_y.value()
+        self._load_document_world()
+        self.statusBar().showMessage(
+            f"Editing WORLD screen {self._world_screen_x + 1}, {self._world_screen_y + 1}"
+        )
 
     def _select_background(self, index: int) -> None:
         if index < 0 or index == self._document.selected_background_index:
