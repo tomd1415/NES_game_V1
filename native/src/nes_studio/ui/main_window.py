@@ -469,6 +469,16 @@ class MainWindow(QMainWindow):
         self.sprite_height.valueChanged.connect(self._resize_sprite)
         dimensions.addWidget(self.sprite_height)
         chars_layout.addLayout(dimensions)
+        cell_controls = QHBoxLayout()
+        self.sprite_cell_x, self.sprite_cell_y = QSpinBox(self.chars_editor), QSpinBox(self.chars_editor)
+        self.sprite_cell_tile, self.sprite_cell_palette = QSpinBox(self.chars_editor), QSpinBox(self.chars_editor)
+        for control, maximum, prefix in ((self.sprite_cell_x, 7, "X "), (self.sprite_cell_y, 7, "Y "), (self.sprite_cell_tile, 255, "Tile "), (self.sprite_cell_palette, 3, "Pal ")):
+            control.setRange(0, maximum); control.setPrefix(prefix); cell_controls.addWidget(control)
+        self.sprite_cell_x.valueChanged.connect(self._refresh_sprite_cell)
+        self.sprite_cell_y.valueChanged.connect(self._refresh_sprite_cell)
+        self.sprite_cell_tile.valueChanged.connect(self._set_sprite_cell)
+        self.sprite_cell_palette.valueChanged.connect(self._set_sprite_cell)
+        chars_layout.addLayout(cell_controls)
         self.editor_stack.addWidget(self.chars_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
@@ -649,6 +659,9 @@ class MainWindow(QMainWindow):
             control.blockSignals(True)
             control.setValue(min(8, max(1, value)))
             control.blockSignals(False)
+        self.sprite_cell_x.setMaximum(self.sprite_width.value() - 1)
+        self.sprite_cell_y.setMaximum(self.sprite_height.value() - 1)
+        self._refresh_sprite_cell()
 
     def _new_sprite(self) -> None:
         name, accepted = QInputDialog.getText(self, "New sprite", "Name:", text="Sprite")
@@ -699,6 +712,20 @@ class MainWindow(QMainWindow):
         index = self.sprite_list.currentRow()
         if index >= 0:
             self._document.resize_sprite(index, self.sprite_width.value(), self.sprite_height.value())
+            self._session.schedule_save()
+
+    def _refresh_sprite_cell(self, _value: int | None = None) -> None:
+        index = self.sprite_list.currentRow()
+        if index < 0:
+            return
+        cell = self._document.state["sprites"][index]["cells"][self.sprite_cell_y.value()][self.sprite_cell_x.value()]
+        for control, value in ((self.sprite_cell_tile, int(cell.get("tile", 0))), (self.sprite_cell_palette, int(cell.get("palette", 0)))):
+            control.blockSignals(True); control.setValue(value); control.blockSignals(False)
+
+    def _set_sprite_cell(self, _value: int) -> None:
+        index = self.sprite_list.currentRow()
+        if index >= 0:
+            self._document.set_sprite_cell(index, self.sprite_cell_x.value(), self.sprite_cell_y.value(), tile=self.sprite_cell_tile.value(), palette=self.sprite_cell_palette.value())
             self._session.schedule_save()
 
     def _select_world_tool(self, tool: str) -> None:

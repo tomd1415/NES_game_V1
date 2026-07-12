@@ -256,6 +256,19 @@ class ProjectDocument:
             sprite["width"], sprite["height"], sprite["cells"] = width, height, resized
             self.dirty = True
 
+    def set_sprite_cell(self, index: int, column: int, row: int, *, tile: int, palette: int) -> None:
+        sprite = self._sprite_at(index)
+        width, height = int(sprite.get("width") or 1), int(sprite.get("height") or 1)
+        if not 0 <= column < width or not 0 <= row < height:
+            raise IndexError("Sprite cell coordinates are outside the sprite")
+        if not 0 <= tile <= 255 or not 0 <= palette <= 3:
+            raise ValueError("Sprite cell tile/palette is invalid")
+        self.resize_sprite(index, width, height)
+        cell = sprite["cells"][row][column]
+        if cell.get("tile") != tile or cell.get("palette") != palette or cell.get("empty"):
+            cell.update({"tile": tile, "palette": palette, "empty": False})
+            self.dirty = True
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):
