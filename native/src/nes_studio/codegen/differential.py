@@ -88,6 +88,21 @@ class CodegenDifferential:
             node_sha256=_sha256(node),
         )
 
+    def assemble(self, project: dict[str, Any]) -> str:
+        """Run the trusted bundled generator without invoking the Node oracle."""
+
+        web, scripts = self._sources()
+        template = (web / "builder-templates" / "platformer.c").read_text(encoding="utf-8")
+        runtime = CodegenRuntime(self.source_root)
+        result = runtime.evaluate(
+            [path.relative_to(self.source_root) for path in scripts],
+            ASSEMBLE_EXPRESSION,
+            globals={"project": project, "template": template},
+        ).value
+        if not isinstance(result, str):
+            raise TypeError("Builder assembler did not return source text")
+        return result
+
     def default_builder(self) -> dict[str, Any]:
         _web, scripts = self._sources()
         runtime = CodegenRuntime(self.source_root)
