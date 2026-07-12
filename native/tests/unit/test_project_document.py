@@ -255,6 +255,12 @@ def test_damage_uses_the_shared_builder_module_contract() -> None:
     assert document.state["builder"]["modules"]["damage"] == {"enabled": True, "config": {"amount": 2, "invincibilityFrames": 45}}
 
 
+def test_pickups_uses_the_shared_enable_only_module_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_pickups_enabled(True)
+    assert document.state["builder"]["modules"]["pickups"] == {"enabled": True, "config": {}}
+
+
 def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
     document = ProjectDocument.preview()
     first = document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")

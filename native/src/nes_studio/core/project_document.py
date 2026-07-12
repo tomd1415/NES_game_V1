@@ -484,6 +484,14 @@ class ProjectDocument:
         if not isinstance(config, dict): config = {}; node["config"] = config
         if config.get(key) != value: config[key] = value; self.dirty = True
 
+    def set_pickups_enabled(self, enabled: bool) -> None:
+        builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
+        modules = builder.setdefault("modules", {}) if isinstance(builder, dict) else {}
+        if not isinstance(modules, dict): modules = {}; builder["modules"] = modules
+        node = modules.setdefault("pickups", {"enabled": False, "config": {}})
+        if not isinstance(node, dict): node = {}; modules["pickups"] = node
+        if node.get("enabled") != enabled: node["enabled"] = enabled; self.dirty = True
+
     def add_audio_song(self, filename: str, asm: str) -> int:
         if not filename or not asm:
             raise ValueError("Audio source needs a filename and content")
