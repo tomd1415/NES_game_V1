@@ -3153,13 +3153,6 @@ def _build_rom(body):
             nes_asm_player=nes_asm_player, nes_asm_smb=nes_asm_smb,
             nes_asm_racer=nes_asm_racer, nes_asm_player2=nes_asm_player2,
             nes_asm_pdraw=nes_asm_pdraw,
-            # Gate on the ACTUAL emission of BW_SMB_HUD_BG in the assembled C
-            # (which is target-engine gated, >= v58), not just the module config
-            # — hud_crt0.o imports _hud_present/_hud_ready, which only exist when
-            # `BW_SMB_HUD_BG && SCROLL_BUILD` both hold.  is_scroll gives the
-            # SCROLL_BUILD half; a pre-v58 target that leaves BW_SMB_HUD_BG out
-            # would otherwise link the crt0 against undefined symbols.
-            hud_nmi=(is_scroll and "#define BW_SMB_HUD_BG 1" in (custom_main_c or "")),
             project_inc=project_inc, **audio_kwargs,
         ))
     # Default (no custom source): build the stock main.c in its own temp dir
@@ -3256,7 +3249,7 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       nes_asm_leaf=False, nes_asm_scroll=False,
                       nes_asm_scene=False, nes_asm_ai=False,
                       nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False, nes_asm_player2=False,
-                      nes_asm_pdraw=False, hud_nmi=False,
+                      nes_asm_pdraw=False,
                       project_inc=None):
     # Clone STEP_DIR into a throwaway directory so a build's main.c + generated
     # asset files never touch the shared tree — used for EVERY build now (the
@@ -3325,17 +3318,6 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
             # default with the real path — the tempdir clone of STEP_DIR
             # has no `tools/` sibling, so the relative form would 404.
             make_args.append(f"FAMISTUDIO_DIR={AUDIO_ENGINE_DIR}")
-
-        # SMB background status bar on a scrolling world: drive its sprite-0
-        # PPU push from the NMI so the strip renders on time under heavy frame
-        # load (the "header flickers after the first screen" fix).  HUD_NMI=1
-        # links src/hud_crt0.o (the NMI hook that calls hud_present()).  Only
-        # for scroll builds — a 1-screen bg HUD has no split and defines no
-        # hud_present symbol for the crt0 to import.  Independent of the ASM
-        # kill switch: hud_present is C and calls scroll_apply_ppu/scroll_stream
-        # whether they resolve to the ASM or the C definitions.
-        if hud_nmi:
-            make_args.append("HUD_NMI=1")
 
         # Cap concurrent compiles (each is CPU-heavy) so a class pressing Play
         # together doesn't spawn dozens of cc65 processes at once.

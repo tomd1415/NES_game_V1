@@ -70,21 +70,15 @@
   // later appends stable.
   function appendToSlot(template, slot, text) {
     const marker = '//@ insert: ' + slot;
-    if (template.indexOf(marker) < 0) {
+    const idx = template.indexOf(marker);
+    if (idx < 0) {
       if (typeof console !== 'undefined') {
         console.warn('[builder] insertion slot not found: ' + slot);
       }
       return template;
     }
-    // Fill EVERY occurrence of the marker.  The `vblank_writes` slot appears
-    // twice in the platformer template — once in the NMI-driven hud_present()
-    // path (SMB background status bar) and once in the render-last main-loop
-    // path — and both must receive a module's vblank writes because exactly one
-    // of the two compiles per build (gated by BW_SMB_HUD_BG).  Every other slot
-    // appears once, so filling all occurrences is identical to filling the
-    // first.  The marker is kept after the inserted text at each site, so
-    // repeated appendToSlot calls for the same slot layer in call order.
-    return template.split(marker).join(text + '\n' + marker);
+    return template.slice(0, idx) + text + '\n' + marker +
+      template.slice(idx + marker.length);
   }
 
   // Strip every remaining `//@ insert: <slot>` marker from the output.

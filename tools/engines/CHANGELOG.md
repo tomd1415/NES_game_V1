@@ -9,47 +9,6 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
-## v69 — 2026-07-12 — SMB background status bar: NMI-driven push (fixes "header flickers after the first screen")
-
-### Changed — migration (goldens `1730448e` + `_rom-equiv` UNCHANGED; affects BW_SMB_HUD_BG scroll builds only)
-The SMB background status bar is a sprite-0 split: every frame the engine must,
-while rendering is off, do OAM DMA + digit repaint + the column stream + the
-strip-scroll setup, THEN re-enable rendering and poll the sprite-0 hit, all
-BEFORE the strip's scanlines (0-31) are drawn.  Run from the main loop (after
-`waitvsync`) that push lands LATE on any frame whose game logic overran vblank —
-i.e. while **scrolling AND running enemy AI** — so `PPU_MASK` is still 0 while
-the top scanlines draw and the strip shows the sky backdrop for that frame.  That
-is the reported "score/timer header goes flickery after the first screen": it
-tracks on-screen enemy load while the camera scrolls (standing still never
-flickers).  FCEUX-reproduced: a 4-screen SMB level with a heavy on-screen goomba
-cluster showed the solid-bar row flip to the sky colour on ~100/760 frames while
-moving.
-
-**Fix — move the push into the NMI.**  A new `src/hud_crt0.s` (a cc65 nes crt0
-whose NMI calls the C `hud_present()`) replaces whichever crt0 would otherwise
-link, ONLY for `HUD_NMI=1` (bg status bar + scroll) builds.  The NMI fires at a
-fixed hardware time and preempts the game logic, so the strip always renders on
-time regardless of frame cost; a frame heavy enough to overrun just drops toward
-30fps instead of tearing the header.  The NMI saves/restores cc65's 26-byte
-runtime zero page around the C call (the interrupted main loop shares it) and
-keeps the stock `VBLANK_FLAG`/`tickcount`/`ppubuf_flush` bookkeeping; a
-`_hud_ready` flag holds it in bookkeeping-only mode through boot so the
-nametable/palette setup is undisturbed.  `platformer.c` grows the exported
-`hud_present()` (the whole push) and, for HUD builds, the main loop's render-last
-vblank window becomes just `waitvsync()` + `famistudio_update()` (audio still
-ticks from the main loop).  `builder-assembler.js`'s `appendToSlot` now fills
-EVERY `//@ insert:` occurrence so both the NMI-push path and the render-last path
-receive module vblank writes (the two are mutually `#if`-exclusive per build).
-
-**Byte-identical off the feature.**  Every non-`BW_SMB_HUD_BG` ROM keeps the
-render-last path and its existing crt0 — the `hud_present()`/main-loop/marker/
-`hud_ready` additions are all `#if BW_SMB_HUD_BG && SCROLL_BUILD` gated, the
-Makefile's `HUD_OBJS`/crt0-swap is `HUD_NMI`-gated, and the server only sets
-`HUD_NMI=1` for scrolling bg-HUD builds.  Goldens (`1730448e`) unchanged.
-FCEUX-validated: after the fix the same heavy 4-screen SMB run shows **0/760**
-sky-backdrop frames across a full four-screen traversal (player + camera reach
-the far end) while the header stays put.
-
 ## v68 — 2026-07-11 — Runner (Geo Dash) player gravity: fix ASM/C divergence + make it tunable
 
 ### Changed (follow-up to v67 — goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
