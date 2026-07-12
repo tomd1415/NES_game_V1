@@ -66,18 +66,22 @@ class NativeShellTests(unittest.TestCase):
             window._select_world_tool("erase")
             window.world_canvas.edit_cell(2, 2)
             window._flush_autosave()
+            window._storage.repository.snapshot(
+                window._session.project_id, window._document.to_json(), reason="manual_test"
+            )
             window._select_world_tool("paint")
             window.world_canvas.edit_cell(3, 3)
             self.assertTrue(window.recover_autosave())
             self.assertEqual(window.world_canvas.cell_value(2, 2), 0)
             self.assertEqual(window.world_canvas.cell_value(3, 3), 0)
-            self.assertTrue(window._document.dirty)
-            self.assertTrue(any(entry.reason == "before_recovery" for entry in window._autosave.entries()))
+            self.assertFalse(window._document.dirty)
+            self.assertTrue(any(entry.reason == "before_restore" for entry in window._storage.repository.snapshots(window._session.project_id)))
+            previous_project_id = window._session.project_id
             window.new_project()
             self.assertEqual(window._document.name, "Untitled Game")
-            self.assertTrue(window._document.dirty)
+            self.assertFalse(window._document.dirty)
             self.assertFalse(window.world_canvas.can_undo)
-            self.assertTrue(any(entry.reason == "before_new" for entry in window._autosave.entries()))
+            self.assertIn(previous_project_id, {entry.project_id for entry in window._storage.projects()})
         window.close()
         application.processEvents()
 

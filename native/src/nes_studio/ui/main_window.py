@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QIODevice, QSaveFile, QStandardPaths, QTimer, Qt
+from PySide6.QtCore import QStandardPaths, QTimer, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -28,7 +28,9 @@ from PySide6.QtWidgets import (
 from ..core.resources import ResourceLocator
 from ..core.project_document import ProjectDocument, ProjectFormatError
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
-from ..persistence.autosave import AutosaveRepository
+from ..persistence.manager import StorageManager
+from ..persistence.portability import AtomicExportError, export_project, import_project
+from ..persistence.session import ProjectSession
 from .diagnostics import DiagnosticsDialog
 from .widgets.world_canvas import WorldCanvas
 
@@ -45,15 +47,17 @@ class MainWindow(QMainWindow):
         self._diagnostics: DiagnosticsDialog | None = None
         self._mode_buttons: dict[str, QPushButton] = {}
         self._tool_buttons: dict[str, QPushButton] = {}
-        self._document = ProjectDocument.preview()
         data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
         )
-        self._autosave = AutosaveRepository(Path(data_root) / "autosave")
-        self._autosave_timer = QTimer(self)
-        self._autosave_timer.setSingleShot(True)
-        self._autosave_timer.setInterval(1000)
-        self._autosave_timer.timeout.connect(self._flush_autosave)
+        self._storage = StorageManager(Path(data_root))
+        projects = self._storage.projects()
+        if projects:
+            self._session = self._storage.open_session(projects[0].project_id)
+        else:
+            project = self._storage.create_starter("scratch", name="Native Preview")
+            self._session = self._storage.open_session(project.project_id)
+        self._document = self._session.document
         self._snapshot_timer = QTimer(self)
         self._snapshot_timer.setInterval(30_000)
         self._snapshot_timer.timeout.connect(self._snapshot_if_changed)
@@ -317,7 +321,7 @@ class MainWindow(QMainWindow):
         self._world_value_changed(f"behaviour {value}")
 
     def _world_value_changed(self, description: str) -> None:
-        self._autosave_timer.start()
+        self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"WORLD changed to {description}")
 
@@ -346,7 +350,7 @@ class MainWindow(QMainWindow):
             self._sync_background_selector()
             return
         self._load_document_world()
-        self._autosave_timer.start()
+        self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Opened WORLD background {self._document.background_names()[index]}")
 
@@ -370,49 +374,54 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{self._document.name}{marker} — {APP_DISPLAY_NAME}")
 
     def open_project_path(self, path: str) -> bool:
-        if self._document.dirty:
-            self._autosave.snapshot(self._document.to_json(), "before_import")
         try:
-            document = ProjectDocument.open(path)
-        except (OSError, ProjectFormatError) as exc:
+            import_project(
+                self._storage.repository,
+                path,
+                replace_project_id=self._session.project_id,
+                expected_revision=self._session.project.revision,
+            )
+            self._session.reload(flush=False)
+        except (OSError, ProjectFormatError, RuntimeError, ValueError) as exc:
             QMessageBox.critical(self, "Could not open project", str(exc))
             return False
-        self._document = document
+        self._document = self._session.document
+        self._document.path = Path(path)
         self._load_document_world()
         self._update_document_title()
-        self.statusBar().showMessage(f"Opened {document.path}")
+        self.statusBar().showMessage(f"Imported {path} into local project storage")
         return True
 
     def save_project_path(self, path: str) -> bool:
-        destination = QSaveFile(path)
-        if not destination.open(QIODevice.OpenModeFlag.WriteOnly):
-            QMessageBox.critical(self, "Could not save project", destination.errorString())
-            return False
-        payload = self._document.to_json()
-        if destination.write(payload) != len(payload) or not destination.commit():
-            QMessageBox.critical(self, "Could not save project", destination.errorString())
-            destination.cancelWriting()
+        try:
+            self._session.flush()
+            export_project(path, self._document)
+        except (AtomicExportError, OSError, RuntimeError) as exc:
+            QMessageBox.critical(self, "Could not save project", str(exc))
             return False
         self._document.path = Path(path)
-        self._document.dirty = False
-        self._autosave.save_current(payload)
         self._update_document_title()
         self.statusBar().showMessage(f"Saved {path}")
         return True
 
     def _flush_autosave(self) -> None:
+        """Compatibility slot for the former recovery timer; now flushes SQLite."""
+
         if self._document.dirty:
-            self._autosave.save_current(self._document.to_json())
-            self.statusBar().showMessage("Autosaved recovery copy")
+            self._session.flush()
+            self.statusBar().showMessage("Saved local project")
 
     def _snapshot_if_changed(self) -> None:
         if self._document.dirty:
-            self._autosave.snapshot(self._document.to_json(), "auto_30s")
+            self._session.flush()
+            self._storage.repository.snapshot(
+                self._session.project_id, self._document.to_json(), reason="auto_30s"
+            )
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
-        self._autosave_timer.stop()
         self._snapshot_timer.stop()
         self._flush_autosave()
+        self._storage.close()
         super().closeEvent(event)
 
     def _open_project(self) -> None:
@@ -433,36 +442,40 @@ class MainWindow(QMainWindow):
             self.save_project_path(path)
 
     def recover_autosave(self) -> bool:
-        payload = self._autosave.load_current()
-        if payload is None:
-            self.statusBar().showMessage("No autosave recovery copy is available")
+        snapshots = self._storage.repository.snapshots(self._session.project_id)
+        if not snapshots:
+            self.statusBar().showMessage("No local project snapshot is available")
             return False
-        if self._document.dirty:
-            self._autosave.snapshot(self._document.to_json(), "before_recovery")
         try:
-            recovered = ProjectDocument.from_json(payload)
-        except ProjectFormatError as exc:
-            QMessageBox.critical(self, "Could not recover autosave", str(exc))
+            self._session.flush()
+            self._storage.repository.restore_snapshot(
+                self._session.project_id,
+                snapshots[0].snapshot_id,
+                expected_revision=self._session.project.revision,
+            )
+            self._session.reload(flush=False)
+        except (KeyError, RuntimeError, ValueError) as exc:
+            QMessageBox.critical(self, "Could not restore project snapshot", str(exc))
             return False
-        recovered.dirty = True
-        self._document = recovered
+        self._document = self._session.document
         self._load_document_world()
         self._update_document_title()
-        self.statusBar().showMessage("Recovered autosave — use Save Project As to keep it")
+        self.statusBar().showMessage("Restored the latest local project snapshot")
         return True
 
     def _recover_autosave(self) -> None:
         self.recover_autosave()
 
     def new_project(self) -> None:
-        if self._document.dirty:
-            self._autosave.snapshot(self._document.to_json(), "before_new")
-        self._document = ProjectDocument.preview()
-        self._document.state["name"] = "Untitled Game"
-        self._document.dirty = True
+        self._session.snapshot_before("new")
+        project = self._storage.create_starter("scratch", name="Untitled Game")
+        self._session.close()
+        self._session.deleteLater()
+        self._session = self._storage.open_session(project.project_id)
+        self._document = self._session.document
         self._load_document_world()
         self._update_document_title()
-        self.statusBar().showMessage("Created a new project — use Save Project As to keep it")
+        self.statusBar().showMessage("Created a new locally managed project")
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(
@@ -510,7 +523,7 @@ class MainWindow(QMainWindow):
         save_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         save_action.triggered.connect(self._save_project_as)
         file_menu.addAction(save_action)
-        recover_action = QAction("&Recover Autosave", self)
+        recover_action = QAction("&Restore Latest Snapshot", self)
         recover_action.setObjectName("recoverAutosaveAction")
         recover_action.triggered.connect(self._recover_autosave)
         file_menu.addAction(recover_action)

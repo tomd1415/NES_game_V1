@@ -77,6 +77,14 @@ class ProjectSession(QObject):
         self._load(project_id)
         self.projectChanged.emit(project_id)
 
+    def reload(self, *, flush: bool = True) -> None:
+        """Reload the active project after an explicit repository operation."""
+
+        if flush:
+            self.flush()
+        self._load(self.project_id)
+        self.projectChanged.emit(self.project_id)
+
     def close(self) -> None:
         self.flush()
 
