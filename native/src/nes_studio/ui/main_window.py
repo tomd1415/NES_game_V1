@@ -641,6 +641,9 @@ class MainWindow(QMainWindow):
         self.player2_options: dict[str, QSpinBox] = {}
         for key, minimum, maximum in (("startX", 0, 240), ("startY", 16, 200), ("walkSpeed", 1, 4), ("jumpHeight", 8, 40), ("maxHp", 0, 9)):
             control = QSpinBox(self.rules_editor); control.setRange(minimum, maximum); control.setPrefix(f"P2 {key}: "); control.valueChanged.connect(lambda value, key=key: self._set_player2_option(key, value)); self.player2_options[key] = control; rules_layout.addWidget(control)
+        self.damage_amount = QSpinBox(self.rules_editor); self.damage_amount.setRange(1, 9); self.damage_amount.setPrefix("Damage: "); self.damage_amount.valueChanged.connect(lambda value: self._set_damage_option("amount", value)); rules_layout.addWidget(self.damage_amount)
+        self.damage_iframes = QSpinBox(self.rules_editor); self.damage_iframes.setRange(0, 120); self.damage_iframes.setPrefix("Invincibility frames: "); self.damage_iframes.valueChanged.connect(lambda value: self._set_damage_option("invincibilityFrames", value)); rules_layout.addWidget(self.damage_iframes)
+        self.damage_checkpoints = QCheckBox("Damage checkpoints", self.rules_editor); self.damage_checkpoints.toggled.connect(lambda value: self._set_damage_option("checkpoints", value)); rules_layout.addWidget(self.damage_checkpoints)
         self.editor_stack.addWidget(self.rules_editor)
         self.sound_editor = QFrame(self.editor_stack)
         self.sound_editor.setObjectName("soundEditor")
@@ -1130,6 +1133,10 @@ class MainWindow(QMainWindow):
         self.player2_enabled.blockSignals(True); self.player2_enabled.setChecked(bool(player2.get("enabled", False)) if isinstance(player2, dict) else False); self.player2_enabled.blockSignals(False)
         for key, default in (("startX", 180), ("startY", 120), ("walkSpeed", 1), ("jumpHeight", 20), ("maxHp", 0)):
             self.player2_options[key].blockSignals(True); self.player2_options[key].setValue(int((config2 or {}).get(key, default))); self.player2_options[key].setEnabled(self.player2_enabled.isChecked()); self.player2_options[key].blockSignals(False)
+        damage = (((builder.get("modules") or {}).get("damage") or {}).get("config") or {})
+        for control, key, default in ((self.damage_amount, "amount", 1), (self.damage_iframes, "invincibilityFrames", 30)):
+            control.blockSignals(True); control.setValue(int(damage.get(key, default))); control.blockSignals(False)
+        self.damage_checkpoints.blockSignals(True); self.damage_checkpoints.setChecked(bool(damage.get("checkpoints", False))); self.damage_checkpoints.blockSignals(False)
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
@@ -1158,6 +1165,10 @@ class MainWindow(QMainWindow):
 
     def _set_player2_option(self, key: str, value: int) -> None:
         self._document.set_player2_option(key, value)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_damage_option(self, key: str, value: int | bool) -> None:
+        self._document.set_damage_option(key, value)
         self._session.schedule_save(); self._update_document_title()
 
     def _refresh_sound_editor(self) -> None:
