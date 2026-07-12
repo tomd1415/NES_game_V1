@@ -210,6 +210,10 @@ class MainWindow(QMainWindow):
         self.world_layout.addItem("2 × 2", (2, 2))
         self.world_layout.currentIndexChanged.connect(self._set_world_layout)
         layout.addWidget(self.world_layout)
+        self.metatile_mode_button = QPushButton("Promote to 16×16 blocks", dock)
+        self.metatile_mode_button.setObjectName("metatileModeButton")
+        self.metatile_mode_button.clicked.connect(self._toggle_metatile_mode)
+        layout.addWidget(self.metatile_mode_button)
         viewport_label = QLabel("EDIT SCREEN", dock)
         viewport_label.setObjectName("sectionLabel")
         layout.addWidget(viewport_label)
@@ -716,6 +720,7 @@ class MainWindow(QMainWindow):
         if mode == "SOUND":
             self._refresh_sound_editor()
         if world_enabled:
+            self._refresh_metatile_mode()
             self._refresh_scene_editor()
             self._select_world_tool(self.world_canvas.tool)
 
@@ -1273,6 +1278,7 @@ class MainWindow(QMainWindow):
         self._load_document_world()
         self._session.schedule_save()
         self._update_document_title()
+        self.statusBar().showMessage(f"WORLD layout changed to {dimensions[0]} × {dimensions[1]}")
         self.statusBar().showMessage(f"Opened WORLD background {self._document.background_names()[index]}")
 
     def _set_world_layout(self, index: int) -> None:
@@ -1288,7 +1294,20 @@ class MainWindow(QMainWindow):
         self._load_document_world()
         self._session.schedule_save()
         self._update_document_title()
-        self.statusBar().showMessage(f"WORLD layout changed to {dimensions[0]} × {dimensions[1]}")
+
+    def _refresh_metatile_mode(self) -> None:
+        metatile = self._document.background_tile_mode() == "16x16"
+        self.metatile_mode_button.setText("Revert to 8×8 tiles" if metatile else "Promote to 16×16 blocks")
+
+    def _toggle_metatile_mode(self) -> None:
+        if self._document.background_tile_mode() == "16x16":
+            self._document.revert_selected_background_to_tiles()
+        else:
+            self._document.promote_selected_background_to_metatiles()
+        self._session.schedule_save()
+        self._refresh_metatile_mode()
+        self._update_document_title()
+        self.statusBar().showMessage("WORLD tile mode changed")
 
     def _new_background(self) -> None:
         self._create_background(duplicate=False)
