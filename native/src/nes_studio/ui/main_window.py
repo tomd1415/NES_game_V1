@@ -644,6 +644,9 @@ class MainWindow(QMainWindow):
         self.damage_amount = QSpinBox(self.rules_editor); self.damage_amount.setRange(1, 9); self.damage_amount.setPrefix("Damage: "); self.damage_amount.valueChanged.connect(lambda value: self._set_damage_option("amount", value)); rules_layout.addWidget(self.damage_amount)
         self.damage_iframes = QSpinBox(self.rules_editor); self.damage_iframes.setRange(0, 120); self.damage_iframes.setPrefix("Invincibility frames: "); self.damage_iframes.valueChanged.connect(lambda value: self._set_damage_option("invincibilityFrames", value)); rules_layout.addWidget(self.damage_iframes)
         self.damage_checkpoints = QCheckBox("Damage checkpoints", self.rules_editor); self.damage_checkpoints.toggled.connect(lambda value: self._set_damage_option("checkpoints", value)); rules_layout.addWidget(self.damage_checkpoints)
+        self.damage_respawn_hp = QSpinBox(self.rules_editor); self.damage_respawn_hp.setRange(1, 9); self.damage_respawn_hp.setPrefix("Respawn HP: "); self.damage_respawn_hp.valueChanged.connect(lambda value: self._set_damage_option("respawnHp", value)); rules_layout.addWidget(self.damage_respawn_hp)
+        self.stomp_defeat = QCheckBox("Stomp defeats enemies", self.rules_editor); self.stomp_defeat.toggled.connect(lambda value: self._set_damage_option("stompDefeat", value)); rules_layout.addWidget(self.stomp_defeat)
+        self.stomp_bounce = QSpinBox(self.rules_editor); self.stomp_bounce.setRange(1, 30); self.stomp_bounce.setPrefix("Stomp bounce: "); self.stomp_bounce.valueChanged.connect(lambda value: self._set_damage_option("stompBounce", value)); rules_layout.addWidget(self.stomp_bounce)
         self.editor_stack.addWidget(self.rules_editor)
         self.sound_editor = QFrame(self.editor_stack)
         self.sound_editor.setObjectName("soundEditor")
@@ -1137,6 +1140,9 @@ class MainWindow(QMainWindow):
         for control, key, default in ((self.damage_amount, "amount", 1), (self.damage_iframes, "invincibilityFrames", 30)):
             control.blockSignals(True); control.setValue(int(damage.get(key, default))); control.blockSignals(False)
         self.damage_checkpoints.blockSignals(True); self.damage_checkpoints.setChecked(bool(damage.get("checkpoints", False))); self.damage_checkpoints.blockSignals(False)
+        for control, key, default in ((self.damage_respawn_hp, "respawnHp", 1), (self.stomp_bounce, "stompBounce", 12)):
+            control.blockSignals(True); control.setValue(int(damage.get(key, default))); control.blockSignals(False)
+        self.stomp_defeat.blockSignals(True); self.stomp_defeat.setChecked(bool(damage.get("stompDefeat", False))); self.stomp_defeat.blockSignals(False)
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
