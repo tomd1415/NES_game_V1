@@ -248,6 +248,13 @@ def test_player_two_uses_the_shared_builder_submodule_contract() -> None:
     assert document.state["builder"]["modules"]["players"]["submodules"]["player2"] == {"enabled": True, "config": {"startX": 180}}
 
 
+def test_damage_uses_the_shared_builder_module_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_damage_option("amount", 2)
+    document.set_damage_option("invincibilityFrames", 45)
+    assert document.state["builder"]["modules"]["damage"] == {"enabled": True, "config": {"amount": 2, "invincibilityFrames": 45}}
+
+
 def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
     document = ProjectDocument.preview()
     first = document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")

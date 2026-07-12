@@ -471,6 +471,19 @@ class ProjectDocument:
         config = self._player2_node().setdefault("config", {})
         if config.get(key) != value: config[key] = value; self.dirty = True
 
+    def set_damage_option(self, key: str, value: int | bool) -> None:
+        valid = (key == "amount" and isinstance(value, int) and 1 <= value <= 9) or (key == "invincibilityFrames" and isinstance(value, int) and 0 <= value <= 120) or (key == "checkpoints" and isinstance(value, bool))
+        if not valid: raise ValueError("Invalid damage option")
+        builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
+        modules = builder.setdefault("modules", {}) if isinstance(builder, dict) else {}
+        if not isinstance(modules, dict): modules = {}; builder["modules"] = modules
+        node = modules.setdefault("damage", {"enabled": True, "config": {}})
+        if not isinstance(node, dict): node = {}; modules["damage"] = node
+        node["enabled"] = True
+        config = node.setdefault("config", {})
+        if not isinstance(config, dict): config = {}; node["config"] = config
+        if config.get(key) != value: config[key] = value; self.dirty = True
+
     def add_audio_song(self, filename: str, asm: str) -> int:
         if not filename or not asm:
             raise ValueError("Audio source needs a filename and content")
