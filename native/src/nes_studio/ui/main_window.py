@@ -483,6 +483,10 @@ class MainWindow(QMainWindow):
         self.new_animation_button.setObjectName("newAnimationButton")
         self.new_animation_button.clicked.connect(self._new_animation)
         chars_layout.addWidget(self.new_animation_button)
+        self.animation_list = QListWidget(self.chars_editor)
+        self.animation_list.setObjectName("animationList")
+        self.animation_list.setAccessibleName("Project animations")
+        chars_layout.addWidget(self.animation_list)
         self.editor_stack.addWidget(self.chars_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
@@ -559,6 +563,7 @@ class MainWindow(QMainWindow):
             self._refresh_tile_editor()
         if mode == "CHARS":
             self._refresh_sprite_editor()
+            self._refresh_animation_list()
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
@@ -742,8 +747,17 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Could not create animation", str(exc))
             return
         self._session.schedule_save()
+        self._refresh_animation_list()
         self._update_document_title()
         self.statusBar().showMessage(f"Created animation {name.strip()}")
+
+    def _refresh_animation_list(self) -> None:
+        self.animation_list.clear()
+        for animation in self._document.state.get("animations") or []:
+            if isinstance(animation, dict):
+                self.animation_list.addItem(
+                    f"{animation.get('name') or 'Animation'} — {animation.get('fps', 8)} fps ({len(animation.get('frames') or [])} frames)"
+                )
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)
