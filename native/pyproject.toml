@@ -30,6 +30,7 @@ dev = [
 [project.scripts]
 nes-studio = "nes_studio.__main__:main"
 nes-studio-codegen-check = "nes_studio.codegen.cli:main"
+nes-studio-project = "nes_studio.core.project_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
