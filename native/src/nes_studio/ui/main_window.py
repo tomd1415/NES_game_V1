@@ -190,6 +190,18 @@ class MainWindow(QMainWindow):
             button.clicked.connect(callback)
             background_actions.addWidget(button)
         layout.addLayout(background_actions)
+        layout_label = QLabel("SCREEN LAYOUT", dock)
+        layout_label.setObjectName("sectionLabel")
+        layout.addWidget(layout_label)
+        self.world_layout = QComboBox(dock)
+        self.world_layout.setObjectName("worldLayoutSelector")
+        self.world_layout.setAccessibleName("WORLD screen layout")
+        self.world_layout.addItem("1 × 1", (1, 1))
+        self.world_layout.addItem("2 × 1", (2, 1))
+        self.world_layout.addItem("1 × 2", (1, 2))
+        self.world_layout.addItem("2 × 2", (2, 2))
+        self.world_layout.currentIndexChanged.connect(self._set_world_layout)
+        layout.addWidget(self.world_layout)
 
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
@@ -390,6 +402,16 @@ class MainWindow(QMainWindow):
         self.background_selector.addItems(self._document.background_names())
         self.background_selector.setCurrentIndex(self._document.selected_background_index)
         self.background_selector.blockSignals(False)
+        self._sync_world_layout()
+
+    def _sync_world_layout(self) -> None:
+        self.world_layout.blockSignals(True)
+        dimensions = self._document.background_dimensions()
+        for index in range(self.world_layout.count()):
+            if self.world_layout.itemData(index) == dimensions:
+                self.world_layout.setCurrentIndex(index)
+                break
+        self.world_layout.blockSignals(False)
 
     def _select_background(self, index: int) -> None:
         if index < 0 or index == self._document.selected_background_index:
@@ -404,6 +426,21 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Opened WORLD background {self._document.background_names()[index]}")
+
+    def _set_world_layout(self, index: int) -> None:
+        dimensions = self.world_layout.itemData(index)
+        if not isinstance(dimensions, tuple):
+            return
+        try:
+            self._document.set_background_dimensions(*dimensions)
+        except (ValueError, ProjectFormatError) as exc:
+            QMessageBox.warning(self, "Could not change WORLD layout", str(exc))
+            self._sync_world_layout()
+            return
+        self._load_document_world()
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"WORLD layout changed to {dimensions[0]} × {dimensions[1]}")
 
     def _new_background(self) -> None:
         self._create_background(duplicate=False)

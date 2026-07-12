@@ -30,3 +30,18 @@ def test_blank_background_has_editable_nes_grid_and_name_validation() -> None:
     assert document.world_tiles() == [[0] * 32 for _ in range(30)]
     with pytest.raises(ValueError, match="cannot be empty"):
         document.rename_background(1, "  ")
+
+
+def test_layout_resize_preserves_top_left_data_and_initializes_new_screens() -> None:
+    document = ProjectDocument.preview()
+    document.set_world_tile(31, 29, 77)
+    document.set_background_dimensions(2, 2)
+    background = document.state["backgrounds"][0]
+    assert document.background_dimensions() == (2, 2)
+    assert len(background["nametable"]) == 60
+    assert len(background["nametable"][0]) == 64
+    assert background["nametable"][29][31]["tile"] == 77
+    assert background["nametable"][59][63] == {"tile": 0, "palette": 0}
+    document.set_background_dimensions(1, 1)
+    assert document.background_dimensions() == (1, 1)
+    assert document.world_tiles()[29][31] == 77

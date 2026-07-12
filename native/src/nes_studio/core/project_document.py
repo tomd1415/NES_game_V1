@@ -182,6 +182,47 @@ class ProjectDocument:
         self.state["selectedBgIdx"] = min(selected - (1 if index < selected else 0), len(backgrounds) - 1)
         self.dirty = True
 
+    def background_dimensions(self, index: int | None = None) -> tuple[int, int]:
+        background = self._background_at(self.selected_background_index if index is None else index)
+        dimensions = background.get("dimensions")
+        if not isinstance(dimensions, dict):
+            raise ProjectFormatError("Background has no dimensions")
+        try:
+            return int(dimensions["screens_x"]), int(dimensions["screens_y"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ProjectFormatError("Background dimensions are invalid") from exc
+
+    def set_background_dimensions(self, screens_x: int, screens_y: int) -> None:
+        if (screens_x, screens_y) not in {(1, 1), (2, 1), (1, 2), (2, 2)}:
+            raise ValueError("WORLD layout must be 1×1, 2×1, 1×2, or 2×2")
+        background = self._selected_background()
+        old_x, old_y = self.background_dimensions()
+        if (old_x, old_y) == (screens_x, screens_y):
+            return
+        columns, rows = screens_x * 32, screens_y * 30
+        old_grid = background.get("nametable") if isinstance(background.get("nametable"), list) else []
+        old_behaviour = background.get("behaviour") if isinstance(background.get("behaviour"), list) else []
+        background["nametable"] = [
+            [
+                copy.deepcopy(old_grid[row][col])
+                if row < len(old_grid) and isinstance(old_grid[row], list) and col < len(old_grid[row]) and isinstance(old_grid[row][col], dict)
+                else {"tile": 0, "palette": 0}
+                for col in range(columns)
+            ]
+            for row in range(rows)
+        ]
+        background["behaviour"] = [
+            [
+                int(old_behaviour[row][col]) & 0xFF
+                if row < len(old_behaviour) and isinstance(old_behaviour[row], list) and col < len(old_behaviour[row])
+                else 0
+                for col in range(columns)
+            ]
+            for row in range(rows)
+        ]
+        background["dimensions"] = {"screens_x": screens_x, "screens_y": screens_y}
+        self.dirty = True
+
     def snapshot(self) -> dict[str, Any]:
         return copy.deepcopy(self.state)
 
@@ -318,8 +359,16 @@ class ProjectDocument:
         return [[int(value) & 0xFF for value in row[:32]] for row in behaviour[:30]]
 
     def _selected_background(self) -> dict[str, Any]:
-        backgrounds = self.state["backgrounds"]
-        return backgrounds[self.state.get("selectedBgIdx", 0)]
+        return self._background_at(self.selected_background_index)
+
+    def _background_at(self, index: int) -> dict[str, Any]:
+        backgrounds = self.state.get("backgrounds")
+        if not isinstance(backgrounds, list) or not 0 <= index < len(backgrounds):
+            raise IndexError(f"Background index outside project: {index}")
+        background = backgrounds[index]
+        if not isinstance(background, dict):
+            raise ProjectFormatError("Selected background is not an object")
+        return background
 
     def set_world_tile(self, col: int, row: int, tile: int) -> None:
         if not 0 <= tile <= 0xFF:
