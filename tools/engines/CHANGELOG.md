@@ -9,6 +9,39 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v69 — 2026-07-12 — SMB status bar: cut vblank cost so the split stops flickering (browser-safe)
+
+### Changed — migration (goldens `1730448e` + `_rom-equiv` UNCHANGED; affects BW_SMB_HUD_BG scroll builds only)
+"The score/timer header goes flickery after the first screen."  The fixed status
+bar is a sprite-0 split done in the main loop after `waitvsync`; on a busy,
+scrolling SMB frame the game logic overruns vblank, the split lands late, and the
+strip briefly shows the sky backdrop.  (An earlier attempt moved the push into the
+NMI; that IS correct on hardware/FCEUX but **jsnes**, the browser editor's
+emulator, does not model NMI/OAM-DMA/sprite-0 timing and rendered garbage OAM, so
+it was reverted.  This version stays render-last = browser-safe.)
+
+Instead of moving the push, this shaves the two hot per-frame costs that were
+tipping the frame over vblank, so the split keeps its timing:
+
+- **OAM "hide unused slots" high-water mark.**  The clear parked ~50 OAM Y-bytes
+  EVERY frame (~7 scanlines of a 262-line frame).  `bw_oam_hwm` tracks last
+  frame's slot count so the clear only touches slots that shrank away — a steady
+  sprite count costs ~0 writes.
+- **Precomputed digit addresses.**  `bw_hud_bg_paint` did a software `*32`
+  multiply per digit (~9 scanlines/repaint on the no-multiply 6502); a
+  digit-change frame that also crossed a scroll boundary was the worst case.
+  `bw_hud_bg_init` now bakes the 11 nametable addresses once (`bw_hud_addr_hi/lo`)
+  and the repaint is a tight addr→PPU walk.
+
+FCEUX-measured on a 4-screen SMB level: a realistic enemy density went **8→0**
+flicker frames over 760; a pathological 30-on-screen-enemy stress case went
+**~100→13**.  jsnes-verified: sprites render correctly (5 active, not the NMI
+attempt's garbage 64).  Very heavy scenes can still occasionally slip — that is
+frame-budget bound (fewer on-screen actors, or a faster scene, is the remedy).
+
+**Byte-identical off the feature** — every change is `BW_SMB_HUD_BG`/`SCROLL_BUILD`
+gated; goldens `1730448e` unchanged.
+
 ## v68 — 2026-07-11 — Runner (Geo Dash) player gravity: fix ASM/C divergence + make it tunable
 
 ### Changed (follow-up to v67 — goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)

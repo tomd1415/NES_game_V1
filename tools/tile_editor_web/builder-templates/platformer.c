@@ -302,6 +302,17 @@ unsigned char bw_hud_last_lives = 0xFF;
  * so they can't go in the pre-vblank HUD block above). */
 unsigned char bw_hud_dirty = 1;   /* 1 at boot -> first vblank paints all 11 digits */
 #define BW_HUD_SET_DIRTY() (bw_hud_dirty = 1)
+#ifdef SCROLL_BUILD
+/* High-water mark of last frame's OAM slot count.  The per-frame "hide unused
+ * slots" clears ~50 OAM entries EVERY frame (~7 scanlines of the ~262-line frame)
+ * — on a busy, scrolling SMB scene that is often the couple of scanlines that tips
+ * the frame over vblank and slips the sprite-0 status-bar split (the header flicker
+ * this build reports).  With the mark, the clear only touches slots that were used
+ * last frame but not this one; a stable sprite count => ~0 writes.  Starts at 256
+ * so frame 1 still does the full clear.  Gated on the bg-HUD scroll split, so no
+ * other ROM changes. */
+unsigned int bw_oam_hwm = 256;
+#endif
 /* Sprite-0 scroll split (scrolling SMB): a solid tile seeded by the server at this
  * index in both pools — the bar's opaque bottom row (the bg hit target) and the
  * sprite-0 marker (opaque only in its bottom row).  BW_HUDBG_SPLIT_Y is the marker's
@@ -348,15 +359,23 @@ void bw_hud_digit(unsigned char hx, unsigned char hy, unsigned char d) {
     oam_buf[oam_idx++] = hx;
 }
 #ifdef BW_SMB_HUD_BG
+/* Precomputed nametable address of each of the 11 digit cells, filled once in
+ * bw_hud_bg_init.  bw_hud_bg_paint runs in the vblank window on any frame a digit
+ * changed; the original `pos[i*2+1]*32 + pos[i*2]` did a software multiply PER
+ * digit (~9 scanlines/repaint on cc65's no-mul 6502).  When a digit-change frame
+ * also crosses a scroll boundary (its column burst), that repaint is the couple
+ * of scanlines that tips the frame over vblank and slips the sprite-0 split — the
+ * header flicker.  Precomputing kills the multiply so the repaint is a tight
+ * addr->PPU walk. */
+unsigned char bw_hud_addr_hi[11];
+unsigned char bw_hud_addr_lo[11];
 /* Paint all 11 status-bar digits into the nametable from the digit cache.
  * PPU writes -> caller MUST have rendering off (boot, or the vblank window). */
 void bw_hud_bg_paint(void) {
     unsigned char i;
-    unsigned int addr;
     for (i = 0; i < 11; i++) {
-        addr = 0x2000 + (unsigned int)bw_hud_bg_pos[i * 2 + 1] * 32 + bw_hud_bg_pos[i * 2];
-        PPU_ADDR = (unsigned char)(addr >> 8);
-        PPU_ADDR = (unsigned char)(addr & 0xFF);
+        PPU_ADDR = bw_hud_addr_hi[i];
+        PPU_ADDR = bw_hud_addr_lo[i];
         PPU_DATA = (unsigned char)(BW_HUD_DIGIT_BASE + bw_hud_d[i]);
     }
 }
@@ -365,6 +384,12 @@ void bw_hud_bg_paint(void) {
  * no split it simply occupies rows 0-3 of a single-screen level. */
 void bw_hud_bg_init(void) {
     unsigned int a;
+    unsigned char i;
+    for (i = 0; i < 11; i++) {         /* one-time: bake each digit's PPU address */
+        a = 0x2000 + (unsigned int)bw_hud_bg_pos[i * 2 + 1] * 32 + bw_hud_bg_pos[i * 2];
+        bw_hud_addr_hi[i] = (unsigned char)(a >> 8);
+        bw_hud_addr_lo[i] = (unsigned char)(a & 0xFF);
+    }
     PPU_ADDR = 0x20; PPU_ADDR = 0x00;              /* $2000 = NT0, row 0 */
     for (a = 0; a < 96; a++)  PPU_DATA = 0x00;     /* rows 0-2 cleared (behind the digits) */
     for (a = 0; a < 32; a++)  PPU_DATA = BW_HUDBG_SOLID_TILE;  /* row 3 = solid bar (sprite-0 hit target + strip edge) */
@@ -2773,10 +2798,27 @@ void main(void) {
         // Hide every slot we didn't touch this frame by parking its Y
         // byte at 0xFF (off-screen on NES).  Only the Y byte matters,
         // so we stride by 4 — 64 OAM entries × 1 write max.
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+        /* High-water-mark clear (see bw_oam_hwm): only park slots that shrank away
+         * since last frame, so a steady sprite count costs ~0 writes here — the
+         * freed frame budget keeps the sprite-0 status-bar split on time on busy
+         * scrolling frames (the header-flicker fix).  Correct because the OAM build
+         * always fills slots 0..oam_idx-1 contiguously, and frame 1 (hwm=256) still
+         * clears everything above the build. */
+        {
+            unsigned int oam_lim = bw_oam_hwm;
+            bw_oam_hwm = oam_idx;
+            while (oam_idx < oam_lim) {
+                oam_buf[oam_idx] = 0xFF;
+                oam_idx += 4;
+            }
+        }
+#else
         while (oam_idx < 256) {
             oam_buf[oam_idx] = 0xFF;
             oam_idx += 4;
         }
+#endif
 
 /* Feedback #2/#3 — a multi-bg door build that stays within 2x2 skips the
  * streamer (see the block-comment at scroll_stream() below).  The
