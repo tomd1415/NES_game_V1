@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from PySide6.QtCore import QIODevice, QSaveFile
+
 from nes_studio.core.project_document import ProjectDocument, ProjectFormatError
 
 from .projects import ProjectRepository
@@ -138,3 +140,44 @@ def import_bundle(
                 snapshot_count += 1
             repository._prune_snapshots(project_id)
     return BundleImportReport(tuple(imported_ids), snapshot_count, tuple(skipped))
+
+
+def export_bundle(repository: ProjectRepository, path: str | Path) -> None:
+    """Atomically export every local project and its deduplicated history."""
+
+    projects = []
+    for project in repository.list():
+        payload = project.document_json
+        projects.append(
+            {
+                "id": project.project_id,
+                "name": project.name,
+                "document_json": payload.decode("utf-8"),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "snapshots": [
+                    {
+                        "reason": snapshot.reason,
+                        "document_json": snapshot.document_json.decode("utf-8"),
+                        "sha256": snapshot.content_hash,
+                        "created_at": snapshot.created_at,
+                    }
+                    for snapshot in repository.snapshots(project.project_id)
+                ],
+            }
+        )
+    payload = (
+        json.dumps(
+            {"format": BUNDLE_FORMAT, "version": BUNDLE_VERSION, "projects": projects},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    ).encode("utf-8")
+    destination = QSaveFile(str(path))
+    if not destination.open(QIODevice.OpenModeFlag.WriteOnly):
+        raise OSError(destination.errorString())
+    if destination.write(payload) != len(payload):
+        destination.cancelWriting()
+        raise OSError(destination.errorString() or "short bundle export write")
+    if not destination.commit():
+        raise OSError(destination.errorString())

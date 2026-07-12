@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from nes_studio.core.project_document import ProjectDocument
-from nes_studio.persistence.bundles import BUNDLE_FORMAT, import_bundle
+from nes_studio.persistence.bundles import BUNDLE_FORMAT, export_bundle, import_bundle
 from nes_studio.persistence.projects import ProjectRepository
 
 
@@ -107,3 +107,34 @@ def test_database_failure_rolls_back_every_staged_project(tmp_path: Path) -> Non
         else:
             raise AssertionError("injected bundle transaction failure succeeded")
         assert repository.list() == ()
+
+
+def test_native_bundle_export_round_trips_documents_and_history(tmp_path: Path) -> None:
+    path = tmp_path / "native-bundle.json"
+    source_ids = iter(("one", "one-snapshot", "two"))
+    with ProjectRepository(
+        tmp_path / "source.sqlite3", identity=lambda: next(source_ids), clock_ms=lambda: 42
+    ) as source:
+        one = source.create("One", payload("One", 4).encode(), engine_version=63)
+        source.snapshot(one.project_id, payload("One old", 2).encode(), reason="before_play")
+        source.create("Two", payload("Two", 7).encode(), engine_version=63)
+        export_bundle(source, path)
+    bundle = json.loads(path.read_text("utf-8"))
+    assert (bundle["format"], bundle["version"]) == (BUNDLE_FORMAT, 1)
+    assert [entry["id"] for entry in bundle["projects"]] == ["one", "two"]
+
+    target_ids = iter(("target-one", "target-snapshot", "target-two"))
+    with ProjectRepository(
+        tmp_path / "target.sqlite3", identity=lambda: next(target_ids), clock_ms=lambda: 99
+    ) as target:
+        report = import_bundle(target, path)
+        assert report.imported_projects == ("target-one", "target-two")
+        assert report.imported_snapshots == 1
+        first = target.get("target-one")
+        assert first.document_json == ProjectDocument.from_json(
+            payload("One", 4).encode()
+        ).to_json()
+        history = target.snapshots(first.project_id)
+        assert [(entry.reason, entry.document_json) for entry in history] == [
+            ("before_play", payload("One old", 2).encode())
+        ]
