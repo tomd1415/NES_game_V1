@@ -57,3 +57,11 @@ def test_each_scrolling_world_screen_reads_and_writes_its_global_coordinates() -
     assert document.world_palettes(1, 1)[29][31] == 3
     assert document.world_behaviours(1, 1)[0][0] == 9
     assert document.world_tiles(0, 0)[0][0] == 0
+
+
+def test_world_grid_options_are_project_persisted_without_affecting_web_data() -> None:
+    document = ProjectDocument.preview()
+    assert document.world_grid_options() == (True, True)
+    document.set_world_grid_options(show_grid=False, show_attributes=True)
+    assert document.world_grid_options() == (False, True)
+    assert document.state["nativeUi"]["world"] == {"showGrid": False, "showAttributes": True}

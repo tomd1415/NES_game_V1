@@ -178,6 +178,16 @@ def test_keyboard_navigation_stays_inside_world_bounds() -> None:
     assert canvas.selected_cell == (0, 0)
 
 
+def test_grid_shortcut_toggles_fine_grid_without_hiding_attribute_guides() -> None:
+    create_application(["world-canvas-test"])
+    canvas = WorldCanvas()
+    canvas.show()
+    canvas.setFocus()
+    assert canvas.grid_options == (True, True)
+    QTest.keyClick(canvas, Qt.Key.Key_G)
+    assert canvas.grid_options == (False, True)
+
+
 def test_selected_tile_value_is_painted_and_reversible() -> None:
     create_application(["world-canvas-test"])
     canvas = WorldCanvas()

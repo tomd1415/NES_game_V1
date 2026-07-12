@@ -27,6 +27,7 @@ class WorldCanvas(QWidget):
     behaviour_changed = Signal(int, int, int)
     cursor_changed = Signal(int, int)
     history_changed = Signal(bool, bool)
+    grid_options_changed = Signal(bool, bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -48,6 +49,8 @@ class WorldCanvas(QWidget):
         self._selection = (0, 0, 0, 0)
         self._selection_anchor: tuple[int, int] | None = None
         self._clipboard: list[list[tuple[int, int, int]]] | None = None
+        self._show_grid = True
+        self._show_attributes = True
         self._undo: list[list[tuple[int, int, int, int, str]]] = []
         self._redo: list[list[tuple[int, int, int, int, str]]] = []
         self._stroke: list[tuple[int, int, int, int, str]] | None = None
@@ -108,6 +111,19 @@ class WorldCanvas(QWidget):
         if not 0 <= value <= 0xFF:
             raise ValueError("WORLD behaviour must be 0..255")
         self._behaviour_value = value
+
+    def set_grid_options(self, *, show_grid: bool, show_attributes: bool) -> None:
+        self._show_grid, self._show_attributes = bool(show_grid), bool(show_attributes)
+        self.update()
+
+    @property
+    def grid_options(self) -> tuple[bool, bool]:
+        return self._show_grid, self._show_attributes
+
+    def toggle_grid(self) -> None:
+        self._show_grid = not self._show_grid
+        self.grid_options_changed.emit(self._show_grid, self._show_attributes)
+        self.update()
 
     def load_tiles(self, tiles: list[list[int]]) -> None:
         if len(tiles) < self.ROWS or any(len(row) < self.COLS for row in tiles[: self.ROWS]):
@@ -385,13 +401,22 @@ class WorldCanvas(QWidget):
                 rect = QRectF(left + col * tile, top + row * tile, tile, tile)
                 painter.fillRect(rect, self.NES_COLOURS[value % len(self.NES_COLOURS)])
 
-        painter.setPen(QPen(QColor("#383858"), 1))
-        for col in range(self.COLS + 1):
-            x = left + col * tile
-            painter.drawLine(QPointF(x, top), QPointF(x, top + self.ROWS * tile))
-        for row in range(self.ROWS + 1):
-            y = top + row * tile
-            painter.drawLine(QPointF(left, y), QPointF(left + self.COLS * tile, y))
+        if self._show_grid:
+            painter.setPen(QPen(QColor("#383858"), 1))
+            for col in range(self.COLS + 1):
+                x = left + col * tile
+                painter.drawLine(QPointF(x, top), QPointF(x, top + self.ROWS * tile))
+            for row in range(self.ROWS + 1):
+                y = top + row * tile
+                painter.drawLine(QPointF(left, y), QPointF(left + self.COLS * tile, y))
+        if self._show_attributes:
+            painter.setPen(QPen(QColor("#7878c8"), 2))
+            for col in range(0, self.COLS + 1, 2):
+                x = left + col * tile
+                painter.drawLine(QPointF(x, top), QPointF(x, top + self.ROWS * tile))
+            for row in range(0, self.ROWS + 1, 2):
+                y = top + row * tile
+                painter.drawLine(QPointF(left, y), QPointF(left + self.COLS * tile, y))
 
         highlight = self._hover if self._hover is not None else self._selected
         if highlight is not None:
@@ -453,6 +478,10 @@ class WorldCanvas(QWidget):
             return
         if event.key() in {Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter}:
             self.edit_cell(col, row)
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_G:
+            self.toggle_grid()
             event.accept()
             return
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:

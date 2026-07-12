@@ -120,6 +120,29 @@ class ProjectDocument:
             for index, background in enumerate(backgrounds)
         ]
 
+    def world_grid_options(self) -> tuple[bool, bool]:
+        native_ui = self.state.get("nativeUi")
+        world = native_ui.get("world") if isinstance(native_ui, dict) else None
+        return (
+            bool(world.get("showGrid", True)) if isinstance(world, dict) else True,
+            bool(world.get("showAttributes", True)) if isinstance(world, dict) else True,
+        )
+
+    def set_world_grid_options(self, *, show_grid: bool, show_attributes: bool) -> None:
+        native_ui = self.state.setdefault("nativeUi", {})
+        if not isinstance(native_ui, dict):
+            native_ui = {}
+            self.state["nativeUi"] = native_ui
+        world = native_ui.setdefault("world", {})
+        if not isinstance(world, dict):
+            world = {}
+            native_ui["world"] = world
+        value = {"showGrid": bool(show_grid), "showAttributes": bool(show_attributes)}
+        if world != value:
+            world.clear()
+            world.update(value)
+            self.dirty = True
+
     def select_background(self, index: int) -> None:
         backgrounds = self.state.get("backgrounds")
         if not isinstance(backgrounds, list) or not 0 <= index < len(backgrounds):

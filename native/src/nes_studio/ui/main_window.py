@@ -9,6 +9,7 @@ from PySide6.QtCore import QIODevice, QObject, QSaveFile, QStandardPaths, QThrea
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QFrame,
     QFileDialog,
@@ -233,6 +234,14 @@ class MainWindow(QMainWindow):
         paste_button.clicked.connect(self._paste_world_region)
         clipboard_actions.addWidget(paste_button)
         layout.addLayout(clipboard_actions)
+        self.grid_toggle = QCheckBox("Fine grid (G)", dock)
+        self.grid_toggle.setObjectName("worldGridToggle")
+        self.grid_toggle.toggled.connect(self._set_world_grid_options)
+        layout.addWidget(self.grid_toggle)
+        self.attribute_toggle = QCheckBox("2 × 2 attribute guides", dock)
+        self.attribute_toggle.setObjectName("worldAttributeGuidesToggle")
+        self.attribute_toggle.toggled.connect(self._set_world_grid_options)
+        layout.addWidget(self.attribute_toggle)
 
         section = QLabel("TOOLS", dock)
         section.setObjectName("sectionLabel")
@@ -330,6 +339,7 @@ class MainWindow(QMainWindow):
         self.world_canvas.behaviour_changed.connect(self._world_behaviour_changed)
         self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
         self.world_canvas.history_changed.connect(self._world_history_changed)
+        self.world_canvas.grid_options_changed.connect(self._world_grid_shortcut_changed)
         screen_layout.addWidget(self.world_canvas)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
@@ -432,11 +442,32 @@ class MainWindow(QMainWindow):
 
     def _load_document_world(self) -> None:
         self._sync_background_selector()
+        show_grid, show_attributes = self._document.world_grid_options()
+        self.world_canvas.set_grid_options(show_grid=show_grid, show_attributes=show_attributes)
+        for checkbox, value in ((self.grid_toggle, show_grid), (self.attribute_toggle, show_attributes)):
+            checkbox.blockSignals(True)
+            checkbox.setChecked(value)
+            checkbox.blockSignals(False)
         self.world_canvas.load_world(
             self._document.world_tiles(self._world_screen_x, self._world_screen_y),
             self._document.world_palettes(self._world_screen_x, self._world_screen_y),
             self._document.world_behaviours(self._world_screen_x, self._world_screen_y),
         )
+
+    def _set_world_grid_options(self, _checked: bool) -> None:
+        show_grid, show_attributes = self.grid_toggle.isChecked(), self.attribute_toggle.isChecked()
+        self.world_canvas.set_grid_options(show_grid=show_grid, show_attributes=show_attributes)
+        self._document.set_world_grid_options(show_grid=show_grid, show_attributes=show_attributes)
+        self._session.schedule_save()
+        self._update_document_title()
+
+    def _world_grid_shortcut_changed(self, show_grid: bool, show_attributes: bool) -> None:
+        self.grid_toggle.blockSignals(True)
+        self.grid_toggle.setChecked(show_grid)
+        self.grid_toggle.blockSignals(False)
+        self._document.set_world_grid_options(show_grid=show_grid, show_attributes=show_attributes)
+        self._session.schedule_save()
+        self._update_document_title()
 
     def _sync_background_selector(self) -> None:
         self.background_selector.blockSignals(True)
