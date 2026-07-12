@@ -152,6 +152,12 @@ def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:
     assert document.state["animations"][0]["frames"] == [0, 1, sprite]
 
 
+def test_game_style_uses_the_shared_builder_game_config() -> None:
+    document = ProjectDocument.preview()
+    document.set_game_style("racer")
+    assert document.state["builder"]["modules"]["game"]["config"]["type"] == "racer"
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)
