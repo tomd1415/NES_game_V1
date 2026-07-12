@@ -209,6 +209,14 @@ def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
     assert document.state["audio"]["defaultSongIdx"] == 0
 
 
+def test_scene_instances_use_the_builder_scene_module_shape() -> None:
+    document = ProjectDocument.preview()
+    sprite = document.add_sprite("Slime", role="enemy")
+    instance = document.add_scene_instance(sprite, x=88, y=120)
+    document.update_scene_instance(instance, x=96, ai="walker")
+    assert document.scene_instances() == [{"id": 1, "spriteIdx": sprite, "x": 96, "y": 120, "ai": "walker", "speed": 1}]
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

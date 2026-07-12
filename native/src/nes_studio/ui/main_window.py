@@ -312,6 +312,37 @@ class MainWindow(QMainWindow):
             lambda value: self.world_canvas.set_behaviour_value(value)
         )
         layout.addWidget(self.behaviour_value)
+        entities_label = QLabel("ENTITIES", dock)
+        entities_label.setObjectName("sectionLabel")
+        layout.addWidget(entities_label)
+        self.scene_sprite = QComboBox(dock)
+        self.scene_sprite.setObjectName("sceneSpriteSelector")
+        layout.addWidget(self.scene_sprite)
+        self.scene_list = QListWidget(dock)
+        self.scene_list.setObjectName("sceneInstanceList")
+        self.scene_list.currentRowChanged.connect(self._select_scene_instance)
+        layout.addWidget(self.scene_list)
+        scene_actions = QHBoxLayout()
+        add_scene = QPushButton("Add entity", dock)
+        add_scene.setObjectName("addSceneInstanceButton")
+        add_scene.clicked.connect(self._add_scene_instance)
+        scene_actions.addWidget(add_scene)
+        remove_scene = QPushButton("Remove", dock)
+        remove_scene.setObjectName("removeSceneInstanceButton")
+        remove_scene.clicked.connect(self._remove_scene_instance)
+        scene_actions.addWidget(remove_scene)
+        layout.addLayout(scene_actions)
+        self.scene_x, self.scene_y = QSpinBox(dock), QSpinBox(dock)
+        for control, maximum, prefix in ((self.scene_x, 504, "X "), (self.scene_y, 464, "Y ")):
+            control.setRange(0, maximum)
+            control.setPrefix(prefix)
+            control.valueChanged.connect(self._update_scene_instance)
+            layout.addWidget(control)
+        self.scene_ai = QComboBox(dock)
+        self.scene_ai.setObjectName("sceneAiSelector")
+        self.scene_ai.addItems(["static", "walker", "chaser", "goomba", "koopa", "item", "flyer", "patrol"])
+        self.scene_ai.currentTextChanged.connect(lambda _value: self._update_scene_instance())
+        layout.addWidget(self.scene_ai)
         layout.addStretch(1)
         return dock
 
@@ -675,6 +706,7 @@ class MainWindow(QMainWindow):
         if mode == "SOUND":
             self._refresh_sound_editor()
         if world_enabled:
+            self._refresh_scene_editor()
             self._select_world_tool(self.world_canvas.tool)
 
     def _refresh_code_preview(self) -> None:
@@ -756,6 +788,60 @@ class MainWindow(QMainWindow):
         if self.tile_bank.currentData() == "sprite":
             return self._document.sprite_tile_pixels(self.tile_selector.value())
         return self._document.background_tile_pixels(self.tile_selector.value())
+
+    def _refresh_scene_editor(self, selected: int | None = None) -> None:
+        if selected is None: selected = self.scene_list.currentRow()
+        self.scene_sprite.blockSignals(True)
+        self.scene_sprite.clear()
+        for index, name in enumerate(self._document.sprite_names()):
+            if (self._document.state.get("sprites") or [])[index].get("role") != "player":
+                self.scene_sprite.addItem(name, index)
+        self.scene_sprite.blockSignals(False)
+        self.scene_list.blockSignals(True)
+        self.scene_list.clear()
+        for instance in self._document.scene_instances():
+            sprite_index = int(instance.get("spriteIdx") or 0)
+            names = self._document.sprite_names()
+            name = names[sprite_index] if 0 <= sprite_index < len(names) else "Character"
+            self.scene_list.addItem(f"{name} @ {instance.get('x', 0)},{instance.get('y', 0)} ({instance.get('ai', 'static')})")
+        self.scene_list.setCurrentRow(selected if 0 <= selected < self.scene_list.count() else -1)
+        self.scene_list.blockSignals(False)
+        self._select_scene_instance(self.scene_list.currentRow())
+
+    def _select_scene_instance(self, index: int) -> None:
+        instances = self._document.scene_instances()
+        instance = instances[index] if 0 <= index < len(instances) else None
+        for control, key, default in ((self.scene_x, "x", 0), (self.scene_y, "y", 0)):
+            control.blockSignals(True); control.setValue(int(instance.get(key, default)) if instance else default); control.blockSignals(False)
+        self.scene_ai.blockSignals(True)
+        self.scene_ai.setCurrentText(str(instance.get("ai", "static")) if instance else "static")
+        self.scene_ai.blockSignals(False)
+
+    def _add_scene_instance(self) -> None:
+        sprite = self.scene_sprite.currentData()
+        if sprite is None:
+            QMessageBox.information(self, "Add entity", "Create a non-player character in CHARS first.")
+            return
+        index = self._document.add_scene_instance(int(sprite))
+        self._session.schedule_save()
+        self._refresh_scene_editor(index)
+        self._update_document_title()
+
+    def _remove_scene_instance(self) -> None:
+        index = self.scene_list.currentRow()
+        if index >= 0:
+            self._document.delete_scene_instance(index)
+            self._session.schedule_save()
+            self._refresh_scene_editor(index)
+            self._update_document_title()
+
+    def _update_scene_instance(self, _value: int | None = None) -> None:
+        index = self.scene_list.currentRow()
+        if index >= 0:
+            self._document.update_scene_instance(index, x=self.scene_x.value(), y=self.scene_y.value(), ai=self.scene_ai.currentText())
+            self._session.schedule_save()
+            self._refresh_scene_editor(index)
+            self._update_document_title()
 
     def _refresh_sprite_editor(self, selected: int | None = None) -> None:
         current = self.sprite_list.currentRow() if selected is None else selected

@@ -458,6 +458,47 @@ class ProjectDocument:
             audio["sfx"] = None
             self.dirty = True
 
+    def scene_instances(self) -> list[dict[str, Any]]:
+        return self._scene_node()["config"]["instances"]
+
+    def add_scene_instance(self, sprite_index: int, *, x: int = 120, y: int = 120) -> int:
+        if not 0 <= sprite_index < len(self._sprites()) or not 0 <= x <= 504 or not 0 <= y <= 464:
+            raise ValueError("Scene instance is outside the project")
+        instances = self.scene_instances()
+        identifier = max((int(instance.get("id") or 0) for instance in instances if isinstance(instance, dict)), default=0) + 1
+        instances.append({"id": identifier, "spriteIdx": sprite_index, "x": x, "y": y, "ai": "static", "speed": 1})
+        self.dirty = True
+        return len(instances) - 1
+
+    def update_scene_instance(self, index: int, *, sprite_index: int | None = None, x: int | None = None, y: int | None = None, ai: str | None = None) -> None:
+        instances = self.scene_instances()
+        if not 0 <= index < len(instances) or not isinstance(instances[index], dict):
+            raise IndexError("Scene instance outside project")
+        instance = instances[index]
+        changes: dict[str, Any] = {}
+        if sprite_index is not None:
+            if not 0 <= sprite_index < len(self._sprites()): raise ValueError("Sprite index outside project")
+            changes["spriteIdx"] = sprite_index
+        if x is not None:
+            if not 0 <= x <= 504: raise ValueError("Scene X must be 0..504")
+            changes["x"] = x
+        if y is not None:
+            if not 0 <= y <= 464: raise ValueError("Scene Y must be 0..464")
+            changes["y"] = y
+        if ai is not None:
+            if ai not in {"static", "walker", "chaser", "goomba", "koopa", "item", "flyer", "patrol"}: raise ValueError("Unknown scene AI")
+            changes["ai"] = ai
+        if any(instance.get(key) != value for key, value in changes.items()):
+            instance.update(changes)
+            self.dirty = True
+
+    def delete_scene_instance(self, index: int) -> None:
+        instances = self.scene_instances()
+        if not 0 <= index < len(instances):
+            raise IndexError("Scene instance outside project")
+        instances.pop(index)
+        self.dirty = True
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):
@@ -492,6 +533,18 @@ class ProjectDocument:
         if not isinstance(audio.get("defaultSongIdx"), int):
             audio["defaultSongIdx"] = 0
         return audio
+
+    def _scene_node(self) -> dict[str, Any]:
+        builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
+        modules = builder.setdefault("modules", {}) if isinstance(builder, dict) else {}
+        if not isinstance(modules, dict): modules = {}; builder["modules"] = modules
+        scene = modules.setdefault("scene", {"enabled": True, "config": {"instances": []}})
+        if not isinstance(scene, dict): scene = {}; modules["scene"] = scene
+        scene["enabled"] = True
+        config = scene.setdefault("config", {})
+        if not isinstance(config, dict): config = {}; scene["config"] = config
+        if not isinstance(config.get("instances"), list): config["instances"] = []
+        return scene
 
     @staticmethod
     def _audio_asset(filename: str, asm: str) -> dict[str, Any]:
