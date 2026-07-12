@@ -203,3 +203,57 @@ def test_engine_version_upgrade_and_explicit_downgrade_rules() -> None:
         pass
     else:
         raise AssertionError("future engine version was accepted")
+
+
+def test_historical_animation_builder_and_metatile_shapes_are_backfilled() -> None:
+    state = project_state()
+    state["template"] = "topdown"
+    state["builder"] = {"version": 0, "legacy": "preserved elsewhere"}
+    state["animations"] = [{"name": "old walk", "frames": [0], "fps": 0}]
+    state["animation_assignments"] = {"walk": 1, "jump": None}
+    state["backgrounds"][0]["tileMode"] = "16x16"
+    document = ProjectDocument.from_json(json.dumps(state))
+    assert document.state["animation_assignments"] == {
+        "walk": 1,
+        "jump": None,
+        "attack": None,
+    }
+    assert document.state["animations"][0] == {
+        "name": "old walk",
+        "frames": [0],
+        "fps": 1,
+        "id": 1,
+        "role": "player",
+        "style": "custom",
+    }
+    assert document.state["nextAnimationId"] == 2
+    assert document.state["builder"]["version"] == 1
+    assert document.state["builder"]["modules"]["game"]["config"]["type"] == "topdown"
+    assert document.state["backgrounds"][0]["metatiles"] == []
+    assert document.state["backgrounds"][0]["mtmap"] == []
+
+
+def test_legacy_custom_behaviour_slot_six_moves_to_seven_everywhere() -> None:
+    state = project_state()
+    state["backgrounds"][0]["behaviour"][2][3] = 6
+    state["behaviour_types"] = [
+        {"id": 6, "name": "ice", "colour": "#abcdef", "builtin": False}
+    ]
+    state["behaviour_reactions"] = [{"6": "bounce"}]
+    document = ProjectDocument.from_json(json.dumps(state))
+    assert document.state["behaviour_types"] == [
+        {"id": 7, "name": "ice", "colour": "#abcdef", "builtin": False}
+    ]
+    assert document.state["backgrounds"][0]["behaviour"][2][3] == 7
+    assert document.state["behaviour_reactions"] == [{"7": "bounce"}]
+
+
+def test_future_schema_and_unknown_fields_survive_normalization() -> None:
+    state = project_state()
+    state["version"] = 99
+    state["futureNativeMustPreserve"] = {"nested": {"value": True}}
+    document = ProjectDocument.from_json(json.dumps(state))
+    assert document.state["version"] == 99
+    assert document.state["futureNativeMustPreserve"] == {"nested": {"value": True}}
+    issues = ProjectDocument.validate(document.state)
+    assert any(issue.severity == "warning" and issue.path == "version" for issue in issues)
