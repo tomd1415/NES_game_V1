@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -401,6 +402,47 @@ class ProjectDocument:
             config[key] = value
             self.dirty = True
 
+    def add_audio_song(self, filename: str, asm: str) -> int:
+        if not filename or not asm:
+            raise ValueError("Audio source needs a filename and content")
+        audio = self._audio()
+        song = self._audio_asset(filename, asm)
+        audio["songs"].append(song)
+        self.dirty = True
+        return len(audio["songs"]) - 1
+
+    def set_audio_sfx(self, filename: str, asm: str) -> None:
+        if not filename or not asm:
+            raise ValueError("Audio source needs a filename and content")
+        asset = self._audio_asset(filename, asm)
+        audio = self._audio()
+        if audio.get("sfx") != asset:
+            audio["sfx"] = asset
+            self.dirty = True
+
+    def set_default_song(self, index: int) -> None:
+        songs = self._audio()["songs"]
+        if not 0 <= index < len(songs):
+            raise IndexError("Song index outside project")
+        if self._audio().get("defaultSongIdx") != index:
+            self._audio()["defaultSongIdx"] = index
+            self.dirty = True
+
+    def remove_audio_song(self, index: int) -> None:
+        audio = self._audio()
+        songs = audio["songs"]
+        if not 0 <= index < len(songs):
+            raise IndexError("Song index outside project")
+        songs.pop(index)
+        audio["defaultSongIdx"] = min(int(audio.get("defaultSongIdx") or 0), max(0, len(songs) - 1))
+        self.dirty = True
+
+    def clear_audio_sfx(self) -> None:
+        audio = self._audio()
+        if audio.get("sfx") is not None:
+            audio["sfx"] = None
+            self.dirty = True
+
     def _sprites(self) -> list[Any]:
         sprites = self.state.setdefault("sprites", [])
         if not isinstance(sprites, list):
@@ -422,6 +464,25 @@ class ProjectDocument:
         for key in ("walk", "jump", "attack"):
             assignments.setdefault(key, None)
         return assignments
+
+    def _audio(self) -> dict[str, Any]:
+        audio = self.state.setdefault("audio", {"songs": [], "sfx": None, "defaultSongIdx": 0})
+        if not isinstance(audio, dict):
+            audio = {"songs": [], "sfx": None, "defaultSongIdx": 0}
+            self.state["audio"] = audio
+        if not isinstance(audio.get("songs"), list):
+            audio["songs"] = []
+        if "sfx" not in audio:
+            audio["sfx"] = None
+        if not isinstance(audio.get("defaultSongIdx"), int):
+            audio["defaultSongIdx"] = 0
+        return audio
+
+    @staticmethod
+    def _audio_asset(filename: str, asm: str) -> dict[str, Any]:
+        match = re.search(r"^\s*\.export\s+_?([A-Za-z_][A-Za-z0-9_]*)\b", asm, re.MULTILINE)
+        name = re.sub(r"\.(s|asm)$", "", Path(filename).name, flags=re.IGNORECASE)
+        return {"name": name, "filename": Path(filename).name, "symbol": match.group(1) if match else None, "asm": asm, "size": len(asm.encode("utf-8"))}
 
     def _sprite_at(self, index: int) -> dict[str, Any]:
         sprites = self._sprites()

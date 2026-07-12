@@ -561,6 +561,34 @@ class MainWindow(QMainWindow):
         self.attack_button.currentTextChanged.connect(lambda value: self._set_player_option("attackButton", value))
         rules_layout.addWidget(self.attack_button)
         self.editor_stack.addWidget(self.rules_editor)
+        self.sound_editor = QFrame(self.editor_stack)
+        self.sound_editor.setObjectName("soundEditor")
+        sound_layout = QVBoxLayout(self.sound_editor)
+        sound_layout.addWidget(QLabel("MUSIC & SOUND EFFECTS", self.sound_editor))
+        self.song_list = QListWidget(self.sound_editor)
+        self.song_list.setObjectName("songList")
+        self.song_list.setAccessibleName("Project songs")
+        sound_layout.addWidget(self.song_list)
+        song_actions = QHBoxLayout()
+        for label, callback in (("Import song", lambda: self._import_audio(False)), ("Make default", self._make_default_song), ("Remove song", self._remove_song)):
+            button = QPushButton(label, self.sound_editor)
+            button.clicked.connect(callback)
+            song_actions.addWidget(button)
+        sound_layout.addLayout(song_actions)
+        self.sfx_label = QLabel("No SFX pack loaded", self.sound_editor)
+        self.sfx_label.setObjectName("sfxStatus")
+        sound_layout.addWidget(self.sfx_label)
+        sfx_actions = QHBoxLayout()
+        for label, callback in (("Import SFX", lambda: self._import_audio(True)), ("Remove SFX", self._remove_sfx)):
+            button = QPushButton(label, self.sound_editor)
+            button.clicked.connect(callback)
+            sfx_actions.addWidget(button)
+        sound_layout.addLayout(sfx_actions)
+        self.audio_budget = QLabel(self.sound_editor)
+        self.audio_budget.setObjectName("audioBudget")
+        self.audio_budget.setWordWrap(True)
+        sound_layout.addWidget(self.audio_budget)
+        self.editor_stack.addWidget(self.sound_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
@@ -626,7 +654,7 @@ class MainWindow(QMainWindow):
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
         self.editor_stack.setCurrentWidget(
-            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.rules_editor if mode == "RULES" else self.world_canvas
+            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.rules_editor if mode == "RULES" else self.sound_editor if mode == "SOUND" else self.world_canvas
         )
         if mode == "CODE":
             self._refresh_code_preview()
@@ -639,6 +667,8 @@ class MainWindow(QMainWindow):
             self._refresh_animation_list()
         if mode == "RULES":
             self._refresh_rules_editor()
+        if mode == "SOUND":
+            self._refresh_sound_editor()
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
@@ -937,6 +967,56 @@ class MainWindow(QMainWindow):
         self._document.set_player_option(key, value)
         self._session.schedule_save()
         self._update_document_title()
+
+    def _refresh_sound_editor(self) -> None:
+        audio = self._document.state.get("audio") or {}
+        songs = audio.get("songs") if isinstance(audio, dict) and isinstance(audio.get("songs"), list) else []
+        default = int(audio.get("defaultSongIdx") or 0) if isinstance(audio, dict) else 0
+        self.song_list.clear()
+        for index, song in enumerate(songs):
+            if isinstance(song, dict):
+                marker = "★ " if index == default else "☆ "
+                self.song_list.addItem(f"{marker}{song.get('name') or song.get('filename') or f'song {index}'} — {int(song.get('size') or len(str(song.get('asm') or '').encode('utf-8')))} bytes")
+        sfx = audio.get("sfx") if isinstance(audio, dict) else None
+        self.sfx_label.setText(f"SFX: {sfx.get('name') or sfx.get('filename')}" if isinstance(sfx, dict) else "No SFX pack loaded")
+        used = sum(int(song.get("size") or len(str(song.get("asm") or "").encode("utf-8"))) for song in songs if isinstance(song, dict)) + (int(sfx.get("size") or len(str(sfx.get("asm") or "").encode("utf-8"))) if isinstance(sfx, dict) else 0)
+        self.audio_budget.setText(f"Audio uses ~{used / 1024:.1f} KB ({round(used / 32768 * 100)}% of a 32 KB cartridge).")
+
+    def _import_audio(self, sfx: bool) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Import SFX" if sfx else "Import song", "", "Assembly source (*.s *.asm)")
+        if not path:
+            return
+        try:
+            asm = Path(path).read_text(encoding="utf-8")
+            if sfx:
+                self._document.set_audio_sfx(path, asm)
+            else:
+                self._document.add_audio_song(path, asm)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Could not import audio", str(exc))
+            return
+        self._session.schedule_save()
+        self._refresh_sound_editor()
+        self._update_document_title()
+
+    def _make_default_song(self) -> None:
+        index = self.song_list.currentRow()
+        if index >= 0:
+            self._document.set_default_song(index)
+            self._session.schedule_save()
+            self._refresh_sound_editor()
+
+    def _remove_song(self) -> None:
+        index = self.song_list.currentRow()
+        if index >= 0:
+            self._document.remove_audio_song(index)
+            self._session.schedule_save()
+            self._refresh_sound_editor()
+
+    def _remove_sfx(self) -> None:
+        self._document.clear_audio_sfx()
+        self._session.schedule_save()
+        self._refresh_sound_editor()
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)

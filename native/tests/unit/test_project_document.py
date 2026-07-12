@@ -187,6 +187,19 @@ def test_player_options_use_the_shared_builder_player_one_config() -> None:
     }
 
 
+def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
+    document = ProjectDocument.preview()
+    first = document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")
+    document.add_audio_song("battle.asm", ".export battle\nbattle: .byte 1")
+    document.set_audio_sfx("effects.s", ".export _sfx\nsfx: .byte 2")
+    document.set_default_song(1)
+    assert document.state["audio"]["songs"][first]["symbol"] == "theme"
+    assert document.state["audio"]["songs"][1]["symbol"] == "battle"
+    assert document.state["audio"]["sfx"]["symbol"] == "sfx"
+    document.remove_audio_song(1)
+    assert document.state["audio"]["defaultSongIdx"] == 0
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)
