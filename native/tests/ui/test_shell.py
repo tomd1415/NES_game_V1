@@ -74,6 +74,11 @@ class NativeShellTests(unittest.TestCase):
         self.assertEqual(window._document.background_palette(0)[0], 0x2A)
         window._sprite_palette_controls[0].setValue(0x16)
         self.assertEqual(window._document.sprite_palette(0)[0], 0x16)
+        window.select_mode("TILES")
+        self.assertEqual(window.editor_stack.currentWidget(), window.tile_editor)
+        window.tile_selector.setValue(7)
+        window._tile_pixel_buttons[4 * 8 + 3].click()
+        self.assertEqual(window._document.background_tile_pixels(7)[4][3], 1)
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "project.json"
             window.select_mode("WORLD")

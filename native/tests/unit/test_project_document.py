@@ -91,6 +91,14 @@ def test_sprite_palettes_have_three_editable_nontransparent_slots() -> None:
     assert document.sprite_palette(3) == (0x0F, 0x0F, 0x16)
 
 
+def test_background_tile_pixels_are_lazily_initialized_and_editable() -> None:
+    document = ProjectDocument.preview()
+    assert document.background_tile_pixels(7) == [[0] * 8 for _ in range(8)]
+    document.set_background_tile_pixel(7, 3, 4, 2)
+    assert document.background_tile_pixels(7)[4][3] == 2
+    assert len(document.state["bg_tiles"]) == 256
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)

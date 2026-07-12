@@ -400,6 +400,34 @@ class MainWindow(QMainWindow):
                 self._sprite_palette_controls.append(control)
                 palette_layout.addWidget(control, palette + 7, slot + 1)
         self.editor_stack.addWidget(self.palette_editor)
+        self.tile_editor = QFrame(self.editor_stack)
+        self.tile_editor.setObjectName("tileEditor")
+        tile_layout = QVBoxLayout(self.tile_editor)
+        selector_row = QHBoxLayout()
+        selector_row.addWidget(QLabel("BACKGROUND TILE", self.tile_editor))
+        self.tile_selector = QSpinBox(self.tile_editor)
+        self.tile_selector.setObjectName("backgroundTileSelector")
+        self.tile_selector.setRange(0, 255)
+        self.tile_selector.setDisplayIntegerBase(16)
+        self.tile_selector.setPrefix("0x")
+        self.tile_selector.setAccessibleName("Background tile index")
+        self.tile_selector.valueChanged.connect(self._refresh_tile_editor)
+        selector_row.addWidget(self.tile_selector)
+        tile_layout.addLayout(selector_row)
+        tile_grid = QGridLayout()
+        tile_grid.setSpacing(1)
+        self._tile_pixel_buttons: list[QPushButton] = []
+        for row in range(8):
+            for column in range(8):
+                button = QPushButton(self.tile_editor)
+                button.setFixedSize(32, 32)
+                button.setObjectName(f"backgroundTilePixel{column}_{row}")
+                button.setAccessibleName(f"Background tile pixel {column}, {row}")
+                button.clicked.connect(lambda _checked=False, column=column, row=row: self._cycle_tile_pixel(column, row))
+                self._tile_pixel_buttons.append(button)
+                tile_grid.addWidget(button, row, column)
+        tile_layout.addLayout(tile_grid)
+        self.editor_stack.addWidget(self.tile_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
@@ -465,12 +493,14 @@ class MainWindow(QMainWindow):
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
         self.editor_stack.setCurrentWidget(
-            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.world_canvas
+            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.world_canvas
         )
         if mode == "CODE":
             self._refresh_code_preview()
         if mode == "PALS":
             self._refresh_palette_editor()
+        if mode == "TILES":
+            self._refresh_tile_editor()
         if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
@@ -515,6 +545,25 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"SP{palette} palette slot {slot + 1} set to 0x{colour:02X}")
+
+    def _refresh_tile_editor(self, _index: int | None = None) -> None:
+        pixels = self._document.background_tile_pixels(self.tile_selector.value())
+        colours = ("#181828", "#4878d8", "#78d878", "#f8d878")
+        for row in range(8):
+            for column in range(8):
+                value = pixels[row][column]
+                button = self._tile_pixel_buttons[row * 8 + column]
+                button.setText(str(value))
+                button.setStyleSheet(f"background: {colours[value]}; color: #080810; padding: 0;")
+
+    def _cycle_tile_pixel(self, column: int, row: int) -> None:
+        index = self.tile_selector.value()
+        value = (self._document.background_tile_pixels(index)[row][column] + 1) & 3
+        self._document.set_background_tile_pixel(index, column, row, value)
+        self._refresh_tile_editor()
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Tile 0x{index:02X} pixel {column}, {row} set to {value}")
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)

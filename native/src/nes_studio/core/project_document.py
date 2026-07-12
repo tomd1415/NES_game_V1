@@ -147,6 +147,47 @@ class ProjectDocument:
     def set_sprite_palette_slot(self, palette: int, slot: int, colour: int) -> None:
         self._set_palette_slot("sprite_palettes", palette, slot, colour)
 
+    def background_tile_pixels(self, index: int) -> list[list[int]]:
+        return self._tile_pixels("bg_tiles", index)
+
+    def set_background_tile_pixel(self, index: int, column: int, row: int, value: int) -> None:
+        if not 0 <= value <= 3:
+            raise ValueError("NES tile pixel must be 0..3")
+        pixels = self._ensure_tile_pixels("bg_tiles", index)
+        if not 0 <= column < 8 or not 0 <= row < 8:
+            raise IndexError("NES tile pixel coordinates must be 0..7")
+        if pixels[row][column] != value:
+            pixels[row][column] = value
+            self.dirty = True
+
+    def _tile_pixels(self, group: str, index: int) -> list[list[int]]:
+        if not 0 <= index < 256:
+            raise IndexError("NES tile index must be 0..255")
+        tiles = self.state.get(group)
+        tile = tiles[index] if isinstance(tiles, list) and index < len(tiles) else None
+        pixels = tile.get("pixels") if isinstance(tile, dict) else None
+        if not isinstance(pixels, list) or len(pixels) < 8:
+            return [[0 for _ in range(8)] for _ in range(8)]
+        return [
+            [int(row[column]) & 3 if isinstance(row, list) and column < len(row) else 0 for column in range(8)]
+            for row in pixels[:8]
+        ]
+
+    def _ensure_tile_pixels(self, group: str, index: int) -> list[list[int]]:
+        tiles = self.state.setdefault(group, [])
+        if not isinstance(tiles, list):
+            tiles = []
+            self.state[group] = tiles
+        while len(tiles) < 256:
+            tiles.append({"name": "", "pixels": [[0 for _ in range(8)] for _ in range(8)]})
+        tile = tiles[index]
+        if not isinstance(tile, dict):
+            tile = {"name": ""}
+            tiles[index] = tile
+        pixels = self._tile_pixels(group, index)
+        tile["pixels"] = pixels
+        return pixels
+
     def _palette(self, group: str, index: int) -> tuple[int, int, int]:
         if not 0 <= index < 4:
             raise IndexError("Palette index must be 0..3")
