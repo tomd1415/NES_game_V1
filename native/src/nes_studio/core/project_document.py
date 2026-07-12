@@ -461,6 +461,16 @@ class ProjectDocument:
         if not isinstance(config, dict): config = {}; node["config"] = config
         if config.get(key) != value: config[key] = value; self.dirty = True
 
+    def set_player2_enabled(self, enabled: bool) -> None:
+        player = self._player2_node()
+        if player.get("enabled") != enabled: player["enabled"] = enabled; self.dirty = True
+
+    def set_player2_option(self, key: str, value: int) -> None:
+        ranges = {"startX": (0, 240), "startY": (16, 200), "walkSpeed": (1, 4), "jumpHeight": (8, 40), "maxHp": (0, 9)}
+        if key not in ranges or not ranges[key][0] <= value <= ranges[key][1]: raise ValueError("Invalid Player 2 option")
+        config = self._player2_node().setdefault("config", {})
+        if config.get(key) != value: config[key] = value; self.dirty = True
+
     def add_audio_song(self, filename: str, asm: str) -> int:
         if not filename or not asm:
             raise ValueError("Audio source needs a filename and content")
@@ -589,6 +599,16 @@ class ProjectDocument:
         if not isinstance(config, dict): config = {}; scene["config"] = config
         if not isinstance(config.get("instances"), list): config["instances"] = []
         return scene
+
+    def _player2_node(self) -> dict[str, Any]:
+        builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
+        modules = builder.setdefault("modules", {}) if isinstance(builder, dict) else {}
+        if not isinstance(modules, dict): modules = {}; builder["modules"] = modules
+        players = modules.setdefault("players", {"enabled": True, "config": {"count": 1}, "submodules": {}})
+        submodules = players.setdefault("submodules", {}) if isinstance(players, dict) else {}
+        if not isinstance(submodules, dict): submodules = {}; players["submodules"] = submodules
+        node = submodules.setdefault("player2", {"enabled": False, "config": {}})
+        return node if isinstance(node, dict) else {"enabled": False, "config": {}}
 
     @staticmethod
     def _audio_asset(filename: str, asm: str) -> dict[str, Any]:

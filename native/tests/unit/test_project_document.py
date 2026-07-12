@@ -241,6 +241,13 @@ def test_global_physics_uses_the_shared_builder_globals_config() -> None:
     assert document.state["builder"]["modules"]["globals"] == {"enabled": True, "config": {"gravityPx": 3, "jumpSpeedPx": 5, "bobWhenWalking": True}}
 
 
+def test_player_two_uses_the_shared_builder_submodule_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_player2_enabled(True)
+    document.set_player2_option("startX", 180)
+    assert document.state["builder"]["modules"]["players"]["submodules"]["player2"] == {"enabled": True, "config": {"startX": 180}}
+
+
 def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
     document = ProjectDocument.preview()
     first = document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")
