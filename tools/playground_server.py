@@ -53,6 +53,7 @@ from nes_studio_core import build as build_core
 from nes_studio_core import play as play_core
 from nes_studio_core import project as project_core
 from nes_studio_core import preparation as preparation_core
+from nes_studio_core import build_assets as build_assets_core
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / "tools" / "tile_editor_web"
@@ -1184,9 +1185,9 @@ def _build_rom(body):
     """Generate and compile a ROM through the transport-independent core."""
     builder = preparation_core.ProjectBuilder(
         BUILD_SERVICE,
-        asm_makefile=ASM_MAKEFILE,
-        songs_stub=_AUTO_SONGS_STUB_ASM,
-        sfx_stub=_AUTO_SFX_STUB_ASM,
+        asm_makefile=build_assets_core.ASM_MAKEFILE,
+        songs_stub=build_assets_core.AUTO_SONGS_STUB_ASM,
+        sfx_stub=build_assets_core.AUTO_SFX_STUB_ASM,
     )
     return builder.build(
         body,
