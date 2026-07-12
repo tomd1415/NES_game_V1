@@ -383,6 +383,22 @@ class MainWindow(QMainWindow):
                 )
                 self._background_palette_controls.append(control)
                 palette_layout.addWidget(control, palette + 1, slot + 1)
+        palette_layout.addWidget(QLabel("SPRITE PALETTES — slot 0 is transparent", self.palette_editor), 6, 0, 1, 4)
+        self._sprite_palette_controls: list[QSpinBox] = []
+        for palette in range(4):
+            palette_layout.addWidget(QLabel(f"SP{palette}", self.palette_editor), palette + 7, 0)
+            for slot in range(3):
+                control = QSpinBox(self.palette_editor)
+                control.setRange(0, 0x3F)
+                control.setDisplayIntegerBase(16)
+                control.setPrefix("0x")
+                control.setObjectName(f"spritePalette{palette}Slot{slot + 1}")
+                control.setAccessibleName(f"Sprite palette {palette} colour slot {slot + 1}")
+                control.valueChanged.connect(
+                    lambda value, palette=palette, slot=slot: self._set_sprite_palette_slot(palette, slot, value)
+                )
+                self._sprite_palette_controls.append(control)
+                palette_layout.addWidget(control, palette + 7, slot + 1)
         self.editor_stack.addWidget(self.palette_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
@@ -482,12 +498,23 @@ class MainWindow(QMainWindow):
                 control.blockSignals(True)
                 control.setValue(colour)
                 control.blockSignals(False)
+            for slot, colour in enumerate(self._document.sprite_palette(palette)):
+                control = self._sprite_palette_controls[palette * 3 + slot]
+                control.blockSignals(True)
+                control.setValue(colour)
+                control.blockSignals(False)
 
     def _set_background_palette_slot(self, palette: int, slot: int, colour: int) -> None:
         self._document.set_background_palette_slot(palette, slot, colour)
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"BG{palette} palette slot {slot + 1} set to 0x{colour:02X}")
+
+    def _set_sprite_palette_slot(self, palette: int, slot: int, colour: int) -> None:
+        self._document.set_sprite_palette_slot(palette, slot, colour)
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"SP{palette} palette slot {slot + 1} set to 0x{colour:02X}")
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)

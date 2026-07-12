@@ -85,6 +85,12 @@ def test_background_palette_slots_are_normalized_and_preserve_the_shared_backdro
     assert document.universal_background == 0x21
 
 
+def test_sprite_palettes_have_three_editable_nontransparent_slots() -> None:
+    document = ProjectDocument.preview()
+    document.set_sprite_palette_slot(3, 2, 0x16)
+    assert document.sprite_palette(3) == (0x0F, 0x0F, 0x16)
+
+
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
     document = ProjectDocument.from_json(json.dumps(project_state()))
     document.set_world_palette(4, 5, 2)
