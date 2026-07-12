@@ -182,6 +182,9 @@ def test_metatile_library_can_add_and_delete_blocks() -> None:
     document.promote_selected_background_to_metatiles()
     block = document.add_metatile()
     assert document.delete_metatile(block)
+    block = document.add_metatile()
+    document.set_metatile(block, tiles=[1, 2, 3, 4], palette=2, behaviour=7)
+    assert document.state["backgrounds"][0]["metatiles"][block] == {"tiles": [1, 2, 3, 4], "palette": 2, "behaviour": 7}
 
 
 def test_animation_creation_uses_migrated_stable_ids_and_fps_limits() -> None:

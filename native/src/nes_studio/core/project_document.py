@@ -776,6 +776,21 @@ class ProjectDocument:
         if deleted: self.dirty = True
         return deleted
 
+    def set_metatile(self, index: int, *, tiles: list[int] | None = None, palette: int | None = None, behaviour: int | None = None) -> None:
+        blocks = self._selected_background().get("metatiles") or []
+        if not 0 <= index < len(blocks) or not isinstance(blocks[index], dict): raise IndexError("Metatile outside project")
+        block = blocks[index]
+        if tiles is not None:
+            if len(tiles) != 4 or any(not 0 <= value <= 255 for value in tiles): raise ValueError("Metatile needs four tile values")
+            block["tiles"] = list(tiles)
+        if palette is not None:
+            if not 0 <= palette <= 3: raise ValueError("Metatile palette must be 0..3")
+            block["palette"] = palette
+        if behaviour is not None:
+            if not 0 <= behaviour <= 255: raise ValueError("Metatile behaviour must be 0..255")
+            block["behaviour"] = behaviour
+        self.dirty = True
+
     def set_background_dimensions(self, screens_x: int, screens_y: int) -> None:
         if (screens_x, screens_y) not in {(1, 1), (2, 1), (1, 2), (2, 2)}:
             raise ValueError("WORLD layout must be 1×1, 2×1, 1×2, or 2×2")
