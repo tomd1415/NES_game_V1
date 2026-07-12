@@ -479,6 +479,10 @@ class MainWindow(QMainWindow):
         self.sprite_cell_tile.valueChanged.connect(self._set_sprite_cell)
         self.sprite_cell_palette.valueChanged.connect(self._set_sprite_cell)
         chars_layout.addLayout(cell_controls)
+        self.new_animation_button = QPushButton("New animation", self.chars_editor)
+        self.new_animation_button.setObjectName("newAnimationButton")
+        self.new_animation_button.clicked.connect(self._new_animation)
+        chars_layout.addWidget(self.new_animation_button)
         self.editor_stack.addWidget(self.chars_editor)
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
@@ -727,6 +731,19 @@ class MainWindow(QMainWindow):
         if index >= 0:
             self._document.set_sprite_cell(index, self.sprite_cell_x.value(), self.sprite_cell_y.value(), tile=self.sprite_cell_tile.value(), palette=self.sprite_cell_palette.value())
             self._session.schedule_save()
+
+    def _new_animation(self) -> None:
+        name, accepted = QInputDialog.getText(self, "New animation", "Name:", text="Animation")
+        if not accepted:
+            return
+        try:
+            self._document.add_animation(name)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Could not create animation", str(exc))
+            return
+        self._session.schedule_save()
+        self._update_document_title()
+        self.statusBar().showMessage(f"Created animation {name.strip()}")
 
     def _select_world_tool(self, tool: str) -> None:
         self.world_canvas.set_tool(tool)
