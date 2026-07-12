@@ -61,3 +61,53 @@ def test_schema_enforces_foreign_keys_and_missing_projects_are_actionable(tmp_pa
                 assert "Unknown project" in str(exc)
             else:
                 raise AssertionError("missing project operation succeeded")
+
+
+def test_snapshots_are_reasoned_deduplicated_retained_and_cascade_deleted(tmp_path: Path) -> None:
+    identities = iter(("project", "s1", "s2", "s3", "s4", "s5"))
+    tick = iter(range(1000, 9000))
+    with ProjectRepository(
+        tmp_path / "projects.sqlite3",
+        identity=lambda: next(identities),
+        clock_ms=lambda: next(tick),
+        snapshot_limit=2,
+        backup_limit=1,
+    ) as store:
+        project = store.create("Game", b"current", engine_version=63)
+        first = store.snapshot(project.project_id, b"one", reason="auto_30s")
+        assert first is not None
+        assert store.snapshot(project.project_id, b"one", reason="before_play") is None
+        store.snapshot(project.project_id, b"two", reason="before_play")
+        store.snapshot(project.project_id, b"three", reason="before_import")
+        store.snapshot(project.project_id, b"backup-one", reason="backup_5m")
+        store.snapshot(project.project_id, b"backup-two", reason="backup_5m")
+        entries = store.snapshots(project.project_id)
+        assert [(entry.reason, entry.document_json) for entry in entries] == [
+            ("backup_5m", b"backup-two"),
+            ("before_import", b"three"),
+            ("before_play", b"two"),
+        ]
+        store.delete(project.project_id)
+        assert store.connection.execute("SELECT count(*) FROM snapshots").fetchone()[0] == 0
+
+
+def test_restore_preserves_current_before_replacing_it(tmp_path: Path) -> None:
+    identities = iter(("project", "target", "before"))
+    tick = iter(range(1000, 5000))
+    with ProjectRepository(
+        tmp_path / "projects.sqlite3",
+        identity=lambda: next(identities),
+        clock_ms=lambda: next(tick),
+    ) as store:
+        project = store.create("Game", b"current", engine_version=63)
+        target = store.snapshot(project.project_id, b"old version", reason="auto_30s")
+        assert target is not None
+        restored = store.restore_snapshot(
+            project.project_id, target.snapshot_id, expected_revision=1
+        )
+        assert restored.document_json == b"old version"
+        assert restored.revision == 2
+        assert [(entry.reason, entry.document_json) for entry in store.snapshots(project.project_id)] == [
+            ("before_restore", b"current"),
+            ("auto_30s", b"old version"),
+        ]
