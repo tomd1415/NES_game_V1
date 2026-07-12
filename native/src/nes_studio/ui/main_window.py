@@ -214,6 +214,17 @@ class MainWindow(QMainWindow):
         self.metatile_mode_button.setObjectName("metatileModeButton")
         self.metatile_mode_button.clicked.connect(self._toggle_metatile_mode)
         layout.addWidget(self.metatile_mode_button)
+        self.metatile_list = QListWidget(dock)
+        self.metatile_list.setObjectName("metatileList")
+        layout.addWidget(self.metatile_list)
+        metatile_actions = QHBoxLayout()
+        add_metatile = QPushButton("New block", dock)
+        add_metatile.clicked.connect(self._add_metatile)
+        metatile_actions.addWidget(add_metatile)
+        remove_metatile = QPushButton("Delete block", dock)
+        remove_metatile.clicked.connect(self._delete_metatile)
+        metatile_actions.addWidget(remove_metatile)
+        layout.addLayout(metatile_actions)
         viewport_label = QLabel("EDIT SCREEN", dock)
         viewport_label.setObjectName("sectionLabel")
         layout.addWidget(viewport_label)
@@ -1298,6 +1309,11 @@ class MainWindow(QMainWindow):
     def _refresh_metatile_mode(self) -> None:
         metatile = self._document.background_tile_mode() == "16x16"
         self.metatile_mode_button.setText("Revert to 8×8 tiles" if metatile else "Promote to 16×16 blocks")
+        self.metatile_list.setEnabled(metatile)
+        self.metatile_list.clear()
+        if metatile:
+            for index, block in enumerate(self._document.state["backgrounds"][self._document.selected_background_index].get("metatiles") or []):
+                self.metatile_list.addItem(f"Block {index}: {block.get('tiles', [0, 0, 0, 0])}")
 
     def _toggle_metatile_mode(self) -> None:
         if self._document.background_tile_mode() == "16x16":
@@ -1308,6 +1324,15 @@ class MainWindow(QMainWindow):
         self._refresh_metatile_mode()
         self._update_document_title()
         self.statusBar().showMessage("WORLD tile mode changed")
+
+    def _add_metatile(self) -> None:
+        try: index = self._document.add_metatile()
+        except ValueError: return
+        self._session.schedule_save(); self._refresh_metatile_mode(); self.metatile_list.setCurrentRow(index); self._update_document_title()
+
+    def _delete_metatile(self) -> None:
+        if self._document.delete_metatile(self.metatile_list.currentRow()):
+            self._session.schedule_save(); self._refresh_metatile_mode(); self._update_document_title()
 
     def _new_background(self) -> None:
         self._create_background(duplicate=False)
