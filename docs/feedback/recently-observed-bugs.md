@@ -99,12 +99,14 @@ was a massive improvement.
 13. More options for enemy paths.
     *Extended 2026-07-06 (v10: flyer + patrol), 2026-07-11 (v11: goomba/koopa
     stomp), and 2026-07-13 (**v71: hopper** — walks + turns at walls AND bounces
-    up and down on a set rhythm, a grounded "pogo" enemy).* The WORLD **AI**
+    on a set rhythm; **v72: shooter** — a stationary turret that fires a projectile
+    toward the player, reusing the firing enemy's own tile as the shot; the shot
+    hurts on contact when the Damage module + Max HP are on).* The WORLD **AI**
     dropdown now offers static / walker / chaser / goomba / koopa / item / flyer /
-    patrol / hopper per enemy, each gated to its engine and degrading to a walker
-    on older targets. Guarded by `flyer-patrol.mjs` + `hopper-enemy.mjs`. Still
-    open for future paths (e.g. a shooter/projectile enemy — see the
-    `2026-07-06-next-improvements.md` A.3 note).
+    patrol / hopper / shooter per enemy, each gated to its engine and degrading to
+    a walker on older targets. Guarded by `flyer-patrol.mjs` + `hopper-enemy.mjs`
+    + `shooter-enemy.mjs`. Further paths (chaser variants, homing, etc.) remain
+    open but the pupil ask for "more enemy paths" is well covered now.
 14. Currently the user can only place enemies and players on the first screen of the first background they should be able to do that for all screens in all backgrounds.
     *Partially resolved 2026-07-06:* the World-dock **place/move tool now works
     across every screen** of a scrolling background — entity coordinates are
