@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QSplitter,
@@ -142,6 +143,22 @@ class MainWindow(QMainWindow):
         painter.end()
         return QIcon(pixmap)
 
+    @staticmethod
+    def _tile_thumbnail(pixels: list[list[int]]) -> QIcon:
+        """Render an 8×8 tile into a compact, recognisable library thumbnail."""
+
+        colours = ("#181828", "#4878d8", "#78d878", "#f8d878")
+        pixmap = QPixmap(20, 20)
+        pixmap.fill(QColor("#080810"))
+        painter = QPainter(pixmap)
+        for row, source_row in enumerate(pixels[:8]):
+            for column, value in enumerate(source_row[:8]):
+                painter.fillRect(2 + column * 2, 2 + row * 2, 2, 2, QColor(colours[int(value) & 3]))
+        painter.setPen(QColor("#7878c8"))
+        painter.drawRect(0, 0, 19, 19)
+        painter.end()
+        return QIcon(pixmap)
+
     def _add_visual_choice(
         self, selector: QComboBox, label: str, value: object = None, *, colour: str, glyph: str = ""
     ) -> None:
@@ -180,7 +197,8 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal, root)
         splitter.setObjectName("workspaceSplitter")
         splitter.setChildrenCollapsible(False)
-        splitter.addWidget(self._create_context_dock())
+        self.context_dock = self._create_context_dock()
+        splitter.addWidget(self.context_dock)
         splitter.addWidget(self._create_stage())
         splitter.addWidget(self._create_quest_panel())
         splitter.setSizes([250, 700, 280])
@@ -216,11 +234,23 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
         return rail
 
-    def _create_context_dock(self) -> QWidget:
-        dock = QFrame(self)
+    def _create_context_dock(self) -> QScrollArea:
+        """Build the WORLD inspector as a scrollable, mode-specific panel.
+
+        WORLD intentionally has a deep inspector.  Keeping it scrollable avoids
+        compressing its controls below readable sizes on laptop-height windows.
+        The inspector is hidden in the focused editors, where it otherwise
+        displayed unrelated, clipped WORLD controls.
+        """
+
+        dock = QScrollArea(self)
         dock.setObjectName("contextDock")
+        dock.setWidgetResizable(True)
+        dock.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         dock.setMinimumWidth(210)
-        layout = QVBoxLayout(dock)
+        content = QFrame(dock)
+        content.setObjectName("contextDockContent")
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(18, 20, 18, 20)
 
         self.mode_title = QLabel(dock)
@@ -443,6 +473,7 @@ class MainWindow(QMainWindow):
         self.scene_text.editingFinished.connect(self._update_scene_instance)
         layout.addWidget(self.scene_text)
         layout.addStretch(1)
+        dock.setWidget(content)
         return dock
 
     def _create_stage(self) -> QWidget:
@@ -535,9 +566,15 @@ class MainWindow(QMainWindow):
                 self._sprite_palette_controls.append(control)
                 palette_layout.addWidget(control, palette + 7, slot + 1)
         self.editor_stack.addWidget(self.palette_editor)
-        self.tile_editor = QFrame(self.editor_stack)
+        self.tile_editor = QScrollArea(self.editor_stack)
         self.tile_editor.setObjectName("tileEditor")
-        tile_layout = QVBoxLayout(self.tile_editor)
+        self.tile_editor.setWidgetResizable(True)
+        self.tile_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tile_content = QFrame(self.tile_editor)
+        tile_content.setObjectName("tileEditorContent")
+        tile_layout = QVBoxLayout(tile_content)
+        tile_layout.setContentsMargins(14, 14, 14, 22)
+        tile_layout.setSpacing(8)
         selector_row = QHBoxLayout()
         self.tile_bank = QComboBox(self.tile_editor)
         self.tile_bank.setObjectName("tileBankSelector")
@@ -563,12 +600,13 @@ class MainWindow(QMainWindow):
             self._tile_shortcuts.append(shortcut)
         tile_layout.addWidget(QLabel("TILE LIBRARY — select a slot", self.tile_editor))
         tile_library = QGridLayout()
-        tile_library.setSpacing(2)
+        tile_library.setSpacing(3)
         self._tile_library_buttons: list[QPushButton] = []
         for index in range(256):
             button = QPushButton(f"{index:02X}", self.tile_editor)
             button.setObjectName(f"tileLibrary{index:02X}")
-            button.setFixedSize(28, 22)
+            button.setFixedSize(42, 28)
+            button.setIconSize(QPixmap(20, 20).size())
             button.setAccessibleName(f"Select tile {index:02X}")
             button.clicked.connect(lambda _checked=False, index=index: self.tile_selector.setValue(index))
             self._tile_library_buttons.append(button)
@@ -621,6 +659,7 @@ class MainWindow(QMainWindow):
                 self._tile_pixel_buttons.append(button)
                 tile_grid.addWidget(button, row, column)
         tile_layout.addLayout(tile_grid)
+        self.tile_editor.setWidget(tile_content)
         self.editor_stack.addWidget(self.tile_editor)
         self.chars_editor = QFrame(self.editor_stack)
         self.chars_editor.setObjectName("charsEditor")
@@ -755,9 +794,15 @@ class MainWindow(QMainWindow):
             self.animation_assignments[kind] = selector
             chars_layout.addWidget(selector)
         self.editor_stack.addWidget(self.chars_editor)
-        self.rules_editor = QFrame(self.editor_stack)
+        self.rules_editor = QScrollArea(self.editor_stack)
         self.rules_editor.setObjectName("rulesEditor")
-        rules_layout = QVBoxLayout(self.rules_editor)
+        self.rules_editor.setWidgetResizable(True)
+        self.rules_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        rules_content = QFrame(self.rules_editor)
+        rules_content.setObjectName("rulesEditorContent")
+        rules_layout = QVBoxLayout(rules_content)
+        rules_layout.setContentsMargins(20, 18, 20, 28)
+        rules_layout.setSpacing(8)
         rules_layout.addWidget(QLabel("GAME STYLE", self.rules_editor))
         self.game_style = QComboBox(self.rules_editor)
         self.game_style.setObjectName("gameStyleSelector")
@@ -908,6 +953,7 @@ class MainWindow(QMainWindow):
         self.damage_respawn_hp = QSpinBox(self.rules_editor); self.damage_respawn_hp.setRange(1, 9); self.damage_respawn_hp.setPrefix("Respawn HP: "); self.damage_respawn_hp.valueChanged.connect(lambda value: self._set_damage_option("respawnHp", value)); rules_layout.addWidget(self.damage_respawn_hp)
         self.stomp_defeat = QCheckBox("Stomp defeats enemies", self.rules_editor); self.stomp_defeat.toggled.connect(lambda value: self._set_damage_option("stompDefeat", value)); rules_layout.addWidget(self.stomp_defeat)
         self.stomp_bounce = QSpinBox(self.rules_editor); self.stomp_bounce.setRange(1, 30); self.stomp_bounce.setPrefix("Stomp bounce: "); self.stomp_bounce.valueChanged.connect(lambda value: self._set_damage_option("stompBounce", value)); rules_layout.addWidget(self.stomp_bounce)
+        self.rules_editor.setWidget(rules_content)
         self.editor_stack.addWidget(self.rules_editor)
         self.sound_editor = QFrame(self.editor_stack)
         self.sound_editor.setObjectName("soundEditor")
@@ -994,6 +1040,7 @@ class MainWindow(QMainWindow):
         )
         self.statusBar().showMessage(f"{mode.title()} mode selected")
         world_enabled = mode == "WORLD"
+        self.context_dock.setVisible(world_enabled)
         for button in self._tool_buttons.values():
             button.setEnabled(world_enabled)
         self.tile_value.setEnabled(world_enabled)
@@ -1094,6 +1141,12 @@ class MainWindow(QMainWindow):
             is_selected, count = index == selected, used.get(index, 0)
             background = "#f8d878" if is_selected else "#4878d8" if count else "#292949"
             foreground = "#080810" if is_selected else "#f8f8f8"
+            tile_pixels = (
+                self._document.sprite_tile_pixels(index)
+                if self.tile_bank.currentData() == "sprite"
+                else self._document.background_tile_pixels(index)
+            )
+            button.setIcon(self._tile_thumbnail(tile_pixels))
             button.setStyleSheet(f"background: {background}; color: {foreground}; padding: 0; border: {'2px solid #f8f8f8' if is_selected else '1px solid #5b5b90'};")
             button.setToolTip(f"Tile 0x{index:02X} — used {count} time{'s' if count != 1 else ''}")
 
@@ -2230,15 +2283,20 @@ class MainWindow(QMainWindow):
             #modeRail QPushButton { background: transparent; color: #b8b8d8; border: 1px solid transparent; padding: 10px 3px; font-weight: 700; }
             #modeRail QPushButton:hover { border-color: #7878c8; color: white; }
             #modeRail QPushButton:checked { background: #383878; color: #f8f8f8; border-color: #9898e8; }
-            #contextDock, #questPanel { background: #202044; }
+            #contextDock, #contextDockContent, #questPanel { background: #202044; }
             #contextDock { border-right: 1px solid #4b4b7b; }
             #questPanel { border-left: 1px solid #4b4b7b; }
             #modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
             #modeHelp { color: #c8c8e8; padding: 6px 0 18px 0; }
             #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
+            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent { background: #181828; }
             #rulesEditor QLabel { color: #d8d8f8; font-weight: 700; padding-top: 8px; }
             #rulesEditor QCheckBox { min-height: 26px; spacing: 8px; }
             #rulesEditor QSpinBox, #rulesEditor QComboBox, #rulesEditor QLineEdit { min-height: 30px; margin-bottom: 4px; }
+            QScrollBar:vertical { background: #15152b; width: 14px; margin: 2px; }
+            QScrollBar::handle:vertical { background: #6868a8; min-height: 36px; border-radius: 5px; }
+            QScrollBar::handle:vertical:hover { background: #9898e8; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
             QPushButton { background: #383878; color: white; border: 1px solid #7878c8; border-radius: 3px; padding: 8px; }
             QPushButton:disabled { background: #292949; color: #787898; border-color: #484868; }
             QComboBox { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; border-radius: 4px; padding: 3px 8px; }
