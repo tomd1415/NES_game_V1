@@ -586,6 +586,10 @@ class MainWindow(QMainWindow):
         paste_tile.setObjectName("pasteTileButton")
         paste_tile.clicked.connect(self._paste_tile)
         tile_operations.addWidget(paste_tile)
+        swap_tile = QPushButton("Swap…", self.tile_editor)
+        swap_tile.setObjectName("swapTileButton")
+        swap_tile.clicked.connect(self._swap_tile)
+        tile_operations.addWidget(swap_tile)
         tile_layout.addLayout(tile_operations)
         self.tile_default_behaviour = QSpinBox(self.tile_editor)
         self.tile_default_behaviour.setObjectName("tileDefaultBehaviour")
@@ -1109,6 +1113,15 @@ class MainWindow(QMainWindow):
         if self.tile_bank.currentData() != "sprite":
             self._document.set_background_tile_metadata(self.tile_selector.value(), name=self.tile_name.text())
             self._session.schedule_save(); self._refresh_tile_editor(); self._update_document_title()
+
+    def _swap_tile(self) -> None:
+        first = self.tile_selector.value()
+        second, accepted = QInputDialog.getInt(self, "Swap tile slots", "Swap with tile (hex shown in library):", first, 0, 255)
+        if not accepted or second == first:
+            return
+        self._document.swap_tile_slots(str(self.tile_bank.currentData()), first, second)
+        self._session.schedule_save(); self.tile_selector.setValue(second); self._refresh_tile_editor(); self._update_document_title()
+        self.statusBar().showMessage(f"Swapped tile slots 0x{first:02X} and 0x{second:02X}; references followed the artwork")
 
     def _set_tile_default_behaviour(self, value: int) -> None:
         if self.tile_bank.currentData() != "sprite":

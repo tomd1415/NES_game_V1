@@ -168,6 +168,15 @@ def test_background_tile_metadata_exposes_default_world_behaviour() -> None:
     assert document.background_tile_default_behaviour(7) == 1
 
 
+def test_tile_slot_swap_moves_art_and_preserves_background_references() -> None:
+    document = ProjectDocument.preview()
+    document.set_background_tile_pixel(3, 0, 0, 1)
+    document.set_world_tile(0, 0, 3)
+    document.swap_tile_slots("bg", 3, 9)
+    assert document.background_tile_pixels(9)[0][0] == 1
+    assert document.world_tiles()[0][0] == 9
+
+
 def test_background_can_promote_and_revert_the_shared_metatile_shape() -> None:
     document = ProjectDocument.preview()
     document.promote_selected_background_to_metatiles()

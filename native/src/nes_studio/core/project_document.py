@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .migrations import CURRENT_SCHEMA_VERSION, migrate_project
-from .editing import delete_metatile, promote_background_to_metatiles
+from .editing import delete_metatile, promote_background_to_metatiles, swap_tile_slots
 
 
 class ProjectFormatError(ValueError):
@@ -182,6 +182,11 @@ class ProjectDocument:
 
     def duplicate_sprite_tile(self, index: int) -> int:
         return self._duplicate_tile("sprite_tiles", index)
+
+    def swap_tile_slots(self, bank: str, first: int, second: int) -> None:
+        swap_tile_slots(self.state, bank, first, second)
+        if first != second:
+            self.dirty = True
 
     def set_background_tile_metadata(self, index: int, *, name: str | None = None, default_behaviour: int | None = None) -> None:
         if default_behaviour is not None and not 0 <= default_behaviour <= 255:
