@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QIODevice, QObject, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QKeySequence, QPainter, QPixmap
+from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -550,6 +550,12 @@ class MainWindow(QMainWindow):
         self.tile_selector.valueChanged.connect(self._refresh_tile_editor)
         selector_row.addWidget(self.tile_selector)
         tile_layout.addLayout(selector_row)
+        self._tile_shortcuts: list[QShortcut] = []
+        for key, delta in (("[", -1), ("]", 1), ("Left", -1), ("Right", 1), ("Up", -16), ("Down", 16)):
+            shortcut = QShortcut(QKeySequence(key), self.tile_editor)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(lambda delta=delta: self._step_tile_selector(delta))
+            self._tile_shortcuts.append(shortcut)
         tile_layout.addWidget(QLabel("TILE LIBRARY — select a slot", self.tile_editor))
         tile_library = QGridLayout()
         tile_library.setSpacing(2)
@@ -1096,6 +1102,9 @@ class MainWindow(QMainWindow):
     def _copy_tile(self) -> None:
         self._tile_clipboard = [row[:] for row in self._tile_pixels()]
         self.statusBar().showMessage(f"Copied tile 0x{self.tile_selector.value():02X}")
+
+    def _step_tile_selector(self, delta: int) -> None:
+        self.tile_selector.setValue(max(0, min(255, self.tile_selector.value() + delta)))
 
     def _paste_tile(self) -> None:
         if self._tile_clipboard is None:
