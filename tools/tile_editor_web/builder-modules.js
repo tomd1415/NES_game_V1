@@ -540,6 +540,7 @@
       ];
       let emitted = 0;      // walker/chaser/goomba/koopa all need bw_sprite_blocked
       let needSmb = false;  // goomba/koopa need the shared SMB stomp/hurt helper
+      let hasShooter = false; // v72 shooter — emit the shared shot pool once below
       // Phase 2b — uniform per-scene-sprite AI tables the ai_update ASM loop reads
       // (NES_ASM_AI). type 0 = handled by C (or none); 1 = walker. state/speed are
       // meaningful only for ASM-handled types. Index i tracks ss_x[i] exactly.
@@ -560,6 +561,8 @@
         // Engine v71 — the hopper (walks + bounces) degrades to a plain walker
         // on older targets so a design authored with it still builds byte-identical.
         if (ai === 'hopper' && targetEngine < 71) ai = 'walker';
+        // Engine v72 — the shooter (turret) degrades to a plain walker pre-v72.
+        if (ai === 'shooter' && targetEngine < 72) ai = 'walker';
         // R-4: per-instance speed (px/frame).  1 = today's feel; clamp 1..4.
         // NB bw_sprite_blocked probes 1px ahead, so at speed >= 2 a fast enemy
         // can step its body slightly into a wall before reversing on the next
@@ -800,6 +803,36 @@
           parts.push('            ss_y[' + i + '] = 0xFF;');
           parts.push('        }');
           parts.push('#endif');
+        } else if (sp.role === 'enemy' && ai === 'shooter') {
+          // Engine v72 — shooter: a stationary turret that periodically fires a
+          // projectile toward the player.  It holds its placed position each frame
+          // (overriding the scene-gravity loop, like the flyer) and, on a per-turret
+          // timer, drops a shot into the shared pool moving horizontally toward the
+          // player.  The shot reuses THIS enemy's own top-left tile/attr so no new
+          // art is needed.  aiType stays 0 so the ai_update ASM loop skips it and
+          // this same C drives it in both the C and ASM builds.  The shared pool +
+          // its move/collide/draw are emitted once, below, when hasShooter.
+          emitted++;
+          hasShooter = true;
+          var shHome = Math.max(8, Math.min(232, A.clampInt(inst.y, 0, 255, 0)));
+          var shStagger = (i * 19) & 0x3F;
+          parts.push(
+            '        // instance ' + i + ' — ' + (sp.name || '?') +
+              ' is a turret: holds position and fires a shot toward the player on a timer');
+          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
+          parts.push('            static unsigned char bw_sht_' + i + ' = ' + shStagger + ';');
+          parts.push('            ss_y[' + i + '] = ' + shHome + ';');   /* hold position (ignore gravity) */
+          parts.push('            bw_sht_' + i + '++;');
+          parts.push('            if (bw_sht_' + i + ' >= BW_SHOOTER_PERIOD) {');
+          parts.push('                bw_sht_' + i + ' = 0;');
+          parts.push('#ifdef SCROLL_BUILD');
+          parts.push('                if (world_to_screen_x((unsigned int)ss_x[' + i + ']) < 0xF0)');
+          parts.push('#endif');
+          parts.push('                bw_shoot((pxcoord_t)ss_x[' + i + '], (pxcoord_t)(' + shHome + ' + (ss_h[' + i + '] << 2)),');
+          parts.push('                         (px < ss_x[' + i + ']) ? (signed char)(-BW_SHOOTER_SPEED) : (signed char)(BW_SHOOTER_SPEED),');
+          parts.push('                         ss_tiles[ss_offset[' + i + ']], ss_attrs[ss_offset[' + i + ']]);');
+          parts.push('            }');
+          parts.push('        }');
         }
         // `static` and non-enemy roles: nothing to emit.  Pickups and
         // decorations just sit where they were placed.
@@ -998,6 +1031,103 @@
           '#ifdef NES_ASM_AI',
           '        ai_update();   /* Phase 2b — hand-written 6502 AI dispatch (walker/chaser/flyer/patrol) */',
           '#endif');
+      }
+      if (hasShooter) {
+        // v72 shooter — the shared projectile pool + its once-per-frame move /
+        // collide / draw.  Emitted only when a turret exists, so a project with no
+        // shooter is byte-identical.  Each turret's fire block (above) drops shots
+        // into this pool with bw_shoot(); they carry the firing enemy's own tile.
+        const shooterDecls = [
+          '/* [builder] v72 shooter — a small shared pool of enemy projectiles. */',
+          '#ifndef BW_SHOOTER_PERIOD',
+          '#define BW_SHOOTER_PERIOD 72   /* frames between shots per turret */',
+          '#endif',
+          '#ifndef BW_SHOOTER_SPEED',
+          '#define BW_SHOOTER_SPEED 2     /* shot travel px/frame */',
+          '#endif',
+          '#ifndef BW_SHOOTER_TTL',
+          '#define BW_SHOOTER_TTL 110     /* shot lifetime in frames */',
+          '#endif',
+          '#define BW_SHOOTER_MAX 4',
+          'unsigned char bw_sh_active[BW_SHOOTER_MAX];',
+          'pxcoord_t     bw_sh_x[BW_SHOOTER_MAX];',
+          'pxcoord_t     bw_sh_y[BW_SHOOTER_MAX];',
+          'signed char   bw_sh_vx[BW_SHOOTER_MAX];',
+          'unsigned char bw_sh_tile[BW_SHOOTER_MAX];',
+          'unsigned char bw_sh_attr[BW_SHOOTER_MAX];',
+          'unsigned char bw_sh_ttl[BW_SHOOTER_MAX];',
+          'void bw_shoot(pxcoord_t x, pxcoord_t y, signed char vx, unsigned char tile, unsigned char attr) {',
+          '    unsigned char k;',
+          '    for (k = 0; k < BW_SHOOTER_MAX; k++) {',
+          '        if (!bw_sh_active[k]) {',
+          '            bw_sh_active[k] = 1; bw_sh_x[k] = x; bw_sh_y[k] = y;',
+          '            bw_sh_vx[k] = vx; bw_sh_tile[k] = tile; bw_sh_attr[k] = attr;',
+          '            bw_sh_ttl[k] = BW_SHOOTER_TTL;',
+          '            return;',
+          '        }',
+          '    }',
+          '}',
+        ].join('\n');
+        withHelper = A.appendToSlot(withHelper, 'declarations', shooterDecls);
+
+        parts.push([
+          '        // [builder] v72 shooter — advance each live shot; expire on TTL /',
+          '        // wall; hurt the player (respecting invincibility) on overlap.',
+          '        {',
+          '            unsigned char bw_shk;',
+          '            for (bw_shk = 0; bw_shk < BW_SHOOTER_MAX; bw_shk++) {',
+          '                unsigned char bw_shb;',
+          '                if (!bw_sh_active[bw_shk]) continue;',
+          '                if (bw_sh_ttl[bw_shk] == 0) { bw_sh_active[bw_shk] = 0; continue; }',
+          '                bw_sh_ttl[bw_shk]--;',
+          '                bw_sh_x[bw_shk] += bw_sh_vx[bw_shk];',
+          '                bw_shb = behaviour_at((unsigned int)((unsigned int)bw_sh_x[bw_shk] >> 3),',
+          '                                      (unsigned int)((unsigned int)bw_sh_y[bw_shk] >> 3));',
+          '                if (bw_shb == BEHAVIOUR_SOLID_GROUND || bw_shb == BEHAVIOUR_WALL) { bw_sh_active[bw_shk] = 0; continue; }',
+          '                if (!((unsigned int)px + (PLAYER_W << 3) <= (unsigned int)bw_sh_x[bw_shk] ||',
+          '                      (unsigned int)px >= (unsigned int)bw_sh_x[bw_shk] + 8 ||',
+          '                      (unsigned int)py + (PLAYER_H << 3) <= (unsigned int)bw_sh_y[bw_shk] ||',
+          '                      (unsigned int)py >= (unsigned int)bw_sh_y[bw_shk] + 8)) {',
+          '                    bw_sh_active[bw_shk] = 0;',
+          '#if PLAYER_HP_ENABLED',
+          '                    /* Hurt the player.  PLAYER_HP_ENABLED implies the Damage',
+          '                     * module is on (it owns the HP constants + the i-frame',
+          '                     * decrement), so honour its invincibility window: a shot',
+          '                     * during i-frames is absorbed, matching enemy contact. */',
+          '                    if (!player_iframes) {',
+          '                        player_hp = (player_hp > DAMAGE_AMOUNT) ? (unsigned char)(player_hp - DAMAGE_AMOUNT) : 0;',
+          '                        player_iframes = INVINCIBILITY_FRAMES;',
+          '                        if (player_hp == 0) player_dead = 1;',
+          '                    }',
+          '#endif',
+          '                }',
+          '            }',
+          '        }',
+        ].join('\n'));
+
+        const shooterDraw = [
+          '        // [builder] v72 shooter — draw each live shot as one 8x8 sprite,',
+          '        // reusing the firing enemy\'s tile.  After the placed instances.',
+          '        {',
+          '            unsigned char bw_shk;',
+          '            for (bw_shk = 0; bw_shk < BW_SHOOTER_MAX; bw_shk++) {',
+          '                if (!bw_sh_active[bw_shk]) continue;',
+          '                if (oam_idx > 252) break;',
+          '#ifdef SCROLL_BUILD',
+          '                oam_buf[oam_idx++] = world_to_screen_y((unsigned int)bw_sh_y[bw_shk]);',
+          '                oam_buf[oam_idx++] = bw_sh_tile[bw_shk];',
+          '                oam_buf[oam_idx++] = bw_sh_attr[bw_shk];',
+          '                oam_buf[oam_idx++] = world_to_screen_x((unsigned int)bw_sh_x[bw_shk]);',
+          '#else',
+          '                oam_buf[oam_idx++] = (unsigned char)bw_sh_y[bw_shk];',
+          '                oam_buf[oam_idx++] = bw_sh_tile[bw_shk];',
+          '                oam_buf[oam_idx++] = bw_sh_attr[bw_shk];',
+          '                oam_buf[oam_idx++] = (unsigned char)bw_sh_x[bw_shk];',
+          '#endif',
+          '            }',
+          '        }',
+        ].join('\n');
+        withHelper = A.appendToSlot(withHelper, 'scene_draw_extra', shooterDraw);
       }
       return A.appendToSlot(withHelper, 'per_frame', parts.join('\n'));
     },

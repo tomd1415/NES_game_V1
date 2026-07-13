@@ -1028,6 +1028,10 @@
       if (stEng >= 71 || selected.ai === 'hopper') {
         aiOpts.push(['hopper', 'hopper (walks + bounces up and down)']);
       }
+      // v72 — a shooter: a stationary turret that fires a shot at the player.
+      if (stEng >= 72 || selected.ai === 'shooter') {
+        aiOpts.push(['shooter', 'shooter (turret — fires shots at the player)']);
+      }
       aiOpts.forEach(function (a) { aiSel.appendChild(el('option', { value: a[0], text: a[1] })); });
       aiSel.value = selected.ai || 'static';
       aiSel.addEventListener('change', function () { ctx.pushUndo(); selected.ai = aiSel.value; ctx.markDirty(); ctx.renderDock(); });

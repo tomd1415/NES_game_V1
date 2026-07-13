@@ -9,6 +9,31 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v72 — 2026-07-13 — New enemy path: shooter/turret (fires projectiles), pupil request #13
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; opt-in per enemy)
+A new per-instance enemy AI on the WORLD page's **AI** dropdown: the **shooter** —
+a stationary turret that holds its placed position and, on a per-turret timer,
+fires a projectile horizontally toward the player.  Shown once the project targets
+v72; degrades to a plain **walker** on older targets so a design authored with it
+still builds byte-identical.
+
+The shots live in a small **shared pool** (`BW_SHOOTER_MAX` = 4) — each carries the
+firing enemy's own tile/attr (so no new art is needed), travels at
+`BW_SHOOTER_SPEED`, and expires on a `BW_SHOOTER_TTL` lifetime, a solid tile, or on
+hitting the player.  A shot that reaches the player **hurts** it exactly like enemy
+contact (honours the invincibility window) — this needs HP, which means the
+**Damage** module + Max HP > 0; without them the shot is a harmless projectile that
+still despawns on contact.
+
+Mechanically it mirrors the v10/v11/v71 recipe: an **un-gated C block with
+`ss_ai_type = 0`** (the `ai_update` ASM loop skips it, so the same C drives it in
+both the C and ASM builds — no hand-written 6502), emitted only when a shooter
+exists, so every existing project stays byte-identical.  Draws via a new
+`//@ insert: scene_draw_extra` template slot (stripped when unused → byte-identical).
+Guarded by `tools/builder-tests/shooter-enemy.mjs` (the ROM fires a drawn shot, it
+travels toward the player, it hurts on contact, and it degrades pre-v72).
+
 ## v71 — 2026-07-13 — New enemy path: hopper (walks + bounces), pupil request #13
 
 ### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; opt-in per enemy)

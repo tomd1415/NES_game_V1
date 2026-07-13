@@ -2929,6 +2929,11 @@ void main(void) {
         }
 #endif
 
+        // Extra scene-owned sprites drawn after the placed instances (e.g. the
+        // shooter enemy's projectiles).  Empty for projects that use none, so the
+        // marker is stripped and the ROM stays byte-identical.
+        //@ insert: scene_draw_extra
+
         // Hide every slot we didn't touch this frame by parking its Y
         // byte at 0xFF (off-screen on NES).  Only the Y byte matters,
         // so we stride by 4 — 64 OAM entries × 1 write max.
