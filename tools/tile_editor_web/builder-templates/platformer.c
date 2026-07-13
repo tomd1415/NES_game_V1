@@ -369,14 +369,24 @@ void bw_hud_digit(unsigned char hx, unsigned char hy, unsigned char d) {
  * addr->PPU walk. */
 unsigned char bw_hud_addr_hi[11];
 unsigned char bw_hud_addr_lo[11];
-/* Paint all 11 status-bar digits into the nametable from the digit cache.
- * PPU writes -> caller MUST have rendering off (boot, or the vblank window). */
+/* What is currently painted in each digit cell.  Only cells whose value actually
+ * changed are re-written, so a timer tick (1-2 digits) costs ~2 PPU writes, not
+ * 33.  Under the NMI push (HUD_NMI) that difference is what keeps a tick frame
+ * inside vblank — repainting all 11 tipped it over and slipped the split, a
+ * single-frame header blip every ~timer tick.  Seeded to 0xFF (no valid digit)
+ * so the first paint writes every cell. */
+unsigned char bw_hud_disp[11];
+/* Paint the status-bar digits that changed since the last paint, from the digit
+ * cache.  PPU writes -> caller MUST have rendering off (boot, or vblank). */
 void bw_hud_bg_paint(void) {
     unsigned char i;
     for (i = 0; i < 11; i++) {
-        PPU_ADDR = bw_hud_addr_hi[i];
-        PPU_ADDR = bw_hud_addr_lo[i];
-        PPU_DATA = (unsigned char)(BW_HUD_DIGIT_BASE + bw_hud_d[i]);
+        if (bw_hud_d[i] != bw_hud_disp[i]) {
+            PPU_ADDR = bw_hud_addr_hi[i];
+            PPU_ADDR = bw_hud_addr_lo[i];
+            PPU_DATA = (unsigned char)(BW_HUD_DIGIT_BASE + bw_hud_d[i]);
+            bw_hud_disp[i] = bw_hud_d[i];
+        }
     }
 }
 /* Boot: clear the top 4 rows (the status strip) then paint the digits.  The
@@ -389,6 +399,7 @@ void bw_hud_bg_init(void) {
         a = 0x2000 + (unsigned int)bw_hud_bg_pos[i * 2 + 1] * 32 + bw_hud_bg_pos[i * 2];
         bw_hud_addr_hi[i] = (unsigned char)(a >> 8);
         bw_hud_addr_lo[i] = (unsigned char)(a & 0xFF);
+        bw_hud_disp[i] = 0xFF;         /* force the first paint to write every cell */
     }
     PPU_ADDR = 0x20; PPU_ADDR = 0x00;              /* $2000 = NT0, row 0 */
     for (a = 0; a < 96; a++)  PPU_DATA = 0x00;     /* rows 0-2 cleared (behind the digits) */
@@ -982,6 +993,102 @@ unsigned char racer_box_on_edge(pxcoord_t bx, pxcoord_t by,
 }
 #endif
 
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+/* The SMB background status bar's PPU push, driven from the NMI (hud_crt0.s).
+ *
+ * ROOT-CAUSE FIX for "the header goes flickery after the first screen".  The
+ * strip is a sprite-0 split: every frame the engine must — rendering off — do
+ * OAM DMA, repaint the digits, stream the off-screen column and set the strip
+ * scroll, THEN re-enable rendering and poll the sprite-0 hit, all BEFORE the
+ * strip's scanlines (0-31) draw.  Run from the main loop (after waitvsync) a
+ * heavy frame (scrolling AND enemy AI) overruns vblank, so the push lands late,
+ * PPU_MASK is still 0 while the top scanlines draw, and the strip shows the sky
+ * backdrop -> flicker.  Driving it from the NMI (fixed hardware time, preempts
+ * the game logic) makes the push always prompt; a frame heavy enough to overrun
+ * just drops toward 30fps instead of tearing the header.
+ *
+ * DOUBLE-BUFFERED so it is browser-safe (jsnes).  The main loop rebuilds oam_buf
+ * / the stream column / cam_x across the whole frame; if the NMI DMAd that
+ * mid-build (as the first cut of this fix did) it copies a half-written OAM ->
+ * garbage sprites (jsnes showed 64).  Here the NMI consumes the frame ONLY when
+ * the main loop has published a complete packet (hud_frame_ready); on any frame
+ * still building — i.e. a lag frame — it re-presents the last complete frame
+ * from the PPU's own OAM + the latched hud_cam_live scroll.  So an overrun is a
+ * clean 30fps hold, never a tear and never garbage, in FCEUX AND jsnes.
+ *
+ * Non-static so the ASM NMI can `.import _hud_present`.  Gated on BW_SMB_HUD_BG
+ * so non-HUD ROMs never see it and stay byte-identical. */
+/* 0 during boot (nametable/palette setup runs with the NMI doing only its
+ * bookkeeping); set 1 right before the game loop so the NMI starts driving the
+ * push.  The crt0 NMI reads hud_ready. */
+unsigned char hud_ready = 0;
+/* Set true by the main loop only after a whole frame packet (oam_buf + stream +
+ * cam_x) is built; the NMI clears it on consume.  The gate that makes the DMA
+ * browser-safe AND the main loop's frame pacer (it spins on this instead of
+ * waitvsync, so it never reads $2002 — the NMI's sprite-0 poll owns $2002, and a
+ * waitvsync polling the same register would race it and hang).  volatile: the
+ * NMI clears it asynchronously, so the spin must re-read it every iteration. */
+volatile unsigned char hud_frame_ready = 0;
+/* The scroll the NMI actually renders.  Advances ONLY when a packet is consumed,
+ * so the rendered scroll stays consistent with the OAM + streamed column it was
+ * built with (and the NMI never reads a torn 16-bit cam_x the main loop is
+ * mid-writing). */
+unsigned int hud_cam_live = 0;
+void hud_present(void) {
+    /* Rendering off for the vblank work. */
+    PPU_MASK = 0;
+
+    /* Consume the main loop's packet ONLY when it is complete. */
+    if (hud_frame_ready) {
+        /* OAM DMA first — canonical NES pattern (marker in slot 0 + sprites). */
+        OAM_ADDR = 0x00;
+        OAM_DMA  = 0x02;
+
+        //@ insert: vblank_writes
+        /* Repaint the status-bar digits only when one changed (rendering off). */
+        if (bw_hud_dirty) { bw_hud_bg_paint(); bw_hud_dirty = 0; }
+
+#if !(BW_DOORS_MULTIBG_ENABLED && (BG_WORLD_COLS <= 64) && (BG_WORLD_ROWS <= 60))
+        /* Stream the off-screen column the camera crossed last frame (rendering
+         * off).  Skipped for a multi-bg door build within 2x2 — see scroll_stream(). */
+        scroll_stream();
+#endif
+        /* Latch the scroll that matches this packet's OAM + streamed column. */
+        hud_cam_live = cam_x;
+        hud_frame_ready = 0;
+    }
+
+    /* --- Sprite-0 status-bar split (runs EVERY frame so the fixed bar always
+     * renders, held frames included).  Strip at scroll (0,0); poll the sprite-0
+     * hit; then swap in the playfield's horizontal scroll for the rest of the
+     * frame.  Uses hud_cam_live (never the main loop's in-flux cam_x). */
+    {
+        unsigned int save_cx = cam_x;
+        cam_x = 0;
+        scroll_apply_ppu();
+        cam_x = save_cx;
+    }
+    PPU_MASK = 0x1E;
+    {
+        /* Tight bounds: this poll runs INSIDE the NMI, so a timeout must stay
+         * well under one frame or the NMI starves the main loop (a scanline-based
+         * emulator like jsnes runs ~16 poll iterations per scanline, so 4000
+         * would be ~1 frame per phase = ~2 frames total on a miss).  A real hit
+         * needs only ~500 iterations (NMI fires ~scanline 241; the old hit clears
+         * at 261 and the new one fires at 31), so 1200 covers every legit hit and
+         * caps a miss to ~150 scanlines. */
+        unsigned int s0g;
+        for (s0g = 0; s0g < 1200u; s0g++) { if (!(PPU_STATUS & 0x40)) break; }
+        for (s0g = 0; s0g < 1200u; s0g++) { if (PPU_STATUS & 0x40) break; }
+    }
+    /* bit 7 (0x80) keeps the vblank NMI armed for the next frame; bit 4 (0x10)
+     * is the BG pattern-table-1 base; bit 0 is the high nametable from cam bit 8. */
+    PPU_CTRL = (unsigned char)(0x90 | ((unsigned char)(hud_cam_live >> 8) & 1));
+    PPU_SCROLL = (unsigned char)(hud_cam_live & 0xFF);
+    PPU_SCROLL = 0;
+}
+#endif /* BW_SMB_HUD_BG && SCROLL_BUILD */
+
 void main(void) {
     waitvsync();
     PPU_MASK = 0;
@@ -1101,7 +1208,34 @@ void main(void) {
 
     //@ insert: init
 
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+    /* Boot done: seed the sprite-0 marker (OAM slot 0) so the first NMI push has
+     * a valid hit target before the first OAM build, then arm the NMI-driven
+     * status-bar push (hud_crt0.s NMI reads hud_ready).  Until now the NMI did
+     * only VBLANK_FLAG/tickcount bookkeeping so boot's nametable/palette writes
+     * ran without the push turning rendering back on underneath them. */
+    oam_buf[0] = BW_HUDBG_SPLIT_Y;
+    oam_buf[1] = BW_HUDBG_SOLID_TILE;
+    oam_buf[2] = 0x20;
+    oam_buf[3] = 8;
+    hud_ready = 1;
+    /* Enable the vblank NMI (bit 7) — WITHOUT this the NMI never fires, so
+     * hud_present() never runs and the PPU is never updated (the main loop runs
+     * but the screen freezes on the boot image).  0x90 = NMI on + BG pattern
+     * table 1 (the engine's PPU_CTRL base), nametable 0.  hud_present() re-writes
+     * PPU_CTRL every frame with bit 7 kept set so NMI stays armed. */
+    PPU_CTRL = 0x90;
+#endif
+
     while (1) {
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+        /* Start of a new frame packet: hold the NMI in "re-present the last
+         * complete frame" mode while we rebuild oam_buf / stream data / cam_x.
+         * The NMI will not DMA or advance the rendered scroll until we set
+         * hud_frame_ready true at the vblank window below — so it can never DMA a
+         * half-built OAM buffer (the jsnes garbage the first cut produced). */
+        hud_frame_ready = 0;
+#endif
 #if PLAYER2_ENABLED
         read_both_controllers();
 #else
@@ -2834,6 +2968,23 @@ void main(void) {
         scroll_stream_prepare();
 #endif
 
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+        /* NMI-driven push (SMB bg status bar): hud_present() runs from the NMI at
+         * vblank start, so the sprite-0 strip always renders on time no matter
+         * how long this frame's game logic took.  Publish the finished frame
+         * packet for the NMI to consume, pace to it (waitvsync waits for the
+         * NMI), then tick audio (APU-only, timing-tolerant).  The render-last
+         * push below is compiled out for HUD builds. */
+        hud_frame_ready = 1;
+        /* Pace to the NMI by spinning until it consumes the packet — NOT
+         * waitvsync, which polls $2002 and would race the NMI's own sprite-0
+         * $2002 poll (that race is what hung the first cut).  On a lag frame the
+         * NMI holds the last frame and this simply waits for the next consume. */
+        while (hud_frame_ready) { }
+#ifdef USE_AUDIO
+        famistudio_update();
+#endif
+#else
         // --- Vblank window ----------------------------------------------
         waitvsync();
 #ifdef SCROLL_BUILD
@@ -2933,6 +3084,7 @@ void main(void) {
          * for why we don't drive this from NMI. */
         famistudio_update();
 #endif
+#endif /* NMI-driven hud_present() replaces the render-last push for HUD builds */
     }
 }
 

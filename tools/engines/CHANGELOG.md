@@ -9,6 +9,41 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v70 — 2026-07-13 — SMB status bar: NMI-driven push with a browser-safe double buffer (real fix for "header flickers after the first screen")
+
+### Changed — migration (goldens `1730448e` + `_rom-equiv` UNCHANGED; affects BW_SMB_HUD_BG scroll builds only)
+v69's vblank-cost trim did **not** actually stop the flicker on a real SMB level.
+Re-diagnosed with `sceneSprites` present (the browser derives them; the earlier
+"0 flicker" runs were enemy-less and misleading): the flicker is **frame drops**.
+The status bar is a sprite-0 split whose whole PPU push (OAM DMA, digit repaint,
+column stream, strip-scroll setup, then the sprite-0 poll) must finish before the
+strip's scanlines (0-31) draw.  Run from the main loop after `waitvsync`, on any
+frame whose game logic overran vblank — **scrolling AND running enemy AI** — it
+lands late, `PPU_MASK` is still 0 while the top scanlines draw, and the strip
+shows the sky backdrop for that frame.  FCEUX lag-frame data on the user's
+2-screen level: a single on-screen enemy while scrolling drops ~50% of frames and
+tears the header on ~30% of scrolling frames.
+
+**Fix — move the push into the NMI (`src/hud_crt0.s`), double-buffered.**  The NMI
+fires at a fixed hardware time and preempts the game logic, so the strip always
+renders on time; a frame heavy enough to overrun just drops toward 30fps instead
+of tearing.  The earlier (reverted) cut of this idea DMAd `oam_buf` unconditionally
+from the NMI, so on a lag frame it copied a half-built OAM → garbage sprites in
+jsnes (the browser preview).  This version gates the OAM DMA + column stream on a
+**`hud_frame_ready`** flag the main loop sets only after a whole frame packet is
+built, and renders from a latched **`hud_cam_live`** scroll; on a lag frame the
+NMI re-presents the last complete frame from the PPU's own OAM (a clean 30fps
+hold), never a mid-build DMA.  Validated in **both** FCEUX (no sky-backdrop
+frames) and jsnes (sprites intact) under enemy load while scrolling.
+
+**Byte-identical off the feature.**  `hud_present()` / the marker seed / the
+`hud_ready`/`hud_frame_ready`/`hud_cam_live` state / the main-loop packet flags
+are all `#if BW_SMB_HUD_BG && SCROLL_BUILD` gated; the Makefile crt0-swap is
+`HUD_NMI`-gated; the server sets `HUD_NMI=1` only for scrolling bg-HUD builds.
+`builder-assembler.js`'s `appendToSlot` now fills EVERY `//@ insert:` occurrence
+so both the NMI-push and render-last paths get module vblank writes (mutually
+`#if`-exclusive per build).  Goldens (`1730448e`) unchanged.
+
 ## v69 — 2026-07-12 — SMB status bar: cut vblank cost so the split stops flickering (browser-safe)
 
 ### Changed — migration (goldens `1730448e` + `_rom-equiv` UNCHANGED; affects BW_SMB_HUD_BG scroll builds only)
