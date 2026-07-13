@@ -2236,6 +2236,9 @@ class MainWindow(QMainWindow):
             #modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
             #modeHelp { color: #c8c8e8; padding: 6px 0 18px 0; }
             #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
+            #rulesEditor QLabel { color: #d8d8f8; font-weight: 700; padding-top: 8px; }
+            #rulesEditor QCheckBox { min-height: 26px; spacing: 8px; }
+            #rulesEditor QSpinBox, #rulesEditor QComboBox, #rulesEditor QLineEdit { min-height: 30px; margin-bottom: 4px; }
             QPushButton { background: #383878; color: white; border: 1px solid #7878c8; border-radius: 3px; padding: 8px; }
             QPushButton:disabled { background: #292949; color: #787898; border-color: #484868; }
             QComboBox { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; border-radius: 4px; padding: 3px 8px; }
