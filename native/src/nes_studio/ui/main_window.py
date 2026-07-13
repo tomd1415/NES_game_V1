@@ -626,6 +626,14 @@ class MainWindow(QMainWindow):
         self.chars_editor.setObjectName("charsEditor")
         chars_layout = QVBoxLayout(self.chars_editor)
         chars_layout.addWidget(QLabel("SPRITES", self.chars_editor))
+        self.sprite_filter = QComboBox(self.chars_editor)
+        self.sprite_filter.setObjectName("spriteRoleFilter")
+        self._prepare_visual_selector(self.sprite_filter, "Filter sprites by role")
+        self._add_visual_choice(self.sprite_filter, "All roles", None, colour="#7878d8", glyph="*")
+        for role in ("player", "npc", "enemy", "item", "tool", "powerup", "pickup", "projectile", "decoration", "hud", "other"):
+            self._add_visual_choice(self.sprite_filter, role, role, colour="#78d878" if role == "player" else "#f87878" if role == "enemy" else "#7878d8", glyph=role[:1])
+        self.sprite_filter.currentIndexChanged.connect(lambda: self._refresh_sprite_editor(0))
+        chars_layout.addWidget(self.sprite_filter)
         self.sprite_list = QListWidget(self.chars_editor)
         self.sprite_list.setObjectName("spriteList")
         self.sprite_list.currentRowChanged.connect(self._select_sprite)
@@ -1269,11 +1277,16 @@ class MainWindow(QMainWindow):
 
     def _refresh_sprite_editor(self, selected: int | None = None) -> None:
         current = self.sprite_list.currentRow() if selected is None else selected
+        role_filter = self.sprite_filter.currentData()
         self.sprite_list.blockSignals(True)
         self.sprite_list.clear()
+        self._visible_sprite_indices: list[int] = []
         for index, name in enumerate(self._document.sprite_names()):
             sprite = self._document.state["sprites"][index]
+            if role_filter is not None and sprite.get("role", "other") != role_filter:
+                continue
             self.sprite_list.addItem(f"{name} ({sprite.get('role', 'other')})")
+            self._visible_sprite_indices.append(index)
         self.sprite_list.setCurrentRow(
             max(0, min(current, self.sprite_list.count() - 1)) if self.sprite_list.count() else -1
         )
@@ -1281,6 +1294,7 @@ class MainWindow(QMainWindow):
         self._select_sprite(self.sprite_list.currentRow())
 
     def _select_sprite(self, index: int) -> None:
+        index = self._visible_sprite_indices[index] if 0 <= index < len(self._visible_sprite_indices) else -1
         enabled = index >= 0 and index < len(self._document.sprite_names())
         self.sprite_role.setEnabled(enabled)
         self.sprite_flying.setEnabled(enabled)
@@ -1303,6 +1317,10 @@ class MainWindow(QMainWindow):
         self.sprite_cell_y.setMaximum(self.sprite_height.value() - 1)
         self._refresh_sprite_cell()
 
+    def _current_sprite_index(self) -> int:
+        row = self.sprite_list.currentRow()
+        return self._visible_sprite_indices[row] if 0 <= row < len(self._visible_sprite_indices) else -1
+
     def _new_sprite(self) -> None:
         name, accepted = QInputDialog.getText(self, "New sprite", "Name:", text="Sprite")
         if accepted:
@@ -1310,7 +1328,7 @@ class MainWindow(QMainWindow):
             self._session.schedule_save()
 
     def _duplicate_sprite(self) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index < 0:
             return
         name, accepted = QInputDialog.getText(self, "Duplicate sprite", "Name:", text=f"{self._document.sprite_names()[index]} copy")
@@ -1319,7 +1337,7 @@ class MainWindow(QMainWindow):
             self._session.schedule_save()
 
     def _rename_sprite(self) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index < 0:
             return
         name, accepted = QInputDialog.getText(self, "Rename sprite", "Name:", text=self._document.sprite_names()[index])
@@ -1329,33 +1347,33 @@ class MainWindow(QMainWindow):
             self._session.schedule_save()
 
     def _delete_sprite(self) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index >= 0:
             self._document.delete_sprite(index)
             self._refresh_sprite_editor(index)
             self._session.schedule_save()
 
     def _set_sprite_role(self, role: str) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index >= 0:
             self._document.set_sprite_role(index, role)
             self._refresh_sprite_editor(index)
             self._session.schedule_save()
 
     def _set_sprite_flying(self, flying: bool) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index >= 0:
             self._document.set_sprite_flying(index, flying)
             self._session.schedule_save()
 
     def _resize_sprite(self, _value: int) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index >= 0:
             self._document.resize_sprite(index, self.sprite_width.value(), self.sprite_height.value())
             self._session.schedule_save()
 
     def _refresh_sprite_cell(self, _value: int | None = None) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index < 0:
             return
         cell = self._document.state["sprites"][index]["cells"][self.sprite_cell_y.value()][self.sprite_cell_x.value()]
@@ -1365,7 +1383,7 @@ class MainWindow(QMainWindow):
             control.blockSignals(True); control.setChecked(bool(cell.get(key, False))); control.blockSignals(False)
 
     def _set_sprite_cell(self, _value: int) -> None:
-        index = self.sprite_list.currentRow()
+        index = self._current_sprite_index()
         if index >= 0:
             self._document.set_sprite_cell(index, self.sprite_cell_x.value(), self.sprite_cell_y.value(), tile=self.sprite_cell_tile.value(), palette=self.sprite_cell_palette.value(), flip_h=self.sprite_cell_flip_h.isChecked(), flip_v=self.sprite_cell_flip_v.isChecked(), priority=self.sprite_cell_priority.isChecked(), empty=self.sprite_cell_empty.isChecked())
             self._session.schedule_save()
@@ -1375,7 +1393,8 @@ class MainWindow(QMainWindow):
         if not accepted:
             return
         try:
-            index = self._document.add_animation(name, frames=[self.sprite_list.currentRow()] if self.sprite_list.currentRow() >= 0 else [])
+            sprite = self._current_sprite_index()
+            index = self._document.add_animation(name, frames=[sprite] if sprite >= 0 else [])
         except ValueError as exc:
             QMessageBox.warning(self, "Could not create animation", str(exc))
             return
@@ -1392,7 +1411,7 @@ class MainWindow(QMainWindow):
         self.animation_fps.setValue(int(animation.get("fps", 8)) if animation else 8)
         self.animation_fps.blockSignals(False)
         has_animation = animation is not None
-        self.animation_add_frame_button.setEnabled(has_animation and self.sprite_list.currentRow() >= 0)
+        self.animation_add_frame_button.setEnabled(has_animation and self._current_sprite_index() >= 0)
         self.animation_remove_frame_button.setEnabled(bool(animation and animation.get("frames")))
         self.animation_rename_button.setEnabled(has_animation)
         self.animation_duplicate_button.setEnabled(has_animation)
@@ -1462,7 +1481,7 @@ class MainWindow(QMainWindow):
             selector.blockSignals(False)
 
     def _append_selected_sprite_frame(self) -> None:
-        animation, sprite = self.animation_list.currentRow(), self.sprite_list.currentRow()
+        animation, sprite = self.animation_list.currentRow(), self._current_sprite_index()
         if animation >= 0 and sprite >= 0:
             self._document.append_animation_frame(animation, sprite)
             self._session.schedule_save()
