@@ -36,8 +36,8 @@ boundary, and owning tests support it.
       thumbnails/filtering, complete animation management and preview.
 - [ ] WORLD: named/custom tile types, clear/zoom/fullscreen preview and a
       richer metatile picker/stamping workflow.
-- [ ] PALS: NES swatch picker, used-by information, recent colours and locked
-      slot guidance.
+- [~] PALS: live NES colour swatches are complete; picker, used-by information,
+      recent colours and locked-slot guidance remain.
 
 ### 3. Finish app workflows
 

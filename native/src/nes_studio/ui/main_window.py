@@ -149,6 +149,20 @@ class MainWindow(QMainWindow):
         selector.setMinimumHeight(34)
         selector.setAccessibleName(accessible_name)
 
+    @staticmethod
+    def _style_palette_control(control: QSpinBox, colour: int) -> None:
+        """Give numeric NES palette entries a readable live colour swatch."""
+
+        tone = colour & 0x0F
+        if tone in {0x0D, 0x0E, 0x0F}:
+            swatch = QColor("#101018")
+        else:
+            swatch = QColor.fromHsv((tone * 23) % 360, 170, (72, 128, 188, 242)[(colour >> 4) & 3])
+        text = "#080810" if swatch.lightness() > 145 else "#f8f8f8"
+        control.setStyleSheet(
+            f"QSpinBox {{ background: {swatch.name()}; color: {text}; border: 2px solid #f8f8f8; font-weight: 800; padding: 4px; }}"
+        )
+
     def _create_workspace(self) -> QWidget:
         root = QWidget(self)
         root.setObjectName("studioWorkspace")
@@ -494,6 +508,7 @@ class MainWindow(QMainWindow):
                 control.valueChanged.connect(
                     lambda value, palette=palette, slot=slot: self._set_background_palette_slot(palette, slot, value)
                 )
+                self._style_palette_control(control, 0)
                 self._background_palette_controls.append(control)
                 palette_layout.addWidget(control, palette + 1, slot + 1)
         palette_layout.addWidget(QLabel("SPRITE PALETTES — slot 0 is transparent", self.palette_editor), 6, 0, 1, 4)
@@ -510,6 +525,7 @@ class MainWindow(QMainWindow):
                 control.valueChanged.connect(
                     lambda value, palette=palette, slot=slot: self._set_sprite_palette_slot(palette, slot, value)
                 )
+                self._style_palette_control(control, 0)
                 self._sprite_palette_controls.append(control)
                 palette_layout.addWidget(control, palette + 7, slot + 1)
         self.editor_stack.addWidget(self.palette_editor)
@@ -945,20 +961,24 @@ class MainWindow(QMainWindow):
                 control.blockSignals(True)
                 control.setValue(colour)
                 control.blockSignals(False)
+                self._style_palette_control(control, colour)
             for slot, colour in enumerate(self._document.sprite_palette(palette)):
                 control = self._sprite_palette_controls[palette * 3 + slot]
                 control.blockSignals(True)
                 control.setValue(colour)
                 control.blockSignals(False)
+                self._style_palette_control(control, colour)
 
     def _set_background_palette_slot(self, palette: int, slot: int, colour: int) -> None:
         self._document.set_background_palette_slot(palette, slot, colour)
+        self._style_palette_control(self._background_palette_controls[palette * 3 + slot], colour)
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"BG{palette} palette slot {slot + 1} set to 0x{colour:02X}")
 
     def _set_sprite_palette_slot(self, palette: int, slot: int, colour: int) -> None:
         self._document.set_sprite_palette_slot(palette, slot, colour)
+        self._style_palette_control(self._sprite_palette_controls[palette * 3 + slot], colour)
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"SP{palette} palette slot {slot + 1} set to 0x{colour:02X}")
