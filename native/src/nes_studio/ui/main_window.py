@@ -100,6 +100,11 @@ class MainWindow(QMainWindow):
         self._snapshot_timer.setInterval(30_000)
         self._snapshot_timer.timeout.connect(self._snapshot_if_changed)
         self._snapshot_timer.start()
+        self._animation_preview_frame = 0
+        self._animation_preview_timer = QTimer(self)
+        self._animation_preview_timer.setInterval(125)
+        self._animation_preview_timer.timeout.connect(self._advance_animation_preview)
+        self._animation_preview_timer.start()
 
         self.setObjectName("mainWindow")
         self.setWindowTitle(APP_DISPLAY_NAME)
@@ -729,6 +734,10 @@ class MainWindow(QMainWindow):
         self.animation_fps.setPrefix("FPS ")
         self.animation_fps.valueChanged.connect(self._set_animation_fps)
         chars_layout.addWidget(self.animation_fps)
+        self.animation_preview = QLabel("Select an animation to preview it.", self.chars_editor)
+        self.animation_preview.setObjectName("animationPreview")
+        self.animation_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        chars_layout.addWidget(self.animation_preview)
         self.animation_assignments: dict[str, QComboBox] = {}
         for kind in ("walk", "jump", "attack"):
             selector = QComboBox(self.chars_editor)
@@ -1376,6 +1385,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Created animation {name.strip()}")
 
     def _select_animation(self, index: int) -> None:
+        self._animation_preview_frame = 0
         animations = self._document.state.get("animations") or []
         animation = animations[index] if 0 <= index < len(animations) and isinstance(animations[index], dict) else None
         self.animation_fps.blockSignals(True)
@@ -1391,6 +1401,35 @@ class MainWindow(QMainWindow):
         self.animation_frame_index.blockSignals(True); self.animation_frame_index.setRange(0, max(0, frame_count - 1)); self.animation_frame_index.setValue(min(self.animation_frame_index.value(), max(0, frame_count - 1))); self.animation_frame_index.setEnabled(frame_count > 0); self.animation_frame_index.blockSignals(False)
         self.animation_frame_left.setEnabled(frame_count > 1 and self.animation_frame_index.value() > 0)
         self.animation_frame_right.setEnabled(frame_count > 1 and self.animation_frame_index.value() < frame_count - 1)
+        self._refresh_animation_preview()
+
+    def _advance_animation_preview(self) -> None:
+        if self.editor_stack.currentWidget() is not self.chars_editor:
+            return
+        animation = self.animation_list.currentRow()
+        animations = self._document.state.get("animations") or []
+        if not 0 <= animation < len(animations) or not isinstance(animations[animation], dict):
+            return
+        frames = animations[animation].get("frames") or []
+        if frames:
+            self._animation_preview_frame = (self._animation_preview_frame + 1) % len(frames)
+            self._refresh_animation_preview()
+
+    def _refresh_animation_preview(self) -> None:
+        index = self.animation_list.currentRow()
+        animations = self._document.state.get("animations") or []
+        if not 0 <= index < len(animations) or not isinstance(animations[index], dict):
+            self.animation_preview.setText("Select an animation to preview it.")
+            return
+        animation = animations[index]
+        frames = animation.get("frames") or []
+        if not frames:
+            self.animation_preview.setText("Add sprite frames to preview this animation.")
+            return
+        frame = int(frames[self._animation_preview_frame % len(frames)])
+        names = self._document.sprite_names()
+        name = names[frame] if 0 <= frame < len(names) else "Missing sprite"
+        self.animation_preview.setText(f"▶ {name}  ·  frame {self._animation_preview_frame % len(frames) + 1}/{len(frames)}  ·  {animation.get('fps', 8)} FPS")
 
     def _refresh_animation_list(self, selected: int | None = None) -> None:
         if selected is None:

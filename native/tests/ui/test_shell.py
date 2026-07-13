@@ -96,6 +96,7 @@ class NativeShellTests(unittest.TestCase):
         window._document.add_animation("Walk", frames=[window.sprite_list.currentRow()])
         window._refresh_animation_list(0)
         self.assertEqual(window.animation_list.currentRow(), 0)
+        self.assertIn("frame 1/1", window.animation_preview.text())
         window.animation_fps.setValue(12)
         self.assertEqual(window._document.state["animations"][0]["fps"], 12)
         window.animation_add_frame_button.click()
