@@ -129,6 +129,17 @@ class NativeShellTests(unittest.TestCase):
         doors = window._document.state["builder"]["modules"]["doors"]
         self.assertTrue(doors["enabled"])
         self.assertEqual(doors["config"]["spawnX"], 88)
+        window.dialogue_enabled.setChecked(True)
+        window.dialogue_lines["text"].setText("HELLO")
+        window._set_dialogue_text("text", window.dialogue_lines["text"].text())
+        window.dialogue_proximity.setValue(3)
+        dialogue = window._document.state["builder"]["modules"]["dialogue"]
+        self.assertTrue(dialogue["enabled"])
+        self.assertEqual(dialogue["config"]["text"], "HELLO")
+        self.assertEqual(dialogue["config"]["proximity"], 3)
+        window.win_enabled.setChecked(True)
+        window.win_type.setCurrentText("all_pickups_collected")
+        self.assertEqual(window._document.state["builder"]["modules"]["win_condition"]["config"]["type"], "all_pickups_collected")
         window._document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")
         window.select_mode("SOUND")
         self.assertEqual(window.editor_stack.currentWidget(), window.sound_editor)

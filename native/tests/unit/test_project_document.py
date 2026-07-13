@@ -288,6 +288,30 @@ def test_doors_use_the_shared_builder_module_contract() -> None:
     }
 
 
+def test_dialogue_uses_the_shared_builder_module_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_dialogue_enabled(True)
+    document.set_dialogue_option("text", "HELLO THERE")
+    document.set_dialogue_option("text2", "WELCOME")
+    document.set_dialogue_option("proximity", 3)
+    document.set_dialogue_option("pauseOnOpen", False)
+    document.set_dialogue_option("autoClose", 90)
+    assert document.state["builder"]["modules"]["dialogue"] == {
+        "enabled": True,
+        "config": {"text": "HELLO THERE", "text2": "WELCOME", "proximity": 3, "pauseOnOpen": False, "autoClose": 90},
+    }
+
+
+def test_win_condition_uses_the_shared_builder_module_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_win_condition_enabled(True)
+    document.set_win_condition_option("type", "all_pickups_collected")
+    document.set_win_condition_option("behaviourType", "door")
+    assert document.state["builder"]["modules"]["win_condition"] == {
+        "enabled": True, "config": {"type": "all_pickups_collected", "behaviourType": "door"},
+    }
+
+
 def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
     document = ProjectDocument.preview()
     first = document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")

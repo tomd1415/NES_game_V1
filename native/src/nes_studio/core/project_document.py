@@ -542,6 +542,51 @@ class ProjectDocument:
             config[key] = value
             self.dirty = True
 
+    def set_dialogue_enabled(self, enabled: bool) -> None:
+        node = self._builder_module("dialogue", enabled=False)
+        if node.get("enabled") != enabled:
+            node["enabled"] = enabled
+            self.dirty = True
+
+    def set_dialogue_option(self, key: str, value: str | int | bool) -> None:
+        valid = (
+            (key in {"text", "text2", "text3"} and isinstance(value, str) and "\n" not in value and len(value) <= 28)
+            or (key == "proximity" and isinstance(value, int) and 1 <= value <= 6)
+            or (key == "autoClose" and isinstance(value, int) and 0 <= value <= 240)
+            or (key == "pauseOnOpen" and isinstance(value, bool))
+        )
+        if not valid:
+            raise ValueError("Invalid dialogue option")
+        node = self._builder_module("dialogue", enabled=False)
+        config = node.setdefault("config", {})
+        if not isinstance(config, dict):
+            config = {}
+            node["config"] = config
+        if config.get(key) != value:
+            config[key] = value
+            self.dirty = True
+
+    def set_win_condition_enabled(self, enabled: bool) -> None:
+        node = self._builder_module("win_condition", enabled=False)
+        if node.get("enabled") != enabled:
+            node["enabled"] = enabled
+            self.dirty = True
+
+    def set_win_condition_option(self, key: str, value: str) -> None:
+        valid = (key == "type" and value in {"reach_tile", "all_pickups_collected"}) or (
+            key == "behaviourType" and value in {"trigger", "door", "solid_ground", "wall", "platform", "ladder"}
+        )
+        if not valid:
+            raise ValueError("Invalid win condition option")
+        node = self._builder_module("win_condition", enabled=False)
+        config = node.setdefault("config", {})
+        if not isinstance(config, dict):
+            config = {}
+            node["config"] = config
+        if config.get(key) != value:
+            config[key] = value
+            self.dirty = True
+
     def add_audio_song(self, filename: str, asm: str) -> int:
         if not filename or not asm:
             raise ValueError("Audio source needs a filename and content")

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QMainWindow,
     QMenu,
@@ -755,6 +756,40 @@ class MainWindow(QMainWindow):
         self.doors_hint = QLabel("Use -1 for a same-room shortcut; 0+ swaps to that background.", self.rules_editor)
         self.doors_hint.setWordWrap(True)
         rules_layout.addWidget(self.doors_hint)
+        rules_layout.addWidget(QLabel("DIALOGUE", self.rules_editor))
+        self.dialogue_enabled = QCheckBox("Enable NPC dialogue", self.rules_editor)
+        self.dialogue_enabled.setObjectName("dialogueEnabled")
+        self.dialogue_enabled.toggled.connect(self._set_dialogue_enabled)
+        rules_layout.addWidget(self.dialogue_enabled)
+        self.dialogue_lines: dict[str, QLineEdit] = {}
+        for key, label in (("text", "Line 1"), ("text2", "Line 2"), ("text3", "Line 3")):
+            control = QLineEdit(self.rules_editor)
+            control.setObjectName(f"dialogue{key.title()}Input")
+            control.setMaxLength(28)
+            control.setPlaceholderText(f"{label} (up to 28 characters)")
+            control.editingFinished.connect(lambda key=key, control=control: self._set_dialogue_text(key, control.text()))
+            self.dialogue_lines[key] = control
+            rules_layout.addWidget(control)
+        self.dialogue_proximity = QSpinBox(self.rules_editor); self.dialogue_proximity.setRange(1, 6); self.dialogue_proximity.setPrefix("Talk distance (tiles): "); self.dialogue_proximity.valueChanged.connect(lambda value: self._set_dialogue_option("proximity", value)); rules_layout.addWidget(self.dialogue_proximity)
+        self.dialogue_pause = QCheckBox("Pause while dialogue is open", self.rules_editor); self.dialogue_pause.toggled.connect(lambda value: self._set_dialogue_option("pauseOnOpen", value)); rules_layout.addWidget(self.dialogue_pause)
+        self.dialogue_auto_close = QSpinBox(self.rules_editor); self.dialogue_auto_close.setRange(0, 240); self.dialogue_auto_close.setPrefix("Auto-close frames: "); self.dialogue_auto_close.valueChanged.connect(lambda value: self._set_dialogue_option("autoClose", value)); rules_layout.addWidget(self.dialogue_auto_close)
+        rules_layout.addWidget(QLabel("WIN CONDITION", self.rules_editor))
+        self.win_enabled = QCheckBox("Enable a win condition", self.rules_editor)
+        self.win_enabled.setObjectName("winConditionEnabled")
+        self.win_enabled.toggled.connect(self._set_win_condition_enabled)
+        rules_layout.addWidget(self.win_enabled)
+        self.win_type = QComboBox(self.rules_editor)
+        self._prepare_visual_selector(self.win_type, "Win condition type")
+        self._add_visual_choice(self.win_type, "reach_tile", colour="#78d878", glyph="★")
+        self._add_visual_choice(self.win_type, "all_pickups_collected", colour="#f8d878", glyph="+")
+        self.win_type.currentTextChanged.connect(lambda value: self._set_win_condition_option("type", value))
+        rules_layout.addWidget(self.win_type)
+        self.win_behaviour = QComboBox(self.rules_editor)
+        self._prepare_visual_selector(self.win_behaviour, "Winning tile type")
+        for value, colour, glyph in (("trigger", "#f8d878", "!"), ("door", "#78d8d8", "D"), ("solid_ground", "#787898", "■"), ("wall", "#c87848", "W"), ("platform", "#78d878", "="), ("ladder", "#f8d878", "H")):
+            self._add_visual_choice(self.win_behaviour, value, colour=colour, glyph=glyph)
+        self.win_behaviour.currentTextChanged.connect(lambda value: self._set_win_condition_option("behaviourType", value))
+        rules_layout.addWidget(self.win_behaviour)
         self.damage_respawn_hp = QSpinBox(self.rules_editor); self.damage_respawn_hp.setRange(1, 9); self.damage_respawn_hp.setPrefix("Respawn HP: "); self.damage_respawn_hp.valueChanged.connect(lambda value: self._set_damage_option("respawnHp", value)); rules_layout.addWidget(self.damage_respawn_hp)
         self.stomp_defeat = QCheckBox("Stomp defeats enemies", self.rules_editor); self.stomp_defeat.toggled.connect(lambda value: self._set_damage_option("stompDefeat", value)); rules_layout.addWidget(self.stomp_defeat)
         self.stomp_bounce = QSpinBox(self.rules_editor); self.stomp_bounce.setRange(1, 30); self.stomp_bounce.setPrefix("Stomp bounce: "); self.stomp_bounce.valueChanged.connect(lambda value: self._set_damage_option("stompBounce", value)); rules_layout.addWidget(self.stomp_bounce)
@@ -1302,6 +1337,21 @@ class MainWindow(QMainWindow):
         self.doors_enabled.blockSignals(True); self.doors_enabled.setChecked(bool(doors.get("enabled", False)) if isinstance(doors, dict) else False); self.doors_enabled.blockSignals(False)
         for control, key, default in ((self.doors_spawn_x, "spawnX", 24), (self.doors_spawn_y, "spawnY", 120), (self.doors_target_bg, "targetBgIdx", -1)):
             control.blockSignals(True); control.setValue(int(doors_config.get(key, default))); control.setEnabled(self.doors_enabled.isChecked()); control.blockSignals(False)
+        dialogue = ((builder.get("modules") or {}).get("dialogue") or {})
+        dialogue_config = dialogue.get("config") if isinstance(dialogue, dict) else {}
+        dialogue_config = dialogue_config if isinstance(dialogue_config, dict) else {}
+        self.dialogue_enabled.blockSignals(True); self.dialogue_enabled.setChecked(bool(dialogue.get("enabled", False)) if isinstance(dialogue, dict) else False); self.dialogue_enabled.blockSignals(False)
+        for key, control in self.dialogue_lines.items():
+            control.blockSignals(True); control.setText(str(dialogue_config.get(key, "HELLO" if key == "text" else ""))); control.setEnabled(self.dialogue_enabled.isChecked()); control.blockSignals(False)
+        for control, key, default in ((self.dialogue_proximity, "proximity", 2), (self.dialogue_auto_close, "autoClose", 0)):
+            control.blockSignals(True); control.setValue(int(dialogue_config.get(key, default))); control.setEnabled(self.dialogue_enabled.isChecked()); control.blockSignals(False)
+        self.dialogue_pause.blockSignals(True); self.dialogue_pause.setChecked(bool(dialogue_config.get("pauseOnOpen", True))); self.dialogue_pause.setEnabled(self.dialogue_enabled.isChecked()); self.dialogue_pause.blockSignals(False)
+        win = ((builder.get("modules") or {}).get("win_condition") or {})
+        win_config = win.get("config") if isinstance(win, dict) else {}
+        win_config = win_config if isinstance(win_config, dict) else {}
+        self.win_enabled.blockSignals(True); self.win_enabled.setChecked(bool(win.get("enabled", False)) if isinstance(win, dict) else False); self.win_enabled.blockSignals(False)
+        for control, key, default in ((self.win_type, "type", "reach_tile"), (self.win_behaviour, "behaviourType", "trigger")):
+            control.blockSignals(True); control.setCurrentText(str(win_config.get(key, default))); control.setEnabled(self.win_enabled.isChecked()); control.blockSignals(False)
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
@@ -1366,6 +1416,28 @@ class MainWindow(QMainWindow):
 
     def _set_doors_option(self, key: str, value: int) -> None:
         self._document.set_doors_option(key, value)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_dialogue_enabled(self, enabled: bool) -> None:
+        self._document.set_dialogue_enabled(enabled)
+        for control in (*self.dialogue_lines.values(), self.dialogue_proximity, self.dialogue_pause, self.dialogue_auto_close):
+            control.setEnabled(enabled)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_dialogue_text(self, key: str, value: str) -> None:
+        self._set_dialogue_option(key, value)
+
+    def _set_dialogue_option(self, key: str, value: str | int | bool) -> None:
+        self._document.set_dialogue_option(key, value)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_win_condition_enabled(self, enabled: bool) -> None:
+        self._document.set_win_condition_enabled(enabled)
+        self.win_type.setEnabled(enabled); self.win_behaviour.setEnabled(enabled)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_win_condition_option(self, key: str, value: str) -> None:
+        self._document.set_win_condition_option(key, value)
         self._session.schedule_save(); self._update_document_title()
 
     def _refresh_sound_editor(self) -> None:
