@@ -44,7 +44,11 @@ class DirectBuildController:
             builder_defaults=source.default_builder(),
             assembler=source.assemble,
         )
-        request = factory.create(document.immutable_snapshot(), mode="native")
+        request = factory.create(
+            document.immutable_snapshot(), mode="native",
+            custom_main_c=document.custom_source("c"),
+            custom_main_asm=document.custom_source("asm"),
+        )
         audio = self.resources.root / "tools" / "audio" / "famistudio"
         service = core.build.BuildService(
             self.resources.playground_dir,

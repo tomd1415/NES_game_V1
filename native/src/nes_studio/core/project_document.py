@@ -109,6 +109,21 @@ class ProjectDocument:
     def name(self) -> str:
         return str(self.state.get("name") or "Untitled")
 
+    def custom_source(self, language: str) -> str | None:
+        key = "customMainAsm" if language == "asm" else "customMainC"
+        value = self.state.get(key)
+        return value if isinstance(value, str) and value.strip() else None
+
+    def set_custom_source(self, language: str, source: str) -> None:
+        if language not in {"c", "asm"}:
+            raise ValueError("Source language must be c or asm")
+        key = "customMainAsm" if language == "asm" else "customMainC"
+        other = "customMainC" if language == "asm" else "customMainAsm"
+        if self.state.get(key) != source or other in self.state:
+            self.state[key] = source
+            self.state.pop(other, None)
+            self.dirty = True
+
     @property
     def selected_background_index(self) -> int:
         return int(self.state.get("selectedBgIdx", 0))

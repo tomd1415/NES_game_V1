@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QIODevice, QObject, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QKeySequence, QPainter, QPixmap, QShortcut
+from PySide6.QtCore import QIODevice, QObject, QRegularExpression, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
+from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QKeySequence, QPainter, QPixmap, QShortcut, QTextCharFormat, QSyntaxHighlighter
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -48,6 +48,35 @@ from .widgets.world_canvas import WorldCanvas
 
 
 MODE_NAMES = ("WORLD", "CHARS", "TILES", "PALS", "RULES", "SOUND", "CODE")
+
+
+class _SourceHighlighter(QSyntaxHighlighter):
+    """Small dependency-free highlighter for the native C and ca65 source panes."""
+
+    def __init__(self, document: object) -> None:
+        super().__init__(document)
+        self.language = "c"
+
+    @staticmethod
+    def _format(colour: str, bold: bool = False) -> QTextCharFormat:
+        value = QTextCharFormat(); value.setForeground(QColor(colour))
+        if bold: value.setFontWeight(700)
+        return value
+
+    def highlightBlock(self, text: str) -> None:  # noqa: N802 - Qt API spelling
+        comment = self._format("#7f9f7f")
+        keyword = self._format("#ff79c6", True)
+        number = self._format("#bd93f9")
+        directive = self._format("#8be9fd", True)
+        rules = [(r"//.*$|/\*.*\*/", comment), (r"\b(0x[0-9a-fA-F]+|\d+)\b", number)]
+        if self.language == "asm":
+            rules += [(r";.*$", comment), (r"^\s*\.[a-zA-Z]+|^\s*[A-Za-z_][\w]*:", directive), (r"\b(lda|sta|ldx|ldy|jmp|jsr|rts|bne|beq|cmp|adc|sbc|inc|dec|and|ora|eor)\b", keyword)]
+        else:
+            rules += [(r"^\s*#\s*\w+", directive), (r"\b(void|int|char|unsigned|const|static|if|else|for|while|return|struct)\b", keyword)]
+        for expression, style in rules:
+            match = QRegularExpression(expression).globalMatch(text)
+            while match.hasNext():
+                hit = match.next(); self.setFormat(hit.capturedStart(), hit.capturedLength(), style)
 
 
 class _BuildWorker(QObject):
@@ -553,12 +582,33 @@ class MainWindow(QMainWindow):
         self.world_canvas.entity_selected.connect(self._select_canvas_entity)
         self.world_canvas.entity_moved.connect(self._move_canvas_entity)
         self.editor_stack.addWidget(self.world_canvas)
-        self.code_preview = QPlainTextEdit(self.editor_stack)
+        self.code_editor = QFrame(self.editor_stack)
+        self.code_editor.setObjectName("codeEditor")
+        code_layout = QVBoxLayout(self.code_editor)
+        code_toolbar = QHBoxLayout()
+        code_toolbar.addWidget(QLabel("SOURCE", self.code_editor))
+        self.code_c_button = QPushButton("C  main.c", self.code_editor)
+        self.code_c_button.setObjectName("codeCButton"); self.code_c_button.setCheckable(True)
+        self.code_c_button.clicked.connect(lambda: self._select_code_language("c"))
+        code_toolbar.addWidget(self.code_c_button)
+        self.code_asm_button = QPushButton("ASM  main.s", self.code_editor)
+        self.code_asm_button.setObjectName("codeAsmButton"); self.code_asm_button.setCheckable(True)
+        self.code_asm_button.clicked.connect(lambda: self._select_code_language("asm"))
+        code_toolbar.addWidget(self.code_asm_button)
+        self.code_language_note = QLabel(self.code_editor)
+        self.code_language_note.setObjectName("codeLanguageNote")
+        code_toolbar.addWidget(self.code_language_note, 1)
+        code_layout.addLayout(code_toolbar)
+        self.code_preview = QPlainTextEdit(self.code_editor)
         self.code_preview.setObjectName("codePreview")
-        self.code_preview.setReadOnly(True)
-        self.code_preview.setAccessibleName("Generated C source preview")
+        self.code_preview.setReadOnly(False)
+        self.code_preview.setAccessibleName("Editable project C source")
         self.code_preview.setPlainText("Select CODE to generate a preview.")
-        self.editor_stack.addWidget(self.code_preview)
+        self.code_preview.textChanged.connect(self._save_code_source)
+        self._code_language = "c"
+        self._code_highlighter = _SourceHighlighter(self.code_preview.document())
+        code_layout.addWidget(self.code_preview)
+        self.editor_stack.addWidget(self.code_editor)
         self.palette_editor = QFrame(self.editor_stack)
         self.palette_editor.setObjectName("paletteEditor")
         palette_layout = QGridLayout(self.palette_editor)
@@ -762,6 +812,10 @@ class MainWindow(QMainWindow):
             control.toggled.connect(self._set_sprite_cell)
             cell_attributes.addWidget(control)
         chars_layout.addLayout(cell_attributes)
+        self.edit_sprite_pixels_button = QPushButton("✎ Edit selected cell pixels", self.chars_editor)
+        self.edit_sprite_pixels_button.setObjectName("editSpritePixelsButton")
+        self.edit_sprite_pixels_button.clicked.connect(self._edit_selected_sprite_pixels)
+        chars_layout.addWidget(self.edit_sprite_pixels_button)
         self.new_animation_button = QPushButton("New animation", self.chars_editor)
         self.new_animation_button.setObjectName("newAnimationButton")
         self.new_animation_button.clicked.connect(self._new_animation)
@@ -1081,7 +1135,7 @@ class MainWindow(QMainWindow):
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
         self.editor_stack.setCurrentWidget(
-            self.code_preview if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.rules_editor if mode == "RULES" else self.sound_editor if mode == "SOUND" else self.world_canvas
+            self.code_editor if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.rules_editor if mode == "RULES" else self.sound_editor if mode == "SOUND" else self.world_canvas
         )
         if mode == "CODE":
             self._refresh_code_preview()
@@ -1102,21 +1156,55 @@ class MainWindow(QMainWindow):
             self._select_world_tool(self.world_canvas.tool)
 
     def _refresh_code_preview(self) -> None:
+        saved = self._document.custom_source(self._code_language)
+        if saved is not None:
+            source = saved
+        elif self._code_language == "asm":
+            source = self._default_asm_source()
+        else:
+            source = self._generated_c_source()
+        self.code_preview.blockSignals(True)
+        self.code_preview.setPlainText(source)
+        self.code_preview.blockSignals(False)
+        self.code_c_button.setChecked(self._code_language == "c")
+        self.code_asm_button.setChecked(self._code_language == "asm")
+        self.code_language_note.setText("Editable cc65 source" if self._code_language == "c" else "Editable ca65 source")
+        self.code_preview.setAccessibleName(f"Editable {'C' if self._code_language == 'c' else '6502 assembly'} source")
+        self._code_highlighter.language = self._code_language
+        self._code_highlighter.rehighlight()
+        self.statusBar().showMessage(f"Loaded editable {'C' if self._code_language == 'c' else 'assembly'} source")
+
+    def _generated_c_source(self) -> str:
         if not self._resource_locator.source_checkout:
-            self.code_preview.setPlainText(
-                "Generated source preview is unavailable: this installation lacks the immutable engine bundle."
-            )
-            return
+            return "// Generated source is unavailable: this installation lacks the engine bundle.\n"
         try:
-            generated = CodegenDifferential(self._resource_locator.root).assemble(
+            return CodegenDifferential(self._resource_locator.root).assemble(
                 self._document.snapshot()
             )
         except Exception as exc:
-            self.code_preview.setPlainText(f"Could not generate C source:\n\n{exc}")
             self.statusBar().showMessage("Could not generate CODE preview")
+            return f"// Could not generate C source:\n// {exc}\n"
+
+    def _default_asm_source(self) -> str:
+        path = self._resource_locator.root / "steps" / "Step_Playground" / "src" / "main_asm.s"
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return "; Assembly starter is unavailable in this installation.\n"
+
+    def _select_code_language(self, language: str) -> None:
+        if language not in {"c", "asm"} or language == self._code_language:
             return
-        self.code_preview.setPlainText(generated)
-        self.statusBar().showMessage("Generated current project C source")
+        self._save_code_source()
+        self._code_language = language
+        self._refresh_code_preview()
+
+    def _save_code_source(self) -> None:
+        if not hasattr(self, "_code_language"):
+            return
+        self._document.set_custom_source(self._code_language, self.code_preview.toPlainText())
+        self._session.schedule_save()
+        self._update_document_title()
 
     def _refresh_palette_editor(self) -> None:
         for palette in range(4):
@@ -1474,6 +1562,16 @@ class MainWindow(QMainWindow):
         if index >= 0:
             self._document.set_sprite_cell(index, self.sprite_cell_x.value(), self.sprite_cell_y.value(), tile=self.sprite_cell_tile.value(), palette=self.sprite_cell_palette.value(), flip_h=self.sprite_cell_flip_h.isChecked(), flip_v=self.sprite_cell_flip_v.isChecked(), priority=self.sprite_cell_priority.isChecked(), empty=self.sprite_cell_empty.isChecked())
             self._session.schedule_save()
+
+    def _edit_selected_sprite_pixels(self) -> None:
+        index = self._current_sprite_index()
+        if index < 0:
+            return
+        cell = self._document.state["sprites"][index]["cells"][self.sprite_cell_y.value()][self.sprite_cell_x.value()]
+        self.tile_bank.setCurrentIndex(1)
+        self.tile_selector.setValue(int(cell.get("tile", 0)))
+        self.select_mode("TILES")
+        self.statusBar().showMessage("Editing selected sprite cell pixels")
 
     def _new_animation(self) -> None:
         name, accepted = QInputDialog.getText(self, "New animation", "Name:", text="Animation")
