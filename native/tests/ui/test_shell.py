@@ -89,6 +89,8 @@ class NativeShellTests(unittest.TestCase):
         window.sprite_role.setCurrentText("enemy")
         self.assertEqual(window._document.state["sprites"][window.sprite_list.currentRow()]["role"], "enemy")
         self.assertFalse(window.sprite_role.itemIcon(window.sprite_role.currentIndex()).isNull())
+        window.sprite_cell_flip_h.setChecked(True)
+        self.assertTrue(window._document.state["sprites"][window.sprite_list.currentRow()]["cells"][0][0]["flipH"])
         self.assertTrue(window._mode_buttons["CHARS"].isChecked())
         self.assertFalse(window._tool_buttons["paint"].isEnabled())
         window._document.add_animation("Walk", frames=[window.sprite_list.currentRow()])

@@ -669,6 +669,15 @@ class MainWindow(QMainWindow):
         self.sprite_cell_tile.valueChanged.connect(self._set_sprite_cell)
         self.sprite_cell_palette.valueChanged.connect(self._set_sprite_cell)
         chars_layout.addLayout(cell_controls)
+        cell_attributes = QHBoxLayout()
+        self.sprite_cell_flip_h = QCheckBox("Flip H", self.chars_editor)
+        self.sprite_cell_flip_v = QCheckBox("Flip V", self.chars_editor)
+        self.sprite_cell_priority = QCheckBox("Behind BG", self.chars_editor)
+        self.sprite_cell_empty = QCheckBox("Empty", self.chars_editor)
+        for control in (self.sprite_cell_flip_h, self.sprite_cell_flip_v, self.sprite_cell_priority, self.sprite_cell_empty):
+            control.toggled.connect(self._set_sprite_cell)
+            cell_attributes.addWidget(control)
+        chars_layout.addLayout(cell_attributes)
         self.new_animation_button = QPushButton("New animation", self.chars_editor)
         self.new_animation_button.setObjectName("newAnimationButton")
         self.new_animation_button.clicked.connect(self._new_animation)
@@ -1321,11 +1330,13 @@ class MainWindow(QMainWindow):
         cell = self._document.state["sprites"][index]["cells"][self.sprite_cell_y.value()][self.sprite_cell_x.value()]
         for control, value in ((self.sprite_cell_tile, int(cell.get("tile", 0))), (self.sprite_cell_palette, int(cell.get("palette", 0)))):
             control.blockSignals(True); control.setValue(value); control.blockSignals(False)
+        for control, key in ((self.sprite_cell_flip_h, "flipH"), (self.sprite_cell_flip_v, "flipV"), (self.sprite_cell_priority, "priority"), (self.sprite_cell_empty, "empty")):
+            control.blockSignals(True); control.setChecked(bool(cell.get(key, False))); control.blockSignals(False)
 
     def _set_sprite_cell(self, _value: int) -> None:
         index = self.sprite_list.currentRow()
         if index >= 0:
-            self._document.set_sprite_cell(index, self.sprite_cell_x.value(), self.sprite_cell_y.value(), tile=self.sprite_cell_tile.value(), palette=self.sprite_cell_palette.value())
+            self._document.set_sprite_cell(index, self.sprite_cell_x.value(), self.sprite_cell_y.value(), tile=self.sprite_cell_tile.value(), palette=self.sprite_cell_palette.value(), flip_h=self.sprite_cell_flip_h.isChecked(), flip_v=self.sprite_cell_flip_v.isChecked(), priority=self.sprite_cell_priority.isChecked(), empty=self.sprite_cell_empty.isChecked())
             self._session.schedule_save()
 
     def _new_animation(self) -> None:

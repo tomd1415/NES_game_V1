@@ -152,6 +152,13 @@ def test_sprite_tiles_are_independent_from_background_tiles() -> None:
     assert document.sprite_tile_pixels(7)[4][4] == 2
 
 
+def test_sprite_cells_preserve_the_shared_oam_attribute_shape() -> None:
+    document = ProjectDocument.preview()
+    sprite = document.add_sprite("Hero")
+    document.set_sprite_cell(sprite, 0, 0, tile=7, palette=2, flip_h=True, flip_v=True, priority=True, empty=False)
+    assert document.state["sprites"][sprite]["cells"][0][0] == {"tile": 7, "palette": 2, "empty": False, "flipH": True, "flipV": True, "priority": True}
+
+
 def test_duplicate_tiles_copies_into_the_first_available_slot_per_bank() -> None:
     document = ProjectDocument.preview()
     document.set_background_tile_pixel(7, 0, 0, 3)

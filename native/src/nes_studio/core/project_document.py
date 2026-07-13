@@ -308,7 +308,7 @@ class ProjectDocument:
             sprite["width"], sprite["height"], sprite["cells"] = width, height, resized
             self.dirty = True
 
-    def set_sprite_cell(self, index: int, column: int, row: int, *, tile: int, palette: int) -> None:
+    def set_sprite_cell(self, index: int, column: int, row: int, *, tile: int, palette: int, flip_h: bool | None = None, flip_v: bool | None = None, priority: bool | None = None, empty: bool | None = None) -> None:
         sprite = self._sprite_at(index)
         width, height = int(sprite.get("width") or 1), int(sprite.get("height") or 1)
         if not 0 <= column < width or not 0 <= row < height:
@@ -317,8 +317,13 @@ class ProjectDocument:
             raise ValueError("Sprite cell tile/palette is invalid")
         self.resize_sprite(index, width, height)
         cell = sprite["cells"][row][column]
-        if cell.get("tile") != tile or cell.get("palette") != palette or cell.get("empty"):
-            cell.update({"tile": tile, "palette": palette, "empty": False})
+        values = {"tile": tile, "palette": palette}
+        if flip_h is not None: values["flipH"] = bool(flip_h)
+        if flip_v is not None: values["flipV"] = bool(flip_v)
+        if priority is not None: values["priority"] = bool(priority)
+        values["empty"] = bool(empty) if empty is not None else False
+        if any(cell.get(key) != value for key, value in values.items()):
+            cell.update(values)
             self.dirty = True
 
     def add_animation(self, name: str, *, fps: int = 8, frames: list[int] | None = None) -> int:
