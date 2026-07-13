@@ -735,6 +735,26 @@ class MainWindow(QMainWindow):
         self.hud_hint.setObjectName("hudSpriteHint")
         self.hud_hint.setWordWrap(True)
         rules_layout.addWidget(self.hud_hint)
+        rules_layout.addWidget(QLabel("DOORS", self.rules_editor))
+        self.doors_enabled = QCheckBox("Teleport when entering a Door tile", self.rules_editor)
+        self.doors_enabled.setObjectName("doorsEnabled")
+        self.doors_enabled.toggled.connect(self._set_doors_enabled)
+        rules_layout.addWidget(self.doors_enabled)
+        self.doors_spawn_x = QSpinBox(self.rules_editor)
+        self.doors_spawn_y = QSpinBox(self.rules_editor)
+        self.doors_target_bg = QSpinBox(self.rules_editor)
+        for control, minimum, maximum, prefix, key in (
+            (self.doors_spawn_x, 0, 240, "Door spawn X: ", "spawnX"),
+            (self.doors_spawn_y, 16, 200, "Door spawn Y: ", "spawnY"),
+            (self.doors_target_bg, -1, 9, "Target background: ", "targetBgIdx"),
+        ):
+            control.setRange(minimum, maximum)
+            control.setPrefix(prefix)
+            control.valueChanged.connect(lambda value, key=key: self._set_doors_option(key, value))
+            rules_layout.addWidget(control)
+        self.doors_hint = QLabel("Use -1 for a same-room shortcut; 0+ swaps to that background.", self.rules_editor)
+        self.doors_hint.setWordWrap(True)
+        rules_layout.addWidget(self.doors_hint)
         self.damage_respawn_hp = QSpinBox(self.rules_editor); self.damage_respawn_hp.setRange(1, 9); self.damage_respawn_hp.setPrefix("Respawn HP: "); self.damage_respawn_hp.valueChanged.connect(lambda value: self._set_damage_option("respawnHp", value)); rules_layout.addWidget(self.damage_respawn_hp)
         self.stomp_defeat = QCheckBox("Stomp defeats enemies", self.rules_editor); self.stomp_defeat.toggled.connect(lambda value: self._set_damage_option("stompDefeat", value)); rules_layout.addWidget(self.stomp_defeat)
         self.stomp_bounce = QSpinBox(self.rules_editor); self.stomp_bounce.setRange(1, 30); self.stomp_bounce.setPrefix("Stomp bounce: "); self.stomp_bounce.valueChanged.connect(lambda value: self._set_damage_option("stompBounce", value)); rules_layout.addWidget(self.stomp_bounce)
@@ -1276,6 +1296,12 @@ class MainWindow(QMainWindow):
             if has_hud_sprite
             else "Tag a small sprite as ‘hud’ in CHARS to choose the heart art."
         )
+        doors = ((builder.get("modules") or {}).get("doors") or {})
+        doors_config = doors.get("config") if isinstance(doors, dict) else {}
+        doors_config = doors_config if isinstance(doors_config, dict) else {}
+        self.doors_enabled.blockSignals(True); self.doors_enabled.setChecked(bool(doors.get("enabled", False)) if isinstance(doors, dict) else False); self.doors_enabled.blockSignals(False)
+        for control, key, default in ((self.doors_spawn_x, "spawnX", 24), (self.doors_spawn_y, "spawnY", 120), (self.doors_target_bg, "targetBgIdx", -1)):
+            control.blockSignals(True); control.setValue(int(doors_config.get(key, default))); control.setEnabled(self.doors_enabled.isChecked()); control.blockSignals(False)
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
@@ -1330,6 +1356,16 @@ class MainWindow(QMainWindow):
 
     def _set_hud_enabled(self, enabled: bool) -> None:
         self._document.set_hud_enabled(enabled)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_doors_enabled(self, enabled: bool) -> None:
+        self._document.set_doors_enabled(enabled)
+        for control in (self.doors_spawn_x, self.doors_spawn_y, self.doors_target_bg):
+            control.setEnabled(enabled)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_doors_option(self, key: str, value: int) -> None:
+        self._document.set_doors_option(key, value)
         self._session.schedule_save(); self._update_document_title()
 
     def _refresh_sound_editor(self) -> None:

@@ -521,6 +521,27 @@ class ProjectDocument:
             node["enabled"] = enabled
             self.dirty = True
 
+    def set_doors_enabled(self, enabled: bool) -> None:
+        """Enable the Builder's shared door behaviour module."""
+
+        node = self._builder_module("doors", enabled=False)
+        if node.get("enabled") != enabled:
+            node["enabled"] = enabled
+            self.dirty = True
+
+    def set_doors_option(self, key: str, value: int) -> None:
+        ranges = {"spawnX": (0, 240), "spawnY": (16, 200), "targetBgIdx": (-1, 9)}
+        if key not in ranges or not ranges[key][0] <= value <= ranges[key][1]:
+            raise ValueError("Invalid door option")
+        node = self._builder_module("doors", enabled=False)
+        config = node.setdefault("config", {})
+        if not isinstance(config, dict):
+            config = {}
+            node["config"] = config
+        if config.get(key) != value:
+            config[key] = value
+            self.dirty = True
+
     def add_audio_song(self, filename: str, asm: str) -> int:
         if not filename or not asm:
             raise ValueError("Audio source needs a filename and content")

@@ -123,6 +123,12 @@ class NativeShellTests(unittest.TestCase):
         self.assertEqual(spawn["config"]["ttl"], 48)
         window.hud_enabled.setChecked(True)
         self.assertTrue(window._document.state["builder"]["modules"]["hud"]["enabled"])
+        window.doors_enabled.setChecked(True)
+        window.doors_spawn_x.setValue(88)
+        window.doors_target_bg.setValue(-1)
+        doors = window._document.state["builder"]["modules"]["doors"]
+        self.assertTrue(doors["enabled"])
+        self.assertEqual(doors["config"]["spawnX"], 88)
         window._document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")
         window.select_mode("SOUND")
         self.assertEqual(window.editor_stack.currentWidget(), window.sound_editor)

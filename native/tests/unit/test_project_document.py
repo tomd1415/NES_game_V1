@@ -277,6 +277,17 @@ def test_hud_uses_the_shared_enable_only_module_contract() -> None:
     assert document.state["builder"]["modules"]["hud"] == {"enabled": True, "config": {}}
 
 
+def test_doors_use_the_shared_builder_module_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_doors_enabled(True)
+    document.set_doors_option("spawnX", 88)
+    document.set_doors_option("spawnY", 160)
+    document.set_doors_option("targetBgIdx", -1)
+    assert document.state["builder"]["modules"]["doors"] == {
+        "enabled": True, "config": {"spawnX": 88, "spawnY": 160, "targetBgIdx": -1},
+    }
+
+
 def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
     document = ProjectDocument.preview()
     first = document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")

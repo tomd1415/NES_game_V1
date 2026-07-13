@@ -22,7 +22,8 @@ boundary, and owning tests support it.
 
 - [x] Spawn effect — enablement, visual sprite selector and lifetime controls.
 - [x] HUD (hearts) enablement and HUD-sprite guidance.
-- [ ] Doors — shared spawn/target controls, then engine-v2 per-door entries.
+- [~] Doors — shared spawn/target controls are complete; engine-v2 per-door
+      entries still need a WORLD door-cell editor.
 - [ ] Dialogue and win-condition controls.
 - [ ] Remaining game-style modules/power-ups, with an owning test per module.
 - [ ] WORLD entity inspector: speed and dialogue text, then click/drag
