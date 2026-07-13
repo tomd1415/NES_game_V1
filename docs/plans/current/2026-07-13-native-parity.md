@@ -26,8 +26,7 @@ boundary, and owning tests support it.
       entries still need a WORLD door-cell editor.
 - [x] Dialogue and win-condition controls.
 - [ ] Remaining game-style modules/power-ups, with an owning test per module.
-- [~] WORLD entity inspector: speed and dialogue text are complete; click/drag
-      placement on the canvas remains.
+- [x] WORLD entity inspector and direct canvas selection/drag placement.
 
 ### 2. Make the core editors complete enough to replace their web pages
 

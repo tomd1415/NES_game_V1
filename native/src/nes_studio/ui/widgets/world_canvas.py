@@ -28,6 +28,8 @@ class WorldCanvas(QWidget):
     cursor_changed = Signal(int, int)
     history_changed = Signal(bool, bool)
     grid_options_changed = Signal(bool, bool)
+    entity_selected = Signal(int)
+    entity_moved = Signal(int, int, int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -55,6 +57,8 @@ class WorldCanvas(QWidget):
         self._redo: list[list[tuple[int, int, int, int, str]]] = []
         self._stroke: list[tuple[int, int, int, int, str]] | None = None
         self._stroke_cells: set[tuple[int, int, str]] = set()
+        self._entities: list[dict[str, int]] = []
+        self._drag_entity: int | None = None
         self._seed_preview()
         self._update_accessible_cell()
 
@@ -149,6 +153,10 @@ class WorldCanvas(QWidget):
         self._selected = (0, 0)
         self._selection = (0, 0, 0, 0)
         self._update_accessible_cell()
+
+    def set_entities(self, entities: list[dict[str, int]]) -> None:
+        self._entities = [dict(entity) for entity in entities]
+        self.update()
 
     def edit_cell(self, col: int, row: int) -> bool:
         """Apply the active tool; return whether the model changed."""
@@ -392,6 +400,18 @@ class WorldCanvas(QWidget):
         tile, left, top = self._grid_geometry()
         return QRectF(left + col * tile, top + row * tile, tile, tile)
 
+    def _world_position(self, point: QPointF) -> tuple[int, int]:
+        tile, left, top = self._grid_geometry()
+        return max(0, min(255, int((point.x() - left) * 8 / tile))), max(0, min(239, int((point.y() - top) * 8 / tile)))
+
+    def _entity_at(self, point: QPointF) -> int | None:
+        x, y = self._world_position(point)
+        for index in reversed(range(len(self._entities))):
+            entity = self._entities[index]
+            if abs(x - entity["x"]) <= 8 and abs(y - entity["y"]) <= 8:
+                return index
+        return None
+
     def paintEvent(self, _event) -> None:  # noqa: N802 - Qt API
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#080810"))
@@ -400,6 +420,11 @@ class WorldCanvas(QWidget):
             for col, value in enumerate(cells):
                 rect = QRectF(left + col * tile, top + row * tile, tile, tile)
                 painter.fillRect(rect, self.NES_COLOURS[value % len(self.NES_COLOURS)])
+        for entity in self._entities:
+            rect = QRectF(left + entity["x"] * tile / 8 - tile / 2, top + entity["y"] * tile / 8 - tile / 2, tile, tile)
+            painter.fillRect(rect, QColor("#f87878"))
+            painter.setPen(QPen(QColor("#f8f8f8"), 1))
+            painter.drawRect(rect)
 
         if self._show_grid:
             painter.setPen(QPen(QColor("#383858"), 1))
@@ -432,6 +457,12 @@ class WorldCanvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             cell = self._cell_at(event.position())
             if cell is not None:
+                if self._tool == "select":
+                    entity = self._entity_at(event.position())
+                    if entity is not None:
+                        self._drag_entity = entity
+                        self.entity_selected.emit(entity)
+                        return
                 self._select_cell(*cell)
                 if self._tool == "select":
                     self._selection_anchor = cell
@@ -442,6 +473,7 @@ class WorldCanvas(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
         if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_entity = None
             self._selection_anchor = None
             self.end_stroke()
 
@@ -453,6 +485,12 @@ class WorldCanvas(QWidget):
             if cell is not None:
                 self.cursor_changed.emit(*cell)
         if cell is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            if self._drag_entity is not None:
+                x, y = self._world_position(event.position())
+                self._entities[self._drag_entity]["x"], self._entities[self._drag_entity]["y"] = x, y
+                self.entity_moved.emit(self._drag_entity, x, y)
+                self.update()
+                return
             if self._tool == "select" and self._selection_anchor is not None:
                 self._set_selection(self._selection_anchor, cell)
             else:

@@ -468,6 +468,8 @@ class MainWindow(QMainWindow):
         self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
         self.world_canvas.history_changed.connect(self._world_history_changed)
         self.world_canvas.grid_options_changed.connect(self._world_grid_shortcut_changed)
+        self.world_canvas.entity_selected.connect(self._select_canvas_entity)
+        self.world_canvas.entity_moved.connect(self._move_canvas_entity)
         self.editor_stack.addWidget(self.world_canvas)
         self.code_preview = QPlainTextEdit(self.editor_stack)
         self.code_preview.setObjectName("codePreview")
@@ -1044,6 +1046,28 @@ class MainWindow(QMainWindow):
         self.scene_list.setCurrentRow(selected if 0 <= selected < self.scene_list.count() else -1)
         self.scene_list.blockSignals(False)
         self._select_scene_instance(self.scene_list.currentRow())
+        self._sync_canvas_entities()
+
+    def _sync_canvas_entities(self) -> None:
+        x_offset, y_offset = self._world_screen_x * 256, self._world_screen_y * 240
+        visible = []
+        for index, instance in enumerate(self._document.scene_instances()):
+            x, y = int(instance.get("x", 0)) - x_offset, int(instance.get("y", 0)) - y_offset
+            if 0 <= x <= 255 and 0 <= y <= 239:
+                visible.append({"index": index, "x": x, "y": y})
+        self.world_canvas.set_entities(visible)
+
+    def _select_canvas_entity(self, visible_index: int) -> None:
+        entities = self.world_canvas._entities
+        if 0 <= visible_index < len(entities):
+            self.scene_list.setCurrentRow(entities[visible_index]["index"])
+
+    def _move_canvas_entity(self, visible_index: int, x: int, y: int) -> None:
+        entities = self.world_canvas._entities
+        if not 0 <= visible_index < len(entities): return
+        index = entities[visible_index]["index"]
+        self._document.update_scene_instance(index, x=x + self._world_screen_x * 256, y=y + self._world_screen_y * 240)
+        self._session.schedule_save(); self._refresh_scene_editor(index); self._update_document_title()
 
     def _select_scene_instance(self, index: int) -> None:
         instances = self._document.scene_instances()
@@ -1560,6 +1584,7 @@ class MainWindow(QMainWindow):
             self._document.world_palettes(self._world_screen_x, self._world_screen_y),
             self._document.world_behaviours(self._world_screen_x, self._world_screen_y),
         )
+        self._sync_canvas_entities()
 
     def _set_world_grid_options(self, _checked: bool) -> None:
         show_grid, show_attributes = self.grid_toggle.isChecked(), self.attribute_toggle.isChecked()
