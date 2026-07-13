@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QIODevice, QObject, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QKeySequence, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -115,6 +115,39 @@ class MainWindow(QMainWindow):
             else "Native workspace ready — FCEUX not found; ROM export remains available"
         )
 
+    @staticmethod
+    def _choice_icon(colour: str, glyph: str = "") -> QIcon:
+        """Create a compact, NES-like visual marker for selector choices."""
+
+        pixmap = QPixmap(28, 20)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setPen(QColor("#080810"))
+        painter.setBrush(QColor(colour))
+        painter.drawRoundedRect(1, 1, 26, 18, 3, 3)
+        # Small square pixels retain the Studio's 8-bit character even where no glyph fits.
+        painter.setBrush(QColor("#f8f8f8"))
+        painter.drawRect(4, 5, 3, 3)
+        painter.drawRect(9, 11, 3, 3)
+        if glyph:
+            painter.setPen(QColor("#080810"))
+            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, glyph[:2].upper())
+        painter.end()
+        return QIcon(pixmap)
+
+    def _add_visual_choice(
+        self, selector: QComboBox, label: str, value: object = None, *, colour: str, glyph: str = ""
+    ) -> None:
+        """Add a labelled choice with an icon; labels remain useful to screen readers."""
+
+        selector.addItem(self._choice_icon(colour, glyph), label, value)
+
+    @staticmethod
+    def _prepare_visual_selector(selector: QComboBox, accessible_name: str) -> None:
+        selector.setIconSize(QPixmap(28, 20).size())
+        selector.setMinimumHeight(34)
+        selector.setAccessibleName(accessible_name)
+
     def _create_workspace(self) -> QWidget:
         root = QWidget(self)
         root.setObjectName("studioWorkspace")
@@ -182,7 +215,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(background_label)
         self.background_selector = QComboBox(dock)
         self.background_selector.setObjectName("worldBackgroundSelector")
-        self.background_selector.setAccessibleName("WORLD background")
+        self._prepare_visual_selector(self.background_selector, "WORLD background")
         self.background_selector.currentIndexChanged.connect(self._select_background)
         layout.addWidget(self.background_selector)
         background_actions = QHBoxLayout()
@@ -203,11 +236,14 @@ class MainWindow(QMainWindow):
         layout.addWidget(layout_label)
         self.world_layout = QComboBox(dock)
         self.world_layout.setObjectName("worldLayoutSelector")
-        self.world_layout.setAccessibleName("WORLD screen layout")
-        self.world_layout.addItem("1 × 1", (1, 1))
-        self.world_layout.addItem("2 × 1", (2, 1))
-        self.world_layout.addItem("1 × 2", (1, 2))
-        self.world_layout.addItem("2 × 2", (2, 2))
+        self._prepare_visual_selector(self.world_layout, "WORLD screen layout")
+        for label, dimensions, colour, glyph in (
+            ("1 × 1 screen", (1, 1), "#4878d8", "1"),
+            ("2 × 1 screens", (2, 1), "#78d878", "2"),
+            ("1 × 2 screens", (1, 2), "#78d8d8", "2"),
+            ("2 × 2 screens", (2, 2), "#f8d878", "4"),
+        ):
+            self._add_visual_choice(self.world_layout, label, dimensions, colour=colour, glyph=glyph)
         self.world_layout.currentIndexChanged.connect(self._set_world_layout)
         layout.addWidget(self.world_layout)
         self.metatile_mode_button = QPushButton("Promote to 16×16 blocks", dock)
@@ -339,6 +375,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(entities_label)
         self.scene_sprite = QComboBox(dock)
         self.scene_sprite.setObjectName("sceneSpriteSelector")
+        self._prepare_visual_selector(self.scene_sprite, "Entity character")
         layout.addWidget(self.scene_sprite)
         self.scene_list = QListWidget(dock)
         self.scene_list.setObjectName("sceneInstanceList")
@@ -362,7 +399,14 @@ class MainWindow(QMainWindow):
             layout.addWidget(control)
         self.scene_ai = QComboBox(dock)
         self.scene_ai.setObjectName("sceneAiSelector")
-        self.scene_ai.addItems(["static", "walker", "chaser", "goomba", "koopa", "item", "flyer", "patrol"])
+        self._prepare_visual_selector(self.scene_ai, "Entity behaviour")
+        for label, colour, glyph in (
+            ("static", "#787898", "■"), ("walker", "#78d878", "→"),
+            ("chaser", "#f87878", "!"), ("goomba", "#c87848", "G"),
+            ("koopa", "#78d878", "K"), ("item", "#f8d878", "+"),
+            ("flyer", "#78d8d8", "↑"), ("patrol", "#7878d8", "↔"),
+        ):
+            self._add_visual_choice(self.scene_ai, label, colour=colour, glyph=glyph)
         self.scene_ai.currentTextChanged.connect(lambda _value: self._update_scene_instance())
         layout.addWidget(self.scene_ai)
         layout.addStretch(1)
@@ -460,8 +504,9 @@ class MainWindow(QMainWindow):
         selector_row = QHBoxLayout()
         self.tile_bank = QComboBox(self.tile_editor)
         self.tile_bank.setObjectName("tileBankSelector")
-        self.tile_bank.addItem("Background", "bg")
-        self.tile_bank.addItem("Sprite", "sprite")
+        self._prepare_visual_selector(self.tile_bank, "Tile bank")
+        self._add_visual_choice(self.tile_bank, "Background tiles", "bg", colour="#4878d8", glyph="BG")
+        self._add_visual_choice(self.tile_bank, "Sprite tiles", "sprite", colour="#f8d878", glyph="SP")
         self.tile_bank.currentIndexChanged.connect(self._refresh_tile_editor)
         selector_row.addWidget(self.tile_bank)
         self.tile_selector = QSpinBox(self.tile_editor)
@@ -519,7 +564,16 @@ class MainWindow(QMainWindow):
             sprite_actions.addWidget(button)
         chars_layout.addLayout(sprite_actions)
         self.sprite_role = QComboBox(self.chars_editor)
-        self.sprite_role.addItems(["player", "npc", "enemy", "item", "tool", "powerup", "pickup", "projectile", "decoration", "hud", "other"])
+        self._prepare_visual_selector(self.sprite_role, "Sprite role")
+        for label, colour, glyph in (
+            ("player", "#78d8d8", "P"), ("npc", "#b8b8d8", "N"),
+            ("enemy", "#f87878", "!"), ("item", "#f8d878", "+"),
+            ("tool", "#9898e8", "T"), ("powerup", "#78d878", "↑"),
+            ("pickup", "#f8d878", "*"), ("projectile", "#f878d8", "→"),
+            ("decoration", "#c87848", "D"), ("hud", "#7878d8", "H"),
+            ("other", "#787898", "?"),
+        ):
+            self._add_visual_choice(self.sprite_role, label, colour=colour, glyph=glyph)
         self.sprite_role.currentTextChanged.connect(self._set_sprite_role)
         chars_layout.addWidget(self.sprite_role)
         self.sprite_flying = QCheckBox("Flying (ignore gravity)", self.chars_editor)
@@ -580,6 +634,7 @@ class MainWindow(QMainWindow):
         for kind in ("walk", "jump", "attack"):
             selector = QComboBox(self.chars_editor)
             selector.setObjectName(f"{kind}AnimationSelector")
+            self._prepare_visual_selector(selector, f"{kind.title()} animation")
             selector.currentIndexChanged.connect(lambda _value, kind=kind: self._set_animation_assignment(kind))
             self.animation_assignments[kind] = selector
             chars_layout.addWidget(selector)
@@ -590,7 +645,13 @@ class MainWindow(QMainWindow):
         rules_layout.addWidget(QLabel("GAME STYLE", self.rules_editor))
         self.game_style = QComboBox(self.rules_editor)
         self.game_style.setObjectName("gameStyleSelector")
-        self.game_style.addItems(["platformer", "topdown", "runner", "racer", "smb"])
+        self._prepare_visual_selector(self.game_style, "Game style")
+        for label, colour, glyph in (
+            ("platformer", "#4878d8", "↟"), ("topdown", "#78d878", "✦"),
+            ("runner", "#f8d878", "→"), ("racer", "#f87878", "R"),
+            ("smb", "#c87848", "M"),
+        ):
+            self._add_visual_choice(self.game_style, label, colour=colour, glyph=glyph)
         self.game_style.currentTextChanged.connect(self._set_game_style)
         rules_layout.addWidget(self.game_style)
         self.game_options: dict[str, QSpinBox] = {}
@@ -625,7 +686,10 @@ class MainWindow(QMainWindow):
             rules_layout.addWidget(control)
         self.attack_button = QComboBox(self.rules_editor)
         self.attack_button.setObjectName("attackButtonSelector")
-        self.attack_button.addItems(["none", "a", "b"])
+        self._prepare_visual_selector(self.attack_button, "Player attack button")
+        self._add_visual_choice(self.attack_button, "none", colour="#787898", glyph="–")
+        self._add_visual_choice(self.attack_button, "a", colour="#f87878", glyph="A")
+        self._add_visual_choice(self.attack_button, "b", colour="#f8d878", glyph="B")
         self.attack_button.currentTextChanged.connect(lambda value: self._set_player_option("attackButton", value))
         rules_layout.addWidget(self.attack_button)
         rules_layout.addWidget(QLabel("GLOBAL PHYSICS", self.rules_editor))
@@ -868,8 +932,14 @@ class MainWindow(QMainWindow):
         self.scene_sprite.blockSignals(True)
         self.scene_sprite.clear()
         for index, name in enumerate(self._document.sprite_names()):
-            if (self._document.state.get("sprites") or [])[index].get("role") != "player":
-                self.scene_sprite.addItem(name, index)
+            sprite = (self._document.state.get("sprites") or [])[index]
+            role = str(sprite.get("role") or "other")
+            if role != "player":
+                colour = {
+                    "enemy": "#f87878", "item": "#f8d878", "npc": "#b8b8d8",
+                    "powerup": "#78d878", "projectile": "#f878d8",
+                }.get(role, "#7878d8")
+                self._add_visual_choice(self.scene_sprite, name, index, colour=colour, glyph=role[:1])
         self.scene_sprite.blockSignals(False)
         self.scene_list.blockSignals(True)
         self.scene_list.clear()
@@ -1058,10 +1128,16 @@ class MainWindow(QMainWindow):
         for kind, selector in self.animation_assignments.items():
             selector.blockSignals(True)
             selector.clear()
-            selector.addItem(f"{kind.title()}: (none)", None)
+            self._add_visual_choice(selector, f"{kind.title()}: (none)", None, colour="#787898", glyph="–")
             for index, animation in enumerate(animations):
                 if isinstance(animation, dict):
-                    selector.addItem(f"{kind.title()}: {animation.get('name') or 'Animation'}", index)
+                    self._add_visual_choice(
+                        selector,
+                        f"{kind.title()}: {animation.get('name') or 'Animation'}",
+                        index,
+                        colour="#78d8d8",
+                        glyph=str(index + 1),
+                    )
             assigned = assignments.get(kind) if isinstance(assignments, dict) else None
             selected_index = next((index for index, animation in enumerate(animations) if isinstance(animation, dict) and animation.get("id") == assigned), -1)
             selector.setCurrentIndex(selected_index + 1)
@@ -1315,7 +1391,15 @@ class MainWindow(QMainWindow):
     def _sync_background_selector(self) -> None:
         self.background_selector.blockSignals(True)
         self.background_selector.clear()
-        self.background_selector.addItems(self._document.background_names())
+        colours = ("#4878d8", "#78d878", "#78d8d8", "#f8d878", "#f878d8", "#c87848")
+        for index, name in enumerate(self._document.background_names()):
+            self._add_visual_choice(
+                self.background_selector,
+                name,
+                index,
+                colour=colours[index % len(colours)],
+                glyph=str(index + 1),
+            )
         self.background_selector.setCurrentIndex(self._document.selected_background_index)
         self.background_selector.blockSignals(False)
         self._sync_world_layout()
@@ -1683,6 +1767,15 @@ class MainWindow(QMainWindow):
             #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
             QPushButton { background: #383878; color: white; border: 1px solid #7878c8; border-radius: 3px; padding: 8px; }
             QPushButton:disabled { background: #292949; color: #787898; border-color: #484868; }
+            QComboBox { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; border-radius: 4px; padding: 3px 8px; }
+            QComboBox:hover, QComboBox:focus { border-color: #f8d878; background: #34346a; }
+            QComboBox::drop-down { width: 28px; border-left: 1px solid #7878c8; background: #383878; }
+            QComboBox::down-arrow { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #f8d878; margin-right: 7px; }
+            QComboBox QAbstractItemView { background: #202044; color: #f8f8f8; border: 1px solid #9898e8; selection-background-color: #4b4b9b; selection-color: white; outline: 0; }
+            QSpinBox { background: #292958; color: #f8f8f8; border: 1px solid #5b5b90; border-radius: 3px; padding: 4px; }
+            QListWidget { background: #181832; border: 1px solid #4b4b7b; border-radius: 4px; padding: 3px; }
+            QListWidget::item { padding: 5px; border-radius: 3px; }
+            QListWidget::item:selected { background: #4b4b9b; color: white; }
             #stagePanel { background: #101024; }
             #liveBadge { color: #78d878; font-weight: 800; }
             #television { background: #585868; border: 8px solid #303044; border-radius: 18px; }
