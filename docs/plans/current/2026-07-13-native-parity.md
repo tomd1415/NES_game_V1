@@ -33,8 +33,8 @@ boundary, and owning tests support it.
 - [x] TILES: visual 256-tile library, usage/state indicators, background names,
       copy/paste, keyboard navigation and reference-safe swaps.
 - [~] CHARS: flip/priority/empty cell attributes plus animation rename/duplicate,
-      frame ordering and preview are complete; pixel drawing tools and
-      thumbnails/filtering remain.
+      frame ordering, preview and role filtering are complete; pixel drawing
+      tools and visual thumbnails remain.
 - [ ] WORLD: named/custom tile types, clear/zoom/fullscreen preview and a
       richer metatile picker/stamping workflow.
 - [~] PALS: live NES colour swatches are complete; picker, used-by information,
