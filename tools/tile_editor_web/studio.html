@@ -300,7 +300,15 @@ h1,h2,h3{margin:0;font-weight:normal;letter-spacing:1px;text-transform:uppercase
 .modal-backdrop.open{display:flex}
 .modal{background:var(--panel);border:3px solid var(--accent);max-width:520px;
   width:92%;max-height:80vh;overflow:auto;padding:16px}
+.modal.wide{max-width:960px}
 .modal h2{color:var(--accent);font-size:15px;margin-bottom:6px}
+.react-matrix-wrap{overflow-x:auto}
+.react-matrix{border-collapse:collapse;width:100%;font-size:12px}
+.react-matrix th,.react-matrix td{border:1px solid var(--line,#3a3352);padding:5px 7px;text-align:left;white-space:nowrap}
+.react-matrix thead th{color:var(--accent);position:sticky;top:0;background:var(--panel)}
+.react-matrix tbody th{color:var(--fg,#e0e0e0);font-weight:600}
+.react-matrix td select{width:100%;min-width:96px}
+.react-matrix .swatch-dot{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:middle;border:1px solid var(--line,#3a3352)}
 .modal .modal-sub{color:var(--muted);font-size:11px;margin-bottom:12px}
 .snap-row{display:flex;align-items:center;gap:10px;border:2px solid var(--line);
   padding:8px;margin-bottom:6px;font-size:12px}

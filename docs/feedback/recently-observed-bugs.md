@@ -173,6 +173,13 @@ was a massive improvement.
     "top view + pixel grid" asked for. This was a gap on the **legacy** Sprites
     page only, which is now secondary to the Studio.
 20. On the behaviour editor the Sprite reactions box needs to be wider so I think it should be below the background window and therefore have a bit more width to help make it easier to use.
+    *Resolved 2026-07-13.* The RULES page's Sprite-reactions card now has an
+    **⤢ Expand** button that opens a **wide matrix** modal — rows = characters,
+    columns = tile-types (with colour swatches), each cell a verb dropdown — so the
+    whole map is visible and editable at once, far wider than the narrow dock.
+    Edits write straight to `behaviour_reactions`. `StudioUI.modal` gained a
+    `wide` option (`.modal.wide`, 960px). Guarded by
+    `studio-tests/reactions-expand.spec.js`.
 21. The triggers and doors on different places should be able to have different effects.
     *Satisfied (2026-07-06 audit):* the **per-door** module gives every door
     (keyed by background + tile x/y) its own `spawnX`/`spawnY` and `targetBgIdx`,

@@ -114,6 +114,14 @@
     var head = el('div', { class: 'head' });
     head.appendChild(el('span', { class: 'card-title', text: 'Sprite reactions' }));
     head.appendChild(el('span', { class: 'chip', text: 'maker' }));
+    // #20 — the per-tile list is cramped in the narrow dock.  Offer a wide view
+    // (every character × every tile at once) in a modal.
+    head.appendChild(el('button', {
+      class: 'btn', type: 'button', id: 'react-expand',
+      style: 'margin-left:auto;padding:2px 8px;font-size:11px',
+      title: 'Open the full reactions table (every character × every tile) in a wide view',
+      text: '⤢ Expand', onclick: function () { openReactionsModal(ctx); },
+    }));
     card.appendChild(head);
     var body = el('div', { class: 'body' });
 
@@ -178,6 +186,58 @@
 
     card.appendChild(body);
     container.appendChild(card);
+  }
+
+  // #20 — a wide reactions editor: rows = characters, columns = tile-types, each
+  // cell a verb dropdown, so the whole map is visible + editable at once with far
+  // more width than the dock card.  Edits write straight to behaviour_reactions.
+  function openReactionsModal(ctx) {
+    var s = ctx.getState();
+    if (!(window.StudioUI && window.StudioUI.modal)) return;
+    var sprites = Array.isArray(s.sprites) ? s.sprites : [];
+    var types = usableTypes(s);
+    var reactions = syncReactions(s);
+    var wrap = el('div', { class: 'react-matrix-wrap' });
+    if (!sprites.length || !types.length) {
+      wrap.appendChild(el('div', { class: 'dock-note',
+        text: 'No characters yet — design one in CHARS, then set its reactions.' }));
+    } else {
+      var htr = el('tr', {}, [el('th', { text: 'Character' })]);
+      types.forEach(function (t) {
+        var th = el('th', {}, []);
+        var rgb = null;
+        try { if (t.color != null && global.NesRender) rgb = global.NesRender.nesRgb(t.color); } catch (e) { rgb = null; }
+        if (rgb) th.appendChild(el('span', { class: 'swatch-dot', style: 'background:' + rgb }));
+        th.appendChild(document.createTextNode(t.label || t.name));
+        htr.appendChild(th);
+      });
+      var tbody = el('tbody');
+      sprites.forEach(function (sp, i) {
+        var rmap = reactions[i] || (reactions[i] = defaultReactionMap(sp, i));
+        var tr = el('tr', {}, [el('th', {
+          text: (sp.name || ('character ' + (i + 1))) + (sp.role ? ' (' + sp.role + ')' : '') })]);
+        types.forEach(function (t) {
+          var sel = el('select', { 'data-mx-sprite': String(i), 'data-mx-type': String(t.id) });
+          REACTION_VERBS.forEach(function (verb) {
+            sel.appendChild(el('option', { value: verb, text: VERB_LABELS[verb] || verb }));
+          });
+          sel.value = rmap[t.id] || 'ignore';
+          sel.addEventListener('change', function () {
+            ctx.pushUndo(); rmap[t.id] = sel.value; ctx.markDirty();
+          });
+          tr.appendChild(el('td', {}, [sel]));
+        });
+        tbody.appendChild(tr);
+      });
+      wrap.appendChild(el('table', { class: 'react-matrix' }, [el('thead', {}, [htr]), tbody]));
+    }
+    window.StudioUI.modal({
+      wide: true,
+      title: 'Sprite reactions',
+      sub: 'What each character does when it touches each kind of tile — every character and tile at once.',
+      bodyNodes: [wrap],
+      actions: [{ label: 'Done', value: null, kind: 'primary' }],
+    }).then(function () { ctx.renderDock(); });
   }
 
   function builderTree(ctx) {
