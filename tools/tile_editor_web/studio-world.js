@@ -1023,6 +1023,11 @@
         aiOpts.push(['flyer', 'flyer (floats up/down toward the player)']);
         aiOpts.push(['patrol', 'patrol (paces a set distance, turns itself)']);
       }
+      // v71 — a hopper: walks + turns at walls like a walker, and bounces up and
+      // down on a set rhythm so it hops along the floor.
+      if (stEng >= 71 || selected.ai === 'hopper') {
+        aiOpts.push(['hopper', 'hopper (walks + bounces up and down)']);
+      }
       aiOpts.forEach(function (a) { aiSel.appendChild(el('option', { value: a[0], text: a[1] })); });
       aiSel.value = selected.ai || 'static';
       aiSel.addEventListener('change', function () { ctx.pushUndo(); selected.ai = aiSel.value; ctx.markDirty(); ctx.renderDock(); });

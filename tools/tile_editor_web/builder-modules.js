@@ -557,6 +557,9 @@
         // Engine v10 flight paths degrade to a plain walker on older targets so
         // a design authored with them still builds (byte-identical) pre-v10.
         if ((ai === 'flyer' || ai === 'patrol') && targetEngine < 10) ai = 'walker';
+        // Engine v71 — the hopper (walks + bounces) degrades to a plain walker
+        // on older targets so a design authored with it still builds byte-identical.
+        if (ai === 'hopper' && targetEngine < 71) ai = 'walker';
         // R-4: per-instance speed (px/frame).  1 = today's feel; clamp 1..4.
         // NB bw_sprite_blocked probes 1px ahead, so at speed >= 2 a fast enemy
         // can step its body slightly into a wall before reversing on the next
@@ -657,6 +660,42 @@
           parts.push('            else { ss_x[' + i + '] -= ' + speed + '; bw_poff_' + i + ' -= ' + speed + '; if (bw_poff_' + i + ' <= -40) bw_pdir_' + i + ' = 1; }');
           parts.push('        }');
           parts.push('#endif');
+        } else if (sp.role === 'enemy' && ai === 'hopper') {
+          // Engine v71 — hopper: a grounded enemy that walks and turns at walls
+          // like a walker, and ALSO bounces up and down on a fixed rhythm so it
+          // hops along the floor toward wherever it is heading.  Like the flyer it
+          // writes ss_y ABSOLUTELY off its start height each frame (overriding the
+          // scene-gravity loop), so guard on ss_y < 0xEF to leave a defeated actor
+          // parked at y=0xFF.  aiType stays 0 so the ai_update ASM loop SKIPS it and
+          // this same C block runs in BOTH the C and ASM builds (identical motion,
+          // no hand-written 6502 twin needed — proven by asm-ab / the hopper test).
+          emitted++;
+          var hopHome = Math.max(16, Math.min(224, A.clampInt(inst.y, 0, 255, 0)));
+          parts.push(
+            '        // instance ' + i + ' — ' + (sp.name || '?') +
+              ' hops: walks + turns at walls and bounces up and down on the spot');
+          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
+          parts.push('            static signed char  bw_hdir_' + i + ' = 1;');
+          parts.push('            static unsigned char bw_hph_' + i + ' = 0;');
+          parts.push('            unsigned char bw_hph, bw_hup;');
+          // Horizontal walk + turn.  Probe at the ground height (hopHome), not the
+          // mid-hop Y, so a wall is sensed the same whether or not it is airborne.
+          parts.push('            if (bw_hdir_' + i + ' > 0) {');
+          parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ' + hopHome + ', ss_w[' + i + '], ss_h[' + i + '], 0)) bw_hdir_' + i + ' = -1;');
+          parts.push('                else ss_x[' + i + '] += ' + speed + ';');
+          parts.push('            } else {');
+          parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ' + hopHome + ', ss_w[' + i + '], ss_h[' + i + '], 1)) bw_hdir_' + i + ' = 1;');
+          parts.push('                else ss_x[' + i + '] -= ' + speed + ';');
+          parts.push('            }');
+          // Vertical hop arc off hopHome: a 64-step cycle — ~half on the ground,
+          // then a symmetric rise-and-fall peaking ~30px up.  speed sets the pace.
+          parts.push('            bw_hph_' + i + ' += ' + speed + ';');
+          parts.push('            bw_hph = bw_hph_' + i + ' & 0x3F;');
+          parts.push('            if (bw_hph < 32) bw_hup = 0;');
+          parts.push('            else if (bw_hph < 48) bw_hup = (unsigned char)((bw_hph - 32) << 1);');
+          parts.push('            else bw_hup = (unsigned char)((63 - bw_hph) << 1);');
+          parts.push('            ss_y[' + i + '] = ' + hopHome + ' - bw_hup;');
+          parts.push('        }');
         } else if (sp.role === 'enemy' && ai === 'goomba') {
           // Engine v4 — Goomba: walks (and off ledges, no ledge sensing),
           // reverses at walls, STOMP from above defeats + bounces the player,

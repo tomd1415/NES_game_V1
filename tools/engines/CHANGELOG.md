@@ -9,6 +9,30 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v71 — 2026-07-13 — New enemy path: hopper (walks + bounces), pupil request #13
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; opt-in per enemy)
+A new per-instance enemy AI, selectable on the WORLD page's **AI** dropdown for
+any Enemy sprite (shown once the project targets v71; degrades to a plain
+**walker** on older targets so a design authored with it still builds
+byte-identical).  The **hopper** walks and turns at walls like a walker and, on
+top of that, bounces up and down on a fixed 64-step rhythm (a ground pause then a
+symmetric rise/fall peaking ~30px up) — a grounded "pogo" enemy that hops along
+the floor.  Per-instance **speed** (1–4) scales both the walk and the hop pace.
+
+Like the flyer it writes `ss_y` absolutely off its placed start height each frame
+(overriding the scene-gravity loop) and is guarded on `ss_y < 0xEF` so a
+stomped/defeated hopper stays parked off-screen.  The horizontal wall probe uses
+the ground height, not the mid-hop Y, so it senses walls the same airborne or not.
+
+Implemented as an **un-gated C block with `ss_ai_type = 0`**, so the `ai_update`
+ASM loop skips it and the *same* C code drives the hopper in both the pure-C and
+the shipped-ASM builds — identical motion with no hand-written 6502 twin (the
+`goomba`/`koopa` actors already use this ungated-C pattern).  Only emitted for
+enemies whose AI is `hopper`, so every existing project stays byte-identical.
+Guarded by `tools/builder-tests/hopper-enemy.mjs` (the ROM actually bounces the
+sprite, degrades pre-v71, and is byte-identical when unused).
+
 ## v70 — 2026-07-13 — SMB status bar: NMI-driven push with a browser-safe double buffer (real fix for "header flickers after the first screen")
 
 ### Changed — migration (goldens `1730448e` + `_rom-equiv` UNCHANGED; affects BW_SMB_HUD_BG scroll builds only)
