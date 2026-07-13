@@ -549,6 +549,19 @@ class MainWindow(QMainWindow):
         self.tile_selector.valueChanged.connect(self._refresh_tile_editor)
         selector_row.addWidget(self.tile_selector)
         tile_layout.addLayout(selector_row)
+        tile_layout.addWidget(QLabel("TILE LIBRARY — select a slot", self.tile_editor))
+        tile_library = QGridLayout()
+        tile_library.setSpacing(2)
+        self._tile_library_buttons: list[QPushButton] = []
+        for index in range(256):
+            button = QPushButton(f"{index:02X}", self.tile_editor)
+            button.setObjectName(f"tileLibrary{index:02X}")
+            button.setFixedSize(28, 22)
+            button.setAccessibleName(f"Select tile {index:02X}")
+            button.clicked.connect(lambda _checked=False, index=index: self.tile_selector.setValue(index))
+            self._tile_library_buttons.append(button)
+            tile_library.addWidget(button, index // 16, index % 16)
+        tile_layout.addLayout(tile_library)
         tile_operations = QHBoxLayout()
         for label, operation in (("Clear", "clear"), ("Flip H", "flip_h"), ("Flip V", "flip_v"), ("Rotate", "rotate")):
             button = QPushButton(label, self.tile_editor)
@@ -996,6 +1009,30 @@ class MainWindow(QMainWindow):
         self.tile_default_behaviour.setValue(self._document.background_tile_default_behaviour(self.tile_selector.value()) or 0)
         self.tile_default_behaviour.setEnabled(self.tile_bank.currentData() != "sprite")
         self.tile_default_behaviour.blockSignals(False)
+        selected = self.tile_selector.value()
+        used = self._tile_usage(self.tile_bank.currentData())
+        for index, button in enumerate(self._tile_library_buttons):
+            is_selected, count = index == selected, used.get(index, 0)
+            background = "#f8d878" if is_selected else "#4878d8" if count else "#292949"
+            foreground = "#080810" if is_selected else "#f8f8f8"
+            button.setStyleSheet(f"background: {background}; color: {foreground}; padding: 0; border: {'2px solid #f8f8f8' if is_selected else '1px solid #5b5b90'};")
+            button.setToolTip(f"Tile 0x{index:02X} — used {count} time{'s' if count != 1 else ''}")
+
+    def _tile_usage(self, bank: str) -> dict[int, int]:
+        usage: dict[int, int] = {}
+        if bank == "sprite":
+            for sprite in self._document.state.get("sprites") or []:
+                for row in sprite.get("cells", []) if isinstance(sprite, dict) else []:
+                    for cell in row if isinstance(row, list) else []:
+                        if isinstance(cell, dict):
+                            tile = int(cell.get("tile", 0)); usage[tile] = usage.get(tile, 0) + 1
+            return usage
+        for background in self._document.state.get("backgrounds") or []:
+            for row in background.get("nametable", []) if isinstance(background, dict) else []:
+                for cell in row if isinstance(row, list) else []:
+                    tile = int(cell.get("tile", 0)) if isinstance(cell, dict) else 0
+                    usage[tile] = usage.get(tile, 0) + 1
+        return usage
 
     def _cycle_tile_pixel(self, column: int, row: int) -> None:
         index = self.tile_selector.value()
