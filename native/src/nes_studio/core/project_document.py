@@ -492,6 +492,35 @@ class ProjectDocument:
         if not isinstance(node, dict): node = {}; modules["pickups"] = node
         if node.get("enabled") != enabled: node["enabled"] = enabled; self.dirty = True
 
+    def set_spawn_enabled(self, enabled: bool) -> None:
+        """Enable the shared Builder trigger-tile effect module."""
+
+        node = self._builder_module("spawn", enabled=False)
+        if node.get("enabled") != enabled:
+            node["enabled"] = enabled
+            self.dirty = True
+
+    def set_spawn_option(self, key: str, value: int) -> None:
+        valid = (key == "spriteIdx" and 0 <= value <= 255) or (key == "ttl" and 1 <= value <= 120)
+        if not valid:
+            raise ValueError("Invalid spawn effect option")
+        node = self._builder_module("spawn", enabled=False)
+        config = node.setdefault("config", {})
+        if not isinstance(config, dict):
+            config = {}
+            node["config"] = config
+        if config.get(key) != value:
+            config[key] = value
+            self.dirty = True
+
+    def set_hud_enabled(self, enabled: bool) -> None:
+        """Enable the shared HUD module; art comes from a sprite tagged ``hud``."""
+
+        node = self._builder_module("hud", enabled=False)
+        if node.get("enabled") != enabled:
+            node["enabled"] = enabled
+            self.dirty = True
+
     def add_audio_song(self, filename: str, asm: str) -> int:
         if not filename or not asm:
             raise ValueError("Audio source needs a filename and content")
@@ -595,6 +624,23 @@ class ProjectDocument:
         for key in ("walk", "jump", "attack"):
             assignments.setdefault(key, None)
         return assignments
+
+    def _builder_module(self, name: str, *, enabled: bool) -> dict[str, Any]:
+        """Return a normalised Builder module node without discarding unknown data."""
+
+        builder = self.state.setdefault("builder", {"version": 1, "modules": {}})
+        if not isinstance(builder, dict):
+            builder = {"version": 1, "modules": {}}
+            self.state["builder"] = builder
+        modules = builder.setdefault("modules", {})
+        if not isinstance(modules, dict):
+            modules = {}
+            builder["modules"] = modules
+        node = modules.setdefault(name, {"enabled": enabled, "config": {}})
+        if not isinstance(node, dict):
+            node = {"enabled": enabled, "config": {}}
+            modules[name] = node
+        return node
 
     def _audio(self) -> dict[str, Any]:
         audio = self.state.setdefault("audio", {"songs": [], "sfx": None, "defaultSongIdx": 0})

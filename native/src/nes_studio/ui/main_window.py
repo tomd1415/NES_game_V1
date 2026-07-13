@@ -709,6 +709,32 @@ class MainWindow(QMainWindow):
         self.damage_iframes = QSpinBox(self.rules_editor); self.damage_iframes.setRange(0, 120); self.damage_iframes.setPrefix("Invincibility frames: "); self.damage_iframes.valueChanged.connect(lambda value: self._set_damage_option("invincibilityFrames", value)); rules_layout.addWidget(self.damage_iframes)
         self.damage_checkpoints = QCheckBox("Damage checkpoints", self.rules_editor); self.damage_checkpoints.toggled.connect(lambda value: self._set_damage_option("checkpoints", value)); rules_layout.addWidget(self.damage_checkpoints)
         self.pickups_enabled = QCheckBox("Enable pickups", self.rules_editor); self.pickups_enabled.toggled.connect(self._set_pickups_enabled); rules_layout.addWidget(self.pickups_enabled)
+        rules_layout.addWidget(QLabel("SPAWN EFFECT", self.rules_editor))
+        self.spawn_enabled = QCheckBox("Effect when entering a trigger tile", self.rules_editor)
+        self.spawn_enabled.setObjectName("spawnEffectEnabled")
+        self.spawn_enabled.toggled.connect(self._set_spawn_enabled)
+        rules_layout.addWidget(self.spawn_enabled)
+        self.spawn_sprite = QComboBox(self.rules_editor)
+        self.spawn_sprite.setObjectName("spawnEffectSprite")
+        self._prepare_visual_selector(self.spawn_sprite, "Spawn effect sprite")
+        self.spawn_sprite.currentIndexChanged.connect(self._set_spawn_sprite)
+        rules_layout.addWidget(self.spawn_sprite)
+        self.spawn_ttl = QSpinBox(self.rules_editor)
+        self.spawn_ttl.setObjectName("spawnEffectLifetime")
+        self.spawn_ttl.setRange(1, 120)
+        self.spawn_ttl.setPrefix("Effect frames: ")
+        self.spawn_ttl.setAccessibleName("Spawn effect lifetime in frames")
+        self.spawn_ttl.valueChanged.connect(self._set_spawn_ttl)
+        rules_layout.addWidget(self.spawn_ttl)
+        rules_layout.addWidget(QLabel("HUD", self.rules_editor))
+        self.hud_enabled = QCheckBox("Show hearts for player health", self.rules_editor)
+        self.hud_enabled.setObjectName("hudEnabled")
+        self.hud_enabled.toggled.connect(self._set_hud_enabled)
+        rules_layout.addWidget(self.hud_enabled)
+        self.hud_hint = QLabel("Tag a small sprite as ‘hud’ in CHARS to choose the heart art.", self.rules_editor)
+        self.hud_hint.setObjectName("hudSpriteHint")
+        self.hud_hint.setWordWrap(True)
+        rules_layout.addWidget(self.hud_hint)
         self.damage_respawn_hp = QSpinBox(self.rules_editor); self.damage_respawn_hp.setRange(1, 9); self.damage_respawn_hp.setPrefix("Respawn HP: "); self.damage_respawn_hp.valueChanged.connect(lambda value: self._set_damage_option("respawnHp", value)); rules_layout.addWidget(self.damage_respawn_hp)
         self.stomp_defeat = QCheckBox("Stomp defeats enemies", self.rules_editor); self.stomp_defeat.toggled.connect(lambda value: self._set_damage_option("stompDefeat", value)); rules_layout.addWidget(self.stomp_defeat)
         self.stomp_bounce = QSpinBox(self.rules_editor); self.stomp_bounce.setRange(1, 30); self.stomp_bounce.setPrefix("Stomp bounce: "); self.stomp_bounce.valueChanged.connect(lambda value: self._set_damage_option("stompBounce", value)); rules_layout.addWidget(self.stomp_bounce)
@@ -1222,6 +1248,34 @@ class MainWindow(QMainWindow):
         self.stomp_defeat.blockSignals(True); self.stomp_defeat.setChecked(bool(damage.get("stompDefeat", False))); self.stomp_defeat.blockSignals(False)
         pickups = ((builder.get("modules") or {}).get("pickups") or {})
         self.pickups_enabled.blockSignals(True); self.pickups_enabled.setChecked(bool(pickups.get("enabled", False)) if isinstance(pickups, dict) else False); self.pickups_enabled.blockSignals(False)
+        spawn = ((builder.get("modules") or {}).get("spawn") or {})
+        spawn_config = spawn.get("config") if isinstance(spawn, dict) else {}
+        spawn_config = spawn_config if isinstance(spawn_config, dict) else {}
+        self.spawn_enabled.blockSignals(True); self.spawn_enabled.setChecked(bool(spawn.get("enabled", False)) if isinstance(spawn, dict) else False); self.spawn_enabled.blockSignals(False)
+        self.spawn_sprite.blockSignals(True)
+        self.spawn_sprite.clear()
+        for index, name in enumerate(self._document.sprite_names()):
+            sprite = (self._document.state.get("sprites") or [])[index]
+            role = str(sprite.get("role") or "other") if isinstance(sprite, dict) else "other"
+            colour = {"enemy": "#f87878", "hud": "#f8d878", "powerup": "#78d878"}.get(role, "#7878d8")
+            self._add_visual_choice(self.spawn_sprite, name, index, colour=colour, glyph=role[:1])
+        selected_sprite = int(spawn_config.get("spriteIdx", 0))
+        selected_index = self.spawn_sprite.findData(selected_sprite)
+        self.spawn_sprite.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+        self.spawn_sprite.setEnabled(self.spawn_sprite.count() > 0)
+        self.spawn_sprite.blockSignals(False)
+        self.spawn_ttl.blockSignals(True); self.spawn_ttl.setValue(int(spawn_config.get("ttl", 24))); self.spawn_ttl.blockSignals(False)
+        hud = ((builder.get("modules") or {}).get("hud") or {})
+        self.hud_enabled.blockSignals(True); self.hud_enabled.setChecked(bool(hud.get("enabled", False)) if isinstance(hud, dict) else False); self.hud_enabled.blockSignals(False)
+        has_hud_sprite = any(
+            isinstance(sprite, dict) and sprite.get("role") == "hud"
+            for sprite in self._document.state.get("sprites") or []
+        )
+        self.hud_hint.setText(
+            "HUD sprite found — its tiles will be used for the hearts."
+            if has_hud_sprite
+            else "Tag a small sprite as ‘hud’ in CHARS to choose the heart art."
+        )
 
     def _set_game_style(self, style: str) -> None:
         self._document.set_game_style(style)
@@ -1258,6 +1312,24 @@ class MainWindow(QMainWindow):
 
     def _set_pickups_enabled(self, enabled: bool) -> None:
         self._document.set_pickups_enabled(enabled)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_spawn_enabled(self, enabled: bool) -> None:
+        self._document.set_spawn_enabled(enabled)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_spawn_sprite(self, _index: int) -> None:
+        sprite = self.spawn_sprite.currentData()
+        if isinstance(sprite, int):
+            self._document.set_spawn_option("spriteIdx", sprite)
+            self._session.schedule_save(); self._update_document_title()
+
+    def _set_spawn_ttl(self, value: int) -> None:
+        self._document.set_spawn_option("ttl", value)
+        self._session.schedule_save(); self._update_document_title()
+
+    def _set_hud_enabled(self, enabled: bool) -> None:
+        self._document.set_hud_enabled(enabled)
         self._session.schedule_save(); self._update_document_title()
 
     def _refresh_sound_editor(self) -> None:

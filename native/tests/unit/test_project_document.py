@@ -261,6 +261,22 @@ def test_pickups_uses_the_shared_enable_only_module_contract() -> None:
     assert document.state["builder"]["modules"]["pickups"] == {"enabled": True, "config": {}}
 
 
+def test_spawn_effect_uses_the_shared_builder_module_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_spawn_enabled(True)
+    document.set_spawn_option("spriteIdx", 3)
+    document.set_spawn_option("ttl", 48)
+    assert document.state["builder"]["modules"]["spawn"] == {
+        "enabled": True, "config": {"spriteIdx": 3, "ttl": 48},
+    }
+
+
+def test_hud_uses_the_shared_enable_only_module_contract() -> None:
+    document = ProjectDocument.preview()
+    document.set_hud_enabled(True)
+    assert document.state["builder"]["modules"]["hud"] == {"enabled": True, "config": {}}
+
+
 def test_audio_assets_match_the_web_song_sfx_payload_shape() -> None:
     document = ProjectDocument.preview()
     first = document.add_audio_song("theme.s", ".export _theme\ntheme: .byte 0")
