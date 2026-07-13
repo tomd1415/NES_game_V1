@@ -640,7 +640,7 @@ class ProjectDocument:
         self.dirty = True
         return len(instances) - 1
 
-    def update_scene_instance(self, index: int, *, sprite_index: int | None = None, x: int | None = None, y: int | None = None, ai: str | None = None) -> None:
+    def update_scene_instance(self, index: int, *, sprite_index: int | None = None, x: int | None = None, y: int | None = None, ai: str | None = None, speed: int | None = None, text: str | None = None) -> None:
         instances = self.scene_instances()
         if not 0 <= index < len(instances) or not isinstance(instances[index], dict):
             raise IndexError("Scene instance outside project")
@@ -658,6 +658,12 @@ class ProjectDocument:
         if ai is not None:
             if ai not in {"static", "walker", "chaser", "goomba", "koopa", "item", "flyer", "patrol"}: raise ValueError("Unknown scene AI")
             changes["ai"] = ai
+        if speed is not None:
+            if not 1 <= speed <= 4: raise ValueError("Scene speed must be 1..4")
+            changes["speed"] = speed
+        if text is not None:
+            if "\n" in text or len(text) > 84: raise ValueError("Scene dialogue must be one line of at most 84 characters")
+            changes["text"] = text
         if any(instance.get(key) != value for key, value in changes.items()):
             instance.update(changes)
             self.dirty = True

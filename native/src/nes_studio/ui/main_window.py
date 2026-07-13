@@ -410,6 +410,18 @@ class MainWindow(QMainWindow):
             self._add_visual_choice(self.scene_ai, label, colour=colour, glyph=glyph)
         self.scene_ai.currentTextChanged.connect(lambda _value: self._update_scene_instance())
         layout.addWidget(self.scene_ai)
+        self.scene_speed = QSpinBox(dock)
+        self.scene_speed.setObjectName("sceneSpeed")
+        self.scene_speed.setRange(1, 4)
+        self.scene_speed.setPrefix("Speed: ")
+        self.scene_speed.valueChanged.connect(self._update_scene_instance)
+        layout.addWidget(self.scene_speed)
+        self.scene_text = QLineEdit(dock)
+        self.scene_text.setObjectName("sceneDialogue")
+        self.scene_text.setMaxLength(84)
+        self.scene_text.setPlaceholderText("NPC dialogue override (optional)")
+        self.scene_text.editingFinished.connect(self._update_scene_instance)
+        layout.addWidget(self.scene_text)
         layout.addStretch(1)
         return dock
 
@@ -1041,6 +1053,8 @@ class MainWindow(QMainWindow):
         self.scene_ai.blockSignals(True)
         self.scene_ai.setCurrentText(str(instance.get("ai", "static")) if instance else "static")
         self.scene_ai.blockSignals(False)
+        self.scene_speed.blockSignals(True); self.scene_speed.setValue(int(instance.get("speed", 1)) if instance else 1); self.scene_speed.blockSignals(False)
+        self.scene_text.blockSignals(True); self.scene_text.setText(str(instance.get("text", "")) if instance else ""); self.scene_text.blockSignals(False)
 
     def _add_scene_instance(self) -> None:
         sprite = self.scene_sprite.currentData()
@@ -1063,7 +1077,7 @@ class MainWindow(QMainWindow):
     def _update_scene_instance(self, _value: int | None = None) -> None:
         index = self.scene_list.currentRow()
         if index >= 0:
-            self._document.update_scene_instance(index, x=self.scene_x.value(), y=self.scene_y.value(), ai=self.scene_ai.currentText())
+            self._document.update_scene_instance(index, x=self.scene_x.value(), y=self.scene_y.value(), ai=self.scene_ai.currentText(), speed=self.scene_speed.value(), text=self.scene_text.text())
             self._session.schedule_save()
             self._refresh_scene_editor(index)
             self._update_document_title()

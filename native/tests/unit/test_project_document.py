@@ -329,8 +329,8 @@ def test_scene_instances_use_the_builder_scene_module_shape() -> None:
     document = ProjectDocument.preview()
     sprite = document.add_sprite("Slime", role="enemy")
     instance = document.add_scene_instance(sprite, x=88, y=120)
-    document.update_scene_instance(instance, x=96, ai="walker")
-    assert document.scene_instances() == [{"id": 1, "spriteIdx": sprite, "x": 96, "y": 120, "ai": "walker", "speed": 1}]
+    document.update_scene_instance(instance, x=96, ai="walker", speed=3, text="Hello there")
+    assert document.scene_instances() == [{"id": 1, "spriteIdx": sprite, "x": 96, "y": 120, "ai": "walker", "speed": 3, "text": "Hello there"}]
 
 
 def test_project_document_edits_palette_and_behaviour_without_losing_cell_fields() -> None:
