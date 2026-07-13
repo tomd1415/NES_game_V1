@@ -112,6 +112,22 @@ def test_background_tile_transforms_are_canonical_and_reversible_by_callers() ->
     assert document.background_tile_pixels(4) == [[0] * 8 for _ in range(8)]
 
 
+def test_sprite_tile_metadata_is_editable() -> None:
+    document = ProjectDocument.preview()
+    document.set_sprite_tile_metadata(9, name="Hero boots")
+    assert document.state["sprite_tiles"][9]["name"] == "Hero boots"
+
+
+def test_tile_duplicate_preserves_metadata_with_a_distinct_name() -> None:
+    document = ProjectDocument.preview()
+    document.set_background_tile_metadata(4, name="Ground", default_behaviour=7)
+    document.set_background_tile_pixel(4, 1, 2, 3)
+    duplicate = document.duplicate_background_tile(4)
+    assert document.state["bg_tiles"][duplicate]["name"] == "Ground copy"
+    assert document.background_tile_default_behaviour(duplicate) == 7
+    assert document.background_tile_pixels(duplicate)[2][1] == 3
+
+
 def test_sprite_lifecycle_supports_roles_flying_and_deep_duplicate() -> None:
     document = ProjectDocument.preview()
     first = document.add_sprite("Hero", role="player")

@@ -213,17 +213,29 @@ class ProjectDocument:
         if default_behaviour is not None and tile.get("defaultBehaviour") != default_behaviour: tile["defaultBehaviour"] = default_behaviour; changed = True
         if changed: self.dirty = True
 
+    def set_sprite_tile_metadata(self, index: int, *, name: str | None = None) -> None:
+        self._ensure_tile_pixels("sprite_tiles", index)
+        tile = self.state["sprite_tiles"][index]
+        if name is not None and tile.get("name") != name.strip():
+            tile["name"] = name.strip()
+            self.dirty = True
+
     def background_tile_default_behaviour(self, index: int) -> int | None:
         tiles = self.state.get("bg_tiles") or []
         value = tiles[index].get("defaultBehaviour") if 0 <= index < len(tiles) and isinstance(tiles[index], dict) else None
         return value if isinstance(value, int) and 0 <= value <= 255 else None
 
     def _duplicate_tile(self, group: str, index: int) -> int:
-        source = copy.deepcopy(self._tile_pixels(group, index))
+        self._ensure_tile_pixels(group, index)
+        source = copy.deepcopy(self.state[group][index])
         target = next((candidate for candidate in range(256) if candidate != index and all(value == 0 for row in self._tile_pixels(group, candidate) for value in row)), None)
         if target is None:
             raise ValueError("No empty tile slot is available")
-        self._ensure_tile_pixels(group, target)[:] = source
+        tiles = self.state[group]
+        duplicate = copy.deepcopy(source)
+        if isinstance(duplicate.get("name"), str) and duplicate["name"].strip():
+            duplicate["name"] = f"{duplicate['name'].strip()} copy"
+        tiles[target] = duplicate
         self.dirty = True
         return target
 

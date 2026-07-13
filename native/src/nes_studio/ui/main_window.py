@@ -695,7 +695,7 @@ class MainWindow(QMainWindow):
         tile_layout.addLayout(tile_library)
         self.tile_name = QLineEdit(self.tile_editor)
         self.tile_name.setObjectName("backgroundTileName")
-        self.tile_name.setPlaceholderText("Background tile name")
+        self.tile_name.setPlaceholderText("Tile name")
         self.tile_name.editingFinished.connect(self._set_tile_name)
         tile_layout.addWidget(self.tile_name)
         tile_operations = QHBoxLayout()
@@ -727,6 +727,22 @@ class MainWindow(QMainWindow):
         self.tile_default_behaviour.setPrefix("Default behaviour: ")
         self.tile_default_behaviour.valueChanged.connect(self._set_tile_default_behaviour)
         tile_layout.addWidget(self.tile_default_behaviour)
+        pen_row = QHBoxLayout()
+        pen_row.addWidget(QLabel("PIXEL PEN", self.tile_editor))
+        self._tile_pen = 1
+        self._tile_pen_buttons: list[QPushButton] = []
+        pen_group = QButtonGroup(self.tile_editor)
+        pen_group.setExclusive(True)
+        for value, colour in enumerate(("#181828", "#4878d8", "#78d878", "#f8d878")):
+            button = QPushButton(str(value), self.tile_editor)
+            button.setObjectName(f"tilePen{value}")
+            button.setCheckable(True); button.setFixedWidth(42)
+            button.setStyleSheet(f"background: {colour}; color: {'#080810' if value else '#f8f8f8'}; font-weight: 800;")
+            button.clicked.connect(lambda _checked=False, value=value: self._set_tile_pen(value))
+            pen_group.addButton(button); self._tile_pen_buttons.append(button); pen_row.addWidget(button)
+        self._tile_pen_buttons[self._tile_pen].setChecked(True)
+        pen_row.addStretch(1)
+        tile_layout.addLayout(pen_row)
         tile_grid = QGridLayout()
         tile_grid.setSpacing(1)
         self._tile_pixel_buttons: list[QPushButton] = []
@@ -1250,10 +1266,10 @@ class MainWindow(QMainWindow):
         self.tile_default_behaviour.blockSignals(False)
         background = self.tile_bank.currentData() != "sprite"
         self.tile_name.blockSignals(True)
-        tiles = self._document.state.get("bg_tiles") or []
-        tile = tiles[self.tile_selector.value()] if background and self.tile_selector.value() < len(tiles) else {}
+        tiles = self._document.state.get("bg_tiles" if background else "sprite_tiles") or []
+        tile = tiles[self.tile_selector.value()] if self.tile_selector.value() < len(tiles) else {}
         self.tile_name.setText(str(tile.get("name") or "") if isinstance(tile, dict) else "")
-        self.tile_name.setEnabled(background)
+        self.tile_name.setEnabled(True)
         self.tile_name.blockSignals(False)
         selected = self.tile_selector.value()
         used = self._tile_usage(self.tile_bank.currentData())
@@ -1288,7 +1304,7 @@ class MainWindow(QMainWindow):
 
     def _cycle_tile_pixel(self, column: int, row: int) -> None:
         index = self.tile_selector.value()
-        value = (self._tile_pixels()[row][column] + 1) & 3
+        value = self._tile_pen
         if self.tile_bank.currentData() == "sprite":
             self._document.set_sprite_tile_pixel(index, column, row, value)
         else:
@@ -1340,9 +1356,15 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Pasted into tile 0x{index:02X}")
 
     def _set_tile_name(self) -> None:
-        if self.tile_bank.currentData() != "sprite":
+        if self.tile_bank.currentData() == "sprite":
+            self._document.set_sprite_tile_metadata(self.tile_selector.value(), name=self.tile_name.text())
+        else:
             self._document.set_background_tile_metadata(self.tile_selector.value(), name=self.tile_name.text())
-            self._session.schedule_save(); self._refresh_tile_editor(); self._update_document_title()
+        self._session.schedule_save(); self._refresh_tile_editor(); self._update_document_title()
+
+    def _set_tile_pen(self, value: int) -> None:
+        self._tile_pen = value
+        self.statusBar().showMessage(f"Tile pen set to colour {value}")
 
     def _swap_tile(self) -> None:
         first = self.tile_selector.value()
