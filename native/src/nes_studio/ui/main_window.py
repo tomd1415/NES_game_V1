@@ -743,8 +743,13 @@ class MainWindow(QMainWindow):
         self._tile_pen_buttons[self._tile_pen].setChecked(True)
         pen_row.addStretch(1)
         tile_layout.addLayout(pen_row)
-        tile_grid = QGridLayout()
-        tile_grid.setSpacing(1)
+        self.tile_pixel_canvas = QFrame(self.tile_editor)
+        self.tile_pixel_canvas.setObjectName("tilePixelCanvas")
+        self.tile_pixel_canvas.setFixedSize(256, 256)
+        tile_grid = QGridLayout(self.tile_pixel_canvas)
+        tile_grid.setContentsMargins(0, 0, 0, 0)
+        tile_grid.setHorizontalSpacing(0)
+        tile_grid.setVerticalSpacing(0)
         self._tile_pixel_buttons: list[QPushButton] = []
         for row in range(8):
             for column in range(8):
@@ -755,7 +760,7 @@ class MainWindow(QMainWindow):
                 button.clicked.connect(lambda _checked=False, column=column, row=row: self._cycle_tile_pixel(column, row))
                 self._tile_pixel_buttons.append(button)
                 tile_grid.addWidget(button, row, column)
-        tile_layout.addLayout(tile_grid)
+        tile_layout.addWidget(self.tile_pixel_canvas, 0, Qt.AlignmentFlag.AlignLeft)
         self.tile_editor.setWidget(tile_content)
         self.editor_stack.addWidget(self.tile_editor)
         self.chars_editor = QFrame(self.editor_stack)
@@ -1258,8 +1263,8 @@ class MainWindow(QMainWindow):
             for column in range(8):
                 value = pixels[row][column]
                 button = self._tile_pixel_buttons[row * 8 + column]
-                button.setText(str(value))
-                button.setStyleSheet(f"background: {colours[value]}; color: #080810; padding: 0;")
+                button.setText("")
+                button.setStyleSheet(f"background: {colours[value]}; border: 1px solid #34345f; padding: 0;")
         self.tile_default_behaviour.blockSignals(True)
         self.tile_default_behaviour.setValue(self._document.background_tile_default_behaviour(self.tile_selector.value()) or 0)
         self.tile_default_behaviour.setEnabled(self.tile_bank.currentData() != "sprite")

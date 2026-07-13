@@ -184,6 +184,7 @@ class NativeShellTests(unittest.TestCase):
         self.assertIsNotNone(window.tile_editor.widget())
         self.assertEqual(len(window._tile_library_buttons), 256)
         self.assertFalse(window._tile_library_buttons[0].icon().isNull())
+        self.assertEqual((window.tile_pixel_canvas.width(), window.tile_pixel_canvas.height()), (256, 256))
         window.tile_bank.setCurrentIndex(0)
         window._tile_library_buttons[7].click()
         self.assertEqual(window.tile_selector.value(), 7)
