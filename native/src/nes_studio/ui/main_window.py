@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -156,6 +157,36 @@ class MainWindow(QMainWindow):
                 painter.fillRect(2 + column * 2, 2 + row * 2, 2, 2, QColor(colours[int(value) & 3]))
         painter.setPen(QColor("#7878c8"))
         painter.drawRect(0, 0, 19, 19)
+        painter.end()
+        return QIcon(pixmap)
+
+    def _sprite_thumbnail(self, sprite: dict[str, object]) -> QIcon:
+        """Draw up to four sprite cells as a compact visual entry in CHARS."""
+
+        colours = ("#181828", "#4878d8", "#78d878", "#f8d878")
+        pixmap = QPixmap(40, 40)
+        pixmap.fill(QColor("#101018"))
+        painter = QPainter(pixmap)
+        cells = sprite.get("cells", [])
+        if isinstance(cells, list):
+            for cell_y, row in enumerate(cells[:2]):
+                if not isinstance(row, list):
+                    continue
+                for cell_x, cell in enumerate(row[:2]):
+                    if not isinstance(cell, dict) or cell.get("empty"):
+                        continue
+                    pixels = self._document.sprite_tile_pixels(int(cell.get("tile", 0)))
+                    for pixel_y, source_row in enumerate(pixels[:8]):
+                        for pixel_x, value in enumerate(source_row[:8]):
+                            painter.fillRect(
+                                cell_x * 20 + 2 + pixel_x * 2,
+                                cell_y * 20 + 2 + pixel_y * 2,
+                                2,
+                                2,
+                                QColor(colours[int(value) & 3]),
+                            )
+        painter.setPen(QColor("#7878c8"))
+        painter.drawRect(0, 0, 39, 39)
         painter.end()
         return QIcon(pixmap)
 
@@ -675,6 +706,7 @@ class MainWindow(QMainWindow):
         chars_layout.addWidget(self.sprite_filter)
         self.sprite_list = QListWidget(self.chars_editor)
         self.sprite_list.setObjectName("spriteList")
+        self.sprite_list.setIconSize(QPixmap(40, 40).size())
         self.sprite_list.currentRowChanged.connect(self._select_sprite)
         chars_layout.addWidget(self.sprite_list)
         sprite_actions = QHBoxLayout()
@@ -1338,7 +1370,9 @@ class MainWindow(QMainWindow):
             sprite = self._document.state["sprites"][index]
             if role_filter is not None and sprite.get("role", "other") != role_filter:
                 continue
-            self.sprite_list.addItem(f"{name} ({sprite.get('role', 'other')})")
+            self.sprite_list.addItem(
+                QListWidgetItem(self._sprite_thumbnail(sprite), f"{name} ({sprite.get('role', 'other')})")
+            )
             self._visible_sprite_indices.append(index)
         self.sprite_list.setCurrentRow(
             max(0, min(current, self.sprite_list.count() - 1)) if self.sprite_list.count() else -1

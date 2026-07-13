@@ -86,6 +86,7 @@ class NativeShellTests(unittest.TestCase):
         window.select_mode("CHARS")
         self.assertEqual(window.mode_title.text(), "CHARS")
         self.assertEqual(window.editor_stack.currentWidget(), window.chars_editor)
+        self.assertFalse(window.sprite_list.item(0).icon().isNull())
         window.sprite_role.setCurrentText("enemy")
         self.assertEqual(window._document.state["sprites"][window.sprite_list.currentRow()]["role"], "enemy")
         self.assertFalse(window.sprite_role.itemIcon(window.sprite_role.currentIndex()).isNull())
