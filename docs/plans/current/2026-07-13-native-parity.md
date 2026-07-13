@@ -41,8 +41,8 @@ boundary, and owning tests support it.
 
 ### 3. Finish app workflows
 
-- [ ] Project catalog UI (switch/rename/duplicate/delete/templates) and a
-      snapshot before Build/Play.
+- [~] Snapshot before Build is complete; project catalog UI
+      (switch/rename/duplicate/delete/templates) remains.
 - [ ] Asset-format imports/exports and partial background/sprite import.
 - [ ] CODE guided editing, Advanced C/ASM, lessons/snippets/symbols/build log.
 - [ ] Native gallery/account/cloud-save, accessibility preferences, help and

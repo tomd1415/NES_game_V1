@@ -1845,6 +1845,7 @@ class MainWindow(QMainWindow):
     def _build_rom(self) -> None:
         if self._build_thread is not None:
             return
+        self._session.snapshot_before("before_build")
         detached = ProjectDocument.from_json(self._document.to_json())
         worker = _BuildWorker(self._build_controller, detached)
         thread = QThread(self)
