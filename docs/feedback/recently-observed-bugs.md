@@ -138,6 +138,18 @@ was a massive improvement.
     defaults but want an attended playtest to fine-tune.** Shooting (the other
     suggestion) already exists in the SMB style (fireballs).
 16. The pallets on the background and for the sprites sometimes do not match what they should be and the ones that are selected are not always represented.
+    *Verified correct 2026-07-13 — not reproducible in the Studio.* Audited all
+    three steps of the reproduction card: **(B) mapping** — the render pipeline
+    maps the *selected* slot to the right pixel value (pixel 0 = backdrop /
+    transparent; pixel N = `slots[N-1]`) for both bg and sprite palettes, with no
+    off-by-one; **(A) persistence** — the picked colours survive save + reload;
+    **(C) ROM** — already guarded by `builder-tests/palette-render.mjs`. New
+    `tools/studio-tests/palette-fidelity.spec.js` locks A + B. The report predates
+    the Studio redesign (it was filed against the legacy Sprites/Backgrounds
+    pages); the Studio's PALS editor + shared `NesRender` pipeline are consistent
+    end-to-end. The one case where a *selected* palette legitimately isn't shown
+    is the NES **2×2-attribute limit** (a whole 16-px block shares one palette) —
+    which the WORLD editor already flags with a red conflict overlay.
 17. Make it clearer to the user that the sprite animation is being used and allow for enemies and pickups etc. to have animations.
     *Resolved 2026-07-06:* the engine + server already baked role-tagged scene
     animations (`ANIM_ENEMY_WALK/IDLE`, `ANIM_PICKUP_IDLE` — see
@@ -282,7 +294,7 @@ diagnosis trail in place for future debuggers (just add a
 "Resolved YYYY-MM-DD: <commit ref>" line at the bottom of the
 relevant sub-entry).
 
-### Item 16 — palette mismatch (status: NOT YET REPRODUCED, 2026-04-26)
+### Item 16 — palette mismatch (status: VERIFIED CORRECT in the Studio, 2026-07-13 — see item 16 above + palette-fidelity.spec.js)
 
 The reported symptom is "the palettes on the background and for
 the sprites sometimes do not match what they should be and the
