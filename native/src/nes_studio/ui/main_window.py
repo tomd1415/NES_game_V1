@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self._build_thread: QThread | None = None
         self._build_worker: _BuildWorker | None = None
         self._last_rom: bytes | None = None
+        self._tile_clipboard: list[list[int]] | None = None
         data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
         )
@@ -562,6 +563,11 @@ class MainWindow(QMainWindow):
             self._tile_library_buttons.append(button)
             tile_library.addWidget(button, index // 16, index % 16)
         tile_layout.addLayout(tile_library)
+        self.tile_name = QLineEdit(self.tile_editor)
+        self.tile_name.setObjectName("backgroundTileName")
+        self.tile_name.setPlaceholderText("Background tile name")
+        self.tile_name.editingFinished.connect(self._set_tile_name)
+        tile_layout.addWidget(self.tile_name)
         tile_operations = QHBoxLayout()
         for label, operation in (("Clear", "clear"), ("Flip H", "flip_h"), ("Flip V", "flip_v"), ("Rotate", "rotate")):
             button = QPushButton(label, self.tile_editor)
@@ -572,6 +578,14 @@ class MainWindow(QMainWindow):
         duplicate_button.setObjectName("duplicateTileButton")
         duplicate_button.clicked.connect(self._duplicate_tile)
         tile_operations.addWidget(duplicate_button)
+        copy_tile = QPushButton("Copy", self.tile_editor)
+        copy_tile.setObjectName("copyTileButton")
+        copy_tile.clicked.connect(self._copy_tile)
+        tile_operations.addWidget(copy_tile)
+        paste_tile = QPushButton("Paste", self.tile_editor)
+        paste_tile.setObjectName("pasteTileButton")
+        paste_tile.clicked.connect(self._paste_tile)
+        tile_operations.addWidget(paste_tile)
         tile_layout.addLayout(tile_operations)
         self.tile_default_behaviour = QSpinBox(self.tile_editor)
         self.tile_default_behaviour.setObjectName("tileDefaultBehaviour")
@@ -1009,6 +1023,13 @@ class MainWindow(QMainWindow):
         self.tile_default_behaviour.setValue(self._document.background_tile_default_behaviour(self.tile_selector.value()) or 0)
         self.tile_default_behaviour.setEnabled(self.tile_bank.currentData() != "sprite")
         self.tile_default_behaviour.blockSignals(False)
+        background = self.tile_bank.currentData() != "sprite"
+        self.tile_name.blockSignals(True)
+        tiles = self._document.state.get("bg_tiles") or []
+        tile = tiles[self.tile_selector.value()] if background and self.tile_selector.value() < len(tiles) else {}
+        self.tile_name.setText(str(tile.get("name") or "") if isinstance(tile, dict) else "")
+        self.tile_name.setEnabled(background)
+        self.tile_name.blockSignals(False)
         selected = self.tile_selector.value()
         used = self._tile_usage(self.tile_bank.currentData())
         for index, button in enumerate(self._tile_library_buttons):
@@ -1067,6 +1088,27 @@ class MainWindow(QMainWindow):
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"Duplicated tile into 0x{index:02X}")
+
+    def _copy_tile(self) -> None:
+        self._tile_clipboard = [row[:] for row in self._tile_pixels()]
+        self.statusBar().showMessage(f"Copied tile 0x{self.tile_selector.value():02X}")
+
+    def _paste_tile(self) -> None:
+        if self._tile_clipboard is None:
+            self.statusBar().showMessage("Nothing to paste — copy a tile first")
+            return
+        index = self.tile_selector.value()
+        for row, pixels in enumerate(self._tile_clipboard):
+            for column, value in enumerate(pixels):
+                if self.tile_bank.currentData() == "sprite": self._document.set_sprite_tile_pixel(index, column, row, value)
+                else: self._document.set_background_tile_pixel(index, column, row, value)
+        self._session.schedule_save(); self._refresh_tile_editor(); self._update_document_title()
+        self.statusBar().showMessage(f"Pasted into tile 0x{index:02X}")
+
+    def _set_tile_name(self) -> None:
+        if self.tile_bank.currentData() != "sprite":
+            self._document.set_background_tile_metadata(self.tile_selector.value(), name=self.tile_name.text())
+            self._session.schedule_save(); self._refresh_tile_editor(); self._update_document_title()
 
     def _set_tile_default_behaviour(self, value: int) -> None:
         if self.tile_bank.currentData() != "sprite":

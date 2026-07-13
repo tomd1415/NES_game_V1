@@ -30,8 +30,9 @@ boundary, and owning tests support it.
 
 ### 2. Make the core editors complete enough to replace their web pages
 
-- [ ] TILES: visual 256-tile library, usage/state indicators, names,
-      copy/paste/keyboard navigation, and reference-safe swaps.
+- [~] TILES: visual 256-tile library, usage/state indicators, background names
+      and copy/paste are complete; keyboard navigation and reference-safe swaps
+      remain.
 - [ ] CHARS: pixel drawing tools, flip/priority/empty cell attributes,
       thumbnails/filtering, complete animation management and preview.
 - [ ] WORLD: named/custom tile types, clear/zoom/fullscreen preview and a
