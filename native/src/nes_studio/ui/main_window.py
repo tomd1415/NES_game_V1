@@ -709,6 +709,20 @@ class MainWindow(QMainWindow):
         self.animation_delete_button.clicked.connect(self._delete_animation)
         animation_actions.addWidget(self.animation_delete_button)
         chars_layout.addLayout(animation_actions)
+        frame_order = QHBoxLayout()
+        self.animation_frame_index = QSpinBox(self.chars_editor)
+        self.animation_frame_index.setObjectName("animationFrameIndex")
+        self.animation_frame_index.setPrefix("Frame ")
+        frame_order.addWidget(self.animation_frame_index)
+        self.animation_frame_left = QPushButton("←", self.chars_editor)
+        self.animation_frame_left.setObjectName("moveAnimationFrameLeftButton")
+        self.animation_frame_left.clicked.connect(lambda: self._move_animation_frame(-1))
+        frame_order.addWidget(self.animation_frame_left)
+        self.animation_frame_right = QPushButton("→", self.chars_editor)
+        self.animation_frame_right.setObjectName("moveAnimationFrameRightButton")
+        self.animation_frame_right.clicked.connect(lambda: self._move_animation_frame(1))
+        frame_order.addWidget(self.animation_frame_right)
+        chars_layout.addLayout(frame_order)
         self.animation_fps = QSpinBox(self.chars_editor)
         self.animation_fps.setObjectName("animationFps")
         self.animation_fps.setRange(1, 60)
@@ -1373,6 +1387,10 @@ class MainWindow(QMainWindow):
         self.animation_rename_button.setEnabled(has_animation)
         self.animation_duplicate_button.setEnabled(has_animation)
         self.animation_delete_button.setEnabled(has_animation)
+        frame_count = len(animation.get("frames") or []) if animation else 0
+        self.animation_frame_index.blockSignals(True); self.animation_frame_index.setRange(0, max(0, frame_count - 1)); self.animation_frame_index.setValue(min(self.animation_frame_index.value(), max(0, frame_count - 1))); self.animation_frame_index.setEnabled(frame_count > 0); self.animation_frame_index.blockSignals(False)
+        self.animation_frame_left.setEnabled(frame_count > 1 and self.animation_frame_index.value() > 0)
+        self.animation_frame_right.setEnabled(frame_count > 1 and self.animation_frame_index.value() < frame_count - 1)
 
     def _refresh_animation_list(self, selected: int | None = None) -> None:
         if selected is None:
@@ -1421,6 +1439,18 @@ class MainWindow(QMainWindow):
             return
         self._session.schedule_save()
         self._refresh_animation_list(animation)
+
+    def _move_animation_frame(self, offset: int) -> None:
+        animation, source = self.animation_list.currentRow(), self.animation_frame_index.value()
+        if animation < 0:
+            return
+        destination = source + offset
+        try:
+            self._document.move_animation_frame(animation, source, destination)
+        except IndexError:
+            return
+        self._session.schedule_save(); self._refresh_animation_list(animation)
+        self.animation_frame_index.setValue(destination)
 
     def _delete_animation(self) -> None:
         animation = self.animation_list.currentRow()

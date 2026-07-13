@@ -238,6 +238,14 @@ def test_duplicate_animation_copies_timing_and_frames_with_a_new_identifier() ->
     assert document.state["animations"][duplicate] == {"id": 2, "name": "Walk copy", "fps": 12, "frames": [sprite]}
 
 
+def test_animation_frame_can_move_without_changing_the_frame_set() -> None:
+    document = ProjectDocument.preview()
+    first, second = document.add_sprite("First"), document.add_sprite("Second")
+    animation = document.add_animation("Cycle", frames=[first, second])
+    document.move_animation_frame(animation, 0, 1)
+    assert document.state["animations"][animation]["frames"] == [second, first]
+
+
 def test_game_style_uses_the_shared_builder_game_config() -> None:
     document = ProjectDocument.preview()
     document.set_game_style("racer")

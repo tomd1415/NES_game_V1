@@ -381,6 +381,16 @@ class ProjectDocument:
         frames.pop()
         self.dirty = True
 
+    def move_animation_frame(self, animation_index: int, source: int, destination: int) -> None:
+        animation = self._animation_at(animation_index)
+        frames = animation.get("frames")
+        if not isinstance(frames, list) or not 0 <= source < len(frames) or not 0 <= destination < len(frames):
+            raise IndexError("Animation frame index outside animation")
+        if source != destination:
+            frame = frames.pop(source)
+            frames.insert(destination, frame)
+            self.dirty = True
+
     def delete_animation(self, animation_index: int) -> None:
         animation = self._animation_at(animation_index)
         identifier = animation.get("id")
