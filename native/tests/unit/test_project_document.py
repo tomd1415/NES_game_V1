@@ -230,6 +230,14 @@ def test_animation_editing_and_assignments_keep_the_web_project_contract() -> No
     assert document.state["animations"] == [{"id": 2, "name": "Jump", "fps": 10, "frames": []}]
 
 
+def test_duplicate_animation_copies_timing_and_frames_with_a_new_identifier() -> None:
+    document = ProjectDocument.preview()
+    sprite = document.add_sprite("Hero")
+    original = document.add_animation("Walk", fps=12, frames=[sprite])
+    duplicate = document.duplicate_animation(original, "Walk copy")
+    assert document.state["animations"][duplicate] == {"id": 2, "name": "Walk copy", "fps": 12, "frames": [sprite]}
+
+
 def test_game_style_uses_the_shared_builder_game_config() -> None:
     document = ProjectDocument.preview()
     document.set_game_style("racer")

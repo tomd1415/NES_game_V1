@@ -696,6 +696,14 @@ class MainWindow(QMainWindow):
         self.animation_remove_frame_button.setObjectName("removeAnimationFrameButton")
         self.animation_remove_frame_button.clicked.connect(self._remove_last_animation_frame)
         animation_actions.addWidget(self.animation_remove_frame_button)
+        self.animation_rename_button = QPushButton("Rename", self.chars_editor)
+        self.animation_rename_button.setObjectName("renameAnimationButton")
+        self.animation_rename_button.clicked.connect(self._rename_animation)
+        animation_actions.addWidget(self.animation_rename_button)
+        self.animation_duplicate_button = QPushButton("Duplicate", self.chars_editor)
+        self.animation_duplicate_button.setObjectName("duplicateAnimationButton")
+        self.animation_duplicate_button.clicked.connect(self._duplicate_animation)
+        animation_actions.addWidget(self.animation_duplicate_button)
         self.animation_delete_button = QPushButton("Delete animation", self.chars_editor)
         self.animation_delete_button.setObjectName("deleteAnimationButton")
         self.animation_delete_button.clicked.connect(self._delete_animation)
@@ -1362,6 +1370,8 @@ class MainWindow(QMainWindow):
         has_animation = animation is not None
         self.animation_add_frame_button.setEnabled(has_animation and self.sprite_list.currentRow() >= 0)
         self.animation_remove_frame_button.setEnabled(bool(animation and animation.get("frames")))
+        self.animation_rename_button.setEnabled(has_animation)
+        self.animation_duplicate_button.setEnabled(has_animation)
         self.animation_delete_button.setEnabled(has_animation)
 
     def _refresh_animation_list(self, selected: int | None = None) -> None:
@@ -1418,6 +1428,27 @@ class MainWindow(QMainWindow):
             self._document.delete_animation(animation)
             self._session.schedule_save()
             self._refresh_animation_list(animation)
+
+    def _rename_animation(self) -> None:
+        index = self.animation_list.currentRow()
+        if index < 0:
+            return
+        current = self._document.state["animations"][index].get("name") or "Animation"
+        name, accepted = QInputDialog.getText(self, "Rename animation", "Name:", text=str(current))
+        if accepted and name.strip():
+            self._document.update_animation(index, name=name)
+            self._session.schedule_save(); self._refresh_animation_list(index); self._update_document_title()
+
+    def _duplicate_animation(self) -> None:
+        index = self.animation_list.currentRow()
+        if index < 0:
+            return
+        current = self._document.state["animations"][index].get("name") or "Animation"
+        name, accepted = QInputDialog.getText(self, "Duplicate animation", "Name:", text=f"{current} copy")
+        if accepted and name.strip():
+            duplicate = self._document.duplicate_animation(index, name)
+            self._session.schedule_save(); self._refresh_animation_list(duplicate)
+            self._update_document_title()
 
     def _set_animation_fps(self, fps: int) -> None:
         animation = self.animation_list.currentRow()

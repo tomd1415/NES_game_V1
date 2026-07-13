@@ -338,6 +338,10 @@ class ProjectDocument:
         self.dirty = True
         return len(animations) - 1
 
+    def duplicate_animation(self, animation_index: int, name: str) -> int:
+        animation = self._animation_at(animation_index)
+        return self.add_animation(name, fps=int(animation.get("fps") or 8), frames=list(animation.get("frames") or []))
+
     def append_animation_frame(self, animation_index: int, sprite_index: int) -> None:
         animations = self.state.get("animations") or []
         if not 0 <= animation_index < len(animations) or not 0 <= sprite_index < len(self._sprites()):
