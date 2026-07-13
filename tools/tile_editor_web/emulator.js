@@ -291,8 +291,19 @@
     }
     if (dlBtn) dlBtn.onclick = onDownload;
 
-    const kd = (e) => { const m = mapCode(e.code); if (m) nes.buttonDown(m.pad, m.button); };
-    const ku = (e) => { const m = mapCode(e.code); if (m) nes.buttonUp(m.pad,   m.button); };
+    // A game key must NOT also do its browser default while playing — Arrow keys
+    // scrolled the page under the emulator, Enter/Space nudged focused buttons,
+    // etc. (feedback #36 "arrow keys drive both the page and the emulator").  So
+    // preventDefault on any key we map to a pad button.  Skip it while a text
+    // field is focused so a pupil can still type (e.g. rename a project) with the
+    // emulator open — those keys go to the field, not the game.
+    const isEditable = (t) => {
+      if (!t) return false;
+      const tag = t.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
+    };
+    const kd = (e) => { const m = mapCode(e.code); if (m && !isEditable(e.target)) { e.preventDefault(); nes.buttonDown(m.pad, m.button); } };
+    const ku = (e) => { const m = mapCode(e.code); if (m && !isEditable(e.target)) { e.preventDefault(); nes.buttonUp(m.pad,   m.button); } };
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup',   ku);
 

@@ -25,6 +25,24 @@ test('▶ Play snapshots before_play, compiles, and launches the emulator', asyn
   await expect(page.locator('#emu-dialog')).toBeVisible({ timeout: 25000 });
   await expect(page.locator('#emu-canvas')).toBeVisible();
 
+  // Focus-theft (#36): a game key must NOT also do its browser default while
+  // playing (Arrow keys used to scroll the page under the emulator).
+  const arrowPrevented = await page.evaluate(() => {
+    const e = new KeyboardEvent('keydown', { code: 'ArrowDown', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  expect(arrowPrevented).toBe(true);
+  // …but a key typed into a focused text field is left alone (so a pupil can
+  // still rename their project with the emulator open).
+  const typingLeftAlone = await page.evaluate(() => {
+    const inp = document.getElementById('project-name'); inp.focus();
+    const e = new KeyboardEvent('keydown', { code: 'KeyD', bubbles: true, cancelable: true });
+    inp.dispatchEvent(e);
+    return e.defaultPrevented;
+  });
+  expect(typingLeftAlone).toBe(false);
+
   // The emulator offers a .nes download of the ROM it just built, and clicking
   // it starts a download named after the project.
   const dl = page.locator('#emu-download');

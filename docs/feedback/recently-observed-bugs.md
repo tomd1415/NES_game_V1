@@ -708,9 +708,18 @@ Root causes below were verified against the current code on 2026-06-17.
     shared `emulator.js` owns its own window listeners.  The latest
     commit (`26fbb82` "running game from the sprite page") fixed a
     *different* bug (ROM byte-format); keyboard capture was resolved
-    earlier.  Status: **VERIFY** closed on both pages; confirm no page
-    that opens a *private* emulator uses a different dialog id than the
-    guard checks.  Plan §B-9.
+    earlier.
+    *Fixed properly 2026-07-13.* The legacy-page bails only stopped each
+    page's *own* keydown logic — they never stopped the **browser's native
+    arrow-key scroll**, and the Studio (`studio.html`, the primary UI) had no
+    such bail at all, so playing there scrolled the page under the TV.  The
+    shared `emulator.js` now calls `e.preventDefault()` on any key it maps to a
+    pad button, so arrow keys (and Enter/Space) no longer do their browser
+    default while the emulator is open — for **every** page that uses it. It
+    skips the preventDefault while a text field is focused, so a pupil can still
+    rename a project with the emulator open.  Guarded by `studio-tests/play.spec.js`
+    (an ArrowDown is `defaultPrevented` while playing; a key in a focused input
+    is not).
 
 37. **"My game keeps crashing" / "emulator froze for no reason."**
     (Feedback F2, F11, F13; reporters D and A.)  Generic, no repro.
