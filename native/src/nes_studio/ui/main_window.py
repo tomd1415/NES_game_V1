@@ -2277,6 +2277,7 @@ class MainWindow(QMainWindow):
             """
             QMainWindow, #studioWorkspace { background: #0f0f1b; color: #f8f8f8; }
             QMenuBar, QMenu, QStatusBar { background: #191933; color: #f8f8f8; }
+            QLabel { color: #d8d8f8; }
             QMenuBar::item:selected, QMenu::item:selected { background: #4b4b9b; }
             #modeRail { background: #191933; border-right: 2px solid #4b4b9b; }
             #brandLabel { color: #f8d878; font-weight: 900; font-size: 17px; padding-bottom: 12px; }
@@ -2308,6 +2309,7 @@ class MainWindow(QMainWindow):
             QListWidget { background: #181832; border: 1px solid #4b4b7b; border-radius: 4px; padding: 3px; }
             QListWidget::item { padding: 5px; border-radius: 3px; }
             QListWidget::item:selected { background: #4b4b9b; color: white; }
+            #codePreview { background: #151528; color: #f0f0ff; border: 1px solid #4b4b7b; selection-background-color: #4b4b9b; selection-color: white; font-family: monospace; }
             #stagePanel { background: #101024; }
             #liveBadge { color: #78d878; font-weight: 800; }
             #television { background: #585868; border: 8px solid #303044; border-radius: 18px; }
