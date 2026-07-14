@@ -49,15 +49,14 @@ was a massive improvement.
    codegen + clamp + byte-identical-when-off. (Broader per-sprite/area fine-tuning
    remains open.)
 7. Include default sound fx in the audio section.
-   *Diagnosed 2026-07-14 — root cause found, implementation designed (needs an
-   engine bump + attended audio playtest; see item 27 for the shared analysis).*
-   A **starter SFX pack** already ships (`/starter/audio` → `sfx` with named
-   slots; the SOUND dock's "♪ Add starter pack" loads it) and it **links and
-   builds** into the ROM (guarded by `builder-tests/audio.mjs`). The gap is that
-   the loaded SFX are **never triggered** — see item 27. So "default sound fx"
-   exists as *content* but is inaudible until the event-wiring in item 27 lands.
-   The two should ship together (v74): wire the named starter slots (jump / coin
-   / hurt / win …) to the matching events.
+   *Implemented 2026-07-14 (engine v74) — pending an attended FCEUX playtest.*
+   A **starter SFX pack** ships (`/starter/audio` → `sfx` with named slots;
+   the SOUND dock's "♪ Add starter pack" loads it), and as of v74 those slots are
+   actually **triggered** on game events (see item 27 for the mechanism). Turn on
+   the SOUND dock's **"Play sounds on game events"** toggle and the starter slots
+   fire on jump / pickup / hurt / win. Build/codegen is guarded by
+   `builder-tests/sfx-events.mjs`; the *sound itself* needs a quick FCEUX playtest
+   to confirm before we call it fully done.
 8. Allow the user to set the default tempo for the audio and the ability to trigger tempo changes.
    *Assessed 2026-07-14.* Tempo is baked into each **FamiStudio** export (the
    `.s` song data carries its own tempo envelope — see the `@tempo_env_*` bytes
@@ -260,6 +259,18 @@ was a massive improvement.
     platformer features that don't yet have a top-down equivalent are tracked
     per-feature (e.g. per-background scene instances, item 14).
 27. It is not clear where the sound effects are linked to events or how to do that currently.
+    *Implemented 2026-07-14 (engine v74) — pending an attended FCEUX playtest.*
+    Shipped as designed below: the SOUND dock's **"Play sounds on game events"**
+    toggle wires the loaded SFX pack to jump / pickup / hurt / win via
+    edge-detectors in the C main loop (fires in both the C and shipped-ASM
+    builds). Gated `#ifdef BW_SFX_EVENTS` → byte-identical when off; the server
+    only enables it with a real sfx pack. Guarded by
+    `builder-tests/sfx-events.mjs` (all four detector branches compile; events
+    change the ROM; the flag without an sfx pack is a no-op). The remaining
+    sign-off is the audio playtest. Deferred to a follow-up: an SMB coin-block
+    sound (`bw_coins`), a runner/GD restart "error" sound, and a per-event slot
+    picker. Original diagnosis + design retained below.
+
     *Root cause found 2026-07-14 — SFX are loaded but never fired.* The engine
     initialises the FamiStudio SFX engine (`famistudio_sfx_init(audio_sfx_data)`,
     `platformer.c:1127`) and declares `famistudio_sfx_play(index, channel)`, but

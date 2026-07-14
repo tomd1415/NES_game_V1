@@ -21,7 +21,7 @@ deferred.
 
 ---
 
-## Engine v11 → v73 + Studio hardening (bring-forward summary) — 2026-07-14
+## Engine v11 → v74 + Studio hardening (bring-forward summary) — 2026-07-14
 
 A high-level catch-up covering everything that shipped **since** the v10 entry
 below. The authoritative, per-version detail lives in
@@ -63,6 +63,13 @@ off-by-default) and both suites green (`node tools/builder-tests/run-all.mjs`,
   that set `invincibilityFrames < 10`, so it is now a proper engine version with
   its own snapshot. Goldens stay byte-identical (Damage default is 30); v72 is
   left untouched so games authored under it rebuild unchanged.
+- **Event sound effects — v74 (#7/#27).** Loaded SFX used to be silent
+  (`famistudio_sfx_init` was called but `famistudio_sfx_play` never was). v74
+  wires the SFX pack to jump / pickup / hurt / win via edge-detectors in the
+  main loop (so they fire in both the C and shipped-ASM builds), behind the
+  SOUND dock's **"Play sounds on game events"** toggle. Gated + off by default
+  (goldens byte-identical); guarded by `sfx-events.mjs`. Actual audio is pending
+  an attended FCEUX playtest before it's called fully done.
 - **Studio UX + safety.** A Games menu (open/manage saved games, available even
   when signed out), a fix for focus theft on load (#36), the reactions matrix
   (#20), the invincibility-frames floor (#35, now engine v73), thumbnail crop
