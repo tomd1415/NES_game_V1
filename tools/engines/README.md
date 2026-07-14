@@ -22,7 +22,10 @@ were authored for.
 5. `node scripts/snapshot-engine.mjs --check` verifies the snapshot matches
    the live sources (run in CI / before shipping).
 
-The first engine feature (per-door destinations) ships as **v2** — snapshot
-v1 first (done) so every v1 game keeps a working fallback.
+This scheme began at **v1** (baseline) with the first engine feature — per-door
+destinations — shipping as **v2**, always snapshotting v1 first so every v1 game
+keeps a working fallback. The engine is now well past that; see
+[`CHANGELOG.md`](CHANGELOG.md) for the current version (v72 at the time of writing)
+and every step in between.
 
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md).

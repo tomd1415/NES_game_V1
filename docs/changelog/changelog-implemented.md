@@ -21,6 +21,48 @@ deferred.
 
 ---
 
+## Engine v11 → v72 + Studio hardening (bring-forward summary) — 2026-07-14
+
+A high-level catch-up covering everything that shipped **since** the v10 entry
+below. The authoritative, per-version detail lives in
+[`tools/engines/CHANGELOG.md`](../../tools/engines/CHANGELOG.md) (one entry per
+version, newest first); the pupil-facing item tracking lives in
+[`docs/feedback/recently-observed-bugs.md`](../feedback/recently-observed-bugs.md).
+Every step kept the golden ROMs byte-identical (new behaviour gated
+off-by-default) and both suites green (`node tools/builder-tests/run-all.mjs`,
+`npx playwright test`).
+
+- **Hand-written 6502 engine now ships by default (v11 → v54).** The player
+  physics were ported to hand-written 6502, verified A/B against the C path for
+  each game style and each player (single- and 2-player: platformer, SMB,
+  auto-runner, top-down, racer), landing OFF-by-default per style and then being
+  switched ON once A/B-clean (player physics shipped v43/v50; the OAM draw loop
+  shipped v54). Net effect for pupils: a much roomier frame budget (~2.8× on the
+  hot paths), same ROM behaviour.
+- **FCEUX-driven polish (v53 → v57).** Racer steering rate-limit, 2-player camera
+  that follows the midpoint, a 2-player auto-runner, and an SMB HUD digit cache —
+  all from validating the shipped engine in FCEUX (not just jsnes).
+- **SMB background status bar (v58 → v70).** A real background HUD with a
+  sprite-0 split (glyph seeding → bg HUD → split → freeze), then the "header
+  flickers after the first screen" fix: v69 cut the vblank cost (browser-safe)
+  and v70 moved the push to an NMI-driven, double-buffered write. Off by default;
+  the multi-bg door-transition wrong-room bug (#2/#3) was fixed in v63 along the
+  way.
+- **Level compression (v64 → v66).** A column-dedup level format with a C then
+  ASM decoder (dormant + byte-identical while proven out), then applied to any
+  multi-screen level so detailed 5–8-screen levels fit.
+- **Physics sliders + new enemy paths (v67 → v72).** The platformer jump-height /
+  speed / gravity sliders now drive the shipped ASM engine (v67), the runner's
+  gravity ASM/C divergence was fixed and made tunable (v68), and three new
+  per-instance enemy paths landed for pupil request #13: **hopper** (walks +
+  bounces, v71) and **shooter/turret** (fires projectiles, v72), alongside the
+  flyer/patrol from v10.
+- **Studio UX + safety.** A Games menu (open/manage saved games, available even
+  when signed out), a fix for focus theft on load (#36), the reactions matrix
+  (#20), an invincibility-frames floor (#35), thumbnail crop fixes (#25), and
+  several items verified-correct-as-is on investigation (#16 palette fidelity,
+  #32). See the feedback list for the per-item status.
+
 ## Engine v10 + bug-list sweep (autonomous) — 2026-07-06
 
 A focused pass over the pupil bug list, each unit test-gated (full builder
