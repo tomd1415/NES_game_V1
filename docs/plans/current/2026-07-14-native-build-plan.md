@@ -10,11 +10,13 @@
 | 1 — Renderer | ✅ **Done** (`829eb9c`) |
 | 2 — Play in the stage | ✅ **Done** (`08da14b`, `b37ff38`) |
 | 5.1 — Project catalog | ✅ **Done** (`eb396ff`) — taken early; the 7 starters were unreachable |
-| 3 — Store + mode extraction | ⬜ **Next.** The big refactor; nothing else depends on it being done *first*, but undo-everywhere and cross-mode refresh are impossible without it. |
-| 4 — Chrome (docks, app bar, theme file) | ⬜ Not started |
+| 3a — `DocumentStore` + undo everywhere | ✅ **Done** (`6e91e5c`) |
+| 3b — Extract modes into `ui/modes/` | ⬜ **Next.** `MainWindow` is still ~2,900 lines. The mode dispatch is now a registry, so the seams are visible; the widgets have not moved yet. |
+| 4a — Editors out of the CRT bezel | ✅ **Done** (`ad8aa12`) |
+| 4b — A dock per mode, app bar, `.qss` theme file | ⬜ Not started |
 | 5.2+ — Remaining parity | ⬜ Not started |
 
-Test count: 180 → **205**, all green.
+Test count: 180 → **214**, all green.
 
 **Bugs found and fixed along the way that were not in the original plan:**
 
@@ -28,6 +30,12 @@ Test count: 180 → **205**, all green.
    stylesheet. Now applied to the application. Same class of bug as the white
    PALS panel; fixing it at the application level closes the class.
 3. **No audio device meant no picture at all** — see §5.3a.
+4. **Every undo re-ran the cc65 codegen.** `_refresh_all_editors()` eagerly
+   re-read every mode, including `_refresh_code_preview()`, which invokes the
+   generator. The undo test suite took 178 s. Refresh is now lazy — the visible
+   mode refreshes, the rest are marked stale and refresh when opened — which
+   brought it to 38 s. Worth remembering when adding a mode: **never put
+   expensive work in a refresh that runs for modes nobody is looking at.**
 
 
 
