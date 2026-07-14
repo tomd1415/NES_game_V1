@@ -2,6 +2,35 @@
 
 **Status:** active. This is the single source of truth for `native/` work.
 
+## Progress (updated 2026-07-14)
+
+| Phase | State |
+| --- | --- |
+| 0 — Triage | ✅ **Done** (`98f747f`) |
+| 1 — Renderer | ✅ **Done** (`829eb9c`) |
+| 2 — Play in the stage | ✅ **Done** (`08da14b`, `b37ff38`) |
+| 5.1 — Project catalog | ✅ **Done** (`eb396ff`) — taken early; the 7 starters were unreachable |
+| 3 — Store + mode extraction | ⬜ **Next.** The big refactor; nothing else depends on it being done *first*, but undo-everywhere and cross-mode refresh are impossible without it. |
+| 4 — Chrome (docks, app bar, theme file) | ⬜ Not started |
+| 5.2+ — Remaining parity | ⬜ Not started |
+
+Test count: 180 → **205**, all green.
+
+**Bugs found and fixed along the way that were not in the original plan:**
+
+1. Viewing CODE **ejected the project into hand-edited source** — populating the
+   editor wrote the generated C into `customMainC`, which feeds the build, so
+   opening a tab silently changed how the game compiled. `blockSignals()` does
+   not help: the syntax highlighter re-touches the document and `textChanged`
+   fires after the blocked window closes.
+2. **Every dialog rendered light-on-light** — the theme was on `MainWindow`, and a
+   `QDialog` is a top-level window that does not inherit a `QMainWindow`
+   stylesheet. Now applied to the application. Same class of bug as the white
+   PALS panel; fixing it at the application level closes the class.
+3. **No audio device meant no picture at all** — see §5.3a.
+
+
+
 It supersedes the ranking in
 [`2026-07-14-native-web-gap-audit.md`](2026-07-14-native-web-gap-audit.md): that
 audit is honest about *what* is missing, but understates the gap (§1.3) and misses
