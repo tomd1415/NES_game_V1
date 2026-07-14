@@ -9,6 +9,28 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v73 — 2026-07-14 — Invincibility-frames floor (#35): version the clamp change that shipped in fea021e
+
+### Changed / migration (goldens `1730448e` + `_rom-equiv` UNCHANGED)
+The Damage module's **Invincibility after hit** now clamps to a **floor of 10
+frames** in codegen (`A.clampInt(c.invincibilityFrames, 10, 120, 30)`), and the
+Builder field's `min` rises from 0 to 10.  With `iframes = 0` the player was
+re-hit on *every* overlapping frame, so a single touch drained all HP in a few
+frames ("enemy contact kills instantly"); the floor keeps damage responsive
+without that footgun.
+
+This alters ROM output **only** for a project that explicitly set
+`invincibilityFrames` in **[0, 9]** (now emitted as 10).  Every other project —
+including all goldens, whose Damage default is 30 — builds byte-identical, so the
+golden hashes are unchanged.
+
+**Bookkeeping note:** the code change itself landed in commit `fea021e`
+("fix(#35): floor Invincibility frames at 10") on top of the v72 snapshot but
+without a version bump, so HEAD's `builder-modules.js` had drifted from its v72
+snapshot (caught by `snapshot-engine.mjs --check`).  This entry + the v73 snapshot
+re-establish the snapshot-matches-HEAD invariant; **v72 is left untouched** so a
+game authored under it still rebuilds with its original iframes behaviour.
+
 ## v72 — 2026-07-13 — New enemy path: shooter/turret (fires projectiles), pupil request #13
 
 ### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; opt-in per enemy)
