@@ -115,12 +115,26 @@ was a massive improvement.
     **NB the live site runs on a separate host — it needs `main` deployed + the
     Python server restarted to pick this up.**
 11. Add the ability to make a 'Geometry Dash' style game. This has been requested by many of the younger pupils and making this as easy as possible would be very helpful.
-    *Largely covered:* the **runner** style is an auto-scroller with tap-to-jump
-    and an instant restart when the player touches a spike tile — the Geometry
-    Dash core loop. It has a starter + tutorial. A dedicated "Geometry Dash"
-    preset name / obstacle-pack could still make it more discoverable for the
-    younger pupils (nice-to-have, not a missing capability).
+    *Done — the discoverability follow-up shipped too (verified 2026-07-14).* Beyond
+    the **runner** engine (auto-scroll + tap-to-jump + instant restart on touching
+    a spike — the Geometry Dash core loop), there is now a **dedicated 🟦 "Geo Dash"
+    starter** in the New-project picker (`studio-starter.js` `createGeoDash`, listed
+    in `StudioStarter.list()`), described as a Geometry-Dash-style course, so the
+    younger pupils can pick it by name. It builds to a valid ROM in
+    `builder-tests/style-starters.mjs` (which asserts the picker offers `geodash`
+    and compiles it) and its tunable gravity is behaviourally covered by
+    `physics-globals.mjs`. Further obstacle-pack art is a nice-to-have, not a gap.
 12. Add an option for a top down racing game (like the classic Micro Machines game).
+    *Done (verified 2026-07-14).* A full **🏎️ Racer** game style ships: a top-down
+    car with steer / accelerate / **brake**, rotation, a scrolling track, lap
+    counting with checkpoints, collision, a lap/time HUD, and 2-player — selectable
+    as the "Top-down racer" starter (`studio-starter.js` `createRacer`) and as the
+    Builder game-type `racer` (`builder-modules.js`, `builder-validators.js` guards
+    that a racer has a >1-screen track and that lap racing has finish+checkpoint
+    markers). Comprehensively tested: `racer.mjs`, `racer-2p`, `racer-brake`,
+    `racer-checkpoints`, `racer-collision`, `racer-hud`, `racer-laps`,
+    `racer-rotation`, `racer-validators`, plus the build smoke in
+    `style-starters.mjs`.
 13. More options for enemy paths.
     *Extended 2026-07-06 (v10: flyer + patrol), 2026-07-11 (v11: goomba/koopa
     stomp), and 2026-07-13 (**v71: hopper** — walks + turns at walls AND bounces
@@ -230,7 +244,21 @@ was a massive improvement.
 23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
 24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
+    *Done (verified 2026-07-14).* The gallery thumbnail is no longer frame 0. The
+    publish flow runs the ROM headless for a **fixed 60-frame (~1 s) warm-up**
+    before grabbing the PNG (`studio.js` `captureRomPreview(rom, 60)` →
+    `NesEmulator.capturePreview`, `emulator.js:372` "runs headless for a fixed
+    warm-up and grabs the frame as a PNG"), so the scene, HUD and sprites have
+    rendered by the time the snapshot is taken.
 26. The top down code has not been tested as much as the platform based code so that will need updating with everything that was discovered in the platform builder code writing and then testing. All should be documented. Again the NES is a very old system so there are probably many solutions to these problems already you should carry out a detailed search for sources of information to aid in writing this application and a suitable way of recording the information needed.
+    *Largely addressed (2026-07-14 audit).* Top-down now has behavioural + build
+    coverage: `builder-tests/topdown.mjs`, `topdown-movement.mjs`,
+    `topdown-enemies.mjs` (chaser + v10 patrol), `topdown-new-project.mjs`, plus
+    the top-down `racer` suite (see item 12) and the `style-starters.mjs` build
+    smoke. The "detailed search for NES sources" half is covered by item 4
+    (`docs/reference/nes-resources.md`). Remaining open: parity sweeps for newer
+    platformer features that don't yet have a top-down equivalent are tracked
+    per-feature (e.g. per-background scene instances, item 14).
 27. It is not clear where the sound effects are linked to events or how to do that currently.
     *Root cause found 2026-07-14 — SFX are loaded but never fired.* The engine
     initialises the FamiStudio SFX engine (`famistudio_sfx_init(audio_sfx_data)`,
