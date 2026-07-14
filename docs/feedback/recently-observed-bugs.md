@@ -49,7 +49,25 @@ was a massive improvement.
    codegen + clamp + byte-identical-when-off. (Broader per-sprite/area fine-tuning
    remains open.)
 7. Include default sound fx in the audio section.
+   *Diagnosed 2026-07-14 — root cause found, implementation designed (needs an
+   engine bump + attended audio playtest; see item 27 for the shared analysis).*
+   A **starter SFX pack** already ships (`/starter/audio` → `sfx` with named
+   slots; the SOUND dock's "♪ Add starter pack" loads it) and it **links and
+   builds** into the ROM (guarded by `builder-tests/audio.mjs`). The gap is that
+   the loaded SFX are **never triggered** — see item 27. So "default sound fx"
+   exists as *content* but is inaudible until the event-wiring in item 27 lands.
+   The two should ship together (v74): wire the named starter slots (jump / coin
+   / hurt / win …) to the matching events.
 8. Allow the user to set the default tempo for the audio and the ability to trigger tempo changes.
+   *Assessed 2026-07-14.* Tempo is baked into each **FamiStudio** export (the
+   `.s` song data carries its own tempo envelope — see the `@tempo_env_*` bytes
+   in `audio.mjs`'s song stub), so a per-song "default tempo" slider in the
+   editor can't change it without re-encoding the FamiStudio data (out of scope —
+   pupils set tempo in FamiStudio when composing). *In-game tempo changes* (speed
+   the music up/down on an event, e.g. a "hurry!" near the time limit) are
+   feasible: the FamiStudio engine exposes a tempo/`SetTempo`-style hook we could
+   drive from the same C-main-loop edge-detector described in item 27. Lower
+   priority than item 7/27; parked as a follow-up once event-SFX ships.
 9. Fix scrolling errors in vertical and 2 by 2 backgrounds.
    *Confirmed fixed 2026-07-10 (engine v62).* A 2×2 world now scrolls seamlessly
    across all four nametables in both axes — FCEUX + jsnes verified: the two
@@ -214,6 +232,37 @@ was a massive improvement.
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
 26. The top down code has not been tested as much as the platform based code so that will need updating with everything that was discovered in the platform builder code writing and then testing. All should be documented. Again the NES is a very old system so there are probably many solutions to these problems already you should carry out a detailed search for sources of information to aid in writing this application and a suitable way of recording the information needed.
 27. It is not clear where the sound effects are linked to events or how to do that currently.
+    *Root cause found 2026-07-14 — SFX are loaded but never fired.* The engine
+    initialises the FamiStudio SFX engine (`famistudio_sfx_init(audio_sfx_data)`,
+    `platformer.c:1127`) and declares `famistudio_sfx_play(index, channel)`, but
+    **there is not a single call to `famistudio_sfx_play(...)` anywhere** in the
+    engine or the server-generated code. So an uploaded/starter SFX pack links,
+    builds, and occupies ROM, yet no game event ever plays a sound — which is
+    exactly why "where SFX link to events" is unclear: they don't, yet.
+    **Design for the fix (a gated engine feature → v74, keep goldens
+    byte-identical when off):**
+    - Trigger all SFX from **edge-detectors in the C main loop**, not from the
+      per-system update code. The main loop runs every frame in *both* the C and
+      the shipped **ASM** build, so watching shared game state avoids the
+      item 22 / v67 trap where a C hook silently doesn't run because the ASM
+      player replaced that path. Concretely: `bw_coins` increased → coin SFX;
+      `player_hp` decreased → hurt SFX; `jumping` went 0→1 → jump SFX (the ASM
+      player sets `jumping`, the C loop just observes the edge); win flag set →
+      win SFX; enemy parked at `y=0xFF` this frame → defeat SFX.
+    - Map the **named starter-pack slots** (item 7) to those events by name, with
+      a sensible default order, and gate the whole block behind a
+      `#ifdef BW_SFX_EVENTS` that the server only defines when an SFX pack is
+      present *and* the feature is on — so every existing project (and all
+      goldens) stays byte-identical.
+    - Surface an **"event sounds" toggle** (and, later, a per-event slot picker)
+      in the SOUND dock so it's visibly clear which sound plays on which event —
+      directly answering this item.
+    - Testing: `audio.mjs`-style codegen/build asserts (emitted C contains the
+      `famistudio_sfx_play(...)` edge-detectors when on; byte-identical when off;
+      ROM builds + differs). **The actual audio must be signed off in an attended
+      FCEUX playtest** (jsnes APU inspection alone is too fragile to claim it),
+      per the engine-change "validate in jsnes AND FCEUX" rule — so this wants a
+      human in the loop before it's marked done.
 28. NPC dialogue is misbehaving in pupil projects.  Re-reported
     2026-04-27 — symptoms not yet captured in detail; please add to
     the diagnosis-notes section below when next observed (does the
