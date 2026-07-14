@@ -153,6 +153,28 @@ function makeState({ withEnemy = true, withHud = false, maxHp = 0, damage = fals
   console.log('✓ A2 damage state emits HP + collision + freeze');
 }
 
+// A3 (#35 — "enemy contact can kill the player instantly"): the Invincibility-
+// frames value is floored at 10.  At 0 every overlapping frame re-hit the player,
+// so one touch drained all HP in a few frames; the floor keeps damage responsive
+// without that footgun.  A normal value still passes through unchanged.
+{
+  const s = makeState({ damage: true, maxHp: 3 });
+  s.builder.modules.damage.config.invincibilityFrames = 0;
+  const out = window.BuilderAssembler.assemble(s, tpl);
+  if (!/#define INVINCIBILITY_FRAMES 10\b/.test(out)) {
+    console.error('FAIL A3: invincibilityFrames=0 must clamp to 10, got: ' +
+      (out.match(/#define INVINCIBILITY_FRAMES \d+/) || ['(none)'])[0]);
+    process.exit(1);
+  }
+  s.builder.modules.damage.config.invincibilityFrames = 45;
+  const out2 = window.BuilderAssembler.assemble(s, tpl);
+  if (!/#define INVINCIBILITY_FRAMES 45\b/.test(out2)) {
+    console.error('FAIL A3: invincibilityFrames=45 must pass through unchanged');
+    process.exit(1);
+  }
+  console.log('✓ A3 invincibility-frames floored at 10 (0→10, 45→45) — #35');
+}
+
 // --- /play end-to-end --------------------------------------------
 const srv = spawn('python3',
   [path.join(ROOT, 'tools', 'playground_server.py')],

@@ -1260,9 +1260,11 @@
         key: 'invincibilityFrames',
         label: 'Invincibility after hit (frames — 60 = 1 sec)',
         type: 'int',
-        min: 0, max: 120,
+        min: 10, max: 120,
         help: 'Player can\'t be hit again for this many frames after ' +
-          'each hit.  0 = instant repeat hits.',
+          'each hit.  Lower = the player takes damage faster while touching an ' +
+          'enemy; the floor of 10 stops a single touch from draining all HP in ' +
+          'a few frames (the old "instant kill").',
       },
       {
         key: 'checkpoints',
@@ -1321,7 +1323,10 @@
     applyToTemplate(template, node, state) {
       const c = (node && node.config) || {};
       const amount = A.clampInt(c.amount, 1, 9, 1);
-      const iframes = A.clampInt(c.invincibilityFrames, 0, 120, 30);
+      // #35 — floor at 10: iframes = 0 re-hit the player every overlapping frame
+      // ("enemy contact kills instantly"), so one touch drained all HP in a few
+      // frames. 10 keeps damage responsive without the multi-hit-per-touch footgun.
+      const iframes = A.clampInt(c.invincibilityFrames, 10, 120, 30);
       const checkpoints = !!c.checkpoints;
       const respawnHp = A.clampInt(c.respawnHp, 1, 9, 1);
       const spawnOnHit = !!c.spawnOnHit;

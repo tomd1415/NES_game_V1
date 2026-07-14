@@ -657,6 +657,13 @@ Root causes below were verified against the current code on 2026-06-17.
     Plan §B-2; codegen plan `2026-06-18-codegen-rework-implementation.md`.
 
 32. **Deleting the 2nd sprite animation appears to delete the 1st.**
+    *Verified correct 2026-07-13 — not reproducible in the Studio.* The CHARS
+    animation list deletes the clicked animation by its own object (`indexOf(an)`
+    in `studio-chars.js`), and each animation owns its `frames` array (frame
+    add/remove is `push`/`pop` on that array only), so removing the 2nd cannot
+    touch the 1st. Guarded by `studio-tests/animation-delete.spec.js`. The report
+    predates the Studio (legacy Sprites page). If a pupil still sees it, capture
+    the exact control used (per-frame vs whole-animation) in the notes below.
     (Feedback F1c, reporter K.)  The delete handlers in `sprites.html`
     (`removeAnimFrame`, line ~4039; `btn-anim-del`, line ~4145) splice
     the *selected* item and read index-correct.  The suspicious line is
@@ -704,8 +711,12 @@ Root causes below were verified against the current code on 2026-06-17.
     blocks repeat hits — so one touch = one hit.  The report predates
     this i-frame handling.  Only still reproduces if a pupil sets
     *Invincibility frames* to **0** (schema `min: 0`), where every
-    overlapping frame re-hits.  Status: **VERIFY**, then optionally
-    raise the schema minimum to ~10.  Plan §B-6.
+    overlapping frame re-hits.
+    *Resolved 2026-07-13:* the *Invincibility frames* value is now **floored at
+    10** (schema `min` + the `builder-modules.js` clamp), so a pupil can no longer
+    set it to 0 and have every overlapping frame re-hit — one touch can't drain all
+    HP in a few frames. A high per-hit damage still allows a deliberate near-instant
+    kill. Guarded by `builder-tests/chunk-a-hp-hud.mjs` A3 (0→10, 45→45).  Plan §B-6.
 
 36. **Arrow keys drive both the page and the emulator (focus theft).**
     (Feedback F12 + F25, reporters D and M.)  Both page-level keydown
@@ -758,7 +769,7 @@ Root causes below were verified against the current code on 2026-06-17.
     in-engine stays a deferred enhancement.  Guarded in `run-all.mjs`.
     Plan §B-8.
 
-### Item 32 — animation delete: reproduction questions
+### Item 32 — animation delete (status: VERIFIED CORRECT in the Studio, 2026-07-13 — see item 32 + animation-delete.spec.js)
 
 - [ ] **Which control?** the per-frame ✕ in the animation's frame strip,
       or the 🗑 *Delete* button on the whole animation?: _____
