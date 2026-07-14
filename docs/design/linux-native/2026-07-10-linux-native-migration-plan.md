@@ -27,10 +27,25 @@ The recommended target is:
   does not render HTML and does not require Qt WebEngine, Chromium, Node or a
   WebView.
 - SQLite plus atomic JSON import/export in XDG-standard user directories.
-- Optional, user-installed FCEUX as the first supported native Play path.
+- ~~Optional, user-installed FCEUX as the first supported native Play path.
   Build and ROM export must still work when no emulator is installed. A later
   out-of-process emulator can provide in-window Play and headless preview
-  capture.
+  capture.~~
+
+  > **SUPERSEDED 2026-07-14 — Play is now in-window and in-process.** The app
+  > embeds a NES core (`native/nes_core/`, a PyO3 binding around `tetanes-core`)
+  > and plays the game inside the CRT stage with audio and two-player input.
+  > FCEUX is demoted to an optional "Open in FCEUX".
+  >
+  > Two things changed the decision. First, capability-gating Play on a
+  > user-installed emulator means that on a locked-down school image the core
+  > loop simply **does not work** — and the CRT stage the design guide is built
+  > around never shows a game. Second, an *out-of-process* helper is unnecessary:
+  > the core is a self-contained `manylinux` wheel with no GPL in its dependency
+  > tree, so it can be linked in-process without relicensing the product.
+  > Build and ROM export still work with no core installed (Play warns).
+  >
+  > See [`2026-07-14-native-build-plan.md`](../../plans/current/2026-07-14-native-build-plan.md) §5.
 - The current browser application retained as a supported product with its own
   release, test and deployment path. It is also the initial behavioral oracle
   for native parity work.

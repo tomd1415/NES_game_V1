@@ -31,6 +31,23 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
 > by the server — they show as `M` in `git status` after any `/play`. Don't
 > commit those build-mutations; the snapshot reads from HEAD to stay stable.
 
+## The native Linux app (`native/`)
+
+A **third front-end**: a PySide6/Qt desktop sibling of the web Studio, sharing the
+project/engine/ROM contracts (`native/tests/contract/` proves both targets emit
+byte-identical ROMs). It plays games in-app via an **embedded NES core**
+(`native/nes_core/`, a PyO3 binding around tetanes-core).
+
+Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/current/2026-07-14-native-build-plan.md)
+— current state, root causes, and what to do next. Setup and traps:
+[`native/README.md`](native/README.md).
+
+> **⚠ Licensing.** The repo is **MIT**, and so is every dependency. The NES core is
+> `MIT OR Apache-2.0` *deliberately* — every mature libretro core (fceumm,
+> nestopia, quicknes = GPLv2; Mesen = GPLv3) would relicense the product. jsnes is
+> Apache-2.0, so the web is clean too. Do not swap the core without reading
+> [`native/nes_core/README.md`](native/nes_core/README.md).
+
 ## Tests (keep green)
 
 - **Node build/regression:** `node tools/builder-tests/run-all.mjs` — includes
@@ -39,10 +56,22 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
   byte-identical (gate new engine behaviour behind an off-by-default flag).
 - **Studio E2E:** `npx playwright test` from repo root (config auto-boots the
   server). Specs in `tools/studio-tests/`.
+- **Native:** `cd native && QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest`
+  (214 tests, ~2 min).
+
+  Two hard-won rules for native tests. The suite was once **fully green while the
+  app rendered a transparent emulator frame, a white-on-white panel, and crashed on
+  every background switch** — because the tests asserted `document.field == X` and
+  never asserted that anything *rendered*. So: **assert pixels, not document
+  fields**, for anything visual. And **close your windows**
+  (`self.addCleanup(window.close)`) — a live `MainWindow` keeps a 30 s snapshot
+  timer and an open session, and leaking them makes two sessions race on one
+  project and raise `StaleRevisionError` inside a *later* test.
 
 ## Where to start
 
 - Docs index: [`docs/README.md`](docs/README.md).
 - Studio redesign status: `docs/plans/current/2026-07-05-studio-redesign.md`.
+- Native Linux app: `docs/plans/current/2026-07-14-native-build-plan.md`.
 - Engine work sequencing/risk:
   `docs/design/decisions/2026-07-05-engine-items-feasibility.md`.

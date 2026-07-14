@@ -12,6 +12,10 @@ license = { text = "MIT" }
 dependencies = [
   "PySide6>=6.8,<7",
   "nes-studio-build-core>=0.1.0.dev0",
+  # The embedded NES core. Not on PyPI — a vendored wheel lives in
+  # nes_core/dist/, so install with `--find-links nes_core/dist`.
+  # See native/nes_core/README.md.
+  "nes-core>=0.1.0",
 ]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",

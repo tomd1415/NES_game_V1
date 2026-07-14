@@ -1,106 +1,148 @@
-# NES Studio native Linux application
+# NES Studio — native Linux application
 
-This directory contains the genuine native Linux sibling of the supported web
-application. It uses PySide6/Qt Widgets and shares project, engine and ROM
-contracts with the browser product.
+The genuine native Linux sibling of the web Studio. PySide6/Qt Widgets, sharing
+the project, engine and ROM contracts with the browser product — `tests/contract/`
+proves the two targets emit **byte-identical ROMs**.
 
-The current contents are the Phase-1 development shell. They intentionally do
-not extract or change the production build pipeline yet.
+Build order, current state and what is next:
+[`docs/plans/current/2026-07-14-native-build-plan.md`](../docs/plans/current/2026-07-14-native-build-plan.md).
 
-## Runnable workspace preview
-
-The current preview is a genuine Qt workspace with the Studio mode rail,
-context dock, NES TV stage, quest log, menus and diagnostics. Editor tools and
-Play are visibly disabled until their native services land; launching the
-preview does not modify project files.
-
-From the repository root, run:
+## Running it
 
 ```bash
 native/.venv/bin/nes-studio
 ```
 
-Use the WORLD, CHARS, TILES, PALS, RULES, SOUND and CODE buttons to inspect the
-native workspace navigation. WORLD is the first interactive slice: choose
-**Paint** or **Erase**, then click or drag over the 32×30 NES tile grid.
-**File → Open Project…** loads the selected background from a
-shared project JSON; **File → Save Project As…** writes edits atomically while
-preserving fields the native preview does not yet understand. Open
-**View → Diagnostics** to inspect the active Qt, resource and XDG paths.
+## What works today
 
-WORLD edits are debounced into an atomic XDG recovery copy. Changed projects
-also receive deduplicated 30-second snapshots (eight retained), a snapshot is
-taken before replacing a dirty project through Open, and pending recovery data
-is flushed when the window closes. Undo/redo history remains separate.
-Use **File → Recover Autosave** to restore the latest recovery copy. The app
-snapshots a dirty current document first and marks the recovered copy unsaved,
-so recovery never silently replaces an original project file.
-**File → New Project** starts a fresh canonical WORLD and snapshots any dirty
-project first.
+- **The game runs in the Studio.** ▶ PLAY builds the ROM if needed and plays it
+  in the CRT stage, with audio and two-player input, via an embedded NES core
+  (`nes_core/`). FCEUX is now only an optional "Open in FCEUX".
+- **WORLD shows the real game** — actual tile art and palettes, entities drawn as
+  their real sprites, and 2×2 attribute conflicts flagged on-canvas before the
+  build.
+- **Undo/redo works in every mode** (40 deep), grouping a paint drag into one
+  step. It survives switching screen or background.
+- **Project catalog** (`File → My Games`, `Ctrl+M`): switch, rename, duplicate,
+  delete, and start from any of the seven starters.
+- Editing: WORLD (paint/fill/palette/behaviour, metatiles, entity placement),
+  TILES (256-tile library, pixel editor, transforms, reference-safe swaps),
+  CHARS (sprites, roles, cells, animations), PALS (true 64-colour NES master
+  palette), RULES, SOUND (import), CODE (editable C/ASM).
+- Persistence: SQLite store, 500 ms debounced saves, 30 s deduplicated snapshots,
+  atomic import/export, XDG recovery.
 
-## Requirements
+## What is not there yet
 
-- Python 3.11 or newer;
-- the matching Python `venv` package (`python3-venv` or, on this server,
-  `python3.13-venv`);
-- a supported Linux desktop session or Qt's offscreen test platform;
-- PySide6 for the application;
-- pytest and pytest-qt for the complete future test suite.
+Honest list — see the build plan for the ordered work:
+
+- No dock outside WORLD; the other modes are a single editor panel.
+- No validators, no guided tutorial, no Time Machine UI, no budget meters.
+- No CHARS painting canvas (you jump to TILES to draw), no STYLE mode.
+- No asset `.chr`/`.pal`/`.nam` import/export, no SOUND preview.
+- No gallery/accounts (a deliberate deferral — server-coupled).
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `1`–`7` | Switch mode (disabled while a game is running) |
+| `Ctrl+S` | Save (flushes to the local store) |
+| `F5` | Build ROM |
+| `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
+| `Ctrl+M` | My Games |
+| `Escape` | Stop the running game |
+
+While playing, controls match the web exactly so pupils do not relearn them:
+P1 = arrows, `F`=A, `D`=B, `Enter`=Start; P2 = `I/J/K/L`, `O`=A, `U`=B, `1`=Start.
 
 ## Development setup
 
-From this directory:
+Requires Python 3.11+ and the matching `venv` package.
 
 ```bash
+cd native
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
+python -m pip install -e '.[dev]' --find-links nes_core/dist
 nes-studio
 ```
 
-The first installation needs access to the configured Python package index.
+`--find-links nes_core/dist` is required: the embedded NES core is a **vendored
+wheel**, not a PyPI package. It is self-contained (`manylinux`, abi3), so the
+target machine needs **no Rust, no compiler and no apt packages** — which is the
+point for locked-down school images.
+
 Do not commit `.venv` or downloaded wheels.
 
-On the current Debian/Ubuntu-style server, `python3 -m venv .venv` reports that
-`ensurepip` is unavailable. A server administrator must install the matching
-`python3.13-venv` package before the isolated PySide6 environment can be
-created. Do not install PySide6 into the system Python as a workaround.
+### Rebuilding the NES core
 
-## Tests that work before Qt is installed
-
-The metadata and resource-location tests use only the standard library:
+Only needed if you change `nes_core/src/lib.rs`. Needs Rust ≥ 1.85 on the *build*
+machine.
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+cd native/nes_core
+../.venv/bin/maturin build --release --out dist
+../.venv/bin/pip install --force-reinstall dist/*.whl
 ```
 
-The UI smoke test skips itself when PySide6 is unavailable. After installing
-the development dependencies, also run:
+See [`nes_core/README.md`](nes_core/README.md) — it documents two traps that will
+bite you (a panicking audio API, and an alpha byte that renders every frame
+transparent).
+
+## Tests
 
 ```bash
-pytest
+cd native
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
+
+214 tests. The suite takes ~2 minutes, mostly constructing `MainWindow`.
+
+| Directory | Holds |
+| --- | --- |
+| `tests/contract/` | Cross-target invariants: ROM/codegen parity with the web, and the NES palette table. **The most valuable tests here.** |
+| `tests/unit/` | Document, persistence, renderer (pixel assertions), emulator. |
+| `tests/ui/` | Shell, triage regressions, undo-everywhere. |
+
+**Testing rule learned the hard way:** the suite was fully green while the app
+rendered a transparent emulator frame, a white-on-white PALS panel, and crashed on
+background switch — because the tests asserted `document.field == X` and never
+asserted that anything *rendered*. New visual work needs a pixel assertion, not a
+document assertion.
+
+Two more traps, both of which have bitten:
+
+- **Close your windows in tests** (`self.addCleanup(window.close)`). A live
+  `MainWindow` keeps a 30 s snapshot timer and an open session; leaking them makes
+  two sessions race on one project and raise `StaleRevisionError` inside a *later*
+  test.
+- **Never put expensive work in a refresh that runs for modes nobody is looking
+  at.** `_refresh_code_preview()` invokes the cc65 codegen; refreshing every mode
+  on every undo made one test file take 178 seconds.
 
 ## Run from a source checkout
 
-The application discovers the repository root by locating `tools/engines/` and
-`steps/Step_Playground/`. Override discovery for diagnostics or packaging work:
+The app finds the repository root by locating `tools/engines/` and
+`steps/Step_Playground/`. Override it for diagnostics or packaging:
 
 ```bash
 NES_STUDIO_RESOURCE_ROOT=/path/to/NES_game_V1 nes-studio
 ```
 
-The development application ID is
-`io.github.tomd1415.NESStudio.Devel`. It is intentionally distinct from the
-eventual production ID so the product owner can approve the permanent identity
-before user settings and packaging depend on it.
+The development application ID is `io.github.tomd1415.NESStudio.Devel`,
+intentionally distinct from the eventual production ID.
 
 ## Boundaries
 
 - Do not import `tools/playground_server.py` from the UI.
 - Do not add QtWebEngine, a WebView, or a required HTTP listener.
-- Do not change project JSON or ROM behavior without cross-target contracts and
-  the review described in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
-- Keep source resources read-only; mutable state belongs in XDG paths exposed
-  by Qt's `QStandardPaths`.
+- Do not change project JSON or ROM behaviour without cross-target contracts and
+  the review in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+- Keep source resources read-only; mutable state belongs in the XDG paths exposed
+  by `QStandardPaths`.
+- The app is **MIT**, and so is every dependency. The embedded core is
+  `MIT OR Apache-2.0` deliberately: every mature libretro NES core is GPL and
+  would relicense the product. Do not swap it without reading
+  [`nes_core/README.md`](nes_core/README.md).

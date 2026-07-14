@@ -9,12 +9,12 @@
 | 0 — Triage | ✅ **Done** (`98f747f`) |
 | 1 — Renderer | ✅ **Done** (`829eb9c`) |
 | 2 — Play in the stage | ✅ **Done** (`08da14b`, `b37ff38`) |
-| 5.1 — Project catalog | ✅ **Done** (`eb396ff`) — taken early; the 7 starters were unreachable |
 | 3a — `DocumentStore` + undo everywhere | ✅ **Done** (`6e91e5c`) |
-| 3b — Extract modes into `ui/modes/` | ⬜ **Next.** `MainWindow` is still ~2,900 lines. The mode dispatch is now a registry, so the seams are visible; the widgets have not moved yet. |
-| 4a — Editors out of the CRT bezel | ✅ **Done** (`ad8aa12`) |
-| 4b — A dock per mode, app bar, `.qss` theme file | ⬜ Not started |
-| 5.2+ — Remaining parity | ⬜ Not started |
+| 4a — Editors out of the CRT bezel; mode registry | ✅ **Done** (`ad8aa12`) |
+| 5.1 — Project catalog + the 7 starters | ✅ **Done** (`eb396ff`) — taken early; six starters shipped unreachable |
+| **3b — Extract modes into `ui/modes/`** | ⬜ **NEXT.** `MainWindow` is **3,008 lines / 176 methods** — it has *grown*. `ui/modes/` is still empty. The dispatch is now a registry, so the seams are visible; the widgets have not moved. |
+| 4b — A dock per mode, app bar, `.qss` file, budget meters | ⬜ Not started |
+| 5.2+ — Remaining parity (validators → tutorial) | ⬜ Not started |
 
 Test count: 180 → **214**, all green.
 
@@ -37,7 +37,7 @@ Test count: 180 → **214**, all green.
    brought it to 38 s. Worth remembering when adding a mode: **never put
    expensive work in a refresh that runs for modes nobody is looking at.**
 
-
+## About this document
 
 It supersedes the ranking in
 [`2026-07-14-native-web-gap-audit.md`](2026-07-14-native-web-gap-audit.md): that
@@ -70,7 +70,7 @@ actually follow, and (c) reaches feature parity with the web Studio.
 | Threaded build | `ui/main_window.py:82` (`_BuildWorker`), `integrations/direct_build.py` (`DirectBuildController`) | Correct: builds against a detached document copy on a `QThread`. |
 | **Embedded NES core** | `native/nes_core/` | **New, done, proven.** See §5. |
 
-### 1.2 The two root causes of everything else
+### 1.2 The two root causes of everything else *(as audited; see the status notes)*
 
 **Root cause A — there is no NES renderer.** The web's centrepiece is a live
 256x240 framebuffer (`studio.js:183 renderLive`) painting real tiles through the
@@ -87,26 +87,37 @@ take over via `renderTV` / `onRenderOverlay`. Native has nothing equivalent:
   `QColor.fromHsv((tone * 23) % 360, ...)`. PALS shows 64 colours the NES cannot
   produce.
 
-Consequence: the CRT bezel at `main_window.py:2579` frames a screen that never
-shows the game. Every visual feature is blocked behind this one missing module.
+Consequence: the CRT bezel framed a screen that never showed the game. Every
+visual feature was blocked behind this one missing module.
 
-**Root cause B — `MainWindow` is a god object with no store.** 2,665 lines, 157
-methods, 129 widget attributes. All 7 modes are built inline in a single 597-line
-`_create_stage()` and dispatched by a nested ternary at `main_window.py:1224`.
-`ui/modes/` was scaffolded for per-mode widgets and left **empty**.
+> **Status: fixed** (§4, `829eb9c`). `render/` now holds the real 64-entry NES
+> palette (pinned to the web's by a contract test), a framebuffer that honours the
+> hardware rules, and `NesScreen`. All five placeholder ramps and
+> `_nes_colour_swatch()` are deleted.
 
-There is no store and no change signal, so the UI mutates the document directly
-(154 call sites) and must *manually remember* to call `schedule_save()` (66 sites)
-and `_update_document_title()` (55 sites) after each edit; 77 `blockSignals()`
-pairs paper over the missing data flow.
+**Root cause B — `MainWindow` is a god object with no store.** At audit: 2,665
+lines, 157 methods, 129 widget attributes, all 7 modes built inline in a single
+597-line `_create_stage()` and dispatched by a nested ternary. `ui/modes/` was
+scaffolded for per-mode widgets and left **empty**.
 
-What the user feels:
-- **Editing a tile in TILES does not repaint WORLD.**
-- **Undo/redo works only in WORLD** (`main_window.py:2356-2362` wires the actions
-  straight to `WorldCanvas.undo/redo`). Tile pixels, sprites, animations, all ~40
-  RULES fields, palettes and sound are **not undoable at all**.
-- `WorldCanvas.load_tiles()` (`world_canvas.py:136`) clears history
-  unconditionally, so switching screen or background **wipes WORLD undo too**.
+No store and no change signal, so the UI mutated the document directly (154 call
+sites) and had to *manually remember* `schedule_save()` (66 sites) and
+`_update_document_title()` (55 sites) after each edit; 77 `blockSignals()` pairs
+papered over the missing data flow.
+
+What the user felt:
+- **Editing a tile in TILES did not repaint WORLD.**
+- **Undo/redo worked only in WORLD.** Tile pixels, sprites, animations, all ~40
+  RULES fields, palettes and sound were **not undoable at all**.
+- `WorldCanvas.load_tiles()` cleared history unconditionally, so switching screen
+  or background **wiped WORLD undo too**.
+
+> **Status.** The *store* half is fixed (§6.1): undo now covers every mode, groups
+> a drag into one step, and survives a background switch. The *god object* half is
+> **not**: `MainWindow` is **3,008 lines / 176 methods** today — it has grown, and
+> the 159 direct mutations, 67 `schedule_save()` calls and 78 `blockSignals()`
+> pairs are all still there. Live cross-mode repaint (a tile edit repainting WORLD)
+> is still missing. **Extracting the modes (§6.2) is the next task.**
 
 ### 1.3 Scale of the parity gap
 
@@ -120,10 +131,10 @@ The existing audit lists 11 gaps. These whole systems are missing outright:
 | **Guided tutorial** | 6 tutorials, lenient re-baselined checks, "Show me" flashes the real control, teacher settings | Absent |
 | **Time Machine** | Browse/restore snapshots; restoring is itself undoable | Snapshots exist, **no UI** |
 | **Budget meters** | CHR bg/sprite N/256, OAM N/64 | Absent |
-| **Attribute-conflict display** | Red cross on 2x2 quadrants whose palettes disagree | Absent |
+| **Attribute-conflict display** | Red cross on 2x2 quadrants whose palettes disagree | ✅ Now present (`829eb9c`) |
 | **Shared-tile guard** | "Used by Villager… Duplicate first / Change everywhere / Cancel" | Absent |
 | **Asset import/export** | `.chr` / `.pal` / `.nam` both ways | Absent |
-| **Emulator** | In-page jsnes, audio, 2P | **Solved — see §5** |
+| **Emulator** | In-page jsnes, audio, 2P | ✅ Embedded core, audio, 2P (§5) |
 | **Gallery / accounts** | Full | Absent (out of scope, §9) |
 
 Native's CHARS has **no drawing canvas at all** — you edit one cell through four
@@ -134,24 +145,27 @@ spin boxes. SOUND is import-only. CODE discards the build log
 
 ## 2. Target architecture
 
+Legend: ✅ exists · ⬜ still to build.
+
 ```
 nes_studio/
-  render/                 ← NEW. The single source of visual truth.
+  render/                 ← ✅ The single source of visual truth.
     palette.py            NES_PALETTE_RGB (64 entries, verbatim from the web)
     framebuffer.py        nametable+tiles+palettes -> QImage; tile/sprite thumbs
     screen.py             NesScreen widget: QImage at integer scale + overlay hook
-  emulator/               ← NEW. Wraps native/nes_core.
+  emulator/               ← ✅ Wraps native/nes_core.
     session.py            EmulatorSession: frame loop, QAudioSink, input mapping
-  state/                  ← NEW. The missing store.
-    store.py              DocumentStore: changed(path) signal + QUndoStack
-    commands.py           QUndoCommand per edit kind
+  state/                  ← ✅ The store.
+    store.py              DocumentStore: whole-document undo, hooked to saveScheduled
   ui/
-    main_window.py        SHRINKS to shell: app bar, rail, stage, dock host, quests
-    modes/                ← FILL THE EMPTY PACKAGE. One QWidget per mode.
+    main_window.py        ⬜ STILL 3,008 lines. Should shrink to: app bar, rail,
+                          stage, dock host, quests, build/play orchestration.
+    project_catalog.py    ✅ Switch/rename/duplicate/delete + starter picker
+    modes/                ⬜ STILL EMPTY. One QWidget per mode. THE NEXT TASK.
       base.py             Mode protocol
       world.py chars.py tiles.py pals.py rules.py style.py sound.py code.py
     widgets/
-      world_canvas.py     Loses its own paint logic; renders via render/
+      world_canvas.py     ✅ Renders via render/; owns interaction, not pixels
   core/ persistence/ codegen/ integrations/   ← largely unchanged
 ```
 
@@ -176,7 +190,7 @@ class Mode(Protocol):
 
 ---
 
-## 3. Phase 0 — triage (half a day, do first)
+## 3. Phase 0 — triage — ✅ DONE (`98f747f`)
 
 These are shipped defects. Do them before any refactor so the refactor starts from
 a working app.
@@ -229,7 +243,7 @@ copy while the real store is SQLite.
 
 ---
 
-## 4. Phase 1 — the renderer (2–3 days). Unblocks everything.
+## 4. Phase 1 — the renderer — ✅ DONE (`829eb9c`)
 
 ### 4.1 `render/palette.py`
 
@@ -279,9 +293,9 @@ The widget the whole app hangs off. Owns:
 
 ### 4.4 Tests — the current suite's blind spot
 
-180 tests pass today while the app renders a transparent screen and a white PALS
-panel, because the tests assert `document.field == X` and **never assert that
-anything renders**. Phase 1 must establish the missing habit:
+180 tests passed while the app rendered a transparent screen and a white PALS
+panel, because the tests asserted `document.field == X` and **never asserted that
+anything rendered**. Phase 1 established the missing habit:
 
 - pixel assertions: render a known nametable, assert specific `QImage.pixel()`
   values;
@@ -291,7 +305,7 @@ anything renders**. Phase 1 must establish the missing habit:
 
 ---
 
-## 5. Phase 2 — Play in the stage (1–2 days). **Core already built.**
+## 5. Phase 2 — Play in the stage — ✅ DONE (`08da14b`, `b37ff38`)
 
 ### 5.1 What exists
 
@@ -387,73 +401,97 @@ hatch if it is installed.
 
 ---
 
-## 6. Phase 3 — store + mode extraction (3–5 days). The unblocking refactor.
+## 6. Phase 3 — store ✅ / mode extraction ⬜ **(next)**
 
-### 6.1 `state/store.py`
+### 6.1 `state/store.py` — ✅ **DONE** (`6e91e5c`), but *not* as this plan first specified
 
-```python
-class DocumentStore(QObject):
-    changed = Signal(str)          # dotted path, e.g. "bg_tiles.9", "sprites.2.cells"
-    dirty_changed = Signal(bool)
+The original spec here proposed a per-edit `QUndoCommand` API (`store.do(command)`)
+and claimed it would "retire" the 66 `schedule_save()` calls, the 55
+`_update_document_title()` calls and most of the 78 `blockSignals()` pairs.
 
-    def do(self, command: QUndoCommand) -> None   # the only way to mutate
-    def undo(self) / redo(self)
-```
+**That is not what was built, and the claim was wrong.** Rewriting 159 direct
+mutation sites into commands is a large, risky change with no user-visible payoff
+on its own. What shipped instead:
 
-Wrap `ProjectDocument`. Every edit becomes a `QUndoCommand` (`state/commands.py`).
-The store owns the `QUndoStack` **and** calls `ProjectSession.schedule_save()` and
-the title update itself.
+`DocumentStore` hooks **`ProjectSession.saveScheduled`** — a signal every edit
+*already* emits. An edit anywhere therefore becomes undoable **without touching a
+single one of those call sites**. Snapshots are whole-document JSON, 40 deep,
+exactly as the web does it (`studio.js` `pushUndo`/`cloneState`). Measured on the
+largest starter: 180 KB per snapshot, ~5 ms to take, ~7 MB for a full stack.
 
-This single change retires:
-- 66 manual `schedule_save()` calls,
-- 55 manual `_update_document_title()` calls,
-- most of the 77 `blockSignals()` pairs,
+Consequences to be honest about:
 
-and delivers the two things the user actually notices: **cross-mode refresh** (a
-tile edit repaints WORLD) and **undo everywhere** — currently impossible to add.
+- The 159 direct-mutation sites, 67 `schedule_save()` calls and 78
+  `blockSignals()` pairs **are all still there.** They are no longer *dangerous*
+  (undo covers them), but they are still the tax on adding features, and cleaning
+  them up is a separate job that Phase 3b can chip at.
+- **Cross-mode refresh is only partial.** The store's `changed` signal fires on
+  undo/redo and project switch, not on every edit — so editing a tile in TILES
+  still does not live-repaint WORLD. WORLD re-renders when you next enter it
+  (modes are marked stale). Closing that properly needs the per-edit change signal
+  the original spec described.
 
-**Migration order:** introduce the store alongside the existing direct mutations,
-port one mode at a time, delete the old path last. `WorldCanvas`'s private history
-(`world_canvas.py:56-58`) is deleted, which also fixes the "switching background
-wipes undo" bug (`world_canvas.py:136`).
+`WorldCanvas`'s private history is gone; it now emits `stroke_began`/`stroke_ended`
+so the store groups a paint drag into one undo step. That also fixed the
+"switching background wipes undo" bug, because `load_tiles()` no longer clears a
+stack that no longer exists.
 
-### 6.2 Fill `ui/modes/`
+### 6.2 Fill `ui/modes/` — ⬜ **NOT DONE. This is the next task.**
 
 One `QWidget` per mode implementing the §2 protocol. Extraction order — easiest
 first, so the pattern is proven before the hard ones:
 
 `pals` → `tiles` → `sound` → `code` → `rules` → `style` (new) → `chars` → `world`.
 
-`MainWindow` keeps only: app bar, mode rail, `NesScreen` stage, dock host, quest
-panel, menus, build/play orchestration. Target **under 600 lines**.
+`MainWindow` keeps only: app bar, mode rail, stage, dock host, quest panel, menus,
+build/play orchestration. Target **under 600 lines** — it is **3,008 lines and 176
+methods today**, i.e. it has *grown* during phases 0–4a, because features landed
+in it. This is the single biggest remaining piece of work in the whole plan.
 
-### 6.3 Kill the nested-ternary dispatch
+The seams are now visible: `_mode_pages()` and `_mode_refreshers()` already name,
+per mode, which widget and which refresh functions belong to it. Extracting a mode
+means moving its `_create_*` block, its refresh methods and its handlers into
+`ui/modes/<mode>.py` behind the §2 protocol, then deleting the entry from those
+two registries.
 
-`main_window.py:1224-1243` — a nested ternary plus six sequential `if mode == …`
-refresh blocks. Adding a mode currently means editing four places. Replace with a
-mode registry keyed by id.
+### 6.3 Kill the nested-ternary dispatch — ✅ **DONE** (`ad8aa12`)
+
+The nested ternary plus six sequential `if mode == …` refresh blocks is replaced by
+the `_mode_pages()` / `_mode_refreshers()` registries.
 
 ---
 
-## 7. Phase 4 — make it look like the design guide (3–4 days)
+## 7. Phase 4 — make it look like the design guide — 🟡 partly done
 
-### 7.1 Give every mode a dock
+### 7.0 Take the editors out of the CRT bezel — ✅ **DONE** (`ad8aa12`)
 
-`main_window.py:1216` does `self.context_dock.setVisible(mode == "WORLD")` — the
-inspector **only exists in WORLD**. In the other six modes the entire left column
-vanishes and the editor form is stuffed inside the TV bezel, which is why RULES
-reads as ~40 full-width spin boxes in a picture frame.
+The television used to wrap the whole editor stack, so RULES rendered as forty spin
+boxes inside a TV frame. The bezel now frames an NES screen and only an NES screen:
+a screen stack (WORLD canvas / running game) sits inside the television, and the
+other modes get a plain bordered editor panel.
 
-Every mode gets a dock (§2 `build_dock`). The stage goes back to being the stage.
+### 7.1 Give every mode a dock — ⬜ **NOT DONE**
+
+`main_window.py:1307` still does `self.context_dock.setVisible(mode == "WORLD")` —
+the inspector **only exists in WORLD**. In the other six modes the entire left
+column vanishes and the mode is a single full-width editor panel.
+
+Every mode gets a dock (§2 `build_dock`). Best done *with* the mode extraction
+(§6.2), not before it — the dock content is exactly what each extracted mode owns.
 
 ### 7.2 Top app bar
 
 Mirror `studio.html:422-457`: project name (live rename), **save-status dot**,
 `▶ Play`, `Build`, `Tutorial`, `Help`, level select. Native currently has menus only.
 
-### 7.3 Theme
+### 7.3 Theme — ⬜ **NOT DONE** (one fix landed)
 
-Extract the 47-line inline QSS (`main_window.py:2539-2588`) into a real `.qss` with
+The theme is now applied to the **application**, not the window (`ad8aa12`/`eb396ff`)
+— a `QDialog` is a top-level window and does not inherit a `QMainWindow` stylesheet,
+so every dialog used to render as light-on-light default Qt chrome. That closes the
+class of bug that produced the white PALS panel.
+
+Still to do: extract the inline QSS string into a real `.qss` file with
 design tokens. Adopt the web's discipline of **sourcing chrome colours from the real
 NES system palette** (`studio.html:15-45`, each documented with its hex index).
 Ship an app icon and mode-rail icons — there are currently **no image assets at
@@ -462,35 +500,43 @@ all**; every icon is procedurally painted at runtime.
 Kill the label hacks: `Racer laps: 3` is a **spin-box prefix**, not a label. Group
 RULES into cards. Hide racer fields in a platformer.
 
-### 7.4 Real quest / attention panel
+### 7.4 Real quest / attention panel — 🟡 **PARTLY DONE**
 
-Replace the hardcoded checklist with: **CHR budget meters** (bg N/256, sprite N/256),
-**OAM** (N/64), live quests, and validator output (§8.2) with **"Fix in \<Mode\> →"**
-jump buttons.
+The hardcoded developer checklist ("Launch a real Qt application", all ticked) is
+gone; quests are now derived from the pupil's own document (`98f747f`).
+
+Still to do: **CHR budget meters** (bg N/256, sprite N/256), **OAM** (N/64), and
+validator output (§8.2) with **"Fix in \<Mode\> →"** jump buttons.
 
 ---
 
-## 8. Phase 5 — feature parity (ordered by value, cheap once 1–4 land)
+## 8. Phase 5 — feature parity (ordered by value)
 
-1. **Project catalog** — switch / rename / duplicate / delete. `ProjectSession.switch()`
-   already exists and is tested; **no UI reaches it**. Expose all **7 starters** —
-   `StorageManager.projects()` is called exactly once (`main_window.py:121`) and
-   `new_project()` (`:2528`) always hardcodes `"scratch"`, so `basics`, `geodash`,
-   `racer`, `runner`, `smb` and `topdown` **ship on disk and are unreachable**.
+1. ~~**Project catalog**~~ — ✅ **DONE** (`eb396ff`). `File → My Games` (`Ctrl+M`):
+   switch / rename / duplicate / delete, plus a starter picker offering all seven.
+   Taken out of order because six starters shipped on disk and were unreachable.
 2. **Validators** — port `builder-validators.js` to `core/validators.py`. Pure logic,
    no Qt, shareable, and **contract-testable against the web's output**. Highest
    value-per-risk item on this list.
-3. **PALS** — correct for free after Phase 1. Add used-by counts, locked slot 0.
+3. **PALS** — 🟡 the master grid and every swatch are correct after Phase 1
+   (`829eb9c`). Still to do: used-by counts, and locking slot 0 (BG = the shared
+   backdrop, sprite = transparent) so it cannot be edited as if it were free.
 4. **CHARS composition canvas** — real metasprite painting on the stage via
    `render_tv`; pencil/fill/line/rect/select. Include the **shared-tile duplicate
    guard** (`studio-chars.js:283-326`) — the best teaching moment in the web app.
-5. **WORLD viewport** — zoom, hover readout, **attribute-conflict overlay**,
-   right-click eyedropper, fullscreen preview, richer block picker.
+5. **WORLD viewport** — 🟡 the **attribute-conflict overlay** landed with Phase 1
+   (`829eb9c`); `render/framebuffer.attribute_conflicts()` is the data behind it.
+   Still to do: zoom, hover coordinate readout, right-click eyedropper, fullscreen
+   preview, richer block picker.
 6. **STYLE mode** — the missing 8th mode; splits game-type tuning out of RULES.
 7. **Time Machine UI** over the snapshots that already exist.
-8. **CODE** — surface the build log (`NativeBuildResult.log` is **discarded** at
-   `main_window.py:2434`), line numbers, snippets, restore-from-generated. Note CODE
-   currently saves on **every keystroke** (`main_window.py:633`).
+8. **CODE** — 🟡 a failed build now shows the compiler log in a dialog, and
+   `NativeBuildResult.log` is kept in `_last_build_log` rather than discarded
+   (`98f747f`). Still to do: a real build-log pane, line numbers, snippets, and
+   **restore-from-generated** — once `customMainC` is set there is still no way
+   back to the generated source from the UI. Note CODE still saves on **every
+   keystroke**; it no longer *ejects* the project just for being opened
+   (`eb396ff`), but the write-per-character remains.
 9. **Expertise levels** — gate modes/tools/dock sections. Keep the web's rule that
    locked modes stay **visible** with a nudge rather than disappearing.
 10. `.chr` / `.pal` / `.nam` import/export; SOUND preview; accessibility prefs
@@ -510,11 +556,17 @@ not native UI gaps. Recorded as a deliberate deferral rather than left implicitl
 
 ## 10. Packaging
 
-- Vendor the `nes_core` wheel (`native/nes_core/dist/`, 568 KB) so installation needs
-  **no Rust toolchain**. Rust >= 1.85 is required on the *build* machine only.
-- `native/nes_core/target/` (120 MB) is gitignored.
-- Vendor the upstream MIT + Apache-2.0 licence texts alongside the wheel —
-  attribution is the one obligation those licences impose.
+- ✅ The `nes_core` wheel is vendored (`native/nes_core/dist/`, 568 KB), so
+  installation needs **no Rust toolchain, no compiler and no apt packages** on the
+  target. Rust >= 1.85 is needed on the *build* machine only.
+- ✅ `native/pyproject.toml` declares `nes-core`. It is **not on PyPI**, so install
+  with `--find-links nes_core/dist` (documented in `native/README.md`). The app
+  degrades gracefully if the core is missing — Play warns instead of crashing — but
+  a machine without it cannot play.
+- ✅ `native/nes_core/target/` (120 MB) is gitignored.
+- ✅ Upstream attribution is vendored in `native/nes_core/THIRD-PARTY-LICENSES.md`
+  (tetanes-core MIT, PyO3 Apache-2.0). Attribution is the one obligation those
+  licences impose. Keep it accurate if the core is ever swapped.
 - Engine-source files under `steps/Step_Playground/src/` are regenerated per build
   and must not be committed (see `CLAUDE.md`).
 
@@ -522,44 +574,89 @@ not native UI gaps. Recorded as a deliberate deferral rather than left implicitl
 
 ## 11. Testing policy — the change that matters most
 
-**The current suite proves the ROM contract and nothing about the UI.** 180 tests
-pass against an app with a transparent emulator frame, a white-on-white PALS panel,
-and a `NameError` on background switch. Distribution today: `contract/` (strong),
-`unit/` (document-level), `ui/` (**two tests**, one of which is a single 240-line
-method that aborts everything after the first failure).
+**180 tests passed against an app with a transparent emulator frame, a
+white-on-white PALS panel, and a `NameError` on every background switch** — because
+they asserted `document.field == X` and never asserted that anything *rendered*.
+That is the single most important thing to know about this codebase's tests.
 
-Add, in priority order:
+**Now: 214 tests, all green.** Added during phases 0–4a:
 
-1. **Pixel assertions** in `render/` — including the palette-parity contract test.
-2. **Per-mode screenshot baselines** — would have caught both Phase 0 bugs.
-3. **Per-mode widget tests**, replacing the monolith in `tests/ui/test_shell.py`.
-4. **Emulator smoke test** — load the gallery ROM, clock 300 frames, assert a
-   non-blank frame and non-zero audio. (Already written as a scratch script during
-   Phase 2; promote it.)
-5. **Failure-path tests** — the `QMessageBox` branches at `main_window.py:1434,
-   1560, 2228, 2244, 2311, 2378, 2392, 2459, 2476` are **all untested**.
+| Added | Covers |
+| --- | --- |
+| `contract/test_palette_parity.py` | Re-parses `sprite-render.js` and pins the native NES palette to the web's, so they can never drift. |
+| `unit/test_framebuffer.py` | **Pixel assertions** — backdrop vs palette slots, sprite transparency, cell flips, attribute conflicts, opacity, render speed. |
+| `unit/test_emulator_session.py` | Real ROM → picture + audio + input; frames are opaque; stop is idempotent; P2 keys match the web. |
+| `ui/test_phase0_triage.py` | The shipped defects: background-switch crash, destructive Open, quest panel, themed dialogs, Save, and CODE-ejection. |
+| `ui/test_undo_everywhere.py` | Undo in palettes/tiles/sprites/rules/WORLD; drag = one step; survives background switch; bounded; does not leak across projects. |
 
-`pytest-qt` is a declared dev dependency but `qtbot` is never used; only the `qapp`
-fixture. There is no `QTest.mouseClick` anywhere, so drag-painting, entity drag and
-rubber-band selection are tested only through the direct `edit_cell()` API, never
-through the actual mouse handlers.
+Still to add, in priority order:
+
+1. **Per-mode screenshot baselines** — would have caught both Phase 0 bugs. Assert
+   on downscaled/quantised images or specific pixels, never on file hashes.
+2. **Per-mode widget tests**, replacing the 240-line monolith in
+   `tests/ui/test_shell.py`, which aborts everything after its first failure.
+3. **Failure-path tests** — most `QMessageBox` branches are still untested.
+4. **Real mouse tests.** There is still no `QTest.mouseClick` anywhere, so
+   drag-painting, entity drag and rubber-band selection are exercised only through
+   the direct `edit_cell()` API, never through the actual mouse handlers.
+   `pytest-qt` is a declared dev dependency but `qtbot` is never used.
+
+### Two traps that have already bitten
+
+- **Close windows in tests** (`self.addCleanup(window.close)`). A live `MainWindow`
+  keeps a 30 s snapshot timer and an open session; leaking them makes two sessions
+  race on one project and raise `StaleRevisionError` inside a *later* test.
+- **Never put expensive work in a refresh that runs for modes nobody is looking
+  at.** `_refresh_code_preview()` invokes the cc65 codegen; refreshing every mode on
+  every undo made one test file take **178 seconds**. Refresh is now lazy (visible
+  mode refreshes; the rest are marked stale) — 38 s.
+
+The full suite takes ~2 minutes, dominated by `MainWindow` construction.
 
 ---
 
-## 12. Sequencing and effort
+## 12. Where we are, and what to do next
 
-| Phase | Work | Effort | Blocks |
-| --- | --- | --- | --- |
-| 0 | Triage: 3 bugs, dev scaffolding, shortcuts | 0.5 d | — |
-| 1 | `render/` — palette, framebuffer, `NesScreen` | 2–3 d | everything visual |
-| 2 | Play in the stage (core **done**) | 1–2 d | needs `NesScreen` |
-| 3 | `DocumentStore` + fill `ui/modes/` | 3–5 d | undo, cross-mode refresh |
-| 4 | Docks, app bar, theme, quest panel | 3–4 d | needs modes |
-| 5 | Parity features (§8) | 3–4 w | needs 1–4 |
+| Phase | Work | State |
+| --- | --- | --- |
+| 0 | Triage: shipped bugs, dev scaffolding, shortcuts | ✅ `98f747f` |
+| 1 | `render/` — palette, framebuffer, `NesScreen` | ✅ `829eb9c` |
+| 2 | Play in the stage, embedded NES core | ✅ `08da14b`, `b37ff38` |
+| 3a | `DocumentStore` — undo everywhere | ✅ `6e91e5c` |
+| 4a | Editors out of the CRT bezel; mode registry | ✅ `ad8aa12` |
+| 5.1 | Project catalog + the 7 starters | ✅ `eb396ff` |
+| **3b** | **Extract the modes into `ui/modes/`** | ⬜ **← next** |
+| 4b | A dock per mode; app bar; `.qss` file; budget meters | ⬜ |
+| 5.2+ | Validators, CHARS canvas, STYLE mode, tutorial, … | ⬜ |
 
-Phases 0–4 are sequential; **Phase 5 parallelises freely** once they land. Phases 1
-and 2 are best done together — they share `NesScreen`, and Phase 2 is what finally
-makes the CRT bezel mean something.
+### The next task, concretely
+
+**Extract the seven modes out of `MainWindow` into `ui/modes/`** (§6.2). It is the
+biggest single piece of work left, and everything in Phase 4b wants it done first —
+"a dock per mode" *is* the extracted mode's `build_dock()`.
+
+Why now and not earlier: the store (3a) was the half of Phase 3 with user-visible
+payoff, so it went first. The extraction is mechanical, low-risk **per mode**, and
+high-risk if half-done — so do it one mode at a time, keeping the suite green at
+each step, and delete the old code path last.
+
+Start here:
+
+1. `_mode_pages()` and `_mode_refreshers()` in `main_window.py` already name, per
+   mode, the widget and the refresh functions that belong to it. That is the seam.
+2. Extract in this order (easiest first, so the pattern is proven before the hard
+   ones): `pals` → `tiles` → `sound` → `code` → `rules` → `chars` → `world`.
+3. `MainWindow` is **3,008 lines / 176 methods** today. Target: under 600.
+
+### Effort on what remains
+
+| Phase | Effort |
+| --- | --- |
+| 3b — mode extraction | 3–5 d |
+| 4b — docks, app bar, theme, budget meters | 3–4 d |
+| 5.2+ — remaining parity (validators → tutorial) | 3–4 w |
+
+Phase 5 parallelises freely once 3b and 4b land.
 
 ## 13. Risks
 

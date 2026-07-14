@@ -66,5 +66,9 @@ toolchain.
 ## Licences
 
 This crate is MIT. It links `tetanes-core` (MIT OR Apache-2.0); we take the MIT
-arm. Attribution is the one obligation MIT imposes — keep the upstream licence
-text vendored alongside the wheel.
+arm. There is no GPL or LGPL anywhere in the dependency tree — that is why this
+core was chosen over every libretro option.
+
+Attribution is the one obligation MIT and Apache-2.0 impose, and it is met in
+[`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md). Keep that file accurate if
+the core is ever swapped.

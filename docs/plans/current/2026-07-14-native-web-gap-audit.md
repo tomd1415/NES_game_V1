@@ -1,5 +1,28 @@
 # Native-to-web gap audit — 2026-07-14
 
+> **⚠ SUPERSEDED, same day.** Read
+> [`2026-07-14-native-build-plan.md`](2026-07-14-native-build-plan.md) instead —
+> it is the single source of truth for `native/` work.
+>
+> This audit is kept because its *ranking* is still a useful record of what a
+> reviewer saw. But it was wrong in two ways, and both mattered:
+>
+> 1. **It understated the gap.** It missed whole systems the web has and native
+>    does not: a **STYLE mode** (the web has 8 modes, not 7), Beginner/Maker/
+>    Advanced **expertise levels**, a 934-line **validator engine** with "Fix in
+>    \<Mode\> →" jumps, the **guided tutorial**, the **Time Machine UI**, **CHR/OAM
+>    budget meters**, the **shared-tile duplicate guard**, and `.chr`/`.pal`/`.nam`
+>    **import/export**.
+> 2. **It missed the root causes**, which is why its P0 list looked like a set of
+>    independent features rather than one blocked dependency. Native had **no NES
+>    renderer at all** — the WORLD canvas painted `NES_COLOURS[value % 4]`, keyed
+>    off the tile index, and the PALS grid *invented* its colours with
+>    `QColor.fromHsv()`. Nearly every item below was blocked behind that.
+>
+> **Status of this audit's P0 list:** items 1 (PALS picker), 3 (partly — attribute
+> conflicts, real rendering) and 4 (project catalog) are **done**; item 2 (CHARS
+> composition canvas) is not. See the build plan's progress table.
+
 This audit compares the current PySide6 application with the supported web
 Studio and legacy editor surfaces. A native feature is only complete when the
 workflow is usable from the Qt UI, persisted by `ProjectDocument`, covered by
