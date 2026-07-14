@@ -345,18 +345,18 @@ class MainWindow(QMainWindow):
         self._prepare_visual_selector(self.background_selector, "WORLD background")
         self.background_selector.currentIndexChanged.connect(self._select_background)
         layout.addWidget(self.background_selector)
-        background_actions = QHBoxLayout()
-        for label, callback in (
+        background_actions = QGridLayout()
+        for position, (label, callback) in enumerate((
             ("New", self._new_background),
             ("Duplicate", self._duplicate_background),
             ("Rename", self._rename_background),
             ("Delete", self._delete_background),
-        ):
+        )):
             button = QPushButton(label, dock)
             button.setObjectName(f"worldBackground{label}Button")
             button.setAccessibleName(f"{label} WORLD background")
             button.clicked.connect(callback)
-            background_actions.addWidget(button)
+            background_actions.addWidget(button, position // 2, position % 2)
         layout.addLayout(background_actions)
         layout_label = QLabel("SCREEN LAYOUT", dock)
         layout_label.setObjectName("sectionLabel")
