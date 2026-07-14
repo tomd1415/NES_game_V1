@@ -146,12 +146,27 @@ class MainWindow(QMainWindow):
         self._load_document_world()
         self._apply_theme()
         self.select_mode("WORLD")
+        self._update_responsive_chrome()
         self._update_document_title()
         self.statusBar().showMessage(
             "Native workspace ready"
             if self._fceux is not None
             else "Native workspace ready — FCEUX not found; ROM export remains available"
         )
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt API spelling
+        super().resizeEvent(event)
+        self._update_responsive_chrome()
+
+    def _update_responsive_chrome(self) -> None:
+        """Keep the centre editor usable at the documented minimum window size."""
+
+        if hasattr(self, "quest_panel"):
+            self.quest_panel.setVisible(self.width() >= 1160)
+        if hasattr(self, "_tile_library_buttons"):
+            compact = self.width() < 1160
+            for button in self._tile_library_buttons:
+                button.setFixedSize(38 if compact else 42, 26 if compact else 28)
 
     @staticmethod
     def _choice_icon(colour: str, glyph: str = "") -> QIcon:
@@ -260,7 +275,8 @@ class MainWindow(QMainWindow):
         self.context_dock = self._create_context_dock()
         splitter.addWidget(self.context_dock)
         splitter.addWidget(self._create_stage())
-        splitter.addWidget(self._create_quest_panel())
+        self.quest_panel = self._create_quest_panel()
+        splitter.addWidget(self.quest_panel)
         splitter.setSizes([250, 700, 280])
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter, 1)
@@ -763,9 +779,15 @@ class MainWindow(QMainWindow):
         tile_layout.addWidget(self.tile_pixel_canvas, 0, Qt.AlignmentFlag.AlignLeft)
         self.tile_editor.setWidget(tile_content)
         self.editor_stack.addWidget(self.tile_editor)
-        self.chars_editor = QFrame(self.editor_stack)
+        self.chars_editor = QScrollArea(self.editor_stack)
         self.chars_editor.setObjectName("charsEditor")
-        chars_layout = QVBoxLayout(self.chars_editor)
+        self.chars_editor.setWidgetResizable(True)
+        self.chars_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        chars_content = QFrame(self.chars_editor)
+        chars_content.setObjectName("charsEditorContent")
+        chars_layout = QVBoxLayout(chars_content)
+        chars_layout.setContentsMargins(18, 16, 18, 24)
+        chars_layout.setSpacing(8)
         chars_layout.addWidget(QLabel("SPRITES", self.chars_editor))
         self.sprite_filter = QComboBox(self.chars_editor)
         self.sprite_filter.setObjectName("spriteRoleFilter")
@@ -900,6 +922,7 @@ class MainWindow(QMainWindow):
             selector.currentIndexChanged.connect(lambda _value, kind=kind: self._set_animation_assignment(kind))
             self.animation_assignments[kind] = selector
             chars_layout.addWidget(selector)
+        self.chars_editor.setWidget(chars_content)
         self.editor_stack.addWidget(self.chars_editor)
         self.rules_editor = QScrollArea(self.editor_stack)
         self.rules_editor.setObjectName("rulesEditor")
@@ -2449,7 +2472,7 @@ class MainWindow(QMainWindow):
             #modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
             #modeHelp { color: #c8c8e8; padding: 6px 0 18px 0; }
             #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
-            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent { background: #181828; }
+            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent, #charsEditor, #charsEditorContent { background: #181828; }
             #rulesEditor QLabel { color: #d8d8f8; font-weight: 700; padding-top: 8px; }
             #rulesEditor QCheckBox { min-height: 26px; spacing: 8px; }
             #rulesEditor QSpinBox, #rulesEditor QComboBox, #rulesEditor QLineEdit { min-height: 30px; margin-bottom: 4px; }
