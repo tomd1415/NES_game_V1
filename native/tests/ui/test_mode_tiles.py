@@ -109,7 +109,7 @@ class TilesModeTests(StudioTest):
 
     def test_swap_follows_the_references(self) -> None:
         window = self.window("scratch")
-        tiles = self.tiles(window)
+        self.tiles(window)
         window.document.set_background_tile_pixel(4, 0, 0, 3)
         window.document.set_world_tile(2, 2, 4)
 

@@ -54,7 +54,7 @@ QToolTip { background: #202044; color: #f8f8f8; border: 1px solid #7878c8; paddi
 
 #modeRail { background: #191933; border-right: 2px solid #4b4b9b; }
 #brandLabel { color: #f8d878; font-weight: 900; font-size: 17px; padding-bottom: 12px; }
-#modeRail QPushButton { background: transparent; color: #b8b8d8; border: 1px solid transparent; padding: 10px 3px; font-weight: 700; text-align: center; }
+#modeRail QPushButton { background: transparent; color: #b8b8d8; border: 1px solid transparent; padding: 8px 3px; font-weight: 700; text-align: center; }
 #modeRail QPushButton:hover { border-color: #7878c8; color: white; }
 #modeRail QPushButton:checked { background: #383878; color: #f8f8f8; border-color: #9898e8; }
 /* A locked mode stays *visible*, dimmed, with a padlock — a pupil should be
@@ -113,7 +113,7 @@ QToolTip { background: #202044; color: #f8f8f8; border: 1px solid #7878c8; paddi
 
 /* ---- validators -------------------------------------------------------- */
 
-#validatorList { background: transparent; border: 0; }
+#validatorList, #validatorListContent { background: transparent; border: 0; }
 #validatorError { color: #f87878; font-weight: 700; }
 #validatorWarning { color: #f8d878; }
 #validatorInfo { color: #a8c8e8; }

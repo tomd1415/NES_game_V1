@@ -29,7 +29,6 @@ from ..widgets.visuals import (
     SPRITE_ROLES,
     add_visual_choice,
     prepare_visual_selector,
-    role_colour,
     sprite_thumbnail,
 )
 from .base import Level, Mode, ModeContext, scroll_body

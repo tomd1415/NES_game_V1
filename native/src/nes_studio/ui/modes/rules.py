@@ -7,7 +7,6 @@ about what happens in the game, not what kind of game it is.
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QLabel,
     QLineEdit,

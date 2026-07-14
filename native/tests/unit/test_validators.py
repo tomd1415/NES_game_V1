@@ -9,7 +9,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from nes_studio.core.validators import (  # noqa: E402
-    Problem,
     has_errors,
     scanline_load,
     too_many_sprites_per_scanline,

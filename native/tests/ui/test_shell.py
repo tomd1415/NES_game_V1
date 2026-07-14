@@ -80,6 +80,38 @@ class ShellTests(StudioTest):
         window.session.flush()
         self.assertEqual(window.save_dot.objectName(), "saveDotSaved")
 
+    def test_no_dock_clips_its_own_controls(self) -> None:
+        """The dock has no horizontal scrollbar, so a control wider than the dock
+        is not scrolled to — it is cut in half. `Duplicate` rendered as `Du`."""
+
+        window = self.window()
+        window.resize(1500, 940)
+        window.show()
+        self.application.processEvents()
+
+        for mode_id, mode in window.modes.items():
+            window.select_mode(mode_id)
+            self.application.processEvents()
+            # Measure the viewport *per mode*, after the layout has settled:
+            # sampling it once up front let a clipped dock pass.
+            available = window.context_dock.viewport().width()
+            needed = mode.dock().minimumSizeHint().width()
+            self.assertLessEqual(
+                needed,
+                available,
+                f"{mode_id}'s inspector needs {needed}px but the dock gives it "
+                f"{available}px — its controls are being cut off",
+            )
+
+        # And the whole dock, not just the modes' half of it: the mode title and
+        # help text live in the host, and the help was wrapping past the edge.
+        content = window.context_dock.widget()
+        self.assertLessEqual(
+            content.minimumSizeHint().width(),
+            window.context_dock.viewport().width(),
+            "the dock's own contents overflow it",
+        )
+
     def test_a_closed_window_frees_its_widgets(self) -> None:
         """A `MainWindow` is ~1,170 widgets, and the theme is applied to the
         *application* — so every leaked window makes every later `setStyleSheet`

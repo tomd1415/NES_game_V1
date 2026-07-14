@@ -6,7 +6,6 @@ import hashlib
 import importlib
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from nes_studio.codegen.differential import CodegenDifferential

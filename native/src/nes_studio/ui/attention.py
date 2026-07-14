@@ -86,7 +86,11 @@ class AttentionPanel(QFrame):
         scroll.setObjectName("validatorList")
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # The scroll area's *content* widget needs its own name, or it renders
+        # with Qt's default white — the same white-on-white class of bug that
+        # shipped in PALS, and that a `document.field == X` test cannot see.
         content = QWidget(scroll)
+        content.setObjectName("validatorListContent")
         self._problem_layout = QVBoxLayout(content)
         self._problem_layout.setContentsMargins(0, 0, 0, 0)
         self._problem_layout.setSpacing(10)
