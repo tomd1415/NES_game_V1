@@ -619,7 +619,7 @@ class MainWindow(QMainWindow):
         self.code_preview.setObjectName("codePreview")
         self.code_preview.setReadOnly(False)
         self.code_preview.setAccessibleName("Editable project C source")
-        self.code_preview.setPlainText("Select CODE to generate a preview.")
+        self.code_preview.setPlainText("")
         self.code_preview.textChanged.connect(self._save_code_source)
         self._code_language = "c"
         self._code_highlighter = _SourceHighlighter(self.code_preview.document())
@@ -1201,6 +1201,8 @@ class MainWindow(QMainWindow):
 
     def _refresh_code_preview(self) -> None:
         saved = self._document.custom_source(self._code_language)
+        if saved == "Select CODE to generate a preview.":
+            saved = None
         if saved is not None:
             source = saved
         elif self._code_language == "asm":
