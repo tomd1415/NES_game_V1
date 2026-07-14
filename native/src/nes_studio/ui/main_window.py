@@ -471,6 +471,11 @@ class MainWindow(QMainWindow):
             lambda value: self.world_canvas.set_paint_value(value)
         )
         layout.addWidget(self.tile_value)
+        self.edit_world_tile_button = QPushButton("Edit this tile's pixels", dock)
+        self.edit_world_tile_button.setObjectName("editWorldTileButton")
+        self.edit_world_tile_button.setAccessibleDescription("Open the current WORLD paint tile in the shared tile pixel editor")
+        self.edit_world_tile_button.clicked.connect(self._edit_world_tile_pixels)
+        layout.addWidget(self.edit_world_tile_button)
 
         palette_label = QLabel("PALETTE (0–3)", dock)
         palette_label.setObjectName("sectionLabel")
@@ -1372,6 +1377,14 @@ class MainWindow(QMainWindow):
 
     def _step_tile_selector(self, delta: int) -> None:
         self.tile_selector.setValue(max(0, min(255, self.tile_selector.value() + delta)))
+
+    def _edit_world_tile_pixels(self) -> None:
+        """Follow the WORLD paint tile into its shared 8×8 pixel editor."""
+
+        self.tile_bank.setCurrentIndex(0)
+        self.tile_selector.setValue(self.tile_value.value())
+        self.select_mode("TILES")
+        self.statusBar().showMessage("Editing the current WORLD paint tile in TILES")
 
     def _paste_tile(self) -> None:
         if self._tile_clipboard is None:

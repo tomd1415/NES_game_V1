@@ -74,6 +74,12 @@ class NativeShellTests(unittest.TestCase):
         window.world_canvas.edit_cell(0, 0)
         self.assertEqual(window._document.world_tiles(1, 1)[0][0], 1)
         self.assertEqual(window._document.world_tiles(0, 0)[0][0], 0)
+        window.tile_value.setValue(9)
+        window.findChild(object, "editWorldTileButton").click()
+        self.assertEqual(window.editor_stack.currentWidget(), window.tile_editor)
+        self.assertEqual(window.tile_bank.currentData(), "bg")
+        self.assertEqual(window.tile_selector.value(), 9)
+        window.select_mode("WORLD")
         enemy = window._document.add_sprite("Slime", role="enemy")
         window._refresh_scene_editor()
         window.scene_sprite.setCurrentIndex(0)
@@ -229,6 +235,7 @@ class NativeShellTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "project.json"
             window.select_mode("WORLD")
+            window.tile_value.setValue(1)
             window._select_world_tool("paint")
             window.world_canvas.edit_cell(2, 2)
             self.assertTrue(window.save_project_path(str(project)))
