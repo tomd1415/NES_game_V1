@@ -61,12 +61,23 @@ Chromebook-class — the classroom reality).
 | **FCEUX** (emscripten) | parity with our native path; experimental | High | GPL |
 
 **Licensing is the biggest gating factor.** The editor is distributed as static
-files, so a GPL core imposes GPL obligations (offer corresponding source). The
-good news: **jsnes is already GPL**, so we're very likely shipping under GPL
-terms today — adding a GPL WASM core changes little. Still, confirm jsnes's
-exact licence and each candidate's, and keep the (already-public) source
-available. A permissive NES core barely exists, so "permissive only" is not a
-realistic constraint.
+files, so a GPL core imposes GPL obligations (offer corresponding source).
+
+> **⚠ CORRECTION (2026-07-14).** Two claims in the paragraph that used to be here
+> were wrong, and they inverted the conclusion:
+>
+> - **jsnes is Apache-2.0, not GPL** (verified at `github.com/bfirsh/jsnes`). The
+>   table row below is also wrong. The project today is cleanly **MIT + Apache-2.0**.
+>   So adding a GPL core would be *new* copyleft contamination, not "changes
+>   little" — this is a real decision, not a formality.
+> - **"A permissive NES core barely exists" is false.** `tetanes-core` (Rust) is
+>   **MIT OR Apache-2.0**, actively maintained, with a full APU and a headless
+>   sample-output API; `plastic_core` (MIT, Rust) is a second. The native app now
+>   embeds tetanes-core — see
+>   [`2026-07-14-native-build-plan.md`](2026-07-14-native-build-plan.md).
+>
+> If this spike is ever revived for the *web*, re-evaluate against a permissive
+> WASM build of tetanes rather than assuming GPL is already conceded.
 
 **Lean:** a single **libretro core (`nestopia` or `fceumm`)** loaded via a thin
 JS glue file is the pragmatic balance (maintained, modest size, good audio).

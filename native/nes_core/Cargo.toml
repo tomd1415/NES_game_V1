@@ -1,0 +1,12 @@
+[package]
+name = "nes_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "nes_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+tetanes-core = "0.14"
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py311"] }

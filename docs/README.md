@@ -55,6 +55,12 @@ Repository-wide contribution, ownership and cross-team review rules live in
   rules, then read the
   [native Linux implementation plan](design/linux-native/2026-07-10-linux-native-migration-plan.md)
   for the dual-target architecture and phased delivery plan.
+- **Building the native Linux app?** Start at the
+  [native build plan](plans/current/2026-07-14-native-build-plan.md) — the single
+  source of truth for `native/` work: current state, root causes, the embedded NES
+  core, and the ordered phases. The
+  [parity tracker](plans/current/2026-07-13-native-parity.md) is the per-feature
+  checklist alongside it.
 - **Looking for context on a past decision?**  Walk
   [`plans/archive/`](plans/archive/) — the chronological filenames
   let you scan quickly, and most of the recent entries
