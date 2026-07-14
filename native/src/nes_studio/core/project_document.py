@@ -164,6 +164,27 @@ class ProjectDocument:
     def set_sprite_palette_slot(self, palette: int, slot: int, colour: int) -> None:
         self._set_palette_slot("sprite_palettes", palette, slot, colour)
 
+    def palette_recent_colours(self) -> list[int]:
+        native_ui = self.state.get("nativeUi")
+        palette = native_ui.get("palette") if isinstance(native_ui, dict) else None
+        values = palette.get("recentColours") if isinstance(palette, dict) else []
+        return [value for value in values if isinstance(value, int) and 0 <= value <= 0x3F][:8]
+
+    def remember_palette_colour(self, colour: int) -> None:
+        if not 0 <= colour <= 0x3F:
+            raise ValueError("NES palette colour must be 0x00..0x3F")
+        native_ui = self.state.setdefault("nativeUi", {})
+        if not isinstance(native_ui, dict):
+            native_ui = {}; self.state["nativeUi"] = native_ui
+        palette = native_ui.setdefault("palette", {})
+        if not isinstance(palette, dict):
+            palette = {}; native_ui["palette"] = palette
+        recent = [value for value in palette.get("recentColours", []) if isinstance(value, int) and value != colour]
+        updated = [colour, *recent][:8]
+        if palette.get("recentColours") != updated:
+            palette["recentColours"] = updated
+            self.dirty = True
+
     def background_tile_pixels(self, index: int) -> list[list[int]]:
         return self._tile_pixels("bg_tiles", index)
 
@@ -253,6 +274,67 @@ class ProjectDocument:
             raise ValueError(f"Unknown tile transformation: {operation}")
         if pixels != transformed:
             pixels[:] = transformed
+            self.dirty = True
+
+    # ---- Quest predicates -------------------------------------------------
+    # Read-only questions the quest panel asks about the pupil's own game.
+    # They must never raise on a malformed document: an unanswerable quest is
+    # simply "not done yet".
+
+    def has_player_sprite(self) -> bool:
+        sprites = self.state.get("sprites") or []
+        return any(
+            isinstance(sprite, dict) and sprite.get("role") == "player"
+            for sprite in sprites
+        )
+
+    def has_drawn_background_tile(self) -> bool:
+        for tile in self.state.get("bg_tiles") or []:
+            if not isinstance(tile, dict):
+                continue
+            for row in tile.get("pixels") or []:
+                if isinstance(row, list) and any(row):
+                    return True
+        return False
+
+    def has_painted_nametable(self) -> bool:
+        for background in self.state.get("backgrounds") or []:
+            if not isinstance(background, dict):
+                continue
+            for row in background.get("nametable") or []:
+                if not isinstance(row, list):
+                    continue
+                for cell in row:
+                    if isinstance(cell, dict) and cell.get("tile"):
+                        return True
+        return False
+
+    def has_multiple_screens(self) -> bool:
+        backgrounds = self.state.get("backgrounds") or []
+        if len(backgrounds) > 1:
+            return True
+        for background in backgrounds:
+            if not isinstance(background, dict):
+                continue
+            dimensions = background.get("dimensions")
+            if isinstance(dimensions, dict):
+                screens_x = int(dimensions.get("screens_x") or 1)
+                screens_y = int(dimensions.get("screens_y") or 1)
+                if screens_x > 1 or screens_y > 1:
+                    return True
+        return False
+
+    def has_been_built(self) -> bool:
+        native_ui = self.state.get("nativeUi")
+        return bool(isinstance(native_ui, dict) and native_ui.get("hasBuilt"))
+
+    def mark_built(self) -> None:
+        native_ui = self.state.setdefault("nativeUi", {})
+        if not isinstance(native_ui, dict):
+            native_ui = {}
+            self.state["nativeUi"] = native_ui
+        if not native_ui.get("hasBuilt"):
+            native_ui["hasBuilt"] = True
             self.dirty = True
 
     def sprite_names(self) -> list[str]:

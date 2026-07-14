@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QIODevice, QObject, QRegularExpression, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
@@ -113,6 +114,7 @@ class MainWindow(QMainWindow):
         self._build_thread: QThread | None = None
         self._build_worker: _BuildWorker | None = None
         self._last_rom: bytes | None = None
+        self._last_build_log: str = ""
         self._tile_clipboard: list[list[int]] | None = None
         data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
@@ -143,6 +145,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 640)
         self._create_menus()
         self.setCentralWidget(self._create_workspace())
+        self._install_mode_shortcuts()
         self._load_document_world()
         self._apply_theme()
         self.select_mode("WORLD")
@@ -260,6 +263,11 @@ class MainWindow(QMainWindow):
         control.setStyleSheet(
             f"QSpinBox {{ background: {swatch.name()}; color: {text}; border: 2px solid #f8f8f8; font-weight: 800; padding: 4px; }}"
         )
+
+    @staticmethod
+    def _nes_colour_swatch(colour: int) -> QColor:
+        tone = colour & 0x0F
+        return QColor("#101018") if tone in {0x0D, 0x0E, 0x0F} else QColor.fromHsv((tone * 23) % 360, 170, (72, 128, 188, 242)[(colour >> 4) & 3])
 
     def _create_workspace(self) -> QWidget:
         root = QWidget(self)
@@ -630,9 +638,14 @@ class MainWindow(QMainWindow):
         self._code_highlighter = _SourceHighlighter(self.code_preview.document())
         code_layout.addWidget(self.code_preview)
         self.editor_stack.addWidget(self.code_editor)
-        self.palette_editor = QFrame(self.editor_stack)
+        self.palette_editor = QScrollArea(self.editor_stack)
         self.palette_editor.setObjectName("paletteEditor")
-        palette_layout = QGridLayout(self.palette_editor)
+        self.palette_editor.setWidgetResizable(True)
+        self.palette_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        palette_content = QFrame(self.palette_editor)
+        palette_content.setObjectName("paletteEditorContent")
+        palette_layout = QGridLayout(palette_content)
+        palette_layout.setContentsMargins(18, 16, 18, 24)
         palette_layout.addWidget(QLabel("BACKGROUND PALETTES — slot 0 uses the universal backdrop", self.palette_editor), 0, 0, 1, 4)
         self._background_palette_controls: list[QSpinBox] = []
         for palette in range(4):
@@ -667,6 +680,34 @@ class MainWindow(QMainWindow):
                 self._style_palette_control(control, 0)
                 self._sprite_palette_controls.append(control)
                 palette_layout.addWidget(control, palette + 7, slot + 1)
+        self.palette_target = QComboBox(self.palette_editor)
+        self.palette_target.setObjectName("paletteTargetSelector")
+        self._prepare_visual_selector(self.palette_target, "Palette slot to edit")
+        for bank, prefix in (("bg", "BG"), ("sprite", "SP")):
+            for palette in range(4):
+                for slot in range(3):
+                    self._add_visual_choice(self.palette_target, f"{prefix}{palette} · colour {slot + 1}", (bank, palette, slot), colour="#4878d8" if bank == "bg" else "#f87878", glyph=prefix)
+        palette_layout.addWidget(QLabel("EDIT SLOT", self.palette_editor), 11, 0)
+        palette_layout.addWidget(self.palette_target, 11, 1, 1, 3)
+        palette_layout.addWidget(QLabel("NES MASTER PALETTE", self.palette_editor), 12, 0, 1, 4)
+        master_grid = QGridLayout()
+        master_grid.setSpacing(3)
+        self._master_palette_buttons: list[QPushButton] = []
+        for colour in range(0x40):
+            button = QPushButton(f"{colour:02X}", self.palette_editor)
+            button.setObjectName(f"nesMasterColour{colour:02X}")
+            button.setFixedSize(42, 28)
+            button.setAccessibleName(f"Use NES colour {colour:02X} for selected palette slot")
+            button.clicked.connect(lambda _checked=False, colour=colour: self._apply_master_palette_colour(colour))
+            self._master_palette_buttons.append(button)
+            master_grid.addWidget(button, colour // 16, colour % 16)
+        palette_layout.addLayout(master_grid, 13, 0, 1, 4)
+        self.palette_recent_label = QLabel("RECENT COLOURS", self.palette_editor)
+        palette_layout.addWidget(self.palette_recent_label, 14, 0, 1, 4)
+        self.palette_recent_row = QHBoxLayout()
+        self._recent_palette_buttons: list[QPushButton] = []
+        palette_layout.addLayout(self.palette_recent_row, 15, 0, 1, 4)
+        self.palette_editor.setWidget(palette_content)
         self.editor_stack.addWidget(self.palette_editor)
         self.tile_editor = QScrollArea(self.editor_stack)
         self.tile_editor.setObjectName("tileEditor")
@@ -1133,27 +1174,43 @@ class MainWindow(QMainWindow):
         title = QLabel("QUEST LOG", panel)
         title.setObjectName("modeTitle")
         layout.addWidget(title)
-        progress = QLabel("Native Studio foundation", panel)
-        progress.setObjectName("questHeading")
-        layout.addWidget(progress)
-        for text, done in (
-            ("Launch a real Qt application", True),
-            ("Build the Studio workspace", True),
-            ("Open and save local projects", True),
-            ("Paint WORLD tiles and entities", True),
-            ("Build and export a ROM", True),
-        ):
-            item = QLabel(("✓  " if done else "○  ") + text, panel)
-            item.setObjectName("questComplete" if done else "questPending")
+
+        # Real quests, derived from the project. The previous contents were a
+        # hardcoded checklist of *developer* milestones ("Launch a real Qt
+        # application"), which told the pupil nothing about their own game.
+        self.quest_heading = QLabel("Your game", panel)
+        self.quest_heading.setObjectName("questHeading")
+        layout.addWidget(self.quest_heading)
+
+        self._quest_labels: list[QLabel] = []
+        for _ in range(len(self.QUESTS)):
+            item = QLabel(panel)
             item.setWordWrap(True)
             layout.addWidget(item)
+            self._quest_labels.append(item)
         layout.addStretch(1)
-
-        notice = QLabel("Development preview\nNo project files are modified by this shell.", panel)
-        notice.setObjectName("previewNotice")
-        notice.setWordWrap(True)
-        layout.addWidget(notice)
         return panel
+
+    # Each quest is (label, predicate) — the predicate reads the live document.
+    QUESTS: tuple[tuple[str, Callable[[ProjectDocument], bool]], ...] = (
+        ("Meet your hero", ProjectDocument.has_player_sprite),
+        ("Draw a tile", ProjectDocument.has_drawn_background_tile),
+        ("Build some ground", ProjectDocument.has_painted_nametable),
+        ("Add a second screen", ProjectDocument.has_multiple_screens),
+        ("Take it for a spin", ProjectDocument.has_been_built),
+    )
+
+    def _refresh_quests(self) -> None:
+        for label, (text, done_for) in zip(self._quest_labels, self.QUESTS):
+            try:
+                done = bool(done_for(self._document))
+            except Exception:  # a quest must never break the editor
+                done = False
+            label.setText(("✓  " if done else "○  ") + text)
+            label.setObjectName("questComplete" if done else "questPending")
+            # Re-polish so the objectName change actually restyles the label.
+            label.style().unpolish(label)
+            label.style().polish(label)
 
     def select_mode(self, mode: str) -> None:
         """Select a workspace mode and update its contextual introduction."""
@@ -1271,9 +1328,15 @@ class MainWindow(QMainWindow):
                 control.setValue(colour)
                 control.blockSignals(False)
                 self._style_palette_control(control, colour)
+        for colour, button in enumerate(self._master_palette_buttons):
+            swatch = self._nes_colour_swatch(colour)
+            text = "#080810" if swatch.lightness() > 145 else "#f8f8f8"
+            button.setStyleSheet(f"background: {swatch.name()}; color: {text}; font-weight: 800; padding: 0;")
+        self._refresh_recent_palette_colours()
 
     def _set_background_palette_slot(self, palette: int, slot: int, colour: int) -> None:
         self._document.set_background_palette_slot(palette, slot, colour)
+        self._document.remember_palette_colour(colour)
         self._style_palette_control(self._background_palette_controls[palette * 3 + slot], colour)
         self._session.schedule_save()
         self._update_document_title()
@@ -1281,10 +1344,33 @@ class MainWindow(QMainWindow):
 
     def _set_sprite_palette_slot(self, palette: int, slot: int, colour: int) -> None:
         self._document.set_sprite_palette_slot(palette, slot, colour)
+        self._document.remember_palette_colour(colour)
         self._style_palette_control(self._sprite_palette_controls[palette * 3 + slot], colour)
         self._session.schedule_save()
         self._update_document_title()
         self.statusBar().showMessage(f"SP{palette} palette slot {slot + 1} set to 0x{colour:02X}")
+
+    def _apply_master_palette_colour(self, colour: int) -> None:
+        target = self.palette_target.currentData()
+        if not isinstance(target, tuple) or len(target) != 3:
+            return
+        bank, palette, slot = target
+        control = (self._background_palette_controls if bank == "bg" else self._sprite_palette_controls)[int(palette) * 3 + int(slot)]
+        control.setValue(colour)
+        self._refresh_recent_palette_colours()
+
+    def _refresh_recent_palette_colours(self) -> None:
+        while self._recent_palette_buttons:
+            button = self._recent_palette_buttons.pop()
+            self.palette_recent_row.removeWidget(button); button.deleteLater()
+        for colour in self._document.palette_recent_colours():
+            button = QPushButton(f"{colour:02X}", self.palette_editor)
+            button.setAccessibleName(f"Reuse recent NES colour {colour:02X}")
+            button.setFixedSize(42, 28)
+            swatch = self._nes_colour_swatch(colour)
+            button.setStyleSheet(f"background: {swatch.name()}; color: {'#080810' if swatch.lightness() > 145 else '#f8f8f8'}; font-weight: 800; padding: 0;")
+            button.clicked.connect(lambda _checked=False, colour=colour: self._apply_master_palette_colour(colour))
+            self._recent_palette_buttons.append(button); self.palette_recent_row.addWidget(button)
 
     def _refresh_tile_editor(self, _index: int | None = None) -> None:
         pixels = self._tile_pixels()
@@ -2086,6 +2172,7 @@ class MainWindow(QMainWindow):
             self._document.world_behaviours(self._world_screen_x, self._world_screen_y),
         )
         self._sync_canvas_entities()
+        self._refresh_quests()
 
     def _set_world_grid_options(self, _checked: bool) -> None:
         show_grid, show_attributes = self.grid_toggle.isChecked(), self.attribute_toggle.isChecked()
@@ -2164,7 +2251,6 @@ class MainWindow(QMainWindow):
         self._load_document_world()
         self._session.schedule_save()
         self._update_document_title()
-        self.statusBar().showMessage(f"WORLD layout changed to {dimensions[0]} × {dimensions[1]}")
         self.statusBar().showMessage(f"Opened WORLD background {self._document.background_names()[index]}")
 
     def _set_world_layout(self, index: int) -> None:
@@ -2299,14 +2385,17 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{self._document.name}{marker} — {APP_DISPLAY_NAME}")
 
     def open_project_path(self, path: str) -> bool:
+        """Import a project file as a *new* stored project and switch to it.
+
+        Opening a file must never overwrite the project the user currently has
+        open, so this imports alongside it rather than replacing its row.
+        """
+
         try:
-            import_project(
-                self._storage.repository,
-                path,
-                replace_project_id=self._session.project_id,
-                expected_revision=self._session.project.revision,
-            )
-            self._session.reload(flush=False)
+            if self._document.dirty:
+                self._session.snapshot_before("open")
+            result = import_project(self._storage.repository, path)
+            self._session.switch(result.project.project_id)
         except (OSError, ProjectFormatError, RuntimeError, ValueError) as exc:
             QMessageBox.critical(self, "Could not open project", str(exc))
             return False
@@ -2314,7 +2403,7 @@ class MainWindow(QMainWindow):
         self._document.path = Path(path)
         self._load_document_world()
         self._update_document_title()
-        self.statusBar().showMessage(f"Imported {path} into local project storage")
+        self.statusBar().showMessage(f"Opened {path} as a new project")
         return True
 
     def save_project_path(self, path: str) -> bool:
@@ -2366,13 +2455,26 @@ class MainWindow(QMainWindow):
 
     def _build_succeeded(self, result: NativeBuildResult) -> None:
         self._last_rom = result.rom
+        self._last_build_log = result.log
         self.export_rom_action.setEnabled(True)
         self.launch_button.setEnabled(self._fceux is not None)
         self.play_action.setEnabled(self._fceux is not None)
+        self._document.mark_built()
+        self._session.schedule_save()
+        self._refresh_quests()
         self.statusBar().showMessage(f"Built ROM ({len(result.rom):,} bytes) — ready to export")
 
     def _build_failed(self, message: str) -> None:
         self.statusBar().showMessage(f"ROM build failed: {message}")
+        # A transient status line is not enough for a compile error the pupil
+        # has to act on; show the failure and keep the log available.
+        self._last_build_log = message
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Critical)
+        dialog.setWindowTitle("ROM build failed")
+        dialog.setText("The ROM could not be built.")
+        dialog.setDetailedText(message)
+        dialog.exec()
 
     def _build_finished(self) -> None:
         self._build_thread = None
@@ -2487,7 +2589,7 @@ class MainWindow(QMainWindow):
             #modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
             #modeHelp { color: #c8c8e8; padding: 6px 0 18px 0; }
             #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
-            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent, #charsEditor, #charsEditorContent { background: #181828; }
+            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent, #charsEditor, #charsEditorContent, #paletteEditor, #paletteEditorContent { background: #181828; }
             #rulesEditor QLabel { color: #d8d8f8; font-weight: 700; padding-top: 8px; }
             #rulesEditor QCheckBox { min-height: 26px; spacing: 8px; }
             #rulesEditor QSpinBox, #rulesEditor QComboBox, #rulesEditor QLineEdit { min-height: 30px; margin-bottom: 4px; }
@@ -2515,7 +2617,6 @@ class MainWindow(QMainWindow):
             #questHeading { color: white; font-weight: 700; padding: 10px 0; }
             #questComplete { color: #78d878; padding: 5px 0; }
             #questPending { color: #b8b8d8; padding: 5px 0; }
-            #previewNotice { background: #30305c; color: #d8d8f8; border: 1px solid #6868a8; padding: 10px; }
             QSplitter::handle { background: #4b4b7b; width: 2px; }
             """
         )
@@ -2530,10 +2631,15 @@ class MainWindow(QMainWindow):
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self._open_project)
         file_menu.addAction(open_action)
-        save_action = QAction("Save Project &As…", self)
-        save_action.setShortcut(QKeySequence.StandardKey.SaveAs)
-        save_action.triggered.connect(self._save_project_as)
+        save_action = QAction("&Save", self)
+        save_action.setObjectName("saveAction")
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
+        save_action.triggered.connect(self._save_project)
         file_menu.addAction(save_action)
+        save_as_action = QAction("Save Project &As…", self)
+        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_as_action.triggered.connect(self._save_project_as)
+        file_menu.addAction(save_as_action)
         recover_action = QAction("&Restore Latest Snapshot", self)
         recover_action.setObjectName("recoverAutosaveAction")
         recover_action.triggered.connect(self._recover_autosave)
@@ -2568,6 +2674,7 @@ class MainWindow(QMainWindow):
 
         build_menu = self.menuBar().addMenu("&Build")
         build_action = QAction("&Build ROM", self)
+        build_action.setShortcut(QKeySequence("F5"))
         build_action.triggered.connect(self._build_rom)
         build_menu.addAction(build_action)
         self.play_action = QAction("&Play in FCEUX", self)
@@ -2580,10 +2687,27 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
-    def _add_placeholder(self, menu: QMenu, label: str) -> None:
-        action = QAction(label, self)
-        action.setEnabled(False)
-        menu.addAction(action)
+    def _install_mode_shortcuts(self) -> None:
+        """Bind 1..N to the mode rail, matching the rail's visible order."""
+
+        for index, mode in enumerate(MODE_NAMES, start=1):
+            shortcut = QShortcut(QKeySequence(str(index)), self)
+            shortcut.activated.connect(lambda mode=mode: self.select_mode(mode))
+
+    def _save_project(self) -> None:
+        """Flush the active project to local storage.
+
+        The real store is SQLite, so 'Save' is a flush — not the JSON export
+        that 'Save Project As…' performs.
+        """
+
+        try:
+            saved = self._session.flush()
+        except Exception as exc:  # repository/schema failures must not crash
+            QMessageBox.critical(self, "Could not save project", str(exc))
+            return
+        self._update_document_title()
+        self.statusBar().showMessage("Saved project" if saved else "No changes to save")
 
     def _show_diagnostics(self) -> None:
         self._diagnostics = DiagnosticsDialog(self._resource_locator, self)
