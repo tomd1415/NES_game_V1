@@ -2,9 +2,10 @@
 
 The genuine native Linux sibling of the web Studio. PySide6/Qt Widgets, sharing
 the project, engine and ROM contracts with the browser product — `tests/contract/`
-proves the two targets emit **byte-identical ROMs**.
+proves the two targets emit **byte-identical ROMs**, and now also that they report
+**identical validation problems**.
 
-Build order, current state and what is next:
+Build order and current state:
 [`docs/plans/current/2026-07-14-native-build-plan.md`](../docs/plans/current/2026-07-14-native-build-plan.md).
 
 ## Running it
@@ -15,46 +16,102 @@ native/.venv/bin/nes-studio
 
 ## What works today
 
-- **The game runs in the Studio.** ▶ PLAY builds the ROM if needed and plays it
-  in the CRT stage, with audio and two-player input, via an embedded NES core
+- **The game runs in the Studio.** ▶ Play builds the ROM if needed and plays it in
+  the CRT stage, with audio and two-player input, via an embedded NES core
   (`nes_core/`). FCEUX is now only an optional "Open in FCEUX".
+- **Eight modes**, each owning its own editor and its own inspector dock:
+  WORLD, CHARS, TILES, PALS, STYLE, RULES, SOUND, CODE.
 - **WORLD shows the real game** — actual tile art and palettes, entities drawn as
-  their real sprites, and 2×2 attribute conflicts flagged on-canvas before the
-  build.
-- **Undo/redo works in every mode** (40 deep), grouping a paint drag into one
-  step. It survives switching screen or background.
-- **Project catalog** (`File → My Games`, `Ctrl+M`): switch, rename, duplicate,
-  delete, and start from any of the seven starters.
-- Editing: WORLD (paint/fill/palette/behaviour, metatiles, entity placement),
-  TILES (256-tile library, pixel editor, transforms, reference-safe swaps),
-  CHARS (sprites, roles, cells, animations), PALS (true 64-colour NES master
-  palette), RULES, SOUND (import), CODE (editable C/ASM).
+  their own sprites, 2×2 attribute conflicts flagged on-canvas, right-click
+  eyedropper, zoom, and a full-screen preview (F11).
+- **CHARS is a drawing canvas.** You paint the character, and the pixel lands in
+  whichever 8×8 tile owns it — through cell flips, and stopping to ask when that
+  tile belongs to another character too ("Used by Villager… Duplicate first /
+  Change everywhere / Cancel").
+- **Validators**: ~30 checks ported from the web, each with a **Fix in ‹Mode› →**
+  button that takes you to the mode that can fix it.
+- **Budget meters**: background tiles N/256, sprite tiles N/256, sprites on screen
+  N/64 (OAM), audio N/32 KB.
+- **Guided tutorials** (6), whose steps advance on their own and whose "Show me"
+  flashes the *real control*, where it lives.
+- **Time Machine** (`Ctrl+H`): browse and restore the snapshots the store has
+  always taken. Restoring is an *edit*, so `Ctrl+Z` really does bring your version
+  back.
+- **Expertise levels** (Beginner / Maker / Advanced) gate the modes. A locked mode
+  stays **visible**, with a padlock and a nudge, rather than disappearing.
+- **Undo/redo in every mode** (40 deep), grouping a paint drag into one step, and
+  surviving a switch of screen or background.
+- **Asset import/export**: `.chr`, `.pal`, `.nam`, both ways.
+- **Accessibility**: text scale, high contrast, reduced flashing while playing.
 - Persistence: SQLite store, 500 ms debounced saves, 30 s deduplicated snapshots,
   atomic import/export, XDG recovery.
+- **Desktop integration**: an app icon, mode-rail icons, a `.desktop` launcher
+  entry and AppStream metainfo. Install with
+  `packaging/install-desktop-entry.sh` (no root needed; `--uninstall` reverses
+  it). The icons are generated from NES pixel art by `scripts/generate_icons.py`,
+  and every colour in them is an index into the real NES system palette.
 
 ## What is not there yet
 
-Honest list — see the build plan for the ordered work:
-
-- No dock outside WORLD; the other modes are a single editor panel.
-- No validators, no guided tutorial, no Time Machine UI, no budget meters.
-- No CHARS painting canvas (you jump to TILES to draw), no STYLE mode.
-- No asset `.chr`/`.pal`/`.nam` import/export, no SOUND preview.
-- No gallery/accounts (a deliberate deferral — server-coupled).
+- No gallery / accounts / cloud publish — a deliberate deferral (server-coupled).
+- SOUND has no on-host player: a `.s` file is ca65 assembly for the APU and there
+  is nothing on a PC that can play it. "Hear this song" therefore builds a
+  **throwaway** ROM that starts with it and plays that; your project is not
+  changed. A real on-host preview would need an APU-only harness around
+  `nes_core`.
+- Editing a tile in TILES does not live-repaint an *already open* WORLD — but only
+  one mode is visible at a time and every mode refreshes when opened, so this is
+  close to moot. See the follow-through plan for why it is a deliberate deferral.
 
 ## Keyboard
 
 | Key | Action |
 | --- | --- |
-| `1`–`7` | Switch mode (disabled while a game is running) |
+| `1`–`8` | Switch mode (disabled while a game is running) |
 | `Ctrl+S` | Save (flushes to the local store) |
-| `F5` | Build ROM |
+| `F5` / `F6` | Build ROM / Play |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
 | `Ctrl+M` | My Games |
+| `Ctrl+H` | Time Machine |
+| `Ctrl+,` | Preferences |
+| `F11` | Full-screen WORLD preview |
 | `Escape` | Stop the running game |
 
 While playing, controls match the web exactly so pupils do not relearn them:
 P1 = arrows, `F`=A, `D`=B, `Enter`=Start; P2 = `I/J/K/L`, `O`=A, `U`=B, `1`=Start.
+
+## Architecture
+
+The shell owns the chrome and **no editor**. It was once 3,008 lines and 176
+methods with all seven modes built inline in a single 597-line method; adding a
+mode meant editing four places in one file.
+
+```
+nes_studio/
+  ui/
+    main_window.py     The shell: app bar, rail, stage, dock host. ~740 lines.
+    modes/             One module per mode, behind the protocol in base.py.
+      base.py          Mode + ModeContext + Level
+      world.py chars.py tiles.py pals.py style.py rules.py sound.py code.py
+    build_play.py      Threaded cc65 build; playing the ROM in the stage
+    project_actions.py New / open / save / catalog / time machine
+    attention.py       Quests + validator problems, with their Fix-in buttons
+    tutorial.py        The step runner, and the "Show me" that flashes a control
+    theme.py           resources/theme.qss + accessibility preferences
+    icons.py           Generated NES pixel-art icons (scripts/generate_icons.py)
+    widgets/           world_canvas, sprite_canvas, budget, forms, visuals, …
+  core/
+    validators.py      ~30 checks, contract-tested against the web's JS
+    tutorials.py       Declarative tutorials; re-baselined, lenient checks
+    assets.py          .chr / .pal / .nam
+  render/ emulator/ state/ persistence/ codegen/ integrations/
+  resources/icons/     Generated PNGs; regenerate with scripts/generate_icons.py
+packaging/             .desktop entry, AppStream metainfo, installer
+```
+
+A mode implements `build_dock()`, `refresh()`, optionally `stage_widget()`, and
+reaches the project only through `ModeContext` — never by caching the document,
+which an undo or a project switch would strand.
 
 ## Development setup
 
@@ -98,29 +155,44 @@ cd native
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
-214 tests. The suite takes ~2 minutes, mostly constructing `MainWindow`.
+**404 tests, ~5 minutes.**
 
 | Directory | Holds |
 | --- | --- |
-| `tests/contract/` | Cross-target invariants: ROM/codegen parity with the web, and the NES palette table. **The most valuable tests here.** |
-| `tests/unit/` | Document, persistence, renderer (pixel assertions), emulator. |
-| `tests/ui/` | Shell, triage regressions, undo-everywhere. |
+| `tests/contract/` | Cross-target invariants: ROM/codegen parity with the web, the NES palette table, and **validator parity** (runs the real `builder-validators.js` in node and diffs it against the Python). **The most valuable tests here.** |
+| `tests/unit/` | Document, persistence, renderer (pixel assertions), emulator, validators, assets, tutorials, budget meters. |
+| `tests/ui/` | One file per mode, plus the shell, the attention panel, the tutorial, undo, the Time Machine, **real mouse events** (`test_mouse.py`) and **failure paths** (`test_failure_paths.py`). |
 
-**Testing rule learned the hard way:** the suite was fully green while the app
-rendered a transparent emulator frame, a white-on-white PALS panel, and crashed on
-background switch — because the tests asserted `document.field == X` and never
-asserted that anything *rendered*. New visual work needs a pixel assertion, not a
-document assertion.
+### Six traps, all of which have bitten
 
-Two more traps, both of which have bitten:
-
-- **Close your windows in tests** (`self.addCleanup(window.close)`). A live
-  `MainWindow` keeps a 30 s snapshot timer and an open session; leaking them makes
-  two sessions race on one project and raise `StaleRevisionError` inside a *later*
-  test.
-- **Never put expensive work in a refresh that runs for modes nobody is looking
-  at.** `_refresh_code_preview()` invokes the cc65 codegen; refreshing every mode
-  on every undo made one test file take 178 seconds.
+1. **Assert pixels, not document fields.** The suite was once fully green while
+   the app rendered a transparent emulator frame, a white-on-white PALS panel, and
+   crashed on every background switch — because every test asserted
+   `document.field == X` and none asserted that anything had been *drawn*. Use
+   `assertRenders()` from `tests/ui/support.py` for anything visual.
+2. **Destroy your windows, do not merely close them.** `processEvents()` does
+   **not** deliver `DeferredDelete`, so `deleteLater()` alone frees nothing. A
+   leaked `MainWindow` keeps ~1,170 widgets alive, and the theme is applied to the
+   *application* — so every later `setStyleSheet()` re-polishes all of them. One
+   test file went from 1.4 s for its first test to 12 s for its ninth before this
+   was found. `tests/ui/support.py::_dispose` is the fix; `test_shell.py` guards it.
+3. **Never put expensive work in a refresh that runs for a mode nobody is looking
+   at.** CODE's refresh invokes the cc65 codegen; refreshing every mode on every
+   undo made one test file take 178 seconds. Refresh is lazy: the visible mode
+   refreshes, the rest are marked stale.
+4. **A clipped control is invisible to a field assertion.** The dock has no
+   horizontal scrollbar, so a control wider than the dock is not scrolled to — it
+   is cut in half, and `Duplicate` renders as `Du`.
+   `test_no_dock_clips_its_own_controls` guards it — and measures the viewport
+   *per mode*, because sampling it once before the layout had settled let a
+   clipped dock pass.
+5. **A modal dialog hangs the suite.** `QMessageBox.warning(...)` is a static
+   helper you can patch, but a failed build *constructs* a `QMessageBox` and calls
+   `.exec()` on it — which blocks forever with nobody to click it. Patch `.exec`
+   too; `tests/ui/test_failure_paths.py::DialogRecorder` does.
+6. **`QTest.mouseMove` does not carry the button state**, so a drag driven with it
+   reads as a hover and paints nothing. `tests/ui/test_mouse.py` builds the
+   `QMouseEvent`s by hand, and is the only thing covering the coordinate maths.
 
 ## Run from a source checkout
 

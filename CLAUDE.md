@@ -35,12 +35,19 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
 
 A **third front-end**: a PySide6/Qt desktop sibling of the web Studio, sharing the
 project/engine/ROM contracts (`native/tests/contract/` proves both targets emit
-byte-identical ROMs). It plays games in-app via an **embedded NES core**
-(`native/nes_core/`, a PyO3 binding around tetanes-core).
+byte-identical ROMs **and** report identical validator output). It plays games
+in-app via an **embedded NES core** (`native/nes_core/`, a PyO3 binding around
+tetanes-core). Eight modes, each in `native/src/nes_studio/ui/modes/<mode>.py`
+behind the protocol in `modes/base.py`; the shell owns no editor.
 
 Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/current/2026-07-14-native-build-plan.md)
-— current state, root causes, and what to do next. Setup and traps:
+— what was built, why, and what is honestly still missing. Setup and traps:
 [`native/README.md`](native/README.md).
+
+> **Adding a native mode** = a new class in `ui/modes/`, added to `MODE_CLASSES`.
+> Populate every `QComboBox` **before** connecting its signals: adding the first
+> item to an empty one fires `currentIndexChanged`, and a handler that calls
+> `refresh()` will re-enter the mode's own constructor.
 
 > **⚠ Licensing.** The repo is **MIT**, and so is every dependency. The NES core is
 > `MIT OR Apache-2.0` *deliberately* — every mature libretro core (fceumm,
@@ -57,16 +64,20 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
 - **Studio E2E:** `npx playwright test` from repo root (config auto-boots the
   server). Specs in `tools/studio-tests/`.
 - **Native:** `cd native && QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest`
-  (214 tests, ~2 min).
+  (404 tests, ~5 min).
 
-  Two hard-won rules for native tests. The suite was once **fully green while the
+  Three hard-won rules for native tests. The suite was once **fully green while the
   app rendered a transparent emulator frame, a white-on-white panel, and crashed on
   every background switch** — because the tests asserted `document.field == X` and
   never asserted that anything *rendered*. So: **assert pixels, not document
-  fields**, for anything visual. And **close your windows**
-  (`self.addCleanup(window.close)`) — a live `MainWindow` keeps a 30 s snapshot
-  timer and an open session, and leaking them makes two sessions race on one
-  project and raise `StaleRevisionError` inside a *later* test.
+  fields**, for anything visual (`assertRenders()` in `tests/ui/support.py`).
+  **Destroy your windows, don't just close them** — `processEvents()` does not
+  deliver `DeferredDelete`, so `deleteLater()` alone frees nothing, and a leaked
+  `MainWindow` keeps ~1,170 widgets that every later `setStyleSheet()` re-polishes;
+  use `StudioTest._dispose`. And **never put expensive work in a refresh that runs
+  for a mode nobody is looking at** — CODE's refresh invokes the cc65 codegen.
+  (Three more traps, with the tests that guard them, are listed in
+  [`native/README.md`](native/README.md#six-traps-all-of-which-have-bitten).)
 
 ## Where to start
 

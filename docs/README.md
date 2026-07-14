@@ -57,8 +57,11 @@ Repository-wide contribution, ownership and cross-team review rules live in
   for the dual-target architecture and phased delivery plan.
 - **Building the native Linux app?** Start at the
   [native build plan](plans/current/2026-07-14-native-build-plan.md) — the single
-  source of truth for `native/` work: current state, root causes, the embedded NES
-  core, and the ordered phases. The
+  source of truth for `native/` work. The build-out it describes is **complete**
+  (eight modes, validators, tutorials, Time Machine, budget meters, asset
+  import/export); it now records what was built, the bugs found doing it, the four
+  testing traps, and what is honestly still missing. Setup lives in
+  [`native/README.md`](../native/README.md); the
   [parity tracker](plans/current/2026-07-13-native-parity.md) is the per-feature
   checklist alongside it.
 - **Looking for context on a past decision?**  Walk
