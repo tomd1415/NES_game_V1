@@ -21,7 +21,7 @@ deferred.
 
 ---
 
-## Engine v11 → v72 + Studio hardening (bring-forward summary) — 2026-07-14
+## Engine v11 → v73 + Studio hardening (bring-forward summary) — 2026-07-14
 
 A high-level catch-up covering everything that shipped **since** the v10 entry
 below. The authoritative, per-version detail lives in
@@ -57,11 +57,17 @@ off-by-default) and both suites green (`node tools/builder-tests/run-all.mjs`,
   per-instance enemy paths landed for pupil request #13: **hopper** (walks +
   bounces, v71) and **shooter/turret** (fires projectiles, v72), alongside the
   flyer/patrol from v10.
+- **Invincibility-frames floor formally versioned as v73.** The `#35` fix (floor
+  the Damage module's "invincibility after hit" at 10 frames, so a single enemy
+  touch can't drain all HP in a few frames) changes ROM output for any project
+  that set `invincibilityFrames < 10`, so it is now a proper engine version with
+  its own snapshot. Goldens stay byte-identical (Damage default is 30); v72 is
+  left untouched so games authored under it rebuild unchanged.
 - **Studio UX + safety.** A Games menu (open/manage saved games, available even
   when signed out), a fix for focus theft on load (#36), the reactions matrix
-  (#20), an invincibility-frames floor (#35), thumbnail crop fixes (#25), and
-  several items verified-correct-as-is on investigation (#16 palette fidelity,
-  #32). See the feedback list for the per-item status.
+  (#20), the invincibility-frames floor (#35, now engine v73), thumbnail crop
+  fixes (#25), and several items verified-correct-as-is on investigation (#16
+  palette fidelity, #32). See the feedback list for the per-item status.
 
 ## Engine v10 + bug-list sweep (autonomous) — 2026-07-06
 
