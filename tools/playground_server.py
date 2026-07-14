@@ -2982,6 +2982,12 @@ def _build_rom(body):
     # compile + link).  The stub song is silent, the stub sfx pack
     # has a single null entry — pupils get whatever asset they
     # uploaded plus a no-op for the other side.
+    # Event sound effects (engine v74): trigger sfx on jump/pickup/hurt/win.
+    # Only honoured when the pupil supplied a REAL sfx pack — the auto-stub
+    # below has a single null entry, and calling famistudio_sfx_play against it
+    # would read past the (empty) sound table.
+    audio_sfx_events = bool(body.get("audioSfxEvents"))
+    has_real_sfx = audio_sfx is not None
     audio_kwargs = {}
     if audio_songs and not audio_sfx:
         audio_sfx = _AUTO_SFX_STUB_ASM
@@ -2989,7 +2995,8 @@ def _build_rom(body):
         audio_songs = _AUTO_SONGS_STUB_ASM
     if audio_songs and audio_sfx:
         audio_kwargs = {"audio_songs_asm": audio_songs,
-                        "audio_sfx_asm":   audio_sfx}
+                        "audio_sfx_asm":   audio_sfx,
+                        "bw_sfx_events":   audio_sfx_events and has_real_sfx}
 
     if custom_main_asm is not None:
         pal_asm = build_palettes_asminc(state)
@@ -3252,7 +3259,7 @@ def _build_asm_in_tempdir(custom_main_asm, chr_bytes, nam_bytes, pal_asm, scene_
 
 def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
                       collision_h, behaviour_c, bg_world_h, bg_world_c,
-                      audio_songs_asm=None, audio_sfx_asm=None,
+                      audio_songs_asm=None, audio_sfx_asm=None, bw_sfx_events=False,
                       nes_asm_leaf=False, nes_asm_scroll=False,
                       nes_asm_scene=False, nes_asm_ai=False,
                       nes_asm_player=False, nes_asm_smb=False, nes_asm_racer=False, nes_asm_player2=False,
@@ -3321,6 +3328,8 @@ def _build_in_tempdir(custom_main, chr_bytes, nam_bytes, pal_src, scene_src,
             (tmp_root / "src" / "audio_songs.s").write_text(_stage_audio_asm(audio_songs_asm))
             (tmp_root / "src" / "audio_sfx.s").write_text(_stage_audio_asm(audio_sfx_asm))
             make_args.append("USE_AUDIO=1")
+            if bw_sfx_events:                       # engine v74 — event SFX (jump/pickup/hurt/win)
+                make_args.append("BW_SFX_EVENTS=1")
             # Override the Makefile's relative `../../tools/audio/famistudio`
             # default with the real path — the tempdir clone of STEP_DIR
             # has no `tools/` sibling, so the relative form would 404.

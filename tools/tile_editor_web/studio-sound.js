@@ -126,6 +126,26 @@
     });
     sfxSec.appendChild(el('button', { class: 'btn', style: 'margin-top:6px', text: '⬆ Upload sfx pack (.s)', onclick: function () { sfxFile.click(); } }));
     sfxSec.appendChild(sfxFile);
+
+    // Event sounds (engine v74) — play sfx on game events.  Only useful with a
+    // real sfx pack loaded; the starter pack's slots (jump/hit/pickup/…) line up
+    // with the events below.
+    if (a.sfx) {
+      var evCb = el('input', { type: 'checkbox', id: 'sound-sfx-events' });
+      evCb.checked = !!a.sfxEvents;
+      evCb.addEventListener('change', function () {
+        ctx.pushUndo(); a.sfxEvents = !!evCb.checked; ctx.markDirty(); ctx.renderDock();
+      });
+      var evRow = el('label', { class: 'row', style: 'margin-top:8px; align-items:flex-start; gap:6px; cursor:pointer' }, [
+        evCb,
+        el('span', {}, [
+          el('div', { text: 'Play sounds on game events' }),
+          el('div', { class: 'dock-note', style: 'margin:2px 0 0',
+            text: 'Uses your sfx pack for jump, coin/pickup, getting hurt, and winning. Works best with the starter pack.' }),
+        ]),
+      ]);
+      sfxSec.appendChild(evRow);
+    }
     dock.appendChild(sfxSec);
 
     // ROM-size audit.

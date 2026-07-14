@@ -9,6 +9,42 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v74 — 2026-07-14 — Event sound effects: play SFX on jump / pickup / hurt / win (#7/#27, opt-in)
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; off by default)
+Loaded sound effects were previously **silent** — the engine called
+`famistudio_sfx_init()` but never `famistudio_sfx_play()`, so an uploaded/starter
+SFX pack occupied ROM yet no game event ever made a sound (feedback #7 "default
+sound fx" and #27 "unclear where SFX link to events").
+
+v74 wires SFX to game events via **edge-detectors in the main loop**, so they fire
+identically in the C and the shipped hand-written-6502 build — the ASM player
+updates `jumping`, the C loop just observes the 0→1 edge, dodging the item-22/v67
+"C hook silently doesn't run under ASM" trap. Detected events and their starter-pack
+slots (declaration order jump/hit/pickup/land/blip/error):
+
+- **jump** — `jumping` 0→1 → slot 0, sfx channel 0.
+- **pickup** — `bw_pickup_count` increased → slot 2, channel 1 (needs the Pickups
+  module; gated on a new `BW_HAS_PICKUPS` define the module emits).
+- **hurt** — `player_hp` dropped → slot 1, channel 1 (needs the Damage module / HP).
+- **win** — `bw_won` 0→1 → slot 4, channel 1 (needs the Win-condition module).
+
+Each detector is a couple of byte compares that only act on the state edge, so the
+frame-budget cost is negligible. The prev-state trackers are `static` locals at the
+top of `main()` (after the module `#define`s), and the slot indices are
+`#ifndef`-guarded so a future per-event picker can override them with a `-D`.
+
+**Gating (byte-identical when off):** the whole feature is `#ifdef BW_SFX_EVENTS`,
+which `steps/Step_Playground/Makefile` turns into `-DBW_SFX_EVENTS=1` only when the
+server passes `BW_SFX_EVENTS=1`. The server sets it **only** when a project has a
+**real** SFX pack (not the silent auto-stub) *and* the new `audioSfxEvents` request
+flag is true — driven by the SOUND dock's "Play sounds on game events" toggle
+(`studio-sound.js` → `play-pipeline.js`). Every project without event sounds — and
+every golden ROM — is byte-identical. Guarded by `tools/builder-tests/sfx-events.mjs`
+(events-ON compiles all four detector branches; events change the ROM vs OFF; the
+flag without an sfx pack is a no-op). **The actual sound is signed off in an attended
+FCEUX playtest** (jsnes APU inspection is too fragile to assert on).
+
 ## v73 — 2026-07-14 — Invincibility-frames floor (#35): version the clamp change that shipped in fea021e
 
 ### Changed / migration (goldens `1730448e` + `_rom-equiv` UNCHANGED)

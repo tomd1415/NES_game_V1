@@ -334,6 +334,10 @@
           '.export _audio_sfx_data:=' + sfxSym + '\n' +
           '.export audio_sfx_data:=' + sfxSym + '\n';
         payload.audioSfxAsm = audio.sfx.asm + sfxAlias;
+        // Engine v74 — trigger these sfx on game events (jump/pickup/hurt/win).
+        // Only sent alongside a real sfx pack, so the server never wires events
+        // to the silent auto-stub.
+        payload.audioSfxEvents = !!audio.sfxEvents;
       }
     }
 

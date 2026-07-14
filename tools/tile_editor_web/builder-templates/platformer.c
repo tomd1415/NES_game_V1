@@ -168,6 +168,38 @@ unsigned char pad;
 unsigned char prev_pad;      // for edge-triggering the jump
 unsigned char jumping;       // 1 while airborne (rising or falling)
 unsigned char jmp_up;        // ascent frames remaining (0 = falling)
+
+#ifdef BW_SFX_EVENTS
+/* v74 — event sound effects.  The server defines BW_SFX_EVENTS (always paired
+ * with USE_AUDIO) when the project has an SFX pack AND the pupil ticked "event
+ * sounds".  SFX are triggered by EDGE-DETECTORS in the main loop that watch
+ * shared game state, so they fire the same in the C and the shipped hand-written
+ * 6502 build (the ASM player updates `jumping`, the C loop just observes the
+ * edge — dodging the item-22/v67 "C hook silently doesn't run under ASM" trap).
+ * The detectors + their prev-state trackers live at the top of main() (as static
+ * locals, so they see the module #defines that are injected above main); this
+ * block only sets the slot->event mapping.  All of it compiles out when
+ * BW_SFX_EVENTS is undefined, so every project without event sounds — and every
+ * golden ROM — is byte-identical.
+ *
+ * Slot indices map to the starter SFX pack's declaration order
+ * (jump/hit/pickup/land/blip/error); a pupil's own pack should provide at least
+ * these slots.  They are `#ifndef`-guarded so a future per-event picker can
+ * override any of them with a -D on the build. */
+#ifndef BW_SFX_JUMP
+#define BW_SFX_JUMP   0   /* player leaves the ground */
+#endif
+#ifndef BW_SFX_HURT
+#define BW_SFX_HURT   1   /* player HP dropped (took a hit) */
+#endif
+#ifndef BW_SFX_PICKUP
+#define BW_SFX_PICKUP 2   /* pickup collected */
+#endif
+#ifndef BW_SFX_WIN
+#define BW_SFX_WIN    4   /* win condition reached */
+#endif
+#endif /* BW_SFX_EVENTS */
+
 unsigned char on_ladder;     // 1 while the player is overlapping a LADDER tile
 unsigned char plrdir;        // 0x40 when facing left (flip-H on every tile)
 //>> walk_speed: How many pixels the player moves each frame. 1 = slow, 2 = normal, 3 = fast.
@@ -1090,6 +1122,23 @@ void hud_present(void) {
 #endif /* BW_SMB_HUD_BG && SCROLL_BUILD */
 
 void main(void) {
+#ifdef BW_SFX_EVENTS
+    /* v74 event-SFX prev-state trackers — `static` so they persist across
+     * frames; declared here at main()'s block start (after the module #defines
+     * that are injected above main) so each #if guard matches the matching
+     * detector in the loop below.  Zero-init is safe: player_hp starts > 0 and
+     * the counters start at 0, so no event fires on the first frame. */
+    static unsigned char bw_sfx_prev_jump = 0;
+#ifdef BW_HAS_PICKUPS
+    static unsigned char bw_sfx_prev_pick = 0;
+#endif
+#if PLAYER_HP_ENABLED
+    static unsigned char bw_sfx_prev_hp = 0;
+#endif
+#if BW_WIN_ENABLED
+    static unsigned char bw_sfx_prev_won = 0;
+#endif
+#endif /* BW_SFX_EVENTS */
     waitvsync();
     PPU_MASK = 0;
 
@@ -2958,6 +3007,36 @@ void main(void) {
             oam_idx += 4;
         }
 #endif
+
+#ifdef BW_SFX_EVENTS
+        /* v74 — event SFX.  Runs once per frame after all game logic + OAM
+         * assembly, just before famistudio_update() below consumes any queued
+         * sfx.  Each detector is a couple of byte compares (negligible vs the
+         * frame budget) and only fires on the state EDGE, not every frame.  Jump
+         * goes on sfx channel 0, the rarer event sounds on channel 1, so a pickup
+         * grabbed mid-jump doesn't cut the jump blip.  Prev-state trackers are the
+         * static locals declared at the top of main(). */
+        if (jumping && !bw_sfx_prev_jump)
+            famistudio_sfx_play(BW_SFX_JUMP, FAMISTUDIO_SFX_CH0);
+        bw_sfx_prev_jump = jumping;
+#ifdef BW_HAS_PICKUPS
+        if (bw_pickup_count != bw_sfx_prev_pick) {
+            if (bw_pickup_count > bw_sfx_prev_pick)
+                famistudio_sfx_play(BW_SFX_PICKUP, FAMISTUDIO_SFX_CH1);
+            bw_sfx_prev_pick = bw_pickup_count;   /* also resync on a respawn reset */
+        }
+#endif
+#if PLAYER_HP_ENABLED
+        if (player_hp < bw_sfx_prev_hp)
+            famistudio_sfx_play(BW_SFX_HURT, FAMISTUDIO_SFX_CH1);
+        bw_sfx_prev_hp = player_hp;
+#endif
+#if BW_WIN_ENABLED
+        if (bw_won && !bw_sfx_prev_won)
+            famistudio_sfx_play(BW_SFX_WIN, FAMISTUDIO_SFX_CH1);
+        bw_sfx_prev_won = bw_won;
+#endif
+#endif /* BW_SFX_EVENTS */
 
 /* Feedback #2/#3 — a multi-bg door build that stays within 2x2 skips the
  * streamer (see the block-comment at scroll_stream() below).  The

@@ -55,6 +55,15 @@ AUDIO_OBJS = $(BUILD)/famistudio_crt0.o $(BUILD)/famistudio_engine.o $(BUILD)/au
 CFLAGS    += -DUSE_AUDIO=1
 endif
 
+# Event sound effects (engine v74) — opt-in, and only meaningful alongside
+# USE_AUDIO (the server pairs the two).  When BW_SFX_EVENTS=1 is passed, main.c's
+# per-frame edge-detectors trigger famistudio_sfx_play on jump / pickup / hurt /
+# win.  Default off keeps every non-event-sound project byte-identical.
+BW_SFX_EVENTS ?= 0
+ifeq ($(BW_SFX_EVENTS),1)
+CFLAGS    += -DBW_SFX_EVENTS=1
+endif
+
 # SMB background status bar (sprite-0 split): its PPU push runs from the NMI so
 # the strip renders on time regardless of frame load (see src/hud_crt0.s +
 # hud_present() in main.c).  HUD_NMI=1 (the playground server sets it when the

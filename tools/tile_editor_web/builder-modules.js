@@ -1156,6 +1156,7 @@
     schema: [],
     applyToTemplate(template, node, state) {
       template = A.appendToSlot(template, 'declarations', [
+        '#define BW_HAS_PICKUPS 1  // [builder] pickups — lets the v74 event-SFX block sound bw_pickup_count',
         'unsigned char bw_pickup_count = 0;  // [builder] pickups — collected so far',
         'unsigned char bw_pickup_total = 0;  // [builder] pickups — total on the level',
       ].join('\n'));
