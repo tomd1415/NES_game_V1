@@ -6,8 +6,8 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QIODevice, QObject, QRegularExpression, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QKeySequence, QPainter, QPixmap, QShortcut, QTextCharFormat, QSyntaxHighlighter
+from PySide6.QtCore import QIODevice, QObject, QRect, QRegularExpression, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
+from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QImage, QKeySequence, QPainter, QPixmap, QShortcut, QTextCharFormat, QSyntaxHighlighter
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -39,6 +39,14 @@ from ..core.resources import ResourceLocator
 from ..codegen.differential import CodegenDifferential
 from ..core.project_document import ProjectDocument, ProjectFormatError
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
+from ..render.framebuffer import (
+    attribute_conflicts,
+    render_background_tile,
+    render_nametable,
+    render_sprite,
+    render_sprite_tile,
+)
+from ..render.palette import is_light, nes_qcolor
 from ..persistence.manager import StorageManager
 from ..persistence.portability import AtomicExportError, export_project, import_project
 from ..persistence.session import ProjectSession
@@ -191,47 +199,62 @@ class MainWindow(QMainWindow):
         painter.end()
         return QIcon(pixmap)
 
-    @staticmethod
-    def _tile_thumbnail(pixels: list[list[int]]) -> QIcon:
-        """Render an 8×8 tile into a compact, recognisable library thumbnail."""
+    def _tile_bank(self) -> str:
+        return "sprite" if self.tile_bank.currentData() == "sprite" else "bg"
 
-        colours = ("#181828", "#4878d8", "#78d878", "#f8d878")
+    def _tile_preview_palette_index(self) -> int:
+        value = self.tile_preview_palette.currentData()
+        return int(value) & 3 if isinstance(value, int) else 0
+
+    def _tile_ramp(self) -> tuple[str, str, str, str]:
+        """The four real colours the current bank+palette paints with.
+
+        Background pixel value 0 is the universal backdrop; sprite value 0 is
+        transparent (shown as the editor's dark base, since a checkerboard would
+        fight the surrounding chrome).
+        """
+
+        palette = self._tile_preview_palette_index()
+        if self._tile_bank() == "sprite":
+            slots = self._document.sprite_palette(palette)
+            zero = "#101018"
+        else:
+            slots = self._document.background_palette(palette)
+            zero = nes_qcolor(self._document.universal_background).name()
+        return (zero, *(nes_qcolor(slot).name() for slot in slots))
+
+    def _tile_thumbnail(self, tile_index: int, *, bank: str = "bg", palette: int = 0) -> QIcon:
+        """Render an 8×8 tile into a library thumbnail, in its real colours."""
+
+        renderer = render_background_tile if bank == "bg" else render_sprite_tile
+        image = renderer(self._document, tile_index, palette)
         pixmap = QPixmap(20, 20)
         pixmap.fill(QColor("#080810"))
         painter = QPainter(pixmap)
-        for row, source_row in enumerate(pixels[:8]):
-            for column, value in enumerate(source_row[:8]):
-                painter.fillRect(2 + column * 2, 2 + row * 2, 2, 2, QColor(colours[int(value) & 3]))
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        painter.drawImage(QRect(2, 2, 16, 16), image)
         painter.setPen(QColor("#7878c8"))
         painter.drawRect(0, 0, 19, 19)
         painter.end()
         return QIcon(pixmap)
 
     def _sprite_thumbnail(self, sprite: dict[str, object]) -> QIcon:
-        """Draw up to four sprite cells as a compact visual entry in CHARS."""
+        """Draw a sprite as a compact visual entry in CHARS, in its real colours."""
 
-        colours = ("#181828", "#4878d8", "#78d878", "#f8d878")
+        image = render_sprite(self._document, sprite)
         pixmap = QPixmap(40, 40)
         pixmap.fill(QColor("#101018"))
         painter = QPainter(pixmap)
-        cells = sprite.get("cells", [])
-        if isinstance(cells, list):
-            for cell_y, row in enumerate(cells[:2]):
-                if not isinstance(row, list):
-                    continue
-                for cell_x, cell in enumerate(row[:2]):
-                    if not isinstance(cell, dict) or cell.get("empty"):
-                        continue
-                    pixels = self._document.sprite_tile_pixels(int(cell.get("tile", 0)))
-                    for pixel_y, source_row in enumerate(pixels[:8]):
-                        for pixel_x, value in enumerate(source_row[:8]):
-                            painter.fillRect(
-                                cell_x * 20 + 2 + pixel_x * 2,
-                                cell_y * 20 + 2 + pixel_y * 2,
-                                2,
-                                2,
-                                QColor(colours[int(value) & 3]),
-                            )
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        if not image.isNull() and image.width() and image.height():
+            # Preserve the sprite's aspect ratio: an 8x16 character must not be
+            # squashed into the square thumbnail.
+            scale = min(36 / image.width(), 36 / image.height())
+            width = max(1, int(image.width() * scale))
+            height = max(1, int(image.height() * scale))
+            painter.drawImage(
+                QRect((40 - width) // 2, (40 - height) // 2, width, height), image
+            )
         painter.setPen(QColor("#7878c8"))
         painter.drawRect(0, 0, 39, 39)
         painter.end()
@@ -254,20 +277,11 @@ class MainWindow(QMainWindow):
     def _style_palette_control(control: QSpinBox, colour: int) -> None:
         """Give numeric NES palette entries a readable live colour swatch."""
 
-        tone = colour & 0x0F
-        if tone in {0x0D, 0x0E, 0x0F}:
-            swatch = QColor("#101018")
-        else:
-            swatch = QColor.fromHsv((tone * 23) % 360, 170, (72, 128, 188, 242)[(colour >> 4) & 3])
-        text = "#080810" if swatch.lightness() > 145 else "#f8f8f8"
+        swatch = nes_qcolor(colour)
+        text = "#080810" if is_light(colour) else "#f8f8f8"
         control.setStyleSheet(
             f"QSpinBox {{ background: {swatch.name()}; color: {text}; border: 2px solid #f8f8f8; font-weight: 800; padding: 4px; }}"
         )
-
-    @staticmethod
-    def _nes_colour_swatch(colour: int) -> QColor:
-        tone = colour & 0x0F
-        return QColor("#101018") if tone in {0x0D, 0x0E, 0x0F} else QColor.fromHsv((tone * 23) % 360, 170, (72, 128, 188, 242)[(colour >> 4) & 3])
 
     def _create_workspace(self) -> QWidget:
         root = QWidget(self)
@@ -734,6 +748,19 @@ class MainWindow(QMainWindow):
         self.tile_selector.setAccessibleName("Background tile index")
         self.tile_selector.valueChanged.connect(self._refresh_tile_editor)
         selector_row.addWidget(self.tile_selector)
+        # A tile has no palette of its own — the nametable cell (or metasprite
+        # cell) that references it chooses one. So the editor needs an explicit
+        # "preview through this palette" choice, exactly as the web has.
+        self.tile_preview_palette = QComboBox(self.tile_editor)
+        self.tile_preview_palette.setObjectName("tilePreviewPalette")
+        self._prepare_visual_selector(self.tile_preview_palette, "Preview palette")
+        for palette in range(4):
+            self._add_visual_choice(
+                self.tile_preview_palette, f"Preview palette {palette}", palette,
+                colour="#4878d8", glyph=str(palette),
+            )
+        self.tile_preview_palette.currentIndexChanged.connect(self._refresh_tile_editor)
+        selector_row.addWidget(self.tile_preview_palette)
         tile_layout.addLayout(selector_row)
         self._tile_shortcuts: list[QShortcut] = []
         for key, delta in (("[", -1), ("]", 1), ("Left", -1), ("Right", 1), ("Up", -16), ("Down", 16)):
@@ -795,11 +822,10 @@ class MainWindow(QMainWindow):
         self._tile_pen_buttons: list[QPushButton] = []
         pen_group = QButtonGroup(self.tile_editor)
         pen_group.setExclusive(True)
-        for value, colour in enumerate(("#181828", "#4878d8", "#78d878", "#f8d878")):
+        for value in range(4):
             button = QPushButton(str(value), self.tile_editor)
             button.setObjectName(f"tilePen{value}")
             button.setCheckable(True); button.setFixedWidth(42)
-            button.setStyleSheet(f"background: {colour}; color: {'#080810' if value else '#f8f8f8'}; font-weight: 800;")
             button.clicked.connect(lambda _checked=False, value=value: self._set_tile_pen(value))
             pen_group.addButton(button); self._tile_pen_buttons.append(button); pen_row.addWidget(button)
         self._tile_pen_buttons[self._tile_pen].setChecked(True)
@@ -1329,8 +1355,8 @@ class MainWindow(QMainWindow):
                 control.blockSignals(False)
                 self._style_palette_control(control, colour)
         for colour, button in enumerate(self._master_palette_buttons):
-            swatch = self._nes_colour_swatch(colour)
-            text = "#080810" if swatch.lightness() > 145 else "#f8f8f8"
+            swatch = nes_qcolor(colour)
+            text = "#080810" if is_light(colour) else "#f8f8f8"
             button.setStyleSheet(f"background: {swatch.name()}; color: {text}; font-weight: 800; padding: 0;")
         self._refresh_recent_palette_colours()
 
@@ -1367,14 +1393,19 @@ class MainWindow(QMainWindow):
             button = QPushButton(f"{colour:02X}", self.palette_editor)
             button.setAccessibleName(f"Reuse recent NES colour {colour:02X}")
             button.setFixedSize(42, 28)
-            swatch = self._nes_colour_swatch(colour)
-            button.setStyleSheet(f"background: {swatch.name()}; color: {'#080810' if swatch.lightness() > 145 else '#f8f8f8'}; font-weight: 800; padding: 0;")
+            swatch = nes_qcolor(colour)
+            button.setStyleSheet(f"background: {swatch.name()}; color: {'#080810' if is_light(colour) else '#f8f8f8'}; font-weight: 800; padding: 0;")
             button.clicked.connect(lambda _checked=False, colour=colour: self._apply_master_palette_colour(colour))
             self._recent_palette_buttons.append(button); self.palette_recent_row.addWidget(button)
 
     def _refresh_tile_editor(self, _index: int | None = None) -> None:
         pixels = self._tile_pixels()
-        colours = ("#181828", "#4878d8", "#78d878", "#f8d878")
+        colours = self._tile_ramp()
+        for value, button in enumerate(self._tile_pen_buttons):
+            button.setStyleSheet(
+                f"background: {colours[value]}; "
+                f"color: {'#f8f8f8' if value == 0 else '#080810'}; font-weight: 800;"
+            )
         for row in range(8):
             for column in range(8):
                 value = pixels[row][column]
@@ -1398,12 +1429,11 @@ class MainWindow(QMainWindow):
             is_selected, count = index == selected, used.get(index, 0)
             background = "#f8d878" if is_selected else "#4878d8" if count else "#292949"
             foreground = "#080810" if is_selected else "#f8f8f8"
-            tile_pixels = (
-                self._document.sprite_tile_pixels(index)
-                if self.tile_bank.currentData() == "sprite"
-                else self._document.background_tile_pixels(index)
+            button.setIcon(
+                self._tile_thumbnail(
+                    index, bank=self._tile_bank(), palette=self._tile_preview_palette_index()
+                )
             )
-            button.setIcon(self._tile_thumbnail(tile_pixels))
             button.setStyleSheet(f"background: {background}; color: {foreground}; padding: 0; border: {'2px solid #f8f8f8' if is_selected else '1px solid #5b5b90'};")
             button.setToolTip(f"Tile 0x{index:02X} — used {count} time{'s' if count != 1 else ''}")
 
@@ -1543,12 +1573,22 @@ class MainWindow(QMainWindow):
 
     def _sync_canvas_entities(self) -> None:
         x_offset, y_offset = self._world_screen_x * 256, self._world_screen_y * 240
+        sprites = self._document.state.get("sprites") or []
         visible = []
+        images: list[QImage | None] = []
         for index, instance in enumerate(self._document.scene_instances()):
             x, y = int(instance.get("x", 0)) - x_offset, int(instance.get("y", 0)) - y_offset
-            if 0 <= x <= 255 and 0 <= y <= 239:
-                visible.append({"index": index, "x": x, "y": y})
+            if not (0 <= x <= 255 and 0 <= y <= 239):
+                continue
+            visible.append({"index": index, "x": x, "y": y})
+            # Draw the entity as its real sprite, not an anonymous red square.
+            sprite_index = int(instance.get("sprite", 0))
+            sprite = sprites[sprite_index] if 0 <= sprite_index < len(sprites) else None
+            images.append(
+                render_sprite(self._document, sprite) if isinstance(sprite, dict) else None
+            )
         self.world_canvas.set_entities(visible)
+        self.world_canvas.set_entity_images(images)
 
     def _select_canvas_entity(self, visible_index: int) -> None:
         entities = self.world_canvas._entities
@@ -2153,7 +2193,23 @@ class MainWindow(QMainWindow):
     def _world_value_changed(self, description: str) -> None:
         self._session.schedule_save()
         self._update_document_title()
+        self._refresh_world_frame()
         self.statusBar().showMessage(f"WORLD changed to {description}")
+
+    def _refresh_world_frame(self) -> None:
+        """Re-render the WORLD screen from the document.
+
+        This is what makes WORLD show the pupil's actual tile art and palettes
+        instead of a placeholder colour per tile index.
+        """
+
+        self.world_canvas.set_frame(
+            render_nametable(self._document, self._world_screen_x, self._world_screen_y)
+        )
+        self.world_canvas.set_conflicts(
+            attribute_conflicts(self._document, self._world_screen_x, self._world_screen_y)
+        )
+        self._refresh_quests()
 
     def _load_document_world(self) -> None:
         self._sync_background_selector()
@@ -2172,7 +2228,7 @@ class MainWindow(QMainWindow):
             self._document.world_behaviours(self._world_screen_x, self._world_screen_y),
         )
         self._sync_canvas_entities()
-        self._refresh_quests()
+        self._refresh_world_frame()
 
     def _set_world_grid_options(self, _checked: bool) -> None:
         show_grid, show_attributes = self.grid_toggle.isChecked(), self.attribute_toggle.isChecked()

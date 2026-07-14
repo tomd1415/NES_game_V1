@@ -5,22 +5,23 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen
+from PySide6.QtGui import QColor, QImage, QKeyEvent, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 
 class WorldCanvas(QWidget):
-    """Paint a small tile-index model without browser or server dependencies."""
+    """The WORLD editing surface, drawn over a real NES framebuffer.
+
+    The canvas owns the *interaction* (tools, selection, undo, entity drag) but
+    not the *pixels*: the rendered 256x240 screen is handed in via `set_frame()`
+    by whoever owns the document. Previously this widget painted each cell as
+    `NES_COLOURS[value % 4]` — a placeholder ramp keyed off the tile index — so
+    it never showed the tile art or the palettes the pupil had actually chosen.
+    """
 
     COLS = 32
     ROWS = 30
     TILE_PIXELS = 8
-    NES_COLOURS = (
-        QColor("#181828"),
-        QColor("#4878d8"),
-        QColor("#78d878"),
-        QColor("#f8d878"),
-    )
 
     cell_changed = Signal(int, int, int)
     palette_changed = Signal(int, int, int)
@@ -59,16 +60,38 @@ class WorldCanvas(QWidget):
         self._stroke_cells: set[tuple[int, int, str]] = set()
         self._entities: list[dict[str, int]] = []
         self._drag_entity: int | None = None
-        self._seed_preview()
+        self._frame: QImage | None = None
+        self._entity_images: list[QImage | None] = []
+        self._conflicts: list[tuple[int, int]] = []
+        self._show_conflicts = True
         self._update_accessible_cell()
 
-    def _seed_preview(self) -> None:
-        for row in range(24, self.ROWS):
-            for col in range(self.COLS):
-                self._cells[row][col] = 2 if row == 24 else 1
-        for col, height in ((5, 3), (6, 3), (12, 5), (13, 5), (22, 2)):
-            for row in range(24 - height, 24):
-                self._cells[row][col] = 3
+    def set_frame(self, image: QImage | None) -> None:
+        """Set the rendered 256x240 NES screen drawn beneath the overlays."""
+
+        self._frame = image
+        self.update()
+
+    def set_entity_images(self, images: list[QImage | None]) -> None:
+        """Set per-entity sprite art, index-aligned with `set_entities()`."""
+
+        self._entity_images = images
+        self.update()
+
+    def set_conflicts(self, conflicts: list[tuple[int, int]]) -> None:
+        """Mark 2x2 quadrants whose cells disagree on palette.
+
+        The NES stores one palette per quadrant, so these cannot render as
+        drawn. Showing them here is what stops the pupil discovering it only
+        after a build.
+        """
+
+        self._conflicts = conflicts
+        self.update()
+
+    def set_show_conflicts(self, show: bool) -> None:
+        self._show_conflicts = show
+        self.update()
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt API
         return QSize(640, 600)
@@ -416,15 +439,37 @@ class WorldCanvas(QWidget):
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#080810"))
         tile, left, top = self._grid_geometry()
-        for row, cells in enumerate(self._cells):
-            for col, value in enumerate(cells):
-                rect = QRectF(left + col * tile, top + row * tile, tile, tile)
-                painter.fillRect(rect, self.NES_COLOURS[value % len(self.NES_COLOURS)])
-        for entity in self._entities:
-            rect = QRectF(left + entity["x"] * tile / 8 - tile / 2, top + entity["y"] * tile / 8 - tile / 2, tile, tile)
-            painter.fillRect(rect, QColor("#f87878"))
-            painter.setPen(QPen(QColor("#f8f8f8"), 1))
-            painter.drawRect(rect)
+
+        # The game itself. Nearest-neighbour: anything smoother turns pixel art
+        # to mush.
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+        screen = QRectF(left, top, self.COLS * tile, self.ROWS * tile)
+        if self._frame is not None and not self._frame.isNull():
+            painter.drawImage(screen, self._frame)
+        else:
+            painter.fillRect(screen, QColor("#101018"))
+
+        for index, entity in enumerate(self._entities):
+            image = self._entity_images[index] if index < len(self._entity_images) else None
+            if image is not None and not image.isNull():
+                # Entity coordinates are the sprite's top-left, in NES pixels.
+                width = image.width() * tile / 8
+                height = image.height() * tile / 8
+                rect = QRectF(left + entity["x"] * tile / 8, top + entity["y"] * tile / 8, width, height)
+                painter.drawImage(rect, image)
+            else:
+                rect = QRectF(left + entity["x"] * tile / 8, top + entity["y"] * tile / 8, tile, tile)
+                painter.fillRect(rect, QColor("#f87878"))
+                painter.setPen(QPen(QColor("#f8f8f8"), 1))
+                painter.drawRect(rect)
+
+        if self._show_conflicts and self._conflicts:
+            painter.setPen(QPen(QColor("#c72e00"), 2))
+            for col, row in self._conflicts:
+                rect = QRectF(left + col * tile, top + row * tile, tile * 2, tile * 2)
+                painter.drawRect(rect)
+                painter.drawLine(rect.topLeft(), rect.bottomRight())
+                painter.drawLine(rect.topRight(), rect.bottomLeft())
 
         if self._show_grid:
             painter.setPen(QPen(QColor("#383858"), 1))
