@@ -52,6 +52,7 @@ from ..render.palette import is_light, nes_qcolor
 from ..render.screen import NesScreen
 from ..emulator.session import EmulatorSession, EmulatorUnavailable, core_available
 from .project_catalog import NewProjectDialog, ProjectCatalogDialog
+from ..state.store import DocumentStore
 from ..persistence.manager import StorageManager
 from ..persistence.portability import AtomicExportError, export_project, import_project
 from ..persistence.session import ProjectSession
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
         self._play_after_build = False
         self._code_loaded_text: str | None = None
         self._mode = "WORLD"
+        self._stale_modes: set[str] = set()
         self._emulator = EmulatorSession(self)
         self._tile_clipboard: list[list[int]] | None = None
         data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
@@ -144,6 +146,8 @@ class MainWindow(QMainWindow):
             project = self._storage.create_starter("scratch", name="Native Preview")
             self._session = self._storage.open_session(project.project_id)
         self._document = self._session.document
+        self._store = DocumentStore(self._session, self)
+        self._store.changed.connect(self._document_restored)
         self._world_screen_x = 0
         self._world_screen_y = 0
         self._snapshot_timer = QTimer(self)
@@ -632,7 +636,8 @@ class MainWindow(QMainWindow):
         self.world_canvas.palette_changed.connect(self._world_palette_changed)
         self.world_canvas.behaviour_changed.connect(self._world_behaviour_changed)
         self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
-        self.world_canvas.history_changed.connect(self._world_history_changed)
+        self.world_canvas.stroke_began.connect(self._store.begin_macro)
+        self.world_canvas.stroke_ended.connect(lambda: self._store.end_macro("paint"))
         self.world_canvas.grid_options_changed.connect(self._world_grid_shortcut_changed)
         self.world_canvas.entity_selected.connect(self._select_canvas_entity)
         self.world_canvas.entity_moved.connect(self._move_canvas_entity)
@@ -1273,6 +1278,10 @@ class MainWindow(QMainWindow):
         if self._emulator.is_running():
             self._stop_play(restore_mode=False)
         self._mode = mode
+        if mode in self._stale_modes:
+            self._refresh_mode(mode)
+            if mode == "WORLD":
+                self._load_document_world()
         self._mode_buttons[mode].setChecked(True)
         self.mode_title.setText(mode)
         self.mode_help.setText(
@@ -2464,17 +2473,19 @@ class MainWindow(QMainWindow):
     def _world_cursor_changed(self, col: int, row: int) -> None:
         self.statusBar().showMessage(f"WORLD cell ({col}, {row}) — {self.world_canvas.tool.title()} tool")
 
-    def _world_history_changed(self, can_undo: bool, can_redo: bool) -> None:
-        self.undo_action.setEnabled(can_undo)
-        self.redo_action.setEnabled(can_redo)
+    def _undo(self) -> None:
+        if self._store.undo():
+            self.statusBar().showMessage("Undone")
 
-    def _undo_world(self) -> None:
-        if self.world_canvas.undo():
-            self.statusBar().showMessage("Undid WORLD edit")
+    def _redo(self) -> None:
+        if self._store.redo():
+            self.statusBar().showMessage("Redone")
 
-    def _redo_world(self) -> None:
-        if self.world_canvas.redo():
-            self.statusBar().showMessage("Redid WORLD edit")
+    def _document_restored(self) -> None:
+        """The document was replaced by an undo or redo — re-read it."""
+
+        self._refresh_all_editors()
+        self._update_document_title()
 
     def _update_document_title(self) -> None:
         marker = " *" if self._document.dirty else ""
@@ -2703,29 +2714,45 @@ class MainWindow(QMainWindow):
             self._stop_play()
         self._session.switch(project_id)
         self._document = self._session.document
+        self._store.rebind(self._session)
         self._last_rom = None
-        self._load_document_world()
         self._refresh_all_editors()
+        self._load_document_world()
         self._update_document_title()
 
-    def _refresh_all_editors(self) -> None:
-        """Re-read every mode from the document after it is replaced wholesale."""
+    def _mode_refreshers(self, mode: str) -> tuple:
+        return {
+            "WORLD": (self._refresh_scene_editor, self._refresh_metatile_mode),
+            "PALS": (self._refresh_palette_editor,),
+            "TILES": (self._refresh_tile_editor,),
+            "CHARS": (self._refresh_sprite_editor, self._refresh_animation_list),
+            "RULES": (self._refresh_rules_editor,),
+            "SOUND": (self._refresh_sound_editor,),
+            "CODE": (self._refresh_code_preview,),
+        }.get(mode, ())
 
-        for refresh in (
-            self._refresh_palette_editor,
-            self._refresh_tile_editor,
-            self._refresh_sprite_editor,
-            self._refresh_animation_list,
-            self._refresh_scene_editor,
-            self._refresh_rules_editor,
-            self._refresh_sound_editor,
-            self._refresh_code_preview,
-            self._refresh_metatile_mode,
-        ):
+    def _refresh_mode(self, mode: str) -> None:
+        self._stale_modes.discard(mode)
+        for refresh in self._mode_refreshers(mode):
             try:
                 refresh()
-            except Exception:  # one broken editor must not block a project switch
+            except Exception:  # one broken editor must not block the app
                 continue
+
+    def _refresh_all_editors(self) -> None:
+        """The document changed underneath every mode — undo, redo, or a project
+        switch.
+
+        Refresh only the mode the pupil is looking at and mark the rest stale, to
+        be refreshed when they are next opened. Refreshing them all eagerly meant
+        every undo re-ran `_refresh_code_preview`, which invokes the cc65 codegen
+        — seconds of work per keystroke-sized edit.
+        """
+
+        self._stale_modes = set(MODE_NAMES)
+        if self._mode == "WORLD":
+            self._load_document_world()
+        self._refresh_mode(self._mode)
 
     def _apply_theme(self) -> None:
         # Applied to the *application*, not this window. A QDialog is a
@@ -2830,14 +2857,17 @@ class MainWindow(QMainWindow):
         self.undo_action.setObjectName("undoAction")
         self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
         self.undo_action.setEnabled(False)
-        self.undo_action.triggered.connect(self._undo_world)
+        self.undo_action.triggered.connect(self._undo)
         edit_menu.addAction(self.undo_action)
         self.redo_action = QAction("&Redo", self)
         self.redo_action.setObjectName("redoAction")
         self.redo_action.setShortcut(QKeySequence.StandardKey.Redo)
         self.redo_action.setEnabled(False)
-        self.redo_action.triggered.connect(self._redo_world)
+        self.redo_action.triggered.connect(self._redo)
         edit_menu.addAction(self.redo_action)
+        # Undo now covers every mode, not just WORLD.
+        self._store.can_undo_changed.connect(self.undo_action.setEnabled)
+        self._store.can_redo_changed.connect(self.redo_action.setEnabled)
 
         view_menu = self.menuBar().addMenu("&View")
         diagnostics_action = QAction("&Diagnostics…", self)

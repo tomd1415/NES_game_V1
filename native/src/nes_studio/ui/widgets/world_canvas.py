@@ -27,7 +27,8 @@ class WorldCanvas(QWidget):
     palette_changed = Signal(int, int, int)
     behaviour_changed = Signal(int, int, int)
     cursor_changed = Signal(int, int)
-    history_changed = Signal(bool, bool)
+    stroke_began = Signal()
+    stroke_ended = Signal()
     grid_options_changed = Signal(bool, bool)
     entity_selected = Signal(int)
     entity_moved = Signal(int, int, int)
@@ -54,10 +55,7 @@ class WorldCanvas(QWidget):
         self._clipboard: list[list[tuple[int, int, int]]] | None = None
         self._show_grid = True
         self._show_attributes = True
-        self._undo: list[list[tuple[int, int, int, int, str]]] = []
-        self._redo: list[list[tuple[int, int, int, int, str]]] = []
-        self._stroke: list[tuple[int, int, int, int, str]] | None = None
-        self._stroke_cells: set[tuple[int, int, str]] = set()
+        self._stroke: list | None = None
         self._entities: list[dict[str, int]] = []
         self._drag_entity: int | None = None
         self._frame: QImage | None = None
@@ -156,9 +154,6 @@ class WorldCanvas(QWidget):
         if len(tiles) < self.ROWS or any(len(row) < self.COLS for row in tiles[: self.ROWS]):
             raise ValueError("WORLD tile data must be at least 32 by 30")
         self._cells = [list(map(int, row[: self.COLS])) for row in tiles[: self.ROWS]]
-        self._undo.clear()
-        self._redo.clear()
-        self.history_changed.emit(False, False)
         self.update()
 
     def load_world(
@@ -279,16 +274,7 @@ class WorldCanvas(QWidget):
         target, signal = self._target_and_signal(tool)
         if target[row][col] == value:
             return False
-        before = target[row][col]
         target[row][col] = value
-        change = (col, row, before, value, tool)
-        if self._stroke is None:
-            self._undo.append([change])
-            self._redo.clear()
-            self.history_changed.emit(True, False)
-        elif (col, row, tool) not in self._stroke_cells:
-            self._stroke.append(change)
-            self._stroke_cells.add((col, row, tool))
         signal.emit(col, row, value)
         if (col, row) == self._selected:
             self._update_accessible_cell()
@@ -309,55 +295,22 @@ class WorldCanvas(QWidget):
         return self._behaviours, self._behaviour_value, self.behaviour_changed
 
     def begin_stroke(self) -> None:
+        """Start a drag. Everything until `end_stroke` is one undo step.
+
+        The canvas no longer keeps its own history — undo lives in DocumentStore
+        so that every mode is undoable, and so that switching background or
+        screen no longer wipes it (`load_tiles` used to clear the stack).
+        """
+
         if self._stroke is None:
             self._stroke = []
-            self._stroke_cells.clear()
+            self.stroke_began.emit()
 
     def end_stroke(self) -> None:
         if self._stroke is None:
             return
-        if self._stroke:
-            self._undo.append(self._stroke)
-            self._redo.clear()
-            self.history_changed.emit(True, False)
         self._stroke = None
-        self._stroke_cells.clear()
-
-    @property
-    def can_undo(self) -> bool:
-        return bool(self._undo)
-
-    @property
-    def can_redo(self) -> bool:
-        return bool(self._redo)
-
-    def undo(self) -> bool:
-        if not self._undo:
-            return False
-        stroke = self._undo.pop()
-        for col, row, before, _after, tool in reversed(stroke):
-            target, signal = self._target_and_signal(tool)
-            target[row][col] = before
-            signal.emit(col, row, before)
-        self._redo.append(stroke)
-        self.history_changed.emit(self.can_undo, self.can_redo)
-        self._update_accessible_cell()
-        self.update()
-        return True
-
-    def redo(self) -> bool:
-        if not self._redo:
-            return False
-        stroke = self._redo.pop()
-        for col, row, _before, after, tool in stroke:
-            target, signal = self._target_and_signal(tool)
-            target[row][col] = after
-            signal.emit(col, row, after)
-        self._undo.append(stroke)
-        self.history_changed.emit(self.can_undo, self.can_redo)
-        self._update_accessible_cell()
-        self.update()
-        return True
+        self.stroke_ended.emit()
 
     def _target_and_signal(self, tool: str):
         if tool in {"paint", "erase", "fill", "tile"}:

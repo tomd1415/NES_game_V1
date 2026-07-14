@@ -98,7 +98,7 @@ class NativeShellTests(unittest.TestCase):
         self.assertEqual(window._document.universal_background, 0x0F)
         window.world_canvas.edit_cell(2, 2)
         self.assertTrue(window.undo_action.isEnabled())
-        window._undo_world()
+        window._undo()
         self.assertTrue(window.redo_action.isEnabled())
         window.select_mode("CHARS")
         self.assertEqual(window.mode_title.text(), "CHARS")
@@ -264,7 +264,8 @@ class NativeShellTests(unittest.TestCase):
             window.new_project()
             self.assertEqual(window._document.name, "Untitled Game")
             self.assertFalse(window._document.dirty)
-            self.assertFalse(window.world_canvas.can_undo)
+            # History lives in DocumentStore now, and does not survive a switch.
+            self.assertFalse(window._store.can_undo)
             self.assertIn(previous_project_id, {entry.project_id for entry in window._storage.projects()})
         window.close()
         application.processEvents()

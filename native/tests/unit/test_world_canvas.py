@@ -28,28 +28,28 @@ def test_world_canvas_paint_and_erase_change_only_the_selected_cell() -> None:
     canvas.set_tool("erase")
     assert canvas.edit_cell(2, 2)
     assert canvas.cell_value(2, 2) == 0
-    assert canvas.undo()
-    assert canvas.cell_value(2, 2) == 1
-    assert canvas.undo()
-    assert canvas.cell_value(2, 2) == 0
-    assert canvas.redo()
-    assert canvas.cell_value(2, 2) == 1
     app.processEvents()
 
 
-def test_world_canvas_groups_a_drag_stroke_into_one_undo_step() -> None:
+def test_a_drag_stroke_brackets_its_edits_with_one_pair_of_signals() -> None:
+    """Undo lives in DocumentStore now; the canvas only says where a stroke
+    starts and ends, so the store can group the drag into one undo step."""
+
     create_application(["world-canvas-test"])
     canvas = WorldCanvas()
+    events: list[str] = []
+    canvas.stroke_began.connect(lambda: events.append("begin"))
+    canvas.stroke_ended.connect(lambda: events.append("end"))
+
     canvas.set_tool("paint")
     canvas.begin_stroke()
     canvas.edit_cell(1, 1)
     canvas.edit_cell(2, 1)
     canvas.edit_cell(3, 1)
     canvas.end_stroke()
+
     assert all(canvas.cell_value(col, 1) == 1 for col in (1, 2, 3))
-    assert canvas.undo()
-    assert all(canvas.cell_value(col, 1) == 0 for col in (1, 2, 3))
-    assert not canvas.can_undo
+    assert events == ["begin", "end"]
 
 
 def test_select_tool_does_not_mutate_and_invalid_cells_are_rejected() -> None:
@@ -68,7 +68,7 @@ def test_select_tool_does_not_mutate_and_invalid_cells_are_rejected() -> None:
         raise AssertionError("out-of-range WORLD edit did not fail")
 
 
-def test_palette_and_behaviour_edits_share_stroke_undo_history() -> None:
+def test_palette_and_behaviour_edits_are_independent() -> None:
     create_application(["world-canvas-test"])
     canvas = WorldCanvas()
     tiles = [[0 for _ in range(32)] for _ in range(30)]
@@ -90,18 +90,11 @@ def test_palette_and_behaviour_edits_share_stroke_undo_history() -> None:
     canvas.set_tool("behaviour")
     assert canvas.edit_cell(8, 9)
     assert canvas.behaviour_value(8, 9) == 7
-    assert canvas.undo()
-    assert canvas.behaviour_value(8, 9) == 0
+    # Painting a behaviour must not disturb the palette painted a moment ago.
     assert canvas.palette_value(8, 9) == 3
-    assert canvas.undo()
-    assert {
-        canvas.palette_value(col, row)
-        for col in (8, 9)
-        for row in (8, 9)
-    } == {0}
 
 
-def test_palette_edit_updates_one_nes_attribute_quadrant_in_one_history_step() -> None:
+def test_palette_edit_updates_one_nes_attribute_quadrant() -> None:
     create_application(["world-canvas-test"])
     canvas = WorldCanvas()
     canvas.set_palette_value(2)
@@ -114,13 +107,6 @@ def test_palette_edit_updates_one_nes_attribute_quadrant_in_one_history_step() -
         for row in (6, 7)
     } == {2}
     assert canvas.palette_value(6, 7) == 0
-    assert canvas.undo()
-    assert {
-        canvas.palette_value(col, row)
-        for col in (4, 5)
-        for row in (6, 7)
-    } == {0}
-    assert not canvas.can_undo
 
 
 def test_coordinate_mapping_is_exact_at_integer_and_fractional_scales() -> None:
@@ -188,7 +174,7 @@ def test_grid_shortcut_toggles_fine_grid_without_hiding_attribute_guides() -> No
     assert canvas.grid_options == (False, True)
 
 
-def test_selected_tile_value_is_painted_and_reversible() -> None:
+def test_selected_tile_value_is_painted() -> None:
     create_application(["world-canvas-test"])
     canvas = WorldCanvas()
     canvas.set_paint_value(173)
@@ -196,13 +182,9 @@ def test_selected_tile_value_is_painted_and_reversible() -> None:
 
     assert canvas.edit_cell(3, 4)
     assert canvas.cell_value(3, 4) == 173
-    assert canvas.undo()
-    assert canvas.cell_value(3, 4) == 0
-    assert canvas.redo()
-    assert canvas.cell_value(3, 4) == 173
 
 
-def test_fill_changes_only_contiguous_matching_tiles_in_one_undo_step() -> None:
+def test_fill_changes_only_contiguous_matching_tiles() -> None:
     create_application(["world-canvas-test"])
     canvas = WorldCanvas()
     tiles = [[0 for _ in range(32)] for _ in range(30)]
@@ -219,10 +201,6 @@ def test_fill_changes_only_contiguous_matching_tiles_in_one_undo_step() -> None:
     assert canvas.cell_value(0, 0) == 6
     assert canvas.cell_value(1, 1) == 9
     assert canvas.cell_value(4, 0) == 0
-    assert canvas.undo()
-    assert canvas.cell_value(0, 0) == 0
-    assert canvas.cell_value(4, 0) == 0
-    assert not canvas.can_undo
 
 
 def test_fill_is_noop_when_region_already_has_selected_tile() -> None:
@@ -231,10 +209,9 @@ def test_fill_is_noop_when_region_already_has_selected_tile() -> None:
     canvas.set_paint_value(canvas.cell_value(0, 0))
     canvas.set_tool("fill")
     assert not canvas.edit_cell(0, 0)
-    assert not canvas.can_undo
 
 
-def test_region_copy_paste_preserves_tile_palette_and_behaviour_in_one_undo_step() -> None:
+def test_region_copy_paste_preserves_tile_palette_and_behaviour() -> None:
     create_application(["world-canvas-test"])
     canvas = WorldCanvas()
     tiles = [[0 for _ in range(32)] for _ in range(30)]
@@ -249,6 +226,3 @@ def test_region_copy_paste_preserves_tile_palette_and_behaviour_in_one_undo_step
     assert canvas.paste_selection()
     assert (canvas.cell_value(5, 4), canvas.palette_value(5, 4), canvas.behaviour_value(5, 4)) == (17, 2, 9)
     assert (canvas.cell_value(6, 4), canvas.palette_value(6, 4), canvas.behaviour_value(6, 4)) == (18, 3, 10)
-    assert canvas.undo()
-    assert (canvas.cell_value(5, 4), canvas.palette_value(5, 4), canvas.behaviour_value(5, 4)) == (0, 0, 0)
-    assert (canvas.cell_value(6, 4), canvas.palette_value(6, 4), canvas.behaviour_value(6, 4)) == (0, 0, 0)
