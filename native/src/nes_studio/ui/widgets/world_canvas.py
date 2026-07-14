@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QKeyEvent, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -397,6 +397,26 @@ class WorldCanvas(QWidget):
         """Map widget coordinates to a WORLD cell without scale rounding."""
 
         return self._cell_at(QPointF(x, y))
+
+    def cell_centre(self, col: int, row: int) -> QPoint:
+        """Where in the widget a cell is drawn — the inverse of `cell_at_position`.
+
+        Exists so a test can click the cell it *means* to click, at whatever zoom
+        and whatever widget size. Without it the mouse handlers can only be tested
+        against coordinates the test itself invented, which proves nothing about
+        the geometry.
+        """
+
+        return self._cell_rect(col, row).center().toPoint()
+
+    def entity_position(self, index: int) -> QPoint:
+        """Where in the widget an entity is drawn."""
+
+        tile, left, top = self._grid_geometry()
+        entity = self._entities[index]
+        return QPointF(
+            left + entity["x"] * tile / 8, top + entity["y"] * tile / 8
+        ).toPoint()
 
     def _cell_rect(self, col: int, row: int) -> QRectF:
         tile, left, top = self._grid_geometry()

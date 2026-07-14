@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -101,6 +101,15 @@ class SpriteCanvas(QWidget):
         height = self._rows * TILE
         size = max(1.0, min(self.width() / width, self.height() / height))
         return size, (self.width() - width * size) / 2, (self.height() - height * size) / 2
+
+    def pixel_centre(self, x: int, y: int) -> QPoint:
+        """Where in the widget one pixel of the character is drawn.
+
+        The inverse of `_pixel_at`, so a test can click the pixel it means to.
+        """
+
+        size, left, top = self._geometry()
+        return QPointF(left + (x + 0.5) * size, top + (y + 0.5) * size).toPoint()
 
     def _pixel_at(self, point: QPointF) -> tuple[int, int] | None:
         size, left, top = self._geometry()

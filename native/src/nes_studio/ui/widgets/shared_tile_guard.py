@@ -78,26 +78,15 @@ class SharedTileGuard:
 
         self._decisions.clear()
 
-    def check(self, tile: int, *, sprite_index: int) -> tuple[str, int]:
-        """Return (decision, tile to actually paint).
+    def ask(self, tile: int, users: list[TileReference]) -> str:
+        """Put the question to the pupil. Returns one of the three answers.
 
-        When the pupil duplicates, the *caller's* cell must be repointed at the
-        new slot — which is why the tile to paint comes back out.
+        Separated from `check()` so a test can answer it without a modal dialog —
+        and so the *consequences* of each answer (which is where the bugs are) can
+        be tested without faking Qt.
         """
 
-        document = self._document()
-        remembered = self._decisions.get(tile)
-        if remembered == self.EVERYWHERE:
-            return self.EVERYWHERE, tile
-        if remembered == self.CANCELLED:
-            return self.CANCELLED, tile
-
-        users = sprite_tile_users(document, tile, excluding=sprite_index)
-        if not users:
-            self._decisions[tile] = self.EVERYWHERE
-            return self.EVERYWHERE, tile
-
-        names = ", ".join(f"{user.name}" for user in users[:4])
+        names = ", ".join(user.name for user in users[:4])
         if len(users) > 4:
             names += f", and {len(users) - 4} more"
 
@@ -117,9 +106,37 @@ class SharedTileGuard:
 
         clicked = dialog.clickedButton()
         if clicked is everywhere:
+            return self.EVERYWHERE
+        if clicked is duplicate:
+            return self.DUPLICATED
+        return self.CANCELLED
+
+    def check(self, tile: int, *, sprite_index: int) -> tuple[str, int]:
+        """Return (decision, tile to actually paint).
+
+        When the pupil duplicates, the *caller's* cell must be repointed at the
+        new slot — which is why the tile to paint comes back out.
+        """
+
+        document = self._document()
+        remembered = self._decisions.get(tile)
+        if remembered == self.EVERYWHERE:
+            return self.EVERYWHERE, tile
+        if remembered == self.CANCELLED:
+            return self.CANCELLED, tile
+
+        users = sprite_tile_users(document, tile, excluding=sprite_index)
+        if not users:
             self._decisions[tile] = self.EVERYWHERE
             return self.EVERYWHERE, tile
-        if clicked is duplicate:
+
+        answer = self.ask(tile, users)
+
+        if answer == self.EVERYWHERE:
+            self._decisions[tile] = self.EVERYWHERE
+            return self.EVERYWHERE, tile
+
+        if answer == self.DUPLICATED:
             try:
                 copy = document.duplicate_sprite_tile(tile)
             except ValueError as exc:
