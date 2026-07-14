@@ -47,6 +47,8 @@ from ..render.framebuffer import (
     render_sprite_tile,
 )
 from ..render.palette import is_light, nes_qcolor
+from ..render.screen import NesScreen
+from ..emulator.session import EmulatorSession, EmulatorUnavailable, core_available
 from ..persistence.manager import StorageManager
 from ..persistence.portability import AtomicExportError, export_project, import_project
 from ..persistence.session import ProjectSession
@@ -123,6 +125,9 @@ class MainWindow(QMainWindow):
         self._build_worker: _BuildWorker | None = None
         self._last_rom: bytes | None = None
         self._last_build_log: str = ""
+        self._play_after_build = False
+        self._mode = "WORLD"
+        self._emulator = EmulatorSession(self)
         self._tile_clipboard: list[list[int]] | None = None
         data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
@@ -153,6 +158,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(960, 640)
         self._create_menus()
         self.setCentralWidget(self._create_workspace())
+        self._emulator.frame_ready.connect(self.nes_screen.set_frame)
+        self._emulator.failed.connect(self._emulator_failed)
         self._install_mode_shortcuts()
         self._load_document_world()
         self._apply_theme()
@@ -598,9 +605,10 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.play_button)
         self.launch_button = QPushButton("▶ PLAY", stage)
         self.launch_button.setObjectName("launchButton")
-        self.launch_button.setAccessibleDescription("Launch the latest built ROM in FCEUX")
-        self.launch_button.setEnabled(False)
-        self.launch_button.clicked.connect(self._launch_last_rom)
+        self.launch_button.setAccessibleDescription(
+            "Build the project and play it here, in the Studio"
+        )
+        self.launch_button.clicked.connect(self._toggle_play)
         toolbar.addWidget(self.launch_button)
         layout.addLayout(toolbar)
 
@@ -1185,9 +1193,21 @@ class MainWindow(QMainWindow):
         self.audio_budget.setWordWrap(True)
         sound_layout.addWidget(self.audio_budget)
         self.editor_stack.addWidget(self.sound_editor)
+
+        # The running game. Same stage, same bezel — the CRT finally shows a game
+        # instead of framing an editor form.
+        self.nes_screen = NesScreen(self.editor_stack)
+        self.editor_stack.addWidget(self.nes_screen)
+
         screen_layout.addWidget(self.editor_stack)
         tv_layout.addWidget(screen)
         layout.addWidget(television, 1)
+
+        self.controls_hint = QLabel(EmulatorSession.CONTROLS_HINT, stage)
+        self.controls_hint.setObjectName("controlsHint")
+        self.controls_hint.setWordWrap(True)
+        self.controls_hint.setVisible(False)
+        layout.addWidget(self.controls_hint)
         return stage
 
     def _create_quest_panel(self) -> QWidget:
@@ -1243,6 +1263,12 @@ class MainWindow(QMainWindow):
 
         if mode not in self._mode_buttons:
             raise ValueError(f"Unknown Studio mode: {mode}")
+        # Stop the game before returning to an editor: the running screen and the
+        # editors share one stage. `restore_mode=False` because we are already
+        # switching mode — restoring here would recurse.
+        if self._emulator.is_running():
+            self._stop_play(restore_mode=False)
+        self._mode = mode
         self._mode_buttons[mode].setChecked(True)
         self.mode_title.setText(mode)
         self.mode_help.setText(
@@ -2513,14 +2539,17 @@ class MainWindow(QMainWindow):
         self._last_rom = result.rom
         self._last_build_log = result.log
         self.export_rom_action.setEnabled(True)
-        self.launch_button.setEnabled(self._fceux is not None)
         self.play_action.setEnabled(self._fceux is not None)
         self._document.mark_built()
         self._session.schedule_save()
         self._refresh_quests()
         self.statusBar().showMessage(f"Built ROM ({len(result.rom):,} bytes) — ready to export")
+        if self._play_after_build:
+            self._play_after_build = False
+            self._run_rom(result.rom)
 
     def _build_failed(self, message: str) -> None:
+        self._play_after_build = False
         self.statusBar().showMessage(f"ROM build failed: {message}")
         # A transient status line is not enough for a compile error the pupil
         # has to act on; show the failure and keep the log available.
@@ -2569,6 +2598,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Launched FCEUX with {target}")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
+        self._emulator.stop()
         self._snapshot_timer.stop()
         self._flush_autosave()
         self._storage.close()
@@ -2667,6 +2697,7 @@ class MainWindow(QMainWindow):
             #codePreview { background: #151528; color: #f0f0ff; border: 1px solid #4b4b7b; selection-background-color: #4b4b9b; selection-color: white; font-family: monospace; }
             #stagePanel { background: #101024; }
             #liveBadge { color: #78d878; font-weight: 800; }
+            #controlsHint { color: #b8b8d8; padding: 8px 2px 0 2px; }
             #television { background: #585868; border: 8px solid #303044; border-radius: 18px; }
             #nesScreen { background: #181828; border: 4px solid #080810; }
             #previewMessage { color: #a8e8f8; font-size: 17px; }
@@ -2733,7 +2764,7 @@ class MainWindow(QMainWindow):
         build_action.setShortcut(QKeySequence("F5"))
         build_action.triggered.connect(self._build_rom)
         build_menu.addAction(build_action)
-        self.play_action = QAction("&Play in FCEUX", self)
+        self.play_action = QAction("Open in &FCEUX", self)
         self.play_action.setEnabled(False)
         self.play_action.triggered.connect(self._launch_last_rom)
         build_menu.addAction(self.play_action)
@@ -2746,9 +2777,83 @@ class MainWindow(QMainWindow):
     def _install_mode_shortcuts(self) -> None:
         """Bind 1..N to the mode rail, matching the rail's visible order."""
 
+        self._mode_shortcuts: list[QShortcut] = []
         for index, mode in enumerate(MODE_NAMES, start=1):
             shortcut = QShortcut(QKeySequence(str(index)), self)
             shortcut.activated.connect(lambda mode=mode: self.select_mode(mode))
+            self._mode_shortcuts.append(shortcut)
+
+    # ---- Play -------------------------------------------------------------
+
+    def _toggle_play(self) -> None:
+        if self._emulator.is_running():
+            self._stop_play()
+        else:
+            self._start_play()
+
+    def _start_play(self) -> None:
+        """Build if needed, then run the game in the stage."""
+
+        if not core_available():
+            QMessageBox.warning(
+                self,
+                "Cannot play here",
+                "The embedded NES core is not installed. Build and export the ROM,"
+                " or install the nes_core wheel.",
+            )
+            return
+        if self._last_rom is None:
+            # Nothing built yet — build first and play when it lands.
+            self._play_after_build = True
+            self._build_rom()
+            return
+        self._run_rom(self._last_rom)
+
+    def _run_rom(self, rom: bytes) -> None:
+        try:
+            self._emulator.start(rom)
+        except (EmulatorUnavailable, RuntimeError) as exc:
+            QMessageBox.critical(self, "Could not start the game", str(exc))
+            return
+        self.editor_stack.setCurrentWidget(self.nes_screen)
+        self.nes_screen.setFocus()
+        self.launch_button.setText("■ STOP")
+        self.live_badge.setText("● PLAYING")
+        self.controls_hint.setVisible(True)
+        # Player 2's Start/Select are 1 and 2, which would otherwise switch mode.
+        for shortcut in self._mode_shortcuts:
+            shortcut.setEnabled(False)
+        self.statusBar().showMessage("Playing — press Escape to stop")
+
+    def _stop_play(self, *, restore_mode: bool = True) -> None:
+        self._emulator.stop()
+        self.launch_button.setText("▶ PLAY")
+        self.live_badge.setText("● LIVE")
+        self.controls_hint.setVisible(False)
+        for shortcut in self._mode_shortcuts:
+            shortcut.setEnabled(True)
+        if restore_mode:
+            self.select_mode(self._mode)
+        self.statusBar().showMessage("Stopped")
+
+    def _emulator_failed(self, message: str) -> None:
+        self._stop_play()
+        QMessageBox.critical(self, "The game stopped", message)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if self._emulator.is_running():
+            if event.key() == Qt.Key.Key_Escape:
+                self._stop_play()
+                return
+            if not event.isAutoRepeat() and self._emulator.handle_key(event.key(), True):
+                return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if self._emulator.is_running() and not event.isAutoRepeat():
+            if self._emulator.handle_key(event.key(), False):
+                return
+        super().keyReleaseEvent(event)
 
     def _save_project(self) -> None:
         """Flush the active project to local storage.

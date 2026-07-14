@@ -309,6 +309,15 @@ depends on `retroarch | libretro-frontend`, so an apt install drags in RetroArch
    `QImage.Format_RGBA8888` renders a **fully transparent (white) screen**. Use
    **`Format_RGBX8888`**. This is the same reason `render/` must use RGBX (§4.2).
 
+### 5.3a A third trap, found while wiring it up
+
+**A machine with no audio device rendered nothing at all.** Pacing the loop on
+`QAudioSink.bytesFree()` is correct — but when there is no sound card, `bytesFree()`
+is permanently 0, so the loop never clocks a frame and Play shows a black screen.
+`EmulatorSession` now falls back to a fixed 16 ms timestep when the sink fails to
+open. On a locked-down school image with no working audio, the game must still be
+playable.
+
 ### 5.4 `emulator/session.py`
 
 ```python
