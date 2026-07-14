@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QGridLayout,
+    QApplication,
+    QDialog,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -49,6 +51,7 @@ from ..render.framebuffer import (
 from ..render.palette import is_light, nes_qcolor
 from ..render.screen import NesScreen
 from ..emulator.session import EmulatorSession, EmulatorUnavailable, core_available
+from .project_catalog import NewProjectDialog, ProjectCatalogDialog
 from ..persistence.manager import StorageManager
 from ..persistence.portability import AtomicExportError, export_project, import_project
 from ..persistence.session import ProjectSession
@@ -126,6 +129,7 @@ class MainWindow(QMainWindow):
         self._last_rom: bytes | None = None
         self._last_build_log: str = ""
         self._play_after_build = False
+        self._code_loaded_text: str | None = None
         self._mode = "WORLD"
         self._emulator = EmulatorSession(self)
         self._tile_clipboard: list[list[int]] | None = None
@@ -1323,6 +1327,13 @@ class MainWindow(QMainWindow):
             source = self._default_asm_source()
         else:
             source = self._generated_c_source()
+        # Populating the editor must not count as the pupil editing it.
+        # blockSignals() is not enough — the syntax highlighter re-touches the
+        # document afterwards, so textChanged fires outside the blocked window.
+        # That wrote the *generated* source straight into customMainC and
+        # silently ejected the project into hand-edited mode just for opening
+        # CODE. Remember what we loaded and ignore a "change" back to it.
+        self._code_loaded_text = source
         self.code_preview.blockSignals(True)
         self.code_preview.setPlainText(source)
         self.code_preview.blockSignals(False)
@@ -1362,7 +1373,10 @@ class MainWindow(QMainWindow):
     def _save_code_source(self) -> None:
         if not hasattr(self, "_code_language"):
             return
-        self._document.set_custom_source(self._code_language, self.code_preview.toPlainText())
+        text = self.code_preview.toPlainText()
+        if text == getattr(self, "_code_loaded_text", None):
+            return  # the editor was populated, not edited
+        self._document.set_custom_source(self._code_language, text)
         self._session.schedule_save()
         self._update_document_title()
 
@@ -2646,20 +2660,86 @@ class MainWindow(QMainWindow):
     def _recover_autosave(self) -> None:
         self.recover_autosave()
 
-    def new_project(self) -> None:
+    def new_project(self, style: str = "scratch", name: str = "Untitled Game") -> None:
+        """Create a project from a starter and switch to it.
+
+        Programmatic on purpose — it must never open a dialog, so callers and
+        tests can drive it directly. `_prompt_new_project` is the menu path.
+        """
+
         self._session.snapshot_before("new")
-        project = self._storage.create_starter("scratch", name="Untitled Game")
-        self._session.close()
-        self._session.deleteLater()
-        self._session = self._storage.open_session(project.project_id)
+        try:
+            project = self._storage.create_starter(style, name=name)
+        except (KeyError, OSError, ValueError) as exc:
+            QMessageBox.critical(self, "Could not create the game", str(exc))
+            return
+        self._switch_to_project(project.project_id)
+        self.statusBar().showMessage(f"Created “{name}”")
+
+    def _prompt_new_project(self) -> None:
+        """Ask which starter to use — all seven, not just `scratch`."""
+
+        dialog = NewProjectDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        chosen, ok = QInputDialog.getText(self, "Name your game", "Name:", text="My game")
+        if not ok or not chosen.strip():
+            return
+        self.new_project(dialog.selected_style(), chosen.strip())
+
+    def open_project_catalog(self) -> None:
+        """Switch, rename, duplicate or delete a project."""
+
+        if self._document.dirty:
+            self._session.flush()
+        dialog = ProjectCatalogDialog(self._storage, self._session.project_id, self)
+        dialog.exec()
+        if dialog.chosen_project_id and dialog.chosen_project_id != self._session.project_id:
+            self._switch_to_project(dialog.chosen_project_id)
+            self.statusBar().showMessage(f"Opened “{self._document.name}”")
+
+    def _switch_to_project(self, project_id: str) -> None:
+        if self._emulator.is_running():
+            self._stop_play()
+        self._session.switch(project_id)
         self._document = self._session.document
+        self._last_rom = None
         self._load_document_world()
+        self._refresh_all_editors()
         self._update_document_title()
-        self.statusBar().showMessage("Created a new locally managed project")
+
+    def _refresh_all_editors(self) -> None:
+        """Re-read every mode from the document after it is replaced wholesale."""
+
+        for refresh in (
+            self._refresh_palette_editor,
+            self._refresh_tile_editor,
+            self._refresh_sprite_editor,
+            self._refresh_animation_list,
+            self._refresh_scene_editor,
+            self._refresh_rules_editor,
+            self._refresh_sound_editor,
+            self._refresh_code_preview,
+            self._refresh_metatile_mode,
+        ):
+            try:
+                refresh()
+            except Exception:  # one broken editor must not block a project switch
+                continue
 
     def _apply_theme(self) -> None:
-        self.setStyleSheet(
+        # Applied to the *application*, not this window. A QDialog is a
+        # top-level window, so it does not inherit a QMainWindow stylesheet —
+        # setting it here left every dialog (the project catalog, the starter
+        # picker) rendering as light-on-light default Qt chrome.
+        target = QApplication.instance() or self
+        target.setStyleSheet(
             """
+            QDialog { background: #191933; color: #f8f8f8; }
+            QDialog QLabel { color: #d8d8f8; }
+            QInputDialog QLineEdit { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; padding: 6px; }
+            QMessageBox { background: #191933; }
+            QMessageBox QLabel { color: #f8f8f8; }
             QMainWindow, #studioWorkspace { background: #0f0f1b; color: #f8f8f8; }
             QMenuBar, QMenu, QStatusBar { background: #191933; color: #f8f8f8; }
             QLabel { color: #d8d8f8; }
@@ -2712,9 +2792,14 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("&File")
         new_action = QAction("&New Project", self)
         new_action.setShortcut(QKeySequence.StandardKey.New)
-        new_action.triggered.connect(self.new_project)
+        new_action.triggered.connect(self._prompt_new_project)
         file_menu.addAction(new_action)
-        open_action = QAction("&Open Project…", self)
+        catalog_action = QAction("&My Games…", self)
+        catalog_action.setObjectName("projectCatalogAction")
+        catalog_action.setShortcut(QKeySequence("Ctrl+M"))
+        catalog_action.triggered.connect(self.open_project_catalog)
+        file_menu.addAction(catalog_action)
+        open_action = QAction("&Open Project File…", self)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self._open_project)
         file_menu.addAction(open_action)

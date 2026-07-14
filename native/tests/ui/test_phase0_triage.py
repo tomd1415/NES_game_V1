@@ -42,7 +42,12 @@ class Phase0TriageTests(unittest.TestCase):
         from nes_studio.core.resources import ResourceLocator
         from nes_studio.ui.main_window import MainWindow
 
-        return MainWindow(ResourceLocator.discover(NATIVE_ROOT))
+        window = MainWindow(ResourceLocator.discover(NATIVE_ROOT))
+        # A live window keeps a 30s snapshot timer and an open session. Leaking
+        # them across tests makes two sessions race on one project and raises
+        # StaleRevisionError inside a *later* test's event loop.
+        self.addCleanup(window.close)
+        return window
 
     def test_switching_background_does_not_raise(self) -> None:
         """`_select_background` referenced an undefined `dimensions` (NameError).
@@ -113,10 +118,15 @@ class Phase0TriageTests(unittest.TestCase):
     def test_palette_editor_is_themed(self) -> None:
         """#paletteEditor was missing from the theme, so PALS rendered white."""
 
+        from PySide6.QtWidgets import QApplication
+
         window = self._window()
-        theme = window.styleSheet()
+        # The theme is applied to the application so that dialogs, which are
+        # top-level windows, inherit it too.
+        theme = QApplication.instance().styleSheet()
         self.assertIn("#paletteEditor", theme)
         self.assertIn("#paletteEditorContent", theme)
+        self.assertIn("QDialog", theme)
 
     def test_save_flushes_to_local_storage(self) -> None:
         """There was no Save at all — only Save As, which exports a JSON copy."""
@@ -133,3 +143,63 @@ class Phase0TriageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(PYSIDE_AVAILABLE, "PySide6 is not installed")
+class CodeEjectionTests(unittest.TestCase):
+    """Opening CODE must not silently eject the project to hand-edited source."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        cls.data_root = tempfile.TemporaryDirectory()
+        os.environ["NES_STUDIO_DATA_ROOT"] = cls.data_root.name
+        from nes_studio.application import create_application
+
+        cls.application = create_application(["nes-studio-test"])
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        os.environ.pop("NES_STUDIO_DATA_ROOT", None)
+        cls.data_root.cleanup()
+
+    def test_viewing_code_does_not_write_custom_source(self) -> None:
+        """`customMainC` feeds the build, so writing it changes how the game is
+        compiled. Merely *looking* at CODE used to set it to the generated
+        source, because the highlighter re-fires textChanged after
+        blockSignals() has been lifted."""
+
+        from nes_studio.core.resources import ResourceLocator
+        from nes_studio.ui.main_window import MainWindow
+
+        window = MainWindow(ResourceLocator.discover(NATIVE_ROOT))
+        self.addCleanup(window.close)
+        # Start from a project no other test has touched.
+        window.new_project("scratch", "code view test")
+        window._session.flush()
+        window._document.dirty = False
+
+        self.assertIsNone(window._document.custom_source("c"))
+        window.select_mode("CODE")
+        self.application.processEvents()
+
+        self.assertIsNone(
+            window._document.custom_source("c"),
+            "opening CODE ejected the project into hand-edited source",
+        )
+        self.assertFalse(window._document.dirty)
+
+    def test_editing_code_does_write_custom_source(self) -> None:
+        from nes_studio.core.resources import ResourceLocator
+        from nes_studio.ui.main_window import MainWindow
+
+        window = MainWindow(ResourceLocator.discover(NATIVE_ROOT))
+        self.addCleanup(window.close)
+        window.new_project("scratch", "code edit test")
+        window.select_mode("CODE")
+        window.code_preview.setPlainText("int main(void) { return 0; }")
+        self.application.processEvents()
+
+        self.assertEqual(
+            window._document.custom_source("c"), "int main(void) { return 0; }"
+        )
