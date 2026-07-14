@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.tomd1415.NESStudio.Devel</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>NES Studio (Development)</name>
+  <summary>Make a real NES game, then play it</summary>
+
+  <description>
+    <p>
+      NES Studio is a game maker for schools. Pupils draw the tiles, paint the
+      world, design the characters and choose the rules — and the Studio compiles
+      it with cc65 into a real .nes ROM, which it then plays on an emulated
+      console in the same window.
+    </p>
+    <p>What it teaches, by making it visible rather than by telling you:</p>
+    <ul>
+      <li>The NES has 64 colours and can show four at a time. The palette editor
+          is the real system palette, and no other.</li>
+      <li>One palette per 2x2 tile quadrant. A quadrant that uses two is flagged
+          on the canvas, before the build, not after.</li>
+      <li>256 background tiles, 256 sprite tiles, 64 hardware sprites, 32 KB of
+          cartridge. Live meters, so the ceiling is met as a limit and not as a
+          crash.</li>
+      <li>Tiles are shared. Repainting one character's boot can repaint another's
+          — so the Studio stops and asks, in those words.</li>
+    </ul>
+    <p>
+      Everything is checked by around thirty validators, each of which can take
+      you to the exact mode that fixes it. Six guided tutorials advance on their
+      own as the work is done.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.tomd1415.NESStudio.Devel.desktop</launchable>
+
+  <categories>
+    <category>Development</category>
+    <category>Education</category>
+  </categories>
+
+  <keywords>
+    <keyword>NES</keyword>
+    <keyword>retro</keyword>
+    <keyword>8-bit</keyword>
+    <keyword>pixel art</keyword>
+    <keyword>game development</keyword>
+  </keywords>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <requires>
+    <display_length compare="ge">960</display_length>
+  </requires>
+
+  <content_rating type="oars-1.1" />
+
+  <provides>
+    <binary>nes-studio</binary>
+  </provides>
+
+  <developer id="io.github.tomd1415">
+    <name>NES Studio</name>
+  </developer>
+</component>

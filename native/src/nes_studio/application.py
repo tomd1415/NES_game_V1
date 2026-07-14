@@ -17,6 +17,7 @@ from .metadata import (
     ORGANIZATION_DOMAIN,
     ORGANIZATION_NAME,
 )
+from .ui.icons import app_icon
 from .ui.main_window import MainWindow
 
 
@@ -38,6 +39,9 @@ def create_application(argv: Sequence[str]) -> QApplication:
     application = QApplication(list(argv))
     QGuiApplication.setDesktopFileName(APP_ID)
     application.setApplicationDisplayName(APP_DISPLAY_NAME)
+    # Set on the *application*, so dialogs and the task switcher get it too — the
+    # same reason the theme is applied here rather than to the window.
+    application.setWindowIcon(app_icon())
     return application
 
 

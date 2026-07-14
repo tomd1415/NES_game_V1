@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=NES Studio (Development)
+GenericName=NES Game Maker
+Comment=Make a real NES game — draw it, build it, and play it on an emulated console
+Keywords=NES;game;retro;8-bit;education;programming;pixel art;
+Exec=nes-studio %f
+TryExec=nes-studio
+Icon=io.github.tomd1415.NESStudio.Devel
+Terminal=false
+Categories=Development;IDE;Education;Game;
+MimeType=application/x-nes-studio-project;application/x-nes-rom;
+StartupNotify=true
+StartupWMClass=nes-studio
