@@ -166,26 +166,28 @@ class ProjectActions:
             window.session.flush()
         dialog = TimeMachineDialog(window.storage, window.session, window)
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.restored:
-            window.after_project_replaced()
+            # `apply_document_json` has already refreshed everything and recorded
+            # the restore as an undoable step.
             window.statusBar().showMessage(dialog.restored_message)
 
     def recover_autosave(self) -> bool:
+        """Jump straight to the newest snapshot — the Time Machine without the UI.
+
+        Undoable, for the same reason and by the same route (see
+        `MainWindow.apply_document_json`).
+        """
+
         window = self._window
         snapshots = window.storage.repository.snapshots(window.session.project_id)
         if not snapshots:
             window.statusBar().showMessage("No local project snapshot is available")
             return False
         try:
-            window.session.flush()
-            window.storage.repository.restore_snapshot(
-                window.session.project_id,
-                snapshots[0].snapshot_id,
-                expected_revision=window.session.project.revision,
+            window.session.snapshot_before("restore")
+            window.apply_document_json(
+                snapshots[0].document_json, "Restored the latest local project snapshot"
             )
-            window.session.reload(flush=False)
         except (KeyError, RuntimeError, ValueError) as exc:
             QMessageBox.critical(window, "Could not restore project snapshot", str(exc))
             return False
-        window.after_project_replaced()
-        window.statusBar().showMessage("Restored the latest local project snapshot")
         return True

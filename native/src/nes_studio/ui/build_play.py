@@ -52,6 +52,10 @@ class BuildPlayController(QObject):
         self._rom: bytes | None = None
         self._log = ""
         self._play_when_built = False
+        #: A build the pupil did not ask to keep — a song preview. Its ROM is
+        #: played and thrown away: it is not the project's ROM, and caching it
+        #: would leave Play running a game that no longer exists.
+        self._transient = False
 
     # ---- state ------------------------------------------------------------
 
@@ -75,14 +79,24 @@ class BuildPlayController(QObject):
 
     # ---- building ---------------------------------------------------------
 
-    def build(self) -> None:
+    def build(self, document: ProjectDocument | None = None, *, transient: bool = False) -> None:
+        """Build the project on a worker thread.
+
+        Always against a **detached copy**: cc65 takes seconds, and the pupil must
+        be able to keep editing while it runs without the build seeing half an
+        edit. Pass `document` to build something that is *not* the live project —
+        a song preview, which must not change what they are working on.
+        """
+
         if self._thread is not None:
             return
         window = self._window
-        window.session.snapshot_before("before_build")
-        detached = ProjectDocument.from_json(window.document.to_json())
+        self._transient = transient
+        if document is None:
+            window.session.snapshot_before("before_build")
+            document = ProjectDocument.from_json(window.document.to_json())
 
-        worker = BuildWorker(self._builder, detached)
+        worker = BuildWorker(self._builder, document)
         thread = QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -100,6 +114,13 @@ class BuildPlayController(QObject):
 
     def _succeeded(self, result: NativeBuildResult) -> None:
         window = self._window
+        if self._transient:
+            # A preview. Play it, but do not adopt it: the project did not change,
+            # so its ROM, its build log and its "has been built" state must not
+            # either.
+            self._transient = False
+            self.run_rom(result.rom)
+            return
         self._rom = result.rom
         self._log = result.log
         window.export_rom_action.setEnabled(True)
@@ -119,6 +140,7 @@ class BuildPlayController(QObject):
     def _failed(self, message: str) -> None:
         window = self._window
         self._play_when_built = False
+        self._transient = False
         self._log = message
         window.modes["CODE"].set_build_log(message, failed=True)
         window.statusBar().showMessage(f"ROM build failed: {message}")
@@ -177,6 +199,11 @@ class BuildPlayController(QObject):
         window.statusBar().showMessage(f"Launched FCEUX with {target}")
 
     # ---- playing ----------------------------------------------------------
+
+    def preview(self, document: ProjectDocument) -> None:
+        """Build and play a document that is not the project, and keep neither."""
+
+        self.build(document, transient=True)
 
     def toggle_play(self) -> None:
         if self.is_playing:

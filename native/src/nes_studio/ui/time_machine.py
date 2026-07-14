@@ -72,23 +72,24 @@ class TimeMachineDialog(QDialog):
     """Every snapshot of this project, newest first."""
 
     def __init__(
-        self, storage: StorageManager, session: ProjectSession, parent: QWidget | None = None
+        self, storage: StorageManager, session: ProjectSession, window: QWidget
     ) -> None:
-        super().__init__(parent)
+        super().__init__(window)
         self.setObjectName("timeMachineDialog")
         self.setWindowTitle("Time Machine")
         self.setMinimumSize(600, 460)
 
         self._storage = storage
         self._session = session
+        self._window = window
         self.restored = False
         self.restored_message = ""
 
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Every version of this game the Studio has kept. Restoring one can be undone "
-                "with Ctrl+Z.",
+                "Every version of this game the Studio has kept. Restoring one is an edit "
+                "like any other — Ctrl+Z undoes it.",
                 self,
             )
         )
@@ -129,24 +130,26 @@ class TimeMachineDialog(QDialog):
         )
 
     def restore(self, index: int) -> bool:
-        """Restore snapshot `index`. Public so a test can drive it without a click."""
+        """Restore snapshot `index`. Public so a test can drive it without a click.
+
+        Restoring is an **edit**, not a project switch: the snapshot's contents are
+        applied to the live document in place, so it lands as one normal undo step
+        and `Ctrl+Z` really does take you back — which is what the dialog has
+        always promised. Reloading the session instead built a *new* document and
+        rebound the store, which threw the whole undo stack away.
+        """
 
         if not 0 <= index < len(self._snapshots):
             return False
         snapshot = self._snapshots[index]
         try:
-            self._session.flush()
-            self._storage.repository.snapshot(
-                self._session.project_id,
-                self._session.document.to_json(),
-                reason="before_time_machine",
+            # Durable belt-and-braces: undo covers this within the session, and
+            # the snapshot covers it across a restart.
+            self._session.snapshot_before("time_machine")
+            self._window.apply_document_json(
+                snapshot.document_json,
+                f"Restored the version from {_when(snapshot.created_at)}",
             )
-            self._storage.repository.restore_snapshot(
-                self._session.project_id,
-                snapshot.snapshot_id,
-                expected_revision=self._session.project.revision,
-            )
-            self._session.reload(flush=False)
         except (KeyError, RuntimeError, ValueError) as exc:
             QMessageBox.critical(self, "Could not restore this version", str(exc))
             return False
@@ -163,7 +166,7 @@ class TimeMachineDialog(QDialog):
             self,
             "Restore this version?",
             f"Go back to how the game was at {_when(snapshot.created_at)}?\n\n"
-            "Your current version is snapshotted first, and Ctrl+Z undoes this.",
+            "Your current version is kept, and Ctrl+Z brings it straight back.",
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return

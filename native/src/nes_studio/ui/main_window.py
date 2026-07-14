@@ -12,11 +12,12 @@ file does not know what is inside one.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QSettings, QSize, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -49,6 +50,7 @@ from .assets import AssetDialogs
 from .attention import AttentionPanel
 from .build_play import BuildPlayController
 from .diagnostics import DiagnosticsDialog
+from .icons import app_icon, locked_mode_icon, mode_icon
 from .modes import MODE_CLASSES, MODE_NAMES, Level, Mode, ModeContext
 from .preferences import PreferencesDialog
 from .project_actions import ProjectActions
@@ -64,7 +66,6 @@ class MainWindow(QMainWindow):
         self._resource_locator = resource_locator
         self._diagnostics: DiagnosticsDialog | None = None
         self._mode = "WORLD"
-        self._stale_modes: set[str] = set()
         self._mode_buttons: dict[str, QPushButton] = {}
         self._modes: dict[str, Mode] = {}
 
@@ -104,6 +105,7 @@ class MainWindow(QMainWindow):
 
         self.setObjectName("mainWindow")
         self.setWindowTitle(APP_DISPLAY_NAME)
+        self.setWindowIcon(app_icon())
         self.resize(1360, 860)
         self.setMinimumSize(960, 640)
         self._create_menus()
@@ -186,7 +188,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._create_stage())
         self.attention = AttentionPanel(self)
         splitter.addWidget(self.attention)
-        splitter.setSizes([280, 760, 300])
+        splitter.setSizes([396, 700, 300])
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter, 1)
         outer.addWidget(body, 1)
@@ -269,6 +271,8 @@ class MainWindow(QMainWindow):
             button.setObjectName(f"mode{mode_class.id.title()}Button")
             button.setCheckable(True)
             button.setAutoExclusive(True)
+            button.setIcon(mode_icon(mode_class.id))
+            button.setIconSize(QSize(24, 24))
             button.setAccessibleName(f"Open {mode_class.id.title()} mode")
             button.setToolTip(f"{mode_class.help_text}  ({index})")
             button.clicked.connect(
@@ -291,7 +295,11 @@ class MainWindow(QMainWindow):
         host.setObjectName("contextDock")
         host.setWidgetResizable(True)
         host.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        host.setMinimumWidth(240)
+        # Wide enough for the widest inspector, *plus* its margins and the vertical
+        # scrollbar. The horizontal scrollbar is off, so anything wider than this
+        # is not scrolled to — it is simply cut off, which is how `Duplicate` came
+        # to render as `Du`. `test_no_dock_clips_its_own_controls` holds the line.
+        host.setMinimumWidth(396)
 
         content = QFrame(host)
         content.setObjectName("contextDockContent")
@@ -434,7 +442,6 @@ class MainWindow(QMainWindow):
         )
 
     def _refresh_mode(self, mode: str) -> None:
-        self._stale_modes.discard(mode)
         try:
             self._modes[mode].refresh()
         except Exception as exc:  # one broken editor must not take the app down
@@ -443,29 +450,47 @@ class MainWindow(QMainWindow):
     def refresh_all_editors(self) -> None:
         """The document changed underneath every mode — undo, redo, or a switch.
 
-        Refresh only the mode the pupil is looking at; mark the rest stale, to be
-        refreshed when they are next opened. Refreshing them all eagerly meant
-        every undo re-ran CODE's refresh, which invokes the cc65 codegen — seconds
-        of work per keystroke-sized edit, and 178 s for one test file.
+        Refresh only the mode the pupil is looking at. Every other mode refreshes
+        when it is next opened, because `select_mode` always refreshes what it
+        opens. Refreshing them all eagerly meant every undo re-ran CODE's refresh,
+        which invokes the cc65 codegen — seconds of work per keystroke-sized edit,
+        and 178 s for one test file.
         """
 
-        self._stale_modes = set(MODE_NAMES)
         self._refresh_mode(self._mode)
         self.attention.refresh()
 
-    def after_project_replaced(self) -> None:
-        """The document was swapped underneath us by a restore."""
+    def apply_document_json(self, payload: bytes, message: str) -> None:
+        """Replace the document's *contents*, in place, as one undoable edit.
 
+        Restoring an old version is an **edit**, not a project switch. Doing it by
+        reloading the session built a new `ProjectDocument` and rebound the store,
+        which cleared the undo stack — while the dialog told the pupil "Ctrl+Z
+        undoes this". It did not. A pupil who restored the wrong version could not
+        get back, and we had said they could.
+
+        Mutating in place keeps every mode's document reference valid and lets the
+        store record the restore as a normal step, which makes the promise true.
+        """
+
+        document = self.document
+        document.state.clear()
+        document.state.update(json.loads(payload))
+        document.dirty = True
+        self.document_edited(message)  # schedule_save → DocumentStore commits a step
+        self.build_play.forget_rom()
+        self.refresh_all_editors()
+
+    def switch_to_project(self, project_id: str) -> None:
+        """Open a *different* project. History does not cross the boundary."""
+
+        if self.build_play.is_playing:
+            self.build_play.stop()
+        self.session.switch(project_id)
         self.store.rebind(self.session)
         self.build_play.forget_rom()
         self.refresh_all_editors()
         self.update_document_title()
-
-    def switch_to_project(self, project_id: str) -> None:
-        if self.build_play.is_playing:
-            self.build_play.stop()
-        self.session.switch(project_id)
-        self.after_project_replaced()
 
     # ---- levels -----------------------------------------------------------
 
@@ -496,6 +521,7 @@ class MainWindow(QMainWindow):
         for mode_id, button in self._mode_buttons.items():
             locked = self._modes[mode_id].min_level > self._level
             button.setText(f"🔒 {mode_id}" if locked else mode_id)
+            button.setIcon(locked_mode_icon(mode_id) if locked else mode_icon(mode_id))
             button.setProperty("locked", "true" if locked else "false")
             self.repolish(button)
 

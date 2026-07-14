@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...core.project_document import ProjectDocument
 from ..widgets.budget import BudgetMeter
 from .base import Level, Mode, ModeContext, scroll_body
 
@@ -97,8 +98,9 @@ class SoundMode(Mode):
             button.clicked.connect(callback)
             layout.addWidget(button)
         preview_hint = QLabel(
-            "There is no way to hear a NES song except on a NES — so this makes it "
-            "the default, builds the ROM, and plays it.",
+            "There is no way to hear a NES song except on a NES — so this builds a "
+            "throwaway ROM that starts with it, and plays that. Your game is not "
+            "changed.",
             dock,
         )
         preview_hint.setWordWrap(True)
@@ -178,23 +180,26 @@ class SoundMode(Mode):
         self.edited(f"Imported {'SFX pack' if sfx else 'song'}")
 
     def _preview(self) -> None:
-        """Hear the selected song.
+        """Hear the selected song — without changing the project.
 
-        A `.s` file is ca65 assembly for the NES's APU — there is nothing on the
-        host that can play it. The only honest preview is the real one: make it
-        the default, build the ROM, and run it on the embedded core.
+        A `.s` file is ca65 assembly for the NES's APU; there is nothing on a PC
+        that can play it, so the only honest preview is the real one: build a ROM
+        and run it on the embedded core.
+
+        But previewing is a *question*, not an edit. This builds a **detached
+        copy** of the project with that song as its default and plays that. The
+        pupil's game keeps whatever default song it had — which the first version
+        of this silently and permanently overwrote.
         """
 
         index = self.song_list.currentRow()
         if index < 0:
             self.status("Select a song first")
             return
-        self.document.set_default_song(index)
-        self.refresh()
-        self.edited("Playing your game with this song")
-        window = self.context.window
-        window.build_play.forget_rom()  # the ROM predates this change
-        window.build_play.start()
+        preview = ProjectDocument.from_json(self.document.to_json())
+        preview.set_default_song(index)
+        self.status("Building a preview — your game is unchanged")
+        self.context.window.build_play.preview(preview)
 
     def _make_default(self) -> None:
         index = self.song_list.currentRow()
