@@ -124,6 +124,23 @@ class ProjectDocument:
             self.state.pop(other, None)
             self.dirty = True
 
+    def clear_custom_source(self, language: str) -> bool:
+        """Hand the project back to the code generator.
+
+        Once `customMainC` is set the build compiles *it*, so edits in WORLD,
+        CHARS and RULES stop reaching the ROM. Without this there is no way
+        back — the project is ejected to hand-edited source for good.
+        """
+
+        if language not in {"c", "asm"}:
+            raise ValueError("Source language must be c or asm")
+        key = "customMainAsm" if language == "asm" else "customMainC"
+        if key not in self.state:
+            return False
+        self.state.pop(key)
+        self.dirty = True
+        return True
+
     @property
     def selected_background_index(self) -> int:
         return int(self.state.get("selectedBgIdx", 0))
@@ -335,7 +352,16 @@ class ProjectDocument:
             self.state["nativeUi"] = native_ui
         if not native_ui.get("hasBuilt"):
             native_ui["hasBuilt"] = True
-            self.dirty = True
+        # `hasBuilt` is a one-way latch, so it cannot answer "did they build
+        # *just now*" — which is what a tutorial step needs to know. The count
+        # can. It is native UI metadata and does not reach the ROM.
+        native_ui["buildCount"] = int(native_ui.get("buildCount") or 0) + 1
+        self.dirty = True
+
+    @property
+    def build_count(self) -> int:
+        native_ui = self.state.get("nativeUi")
+        return int(native_ui.get("buildCount") or 0) if isinstance(native_ui, dict) else 0
 
     def sprite_names(self) -> list[str]:
         sprites = self.state.get("sprites")

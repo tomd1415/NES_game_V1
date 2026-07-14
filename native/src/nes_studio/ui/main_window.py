@@ -1,4 +1,14 @@
-"""Native NES Studio workspace shell."""
+"""The Studio shell.
+
+Owns the chrome — app bar, mode rail, stage, dock host, attention panel — and
+delegates everything else: the modes to `ui/modes/`, building and playing to
+`ui/build_play.py`, the File menu to `ui/project_actions.py`.
+
+It owns **no editor**. It used to own all seven: 3,008 lines, 176 methods, 129
+widget attributes, every mode built inline in one 597-line method. A mode now
+lives in `ui/modes/<mode>.py` behind the protocol in `ui/modes/base.py`, and this
+file does not know what is inside one.
+"""
 
 from __future__ import annotations
 
@@ -6,318 +16,239 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QIODevice, QObject, QRect, QRegularExpression, QSaveFile, QStandardPaths, QThread, QTimer, Qt, Signal, Slot
-from PySide6.QtGui import QAction, QColor, QCloseEvent, QIcon, QImage, QKeySequence, QPainter, QPixmap, QShortcut, QTextCharFormat, QSyntaxHighlighter
+from PySide6.QtCore import QSettings, QStandardPaths, Qt, QTimer
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup,
-    QCheckBox,
-    QComboBox,
-    QFrame,
-    QFileDialog,
-    QHBoxLayout,
-    QGridLayout,
     QApplication,
+    QComboBox,
     QDialog,
-    QInputDialog,
+    QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPushButton,
-    QPlainTextEdit,
     QScrollArea,
     QSizePolicy,
-    QSpinBox,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from ..core.project_document import ProjectDocument
 from ..core.resources import ResourceLocator
-from ..codegen.differential import CodegenDifferential
-from ..core.project_document import ProjectDocument, ProjectFormatError
+from ..emulator.session import EmulatorSession
+from ..integrations.fceux import FceuxLauncher
 from ..metadata import APP_DISPLAY_NAME, APP_VERSION
-from ..render.framebuffer import (
-    attribute_conflicts,
-    render_background_tile,
-    render_nametable,
-    render_sprite,
-    render_sprite_tile,
-)
-from ..render.palette import is_light, nes_qcolor
-from ..render.screen import NesScreen
-from ..emulator.session import EmulatorSession, EmulatorUnavailable, core_available
-from .project_catalog import NewProjectDialog, ProjectCatalogDialog
-from ..state.store import DocumentStore
 from ..persistence.manager import StorageManager
-from ..persistence.portability import AtomicExportError, export_project, import_project
-from ..persistence.session import ProjectSession
-from ..integrations.direct_build import DirectBuildController, NativeBuildResult
-from ..integrations.fceux import EmulatorLaunchError, FceuxLauncher
+from ..render.screen import NesScreen
+from ..state.store import DocumentStore
+from .assets import AssetDialogs
+from .attention import AttentionPanel
+from .build_play import BuildPlayController
 from .diagnostics import DiagnosticsDialog
-from .widgets.world_canvas import WorldCanvas
-
-
-MODE_NAMES = ("WORLD", "CHARS", "TILES", "PALS", "RULES", "SOUND", "CODE")
-
-
-class _SourceHighlighter(QSyntaxHighlighter):
-    """Small dependency-free highlighter for the native C and ca65 source panes."""
-
-    def __init__(self, document: object) -> None:
-        super().__init__(document)
-        self.language = "c"
-
-    @staticmethod
-    def _format(colour: str, bold: bool = False) -> QTextCharFormat:
-        value = QTextCharFormat(); value.setForeground(QColor(colour))
-        if bold: value.setFontWeight(700)
-        return value
-
-    def highlightBlock(self, text: str) -> None:  # noqa: N802 - Qt API spelling
-        comment = self._format("#7f9f7f")
-        keyword = self._format("#ff79c6", True)
-        number = self._format("#bd93f9")
-        directive = self._format("#8be9fd", True)
-        rules = [(r"//.*$|/\*.*\*/", comment), (r"\b(0x[0-9a-fA-F]+|\d+)\b", number)]
-        if self.language == "asm":
-            rules += [(r";.*$", comment), (r"^\s*\.[a-zA-Z]+|^\s*[A-Za-z_][\w]*:", directive), (r"\b(lda|sta|ldx|ldy|jmp|jsr|rts|bne|beq|cmp|adc|sbc|inc|dec|and|ora|eor)\b", keyword)]
-        else:
-            rules += [(r"^\s*#\s*\w+", directive), (r"\b(void|int|char|unsigned|const|static|if|else|for|while|return|struct)\b", keyword)]
-        for expression, style in rules:
-            match = QRegularExpression(expression).globalMatch(text)
-            while match.hasNext():
-                hit = match.next(); self.setFormat(hit.capturedStart(), hit.capturedLength(), style)
-
-
-class _BuildWorker(QObject):
-    succeeded = Signal(object)
-    failed = Signal(str)
-    finished = Signal()
-
-    def __init__(self, controller: DirectBuildController, document: ProjectDocument) -> None:
-        super().__init__()
-        self.controller = controller
-        self.document = document
-
-    @Slot()
-    def run(self) -> None:
-        try:
-            self.succeeded.emit(self.controller.build(self.document))
-        except Exception as exc:  # surfaced in the desktop UI, not an event-loop traceback
-            self.failed.emit(str(exc))
-        finally:
-            self.finished.emit()
+from .modes import MODE_CLASSES, MODE_NAMES, Level, Mode, ModeContext
+from .preferences import PreferencesDialog
+from .project_actions import ProjectActions
+from .theme import Accessibility, apply_theme
+from .tutorial import TutorialController, TutorialPickerDialog
 
 
 class MainWindow(QMainWindow):
-    """Real Qt workspace establishing the native Studio information architecture."""
+    """The Studio's chrome, and nothing else."""
 
     def __init__(self, resource_locator: ResourceLocator) -> None:
         super().__init__()
         self._resource_locator = resource_locator
         self._diagnostics: DiagnosticsDialog | None = None
-        self._mode_buttons: dict[str, QPushButton] = {}
-        self._tool_buttons: dict[str, QPushButton] = {}
-        self._build_controller = DirectBuildController(resource_locator)
-        self._fceux = FceuxLauncher.discover()
-        self._build_thread: QThread | None = None
-        self._build_worker: _BuildWorker | None = None
-        self._last_rom: bytes | None = None
-        self._last_build_log: str = ""
-        self._play_after_build = False
-        self._code_loaded_text: str | None = None
         self._mode = "WORLD"
         self._stale_modes: set[str] = set()
-        self._emulator = EmulatorSession(self)
-        self._tile_clipboard: list[list[int]] | None = None
+        self._mode_buttons: dict[str, QPushButton] = {}
+        self._modes: dict[str, Mode] = {}
+
+        self.fceux = FceuxLauncher.discover()
+        self.emulator = EmulatorSession(self)
+
+        self._settings = QSettings()
+        self._accessibility = Accessibility.load(self._settings)
+        self._level = Level.parse(self._settings.value("studio/level", Level.MAKER))
+
         data_root = os.environ.get("NES_STUDIO_DATA_ROOT") or QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppDataLocation
         )
-        self._storage = StorageManager(Path(data_root))
-        projects = self._storage.projects()
+        self.storage = StorageManager(Path(data_root))
+        projects = self.storage.projects()
         if projects:
-            self._session = self._storage.open_session(projects[0].project_id)
+            self.session = self.storage.open_session(projects[0].project_id)
         else:
-            project = self._storage.create_starter("scratch", name="Native Preview")
-            self._session = self._storage.open_session(project.project_id)
-        self._document = self._session.document
-        self._store = DocumentStore(self._session, self)
-        self._store.changed.connect(self._document_restored)
-        self._world_screen_x = 0
-        self._world_screen_y = 0
+            project = self.storage.create_starter("scratch", name="Native Preview")
+            self.session = self.storage.open_session(project.project_id)
+
+        self.store = DocumentStore(self.session, self)
+        self.store.changed.connect(self._document_restored)
+        self.session.saveScheduled.connect(self.mark_unsaved)
+        self.session.saved.connect(lambda _revision: self.mark_saved())
+
         self._snapshot_timer = QTimer(self)
         self._snapshot_timer.setInterval(30_000)
-        self._snapshot_timer.timeout.connect(self._snapshot_if_changed)
+        self._snapshot_timer.timeout.connect(lambda: self.projects.snapshot_if_changed())
         self._snapshot_timer.start()
-        self._animation_preview_frame = 0
-        self._animation_preview_timer = QTimer(self)
-        self._animation_preview_timer.setInterval(125)
-        self._animation_preview_timer.timeout.connect(self._advance_animation_preview)
-        self._animation_preview_timer.start()
+
+        self._context = ModeContext(self)
+        self.projects = ProjectActions(self)
+        self.assets = AssetDialogs(self)
+        self.tutorial = TutorialController(self)
+        self.build_play = BuildPlayController(self)
 
         self.setObjectName("mainWindow")
         self.setWindowTitle(APP_DISPLAY_NAME)
-        self.resize(1280, 800)
+        self.resize(1360, 860)
         self.setMinimumSize(960, 640)
         self._create_menus()
         self.setCentralWidget(self._create_workspace())
-        self._emulator.frame_ready.connect(self.nes_screen.set_frame)
-        self._emulator.failed.connect(self._emulator_failed)
-        self._install_mode_shortcuts()
-        self._load_document_world()
-        self._apply_theme()
+        self.emulator.frame_ready.connect(self.nes_screen.set_frame)
+        self.emulator.failed.connect(self._emulator_failed)
+        self._install_shortcuts()
+        self.apply_accessibility(self._accessibility)
         self.select_mode("WORLD")
         self._update_responsive_chrome()
-        self._update_document_title()
+        self.update_document_title()
         self.statusBar().showMessage(
             "Native workspace ready"
-            if self._fceux is not None
+            if self.fceux is not None
             else "Native workspace ready — FCEUX not found; ROM export remains available"
         )
 
-    def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt API spelling
-        super().resizeEvent(event)
-        self._update_responsive_chrome()
+    # ---- what a mode is allowed to see ------------------------------------
 
-    def _update_responsive_chrome(self) -> None:
-        """Keep the centre editor usable at the documented minimum window size."""
+    @property
+    def resource_locator(self) -> ResourceLocator:
+        return self._resource_locator
 
-        if hasattr(self, "quest_panel"):
-            self.quest_panel.setVisible(self.width() >= 1160)
-        if hasattr(self, "_tile_library_buttons"):
-            compact = self.width() < 1160
-            for button in self._tile_library_buttons:
-                button.setFixedSize(38 if compact else 42, 26 if compact else 28)
+    @property
+    def modes(self) -> dict[str, Mode]:
+        return self._modes
 
-    @staticmethod
-    def _choice_icon(colour: str, glyph: str = "") -> QIcon:
-        """Create a compact, NES-like visual marker for selector choices."""
+    @property
+    def mode(self) -> str:
+        return self._mode
 
-        pixmap = QPixmap(28, 20)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setPen(QColor("#080810"))
-        painter.setBrush(QColor(colour))
-        painter.drawRoundedRect(1, 1, 26, 18, 3, 3)
-        # Small square pixels retain the Studio's 8-bit character even where no glyph fits.
-        painter.setBrush(QColor("#f8f8f8"))
-        painter.drawRect(4, 5, 3, 3)
-        painter.drawRect(9, 11, 3, 3)
-        if glyph:
-            painter.setPen(QColor("#080810"))
-            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, glyph[:2].upper())
-        painter.end()
-        return QIcon(pixmap)
+    @property
+    def level(self) -> Level:
+        return self._level
 
-    def _tile_bank(self) -> str:
-        return "sprite" if self.tile_bank.currentData() == "sprite" else "bg"
+    @property
+    def document(self) -> ProjectDocument:
+        return self.session.document
 
-    def _tile_preview_palette_index(self) -> int:
-        value = self.tile_preview_palette.currentData()
-        return int(value) & 3 if isinstance(value, int) else 0
+    def document_edited(self, message: str = "") -> None:
+        """A mode changed the document.
 
-    def _tile_ramp(self) -> tuple[str, str, str, str]:
-        """The four real colours the current bank+palette paints with.
-
-        Background pixel value 0 is the universal backdrop; sprite value 0 is
-        transparent (shown as the editor's dark base, since a checkerboard would
-        fight the surrounding chrome).
+        One place, so no mode has to *remember* to save, retitle and re-check.
+        `DocumentStore` hooks the session's `saveScheduled`, so this is also what
+        makes the edit undoable.
         """
 
-        palette = self._tile_preview_palette_index()
-        if self._tile_bank() == "sprite":
-            slots = self._document.sprite_palette(palette)
-            zero = "#101018"
-        else:
-            slots = self._document.background_palette(palette)
-            zero = nes_qcolor(self._document.universal_background).name()
-        return (zero, *(nes_qcolor(slot).name() for slot in slots))
+        self.session.schedule_save()
+        self.update_document_title()
+        self.attention.refresh()
+        self.tutorial.check()
+        if message:
+            self.statusBar().showMessage(message)
 
-    def _tile_thumbnail(self, tile_index: int, *, bank: str = "bg", palette: int = 0) -> QIcon:
-        """Render an 8×8 tile into a library thumbnail, in its real colours."""
-
-        renderer = render_background_tile if bank == "bg" else render_sprite_tile
-        image = renderer(self._document, tile_index, palette)
-        pixmap = QPixmap(20, 20)
-        pixmap.fill(QColor("#080810"))
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-        painter.drawImage(QRect(2, 2, 16, 16), image)
-        painter.setPen(QColor("#7878c8"))
-        painter.drawRect(0, 0, 19, 19)
-        painter.end()
-        return QIcon(pixmap)
-
-    def _sprite_thumbnail(self, sprite: dict[str, object]) -> QIcon:
-        """Draw a sprite as a compact visual entry in CHARS, in its real colours."""
-
-        image = render_sprite(self._document, sprite)
-        pixmap = QPixmap(40, 40)
-        pixmap.fill(QColor("#101018"))
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-        if not image.isNull() and image.width() and image.height():
-            # Preserve the sprite's aspect ratio: an 8x16 character must not be
-            # squashed into the square thumbnail.
-            scale = min(36 / image.width(), 36 / image.height())
-            width = max(1, int(image.width() * scale))
-            height = max(1, int(image.height() * scale))
-            painter.drawImage(
-                QRect((40 - width) // 2, (40 - height) // 2, width, height), image
-            )
-        painter.setPen(QColor("#7878c8"))
-        painter.drawRect(0, 0, 39, 39)
-        painter.end()
-        return QIcon(pixmap)
-
-    def _add_visual_choice(
-        self, selector: QComboBox, label: str, value: object = None, *, colour: str, glyph: str = ""
-    ) -> None:
-        """Add a labelled choice with an icon; labels remain useful to screen readers."""
-
-        selector.addItem(self._choice_icon(colour, glyph), label, value)
-
-    @staticmethod
-    def _prepare_visual_selector(selector: QComboBox, accessible_name: str) -> None:
-        selector.setIconSize(QPixmap(28, 20).size())
-        selector.setMinimumHeight(34)
-        selector.setAccessibleName(accessible_name)
-
-    @staticmethod
-    def _style_palette_control(control: QSpinBox, colour: int) -> None:
-        """Give numeric NES palette entries a readable live colour swatch."""
-
-        swatch = nes_qcolor(colour)
-        text = "#080810" if is_light(colour) else "#f8f8f8"
-        control.setStyleSheet(
-            f"QSpinBox {{ background: {swatch.name()}; color: {text}; border: 2px solid #f8f8f8; font-weight: 800; padding: 4px; }}"
-        )
+    # ---- layout -----------------------------------------------------------
 
     def _create_workspace(self) -> QWidget:
         root = QWidget(self)
         root.setObjectName("studioWorkspace")
-        layout = QHBoxLayout(root)
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._create_app_bar())
+
+        body = QWidget(root)
+        layout = QHBoxLayout(body)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
         layout.addWidget(self._create_mode_rail())
-        splitter = QSplitter(Qt.Orientation.Horizontal, root)
+
+        # Build every mode before the stage: the stage needs their widgets.
+        for mode_class in MODE_CLASSES:
+            mode = mode_class(self._context)
+            self._modes[mode.id] = mode
+
+        splitter = QSplitter(Qt.Orientation.Horizontal, body)
         splitter.setObjectName("workspaceSplitter")
         splitter.setChildrenCollapsible(False)
-        self.context_dock = self._create_context_dock()
-        splitter.addWidget(self.context_dock)
+        splitter.addWidget(self._create_dock_host())
         splitter.addWidget(self._create_stage())
-        self.quest_panel = self._create_quest_panel()
-        splitter.addWidget(self.quest_panel)
-        splitter.setSizes([250, 700, 280])
+        self.attention = AttentionPanel(self)
+        splitter.addWidget(self.attention)
+        splitter.setSizes([280, 760, 300])
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter, 1)
+        outer.addWidget(body, 1)
         return root
+
+    def _create_app_bar(self) -> QWidget:
+        """Mirrors the web's top bar (`studio.html:422-457`)."""
+
+        bar = QFrame(self)
+        bar.setObjectName("appBar")
+        bar.setFixedHeight(56)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(16, 6, 16, 6)
+        layout.setSpacing(8)
+
+        self.project_name = QLineEdit(bar)
+        self.project_name.setObjectName("projectName")
+        self.project_name.setAccessibleName("Project name")
+        self.project_name.setToolTip("Click to rename your game")
+        self.project_name.setMaximumWidth(320)
+        self.project_name.editingFinished.connect(self._rename_project)
+        layout.addWidget(self.project_name)
+
+        self.save_dot = QLabel("●", bar)
+        self.save_dot.setObjectName("saveDot")
+        layout.addWidget(self.save_dot)
+        layout.addStretch(1)
+
+        self.level_select = QComboBox(bar)
+        self.level_select.setObjectName("levelSelect")
+        self.level_select.setAccessibleName("Expertise level")
+        self.level_select.setToolTip(
+            "Beginner hides the advanced modes. Nothing is deleted — locked modes "
+            "stay on the rail so you can see what is ahead."
+        )
+        for level in (Level.BEGINNER, Level.MAKER, Level.ADVANCED):
+            self.level_select.addItem(level.label, level)
+        self.level_select.setCurrentIndex(int(self._level))
+        self.level_select.currentIndexChanged.connect(self._level_chosen)
+        layout.addWidget(self.level_select)
+
+        for label, name, callback in (
+            ("Tutorial", "tutorialButton", self.open_tutorial_picker),
+            ("Build", "buildButton", lambda: self.build_play.build()),
+            ("▶ Play", "playButton", lambda: self.build_play.toggle_play()),
+            ("Help", "helpButton", self._show_about),
+        ):
+            button = QPushButton(label, bar)
+            button.setObjectName(name)
+            button.clicked.connect(callback)
+            layout.addWidget(button)
+            if name == "buildButton":
+                self.build_button = button
+            elif name == "playButton":
+                self.play_button = button
+        self.build_button.setAccessibleDescription(
+            "Build the current project in a background worker"
+        )
+        self.play_button.setAccessibleDescription(
+            "Build the project and play it here, in the Studio"
+        )
+        return bar
 
     def _create_mode_rail(self) -> QWidget:
         rail = QFrame(self)
@@ -325,7 +256,7 @@ class MainWindow(QMainWindow):
         rail.setFixedWidth(108)
         layout = QVBoxLayout(rail)
         layout.setContentsMargins(10, 16, 10, 16)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
         brand = QLabel("NES\nSTUDIO", rail)
         brand.setObjectName("brandLabel")
@@ -333,299 +264,84 @@ class MainWindow(QMainWindow):
         brand.setAccessibleName("NES Studio")
         layout.addWidget(brand)
 
-        group = QButtonGroup(self)
-        group.setExclusive(True)
-        for mode in MODE_NAMES:
-            button = QPushButton(mode, rail)
-            button.setObjectName(f"mode{mode.title()}Button")
+        for index, mode_class in enumerate(MODE_CLASSES, start=1):
+            button = QPushButton(mode_class.id, rail)
+            button.setObjectName(f"mode{mode_class.id.title()}Button")
             button.setCheckable(True)
-            button.setAccessibleName(f"Open {mode.title()} mode")
-            button.clicked.connect(lambda _checked=False, name=mode: self.select_mode(name))
-            group.addButton(button)
-            self._mode_buttons[mode] = button
+            button.setAutoExclusive(True)
+            button.setAccessibleName(f"Open {mode_class.id.title()} mode")
+            button.setToolTip(f"{mode_class.help_text}  ({index})")
+            button.clicked.connect(
+                lambda _checked=False, name=mode_class.id: self.select_mode(name)
+            )
+            self._mode_buttons[mode_class.id] = button
             layout.addWidget(button)
         layout.addStretch(1)
         return rail
 
-    def _create_context_dock(self) -> QScrollArea:
-        """Build the WORLD inspector as a scrollable, mode-specific panel.
+    def _create_dock_host(self) -> QWidget:
+        """One inspector per mode.
 
-        WORLD intentionally has a deep inspector.  Keeping it scrollable avoids
-        compressing its controls below readable sizes on laptop-height windows.
-        The inspector is hidden in the focused editors, where it otherwise
-        displayed unrelated, clipped WORLD controls.
+        The dock used to exist **only in WORLD** — `setVisible(mode == "WORLD")`
+        — so in the other six modes the entire left column vanished and the mode
+        was a single full-width editor panel.
         """
 
-        dock = QScrollArea(self)
-        dock.setObjectName("contextDock")
-        dock.setWidgetResizable(True)
-        dock.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        dock.setMinimumWidth(210)
-        content = QFrame(dock)
+        host = QScrollArea(self)
+        host.setObjectName("contextDock")
+        host.setWidgetResizable(True)
+        host.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        host.setMinimumWidth(240)
+
+        content = QFrame(host)
         content.setObjectName("contextDockContent")
         layout = QVBoxLayout(content)
         layout.setContentsMargins(18, 20, 18, 20)
 
-        self.mode_title = QLabel(dock)
+        self.mode_title = QLabel(content)
         self.mode_title.setObjectName("modeTitle")
         layout.addWidget(self.mode_title)
-        self.mode_help = QLabel(dock)
+        self.mode_help = QLabel(content)
         self.mode_help.setObjectName("modeHelp")
         self.mode_help.setWordWrap(True)
         layout.addWidget(self.mode_help)
 
-        background_label = QLabel("BACKGROUND", dock)
-        background_label.setObjectName("sectionLabel")
-        layout.addWidget(background_label)
-        self.background_selector = QComboBox(dock)
-        self.background_selector.setObjectName("worldBackgroundSelector")
-        self._prepare_visual_selector(self.background_selector, "WORLD background")
-        self.background_selector.currentIndexChanged.connect(self._select_background)
-        layout.addWidget(self.background_selector)
-        background_actions = QGridLayout()
-        for position, (label, callback) in enumerate((
-            ("New", self._new_background),
-            ("Duplicate", self._duplicate_background),
-            ("Rename", self._rename_background),
-            ("Delete", self._delete_background),
-        )):
-            button = QPushButton(label, dock)
-            button.setObjectName(f"worldBackground{label}Button")
-            button.setAccessibleName(f"{label} WORLD background")
-            button.clicked.connect(callback)
-            background_actions.addWidget(button, position // 2, position % 2)
-        layout.addLayout(background_actions)
-        layout_label = QLabel("SCREEN LAYOUT", dock)
-        layout_label.setObjectName("sectionLabel")
-        layout.addWidget(layout_label)
-        self.world_layout = QComboBox(dock)
-        self.world_layout.setObjectName("worldLayoutSelector")
-        self._prepare_visual_selector(self.world_layout, "WORLD screen layout")
-        for label, dimensions, colour, glyph in (
-            ("1 × 1 screen", (1, 1), "#4878d8", "1"),
-            ("2 × 1 screens", (2, 1), "#78d878", "2"),
-            ("1 × 2 screens", (1, 2), "#78d8d8", "2"),
-            ("2 × 2 screens", (2, 2), "#f8d878", "4"),
-        ):
-            self._add_visual_choice(self.world_layout, label, dimensions, colour=colour, glyph=glyph)
-        self.world_layout.currentIndexChanged.connect(self._set_world_layout)
-        layout.addWidget(self.world_layout)
-        self.metatile_mode_button = QPushButton("Promote to 16×16 blocks", dock)
-        self.metatile_mode_button.setObjectName("metatileModeButton")
-        self.metatile_mode_button.clicked.connect(self._toggle_metatile_mode)
-        layout.addWidget(self.metatile_mode_button)
-        self.metatile_list = QListWidget(dock)
-        self.metatile_list.setObjectName("metatileList")
-        self.metatile_list.currentRowChanged.connect(self._select_metatile)
-        layout.addWidget(self.metatile_list)
-        metatile_actions = QHBoxLayout()
-        add_metatile = QPushButton("New block", dock)
-        add_metatile.clicked.connect(self._add_metatile)
-        metatile_actions.addWidget(add_metatile)
-        remove_metatile = QPushButton("Delete block", dock)
-        remove_metatile.clicked.connect(self._delete_metatile)
-        metatile_actions.addWidget(remove_metatile)
-        layout.addLayout(metatile_actions)
-        self.metatile_tiles = [QSpinBox(dock) for _ in range(4)]
-        for index, control in enumerate(self.metatile_tiles):
-            control.setRange(0, 255); control.setPrefix(f"Block tile {index}: "); control.valueChanged.connect(self._update_metatile); layout.addWidget(control)
-        self.metatile_palette, self.metatile_behaviour = QSpinBox(dock), QSpinBox(dock)
-        for control, maximum, prefix in ((self.metatile_palette, 3, "Block palette: "), (self.metatile_behaviour, 255, "Block behaviour: ")):
-            control.setRange(0, maximum); control.setPrefix(prefix); control.valueChanged.connect(self._update_metatile); layout.addWidget(control)
-        viewport_label = QLabel("EDIT SCREEN", dock)
-        viewport_label.setObjectName("sectionLabel")
-        layout.addWidget(viewport_label)
-        viewport = QHBoxLayout()
-        self.world_screen_x = QSpinBox(dock)
-        self.world_screen_x.setObjectName("worldScreenX")
-        self.world_screen_x.setPrefix("X ")
-        self.world_screen_x.setAccessibleName("WORLD screen horizontal position")
-        self.world_screen_x.valueChanged.connect(self._select_world_screen)
-        viewport.addWidget(self.world_screen_x)
-        self.world_screen_y = QSpinBox(dock)
-        self.world_screen_y.setObjectName("worldScreenY")
-        self.world_screen_y.setPrefix("Y ")
-        self.world_screen_y.setAccessibleName("WORLD screen vertical position")
-        self.world_screen_y.valueChanged.connect(self._select_world_screen)
-        viewport.addWidget(self.world_screen_y)
-        layout.addLayout(viewport)
-        clipboard_actions = QHBoxLayout()
-        copy_button = QPushButton("Copy", dock)
-        copy_button.setObjectName("worldCopyButton")
-        copy_button.setAccessibleName("Copy selected WORLD region")
-        copy_button.clicked.connect(self._copy_world_region)
-        clipboard_actions.addWidget(copy_button)
-        paste_button = QPushButton("Paste", dock)
-        paste_button.setObjectName("worldPasteButton")
-        paste_button.setAccessibleName("Paste WORLD region at selected cell")
-        paste_button.clicked.connect(self._paste_world_region)
-        clipboard_actions.addWidget(paste_button)
-        layout.addLayout(clipboard_actions)
-        self.grid_toggle = QCheckBox("Fine grid (G)", dock)
-        self.grid_toggle.setObjectName("worldGridToggle")
-        self.grid_toggle.toggled.connect(self._set_world_grid_options)
-        layout.addWidget(self.grid_toggle)
-        self.attribute_toggle = QCheckBox("2 × 2 attribute guides", dock)
-        self.attribute_toggle.setObjectName("worldAttributeGuidesToggle")
-        self.attribute_toggle.toggled.connect(self._set_world_grid_options)
-        layout.addWidget(self.attribute_toggle)
-        backdrop_label = QLabel("UNIVERSAL BACKDROP", dock)
-        backdrop_label.setObjectName("sectionLabel")
-        layout.addWidget(backdrop_label)
-        self.universal_background = QSpinBox(dock)
-        self.universal_background.setObjectName("universalBackgroundValue")
-        self.universal_background.setRange(0, 0x3F)
-        self.universal_background.setDisplayIntegerBase(16)
-        self.universal_background.setPrefix("0x")
-        self.universal_background.setAccessibleName("Universal NES background colour")
-        self.universal_background.valueChanged.connect(self._set_universal_background)
-        layout.addWidget(self.universal_background)
+        self.locked_notice = QLabel(content)
+        self.locked_notice.setObjectName("lockedNotice")
+        self.locked_notice.setWordWrap(True)
+        self.locked_notice.setVisible(False)
+        layout.addWidget(self.locked_notice)
 
-        section = QLabel("TOOLS", dock)
-        section.setObjectName("sectionLabel")
-        layout.addWidget(section)
-        tool_group = QButtonGroup(self)
-        tool_group.setExclusive(True)
-        for tool in ("select", "paint", "erase", "fill", "palette", "behaviour"):
-            label = tool.title()
-            button = QPushButton(label, dock)
-            button.setObjectName(f"world{label}Button")
-            button.setCheckable(True)
-            button.clicked.connect(lambda _checked=False, name=tool: self._select_world_tool(name))
-            tool_group.addButton(button)
-            self._tool_buttons[tool] = button
-            layout.addWidget(button)
+        self.dock_stack = QStackedWidget(content)
+        self.dock_stack.setObjectName("dockStack")
+        for mode in self._modes.values():
+            self.dock_stack.addWidget(mode.dock() or QWidget())
+        layout.addWidget(self.dock_stack, 1)
 
-        tile_label = QLabel("TILE (0–255)", dock)
-        tile_label.setObjectName("sectionLabel")
-        layout.addWidget(tile_label)
-        self.tile_value = QSpinBox(dock)
-        self.tile_value.setObjectName("worldTileValue")
-        self.tile_value.setRange(0, 255)
-        self.tile_value.setValue(1)
-        self.tile_value.setAccessibleName("WORLD tile value")
-        self.tile_value.valueChanged.connect(
-            lambda value: self.world_canvas.set_paint_value(value)
-        )
-        layout.addWidget(self.tile_value)
-        self.edit_world_tile_button = QPushButton("Edit this tile's pixels", dock)
-        self.edit_world_tile_button.setObjectName("editWorldTileButton")
-        self.edit_world_tile_button.setAccessibleDescription("Open the current WORLD paint tile in the shared tile pixel editor")
-        self.edit_world_tile_button.clicked.connect(self._edit_world_tile_pixels)
-        layout.addWidget(self.edit_world_tile_button)
-
-        palette_label = QLabel("PALETTE (0–3)", dock)
-        palette_label.setObjectName("sectionLabel")
-        layout.addWidget(palette_label)
-        self.palette_value = QSpinBox(dock)
-        self.palette_value.setObjectName("worldPaletteValue")
-        self.palette_value.setRange(0, 3)
-        self.palette_value.setValue(1)
-        self.palette_value.setAccessibleName("WORLD palette value")
-        self.palette_value.valueChanged.connect(
-            lambda value: self.world_canvas.set_palette_value(value)
-        )
-        layout.addWidget(self.palette_value)
-
-        behaviour_label = QLabel("BEHAVIOUR (0–255)", dock)
-        behaviour_label.setObjectName("sectionLabel")
-        layout.addWidget(behaviour_label)
-        self.behaviour_value = QSpinBox(dock)
-        self.behaviour_value.setObjectName("worldBehaviourValue")
-        self.behaviour_value.setRange(0, 255)
-        self.behaviour_value.setValue(1)
-        self.behaviour_value.setAccessibleName("WORLD behaviour value")
-        self.behaviour_value.valueChanged.connect(
-            lambda value: self.world_canvas.set_behaviour_value(value)
-        )
-        layout.addWidget(self.behaviour_value)
-        entities_label = QLabel("ENTITIES", dock)
-        entities_label.setObjectName("sectionLabel")
-        layout.addWidget(entities_label)
-        self.scene_sprite = QComboBox(dock)
-        self.scene_sprite.setObjectName("sceneSpriteSelector")
-        self._prepare_visual_selector(self.scene_sprite, "Entity character")
-        layout.addWidget(self.scene_sprite)
-        self.scene_list = QListWidget(dock)
-        self.scene_list.setObjectName("sceneInstanceList")
-        self.scene_list.currentRowChanged.connect(self._select_scene_instance)
-        layout.addWidget(self.scene_list)
-        scene_actions = QHBoxLayout()
-        add_scene = QPushButton("Add entity", dock)
-        add_scene.setObjectName("addSceneInstanceButton")
-        add_scene.clicked.connect(self._add_scene_instance)
-        scene_actions.addWidget(add_scene)
-        remove_scene = QPushButton("Remove", dock)
-        remove_scene.setObjectName("removeSceneInstanceButton")
-        remove_scene.clicked.connect(self._remove_scene_instance)
-        scene_actions.addWidget(remove_scene)
-        layout.addLayout(scene_actions)
-        self.scene_x, self.scene_y = QSpinBox(dock), QSpinBox(dock)
-        for control, maximum, prefix in ((self.scene_x, 504, "X "), (self.scene_y, 464, "Y ")):
-            control.setRange(0, maximum)
-            control.setPrefix(prefix)
-            control.valueChanged.connect(self._update_scene_instance)
-            layout.addWidget(control)
-        self.scene_ai = QComboBox(dock)
-        self.scene_ai.setObjectName("sceneAiSelector")
-        self._prepare_visual_selector(self.scene_ai, "Entity behaviour")
-        for label, colour, glyph in (
-            ("static", "#787898", "■"), ("walker", "#78d878", "→"),
-            ("chaser", "#f87878", "!"), ("goomba", "#c87848", "G"),
-            ("koopa", "#78d878", "K"), ("item", "#f8d878", "+"),
-            ("flyer", "#78d8d8", "↑"), ("patrol", "#7878d8", "↔"),
-        ):
-            self._add_visual_choice(self.scene_ai, label, colour=colour, glyph=glyph)
-        self.scene_ai.currentTextChanged.connect(lambda _value: self._update_scene_instance())
-        layout.addWidget(self.scene_ai)
-        self.scene_speed = QSpinBox(dock)
-        self.scene_speed.setObjectName("sceneSpeed")
-        self.scene_speed.setRange(1, 4)
-        self.scene_speed.setPrefix("Speed: ")
-        self.scene_speed.valueChanged.connect(self._update_scene_instance)
-        layout.addWidget(self.scene_speed)
-        self.scene_text = QLineEdit(dock)
-        self.scene_text.setObjectName("sceneDialogue")
-        self.scene_text.setMaxLength(84)
-        self.scene_text.setPlaceholderText("NPC dialogue override (optional)")
-        self.scene_text.editingFinished.connect(self._update_scene_instance)
-        layout.addWidget(self.scene_text)
-        layout.addStretch(1)
-        dock.setWidget(content)
-        return dock
+        host.setWidget(content)
+        self.context_dock = host
+        return host
 
     def _create_stage(self) -> QWidget:
         stage = QFrame(self)
         stage.setObjectName("stagePanel")
         stage.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout = QVBoxLayout(stage)
-        layout.setContentsMargins(24, 20, 24, 24)
+        layout.setContentsMargins(20, 16, 20, 20)
 
         toolbar = QHBoxLayout()
         self.live_badge = QLabel("● LIVE", stage)
         self.live_badge.setObjectName("liveBadge")
         toolbar.addWidget(self.live_badge)
         toolbar.addStretch(1)
-        self.play_button = QPushButton("▶ BUILD ROM", stage)
-        self.play_button.setObjectName("playButton")
-        self.play_button.setAccessibleDescription("Build the current project in a background worker")
-        self.play_button.clicked.connect(self._build_rom)
-        toolbar.addWidget(self.play_button)
-        self.launch_button = QPushButton("▶ PLAY", stage)
-        self.launch_button.setObjectName("launchButton")
-        self.launch_button.setAccessibleDescription(
-            "Build the project and play it here, in the Studio"
-        )
-        self.launch_button.clicked.connect(self._toggle_play)
-        toolbar.addWidget(self.launch_button)
         layout.addLayout(toolbar)
+
+        self.editor_stack = QStackedWidget(stage)
+        self.editor_stack.setObjectName("editorStack")
 
         # The CRT bezel frames an NES screen — and *only* an NES screen. It used
         # to wrap the whole editor stack, so RULES rendered as forty spin boxes
         # inside a television.
-        self.editor_stack = QStackedWidget(stage)
-        self.editor_stack.setObjectName("editorStack")
-
         self.television = QFrame(self.editor_stack)
         self.television.setObjectName("television")
         self.television.setAccessibleName("Live NES game preview")
@@ -637,588 +353,25 @@ class MainWindow(QMainWindow):
         screen_layout.setContentsMargins(0, 0, 0, 0)
         self.screen_stack = QStackedWidget(screen)
         self.screen_stack.setObjectName("screenStack")
-        self.world_canvas = WorldCanvas(self.screen_stack)
-        self.world_canvas.cell_changed.connect(self._world_cell_changed)
-        self.world_canvas.palette_changed.connect(self._world_palette_changed)
-        self.world_canvas.behaviour_changed.connect(self._world_behaviour_changed)
-        self.world_canvas.cursor_changed.connect(self._world_cursor_changed)
-        self.world_canvas.stroke_began.connect(self._store.begin_macro)
-        self.world_canvas.stroke_ended.connect(lambda: self._store.end_macro("paint"))
-        self.world_canvas.grid_options_changed.connect(self._world_grid_shortcut_changed)
-        self.world_canvas.entity_selected.connect(self._select_canvas_entity)
-        self.world_canvas.entity_moved.connect(self._move_canvas_entity)
-        self.screen_stack.addWidget(self.world_canvas)
-        self.code_editor = QFrame(self.editor_stack)
-        self.code_editor.setObjectName("codeEditor")
-        code_layout = QVBoxLayout(self.code_editor)
-        code_toolbar = QHBoxLayout()
-        code_toolbar.addWidget(QLabel("SOURCE", self.code_editor))
-        self.code_c_button = QPushButton("C  main.c", self.code_editor)
-        self.code_c_button.setObjectName("codeCButton"); self.code_c_button.setCheckable(True)
-        self.code_c_button.clicked.connect(lambda: self._select_code_language("c"))
-        code_toolbar.addWidget(self.code_c_button)
-        self.code_asm_button = QPushButton("ASM  main.s", self.code_editor)
-        self.code_asm_button.setObjectName("codeAsmButton"); self.code_asm_button.setCheckable(True)
-        self.code_asm_button.clicked.connect(lambda: self._select_code_language("asm"))
-        code_toolbar.addWidget(self.code_asm_button)
-        self.code_language_note = QLabel(self.code_editor)
-        self.code_language_note.setObjectName("codeLanguageNote")
-        code_toolbar.addWidget(self.code_language_note, 1)
-        code_layout.addLayout(code_toolbar)
-        self.code_preview = QPlainTextEdit(self.code_editor)
-        self.code_preview.setObjectName("codePreview")
-        self.code_preview.setReadOnly(False)
-        self.code_preview.setAccessibleName("Editable project C source")
-        self.code_preview.setPlainText("")
-        self.code_preview.textChanged.connect(self._save_code_source)
-        self._code_language = "c"
-        self._code_highlighter = _SourceHighlighter(self.code_preview.document())
-        code_layout.addWidget(self.code_preview)
-        self.editor_stack.addWidget(self.code_editor)
-        self.palette_editor = QScrollArea(self.editor_stack)
-        self.palette_editor.setObjectName("paletteEditor")
-        self.palette_editor.setWidgetResizable(True)
-        self.palette_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        palette_content = QFrame(self.palette_editor)
-        palette_content.setObjectName("paletteEditorContent")
-        palette_layout = QGridLayout(palette_content)
-        palette_layout.setContentsMargins(18, 16, 18, 24)
-        palette_layout.addWidget(QLabel("BACKGROUND PALETTES — slot 0 uses the universal backdrop", self.palette_editor), 0, 0, 1, 4)
-        self._background_palette_controls: list[QSpinBox] = []
-        for palette in range(4):
-            palette_layout.addWidget(QLabel(f"BG{palette}", self.palette_editor), palette + 1, 0)
-            for slot in range(3):
-                control = QSpinBox(self.palette_editor)
-                control.setRange(0, 0x3F)
-                control.setDisplayIntegerBase(16)
-                control.setPrefix("0x")
-                control.setObjectName(f"backgroundPalette{palette}Slot{slot + 1}")
-                control.setAccessibleName(f"Background palette {palette} colour slot {slot + 1}")
-                control.valueChanged.connect(
-                    lambda value, palette=palette, slot=slot: self._set_background_palette_slot(palette, slot, value)
-                )
-                self._style_palette_control(control, 0)
-                self._background_palette_controls.append(control)
-                palette_layout.addWidget(control, palette + 1, slot + 1)
-        palette_layout.addWidget(QLabel("SPRITE PALETTES — slot 0 is transparent", self.palette_editor), 6, 0, 1, 4)
-        self._sprite_palette_controls: list[QSpinBox] = []
-        for palette in range(4):
-            palette_layout.addWidget(QLabel(f"SP{palette}", self.palette_editor), palette + 7, 0)
-            for slot in range(3):
-                control = QSpinBox(self.palette_editor)
-                control.setRange(0, 0x3F)
-                control.setDisplayIntegerBase(16)
-                control.setPrefix("0x")
-                control.setObjectName(f"spritePalette{palette}Slot{slot + 1}")
-                control.setAccessibleName(f"Sprite palette {palette} colour slot {slot + 1}")
-                control.valueChanged.connect(
-                    lambda value, palette=palette, slot=slot: self._set_sprite_palette_slot(palette, slot, value)
-                )
-                self._style_palette_control(control, 0)
-                self._sprite_palette_controls.append(control)
-                palette_layout.addWidget(control, palette + 7, slot + 1)
-        self.palette_target = QComboBox(self.palette_editor)
-        self.palette_target.setObjectName("paletteTargetSelector")
-        self._prepare_visual_selector(self.palette_target, "Palette slot to edit")
-        for bank, prefix in (("bg", "BG"), ("sprite", "SP")):
-            for palette in range(4):
-                for slot in range(3):
-                    self._add_visual_choice(self.palette_target, f"{prefix}{palette} · colour {slot + 1}", (bank, palette, slot), colour="#4878d8" if bank == "bg" else "#f87878", glyph=prefix)
-        palette_layout.addWidget(QLabel("EDIT SLOT", self.palette_editor), 11, 0)
-        palette_layout.addWidget(self.palette_target, 11, 1, 1, 3)
-        palette_layout.addWidget(QLabel("NES MASTER PALETTE", self.palette_editor), 12, 0, 1, 4)
-        master_grid = QGridLayout()
-        master_grid.setSpacing(3)
-        self._master_palette_buttons: list[QPushButton] = []
-        for colour in range(0x40):
-            button = QPushButton(f"{colour:02X}", self.palette_editor)
-            button.setObjectName(f"nesMasterColour{colour:02X}")
-            button.setFixedSize(42, 28)
-            button.setAccessibleName(f"Use NES colour {colour:02X} for selected palette slot")
-            button.clicked.connect(lambda _checked=False, colour=colour: self._apply_master_palette_colour(colour))
-            self._master_palette_buttons.append(button)
-            master_grid.addWidget(button, colour // 16, colour % 16)
-        palette_layout.addLayout(master_grid, 13, 0, 1, 4)
-        self.palette_recent_label = QLabel("RECENT COLOURS", self.palette_editor)
-        palette_layout.addWidget(self.palette_recent_label, 14, 0, 1, 4)
-        self.palette_recent_row = QHBoxLayout()
-        self._recent_palette_buttons: list[QPushButton] = []
-        palette_layout.addLayout(self.palette_recent_row, 15, 0, 1, 4)
-        self.palette_editor.setWidget(palette_content)
-        self.editor_stack.addWidget(self.palette_editor)
-        self.tile_editor = QScrollArea(self.editor_stack)
-        self.tile_editor.setObjectName("tileEditor")
-        self.tile_editor.setWidgetResizable(True)
-        self.tile_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        tile_content = QFrame(self.tile_editor)
-        tile_content.setObjectName("tileEditorContent")
-        tile_layout = QVBoxLayout(tile_content)
-        tile_layout.setContentsMargins(14, 14, 14, 22)
-        tile_layout.setSpacing(8)
-        selector_row = QHBoxLayout()
-        self.tile_bank = QComboBox(self.tile_editor)
-        self.tile_bank.setObjectName("tileBankSelector")
-        self._prepare_visual_selector(self.tile_bank, "Tile bank")
-        self._add_visual_choice(self.tile_bank, "Background tiles", "bg", colour="#4878d8", glyph="BG")
-        self._add_visual_choice(self.tile_bank, "Sprite tiles", "sprite", colour="#f8d878", glyph="SP")
-        self.tile_bank.currentIndexChanged.connect(self._refresh_tile_editor)
-        selector_row.addWidget(self.tile_bank)
-        self.tile_selector = QSpinBox(self.tile_editor)
-        self.tile_selector.setObjectName("backgroundTileSelector")
-        self.tile_selector.setRange(0, 255)
-        self.tile_selector.setDisplayIntegerBase(16)
-        self.tile_selector.setPrefix("0x")
-        self.tile_selector.setAccessibleName("Background tile index")
-        self.tile_selector.valueChanged.connect(self._refresh_tile_editor)
-        selector_row.addWidget(self.tile_selector)
-        # A tile has no palette of its own — the nametable cell (or metasprite
-        # cell) that references it chooses one. So the editor needs an explicit
-        # "preview through this palette" choice, exactly as the web has.
-        self.tile_preview_palette = QComboBox(self.tile_editor)
-        self.tile_preview_palette.setObjectName("tilePreviewPalette")
-        self._prepare_visual_selector(self.tile_preview_palette, "Preview palette")
-        for palette in range(4):
-            self._add_visual_choice(
-                self.tile_preview_palette, f"Preview palette {palette}", palette,
-                colour="#4878d8", glyph=str(palette),
-            )
-        self.tile_preview_palette.currentIndexChanged.connect(self._refresh_tile_editor)
-        selector_row.addWidget(self.tile_preview_palette)
-        tile_layout.addLayout(selector_row)
-        self._tile_shortcuts: list[QShortcut] = []
-        for key, delta in (("[", -1), ("]", 1), ("Left", -1), ("Right", 1), ("Up", -16), ("Down", 16)):
-            shortcut = QShortcut(QKeySequence(key), self.tile_editor)
-            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            shortcut.activated.connect(lambda delta=delta: self._step_tile_selector(delta))
-            self._tile_shortcuts.append(shortcut)
-        tile_layout.addWidget(QLabel("TILE LIBRARY — select a slot", self.tile_editor))
-        tile_library = QGridLayout()
-        tile_library.setSpacing(3)
-        self._tile_library_buttons: list[QPushButton] = []
-        for index in range(256):
-            button = QPushButton(f"{index:02X}", self.tile_editor)
-            button.setObjectName(f"tileLibrary{index:02X}")
-            button.setFixedSize(42, 28)
-            button.setIconSize(QPixmap(20, 20).size())
-            button.setAccessibleName(f"Select tile {index:02X}")
-            button.clicked.connect(lambda _checked=False, index=index: self.tile_selector.setValue(index))
-            self._tile_library_buttons.append(button)
-            tile_library.addWidget(button, index // 16, index % 16)
-        tile_layout.addLayout(tile_library)
-        self.tile_name = QLineEdit(self.tile_editor)
-        self.tile_name.setObjectName("backgroundTileName")
-        self.tile_name.setPlaceholderText("Tile name")
-        self.tile_name.editingFinished.connect(self._set_tile_name)
-        tile_layout.addWidget(self.tile_name)
-        tile_operations = QHBoxLayout()
-        for label, operation in (("Clear", "clear"), ("Flip H", "flip_h"), ("Flip V", "flip_v"), ("Rotate", "rotate")):
-            button = QPushButton(label, self.tile_editor)
-            button.setObjectName(f"tile{operation.title().replace('_', '')}Button")
-            button.clicked.connect(lambda _checked=False, operation=operation: self._transform_tile(operation))
-            tile_operations.addWidget(button)
-        duplicate_button = QPushButton("Duplicate", self.tile_editor)
-        duplicate_button.setObjectName("duplicateTileButton")
-        duplicate_button.clicked.connect(self._duplicate_tile)
-        tile_operations.addWidget(duplicate_button)
-        copy_tile = QPushButton("Copy", self.tile_editor)
-        copy_tile.setObjectName("copyTileButton")
-        copy_tile.clicked.connect(self._copy_tile)
-        tile_operations.addWidget(copy_tile)
-        paste_tile = QPushButton("Paste", self.tile_editor)
-        paste_tile.setObjectName("pasteTileButton")
-        paste_tile.clicked.connect(self._paste_tile)
-        tile_operations.addWidget(paste_tile)
-        swap_tile = QPushButton("Swap…", self.tile_editor)
-        swap_tile.setObjectName("swapTileButton")
-        swap_tile.clicked.connect(self._swap_tile)
-        tile_operations.addWidget(swap_tile)
-        tile_layout.addLayout(tile_operations)
-        self.tile_default_behaviour = QSpinBox(self.tile_editor)
-        self.tile_default_behaviour.setObjectName("tileDefaultBehaviour")
-        self.tile_default_behaviour.setRange(0, 255)
-        self.tile_default_behaviour.setPrefix("Default behaviour: ")
-        self.tile_default_behaviour.valueChanged.connect(self._set_tile_default_behaviour)
-        tile_layout.addWidget(self.tile_default_behaviour)
-        pen_row = QHBoxLayout()
-        pen_row.addWidget(QLabel("PIXEL PEN", self.tile_editor))
-        self._tile_pen = 1
-        self._tile_pen_buttons: list[QPushButton] = []
-        pen_group = QButtonGroup(self.tile_editor)
-        pen_group.setExclusive(True)
-        for value in range(4):
-            button = QPushButton(str(value), self.tile_editor)
-            button.setObjectName(f"tilePen{value}")
-            button.setCheckable(True); button.setFixedWidth(42)
-            button.clicked.connect(lambda _checked=False, value=value: self._set_tile_pen(value))
-            pen_group.addButton(button); self._tile_pen_buttons.append(button); pen_row.addWidget(button)
-        self._tile_pen_buttons[self._tile_pen].setChecked(True)
-        pen_row.addStretch(1)
-        tile_layout.addLayout(pen_row)
-        self.tile_pixel_canvas = QFrame(self.tile_editor)
-        self.tile_pixel_canvas.setObjectName("tilePixelCanvas")
-        self.tile_pixel_canvas.setFixedSize(256, 256)
-        tile_grid = QGridLayout(self.tile_pixel_canvas)
-        tile_grid.setContentsMargins(0, 0, 0, 0)
-        tile_grid.setHorizontalSpacing(0)
-        tile_grid.setVerticalSpacing(0)
-        self._tile_pixel_buttons: list[QPushButton] = []
-        for row in range(8):
-            for column in range(8):
-                button = QPushButton(self.tile_editor)
-                button.setFixedSize(32, 32)
-                button.setObjectName(f"backgroundTilePixel{column}_{row}")
-                button.setAccessibleName(f"Background tile pixel {column}, {row}")
-                button.clicked.connect(lambda _checked=False, column=column, row=row: self._cycle_tile_pixel(column, row))
-                self._tile_pixel_buttons.append(button)
-                tile_grid.addWidget(button, row, column)
-        tile_layout.addWidget(self.tile_pixel_canvas, 0, Qt.AlignmentFlag.AlignLeft)
-        self.tile_editor.setWidget(tile_content)
-        self.editor_stack.addWidget(self.tile_editor)
-        self.chars_editor = QScrollArea(self.editor_stack)
-        self.chars_editor.setObjectName("charsEditor")
-        self.chars_editor.setWidgetResizable(True)
-        self.chars_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        chars_content = QFrame(self.chars_editor)
-        chars_content.setObjectName("charsEditorContent")
-        chars_layout = QVBoxLayout(chars_content)
-        chars_layout.setContentsMargins(18, 16, 18, 24)
-        chars_layout.setSpacing(8)
-        chars_layout.addWidget(QLabel("SPRITES", self.chars_editor))
-        self.sprite_filter = QComboBox(self.chars_editor)
-        self.sprite_filter.setObjectName("spriteRoleFilter")
-        self._prepare_visual_selector(self.sprite_filter, "Filter sprites by role")
-        self._add_visual_choice(self.sprite_filter, "All roles", None, colour="#7878d8", glyph="*")
-        for role in ("player", "npc", "enemy", "item", "tool", "powerup", "pickup", "projectile", "decoration", "hud", "other"):
-            self._add_visual_choice(self.sprite_filter, role, role, colour="#78d878" if role == "player" else "#f87878" if role == "enemy" else "#7878d8", glyph=role[:1])
-        self.sprite_filter.currentIndexChanged.connect(lambda: self._refresh_sprite_editor(0))
-        chars_layout.addWidget(self.sprite_filter)
-        self.sprite_list = QListWidget(self.chars_editor)
-        self.sprite_list.setObjectName("spriteList")
-        self.sprite_list.setIconSize(QPixmap(40, 40).size())
-        self.sprite_list.currentRowChanged.connect(self._select_sprite)
-        chars_layout.addWidget(self.sprite_list)
-        sprite_actions = QHBoxLayout()
-        for label, callback in (("New", self._new_sprite), ("Duplicate", self._duplicate_sprite), ("Rename", self._rename_sprite), ("Delete", self._delete_sprite)):
-            button = QPushButton(label, self.chars_editor)
-            button.clicked.connect(callback)
-            sprite_actions.addWidget(button)
-        chars_layout.addLayout(sprite_actions)
-        self.sprite_role = QComboBox(self.chars_editor)
-        self._prepare_visual_selector(self.sprite_role, "Sprite role")
-        for label, colour, glyph in (
-            ("player", "#78d8d8", "P"), ("npc", "#b8b8d8", "N"),
-            ("enemy", "#f87878", "!"), ("item", "#f8d878", "+"),
-            ("tool", "#9898e8", "T"), ("powerup", "#78d878", "↑"),
-            ("pickup", "#f8d878", "*"), ("projectile", "#f878d8", "→"),
-            ("decoration", "#c87848", "D"), ("hud", "#7878d8", "H"),
-            ("other", "#787898", "?"),
-        ):
-            self._add_visual_choice(self.sprite_role, label, colour=colour, glyph=glyph)
-        self.sprite_role.currentTextChanged.connect(self._set_sprite_role)
-        chars_layout.addWidget(self.sprite_role)
-        self.sprite_flying = QCheckBox("Flying (ignore gravity)", self.chars_editor)
-        self.sprite_flying.toggled.connect(self._set_sprite_flying)
-        chars_layout.addWidget(self.sprite_flying)
-        dimensions = QHBoxLayout()
-        self.sprite_width = QSpinBox(self.chars_editor)
-        self.sprite_width.setRange(1, 8)
-        self.sprite_width.setPrefix("W ")
-        self.sprite_width.valueChanged.connect(self._resize_sprite)
-        dimensions.addWidget(self.sprite_width)
-        self.sprite_height = QSpinBox(self.chars_editor)
-        self.sprite_height.setRange(1, 8)
-        self.sprite_height.setPrefix("H ")
-        self.sprite_height.valueChanged.connect(self._resize_sprite)
-        dimensions.addWidget(self.sprite_height)
-        chars_layout.addLayout(dimensions)
-        cell_controls = QHBoxLayout()
-        self.sprite_cell_x, self.sprite_cell_y = QSpinBox(self.chars_editor), QSpinBox(self.chars_editor)
-        self.sprite_cell_tile, self.sprite_cell_palette = QSpinBox(self.chars_editor), QSpinBox(self.chars_editor)
-        for control, maximum, prefix in ((self.sprite_cell_x, 7, "X "), (self.sprite_cell_y, 7, "Y "), (self.sprite_cell_tile, 255, "Tile "), (self.sprite_cell_palette, 3, "Pal ")):
-            control.setRange(0, maximum); control.setPrefix(prefix); cell_controls.addWidget(control)
-        self.sprite_cell_x.valueChanged.connect(self._refresh_sprite_cell)
-        self.sprite_cell_y.valueChanged.connect(self._refresh_sprite_cell)
-        self.sprite_cell_tile.valueChanged.connect(self._set_sprite_cell)
-        self.sprite_cell_palette.valueChanged.connect(self._set_sprite_cell)
-        chars_layout.addLayout(cell_controls)
-        cell_attributes = QHBoxLayout()
-        self.sprite_cell_flip_h = QCheckBox("Flip H", self.chars_editor)
-        self.sprite_cell_flip_v = QCheckBox("Flip V", self.chars_editor)
-        self.sprite_cell_priority = QCheckBox("Behind BG", self.chars_editor)
-        self.sprite_cell_empty = QCheckBox("Empty", self.chars_editor)
-        for control in (self.sprite_cell_flip_h, self.sprite_cell_flip_v, self.sprite_cell_priority, self.sprite_cell_empty):
-            control.toggled.connect(self._set_sprite_cell)
-            cell_attributes.addWidget(control)
-        chars_layout.addLayout(cell_attributes)
-        self.edit_sprite_pixels_button = QPushButton("✎ Edit selected cell pixels", self.chars_editor)
-        self.edit_sprite_pixels_button.setObjectName("editSpritePixelsButton")
-        self.edit_sprite_pixels_button.clicked.connect(self._edit_selected_sprite_pixels)
-        chars_layout.addWidget(self.edit_sprite_pixels_button)
-        self.new_animation_button = QPushButton("New animation", self.chars_editor)
-        self.new_animation_button.setObjectName("newAnimationButton")
-        self.new_animation_button.clicked.connect(self._new_animation)
-        chars_layout.addWidget(self.new_animation_button)
-        self.animation_list = QListWidget(self.chars_editor)
-        self.animation_list.setObjectName("animationList")
-        self.animation_list.setAccessibleName("Project animations")
-        self.animation_list.currentRowChanged.connect(self._select_animation)
-        chars_layout.addWidget(self.animation_list)
-        animation_actions = QHBoxLayout()
-        self.animation_add_frame_button = QPushButton("Add sprite frame", self.chars_editor)
-        self.animation_add_frame_button.setObjectName("addAnimationFrameButton")
-        self.animation_add_frame_button.clicked.connect(self._append_selected_sprite_frame)
-        animation_actions.addWidget(self.animation_add_frame_button)
-        self.animation_remove_frame_button = QPushButton("Remove last frame", self.chars_editor)
-        self.animation_remove_frame_button.setObjectName("removeAnimationFrameButton")
-        self.animation_remove_frame_button.clicked.connect(self._remove_last_animation_frame)
-        animation_actions.addWidget(self.animation_remove_frame_button)
-        self.animation_rename_button = QPushButton("Rename", self.chars_editor)
-        self.animation_rename_button.setObjectName("renameAnimationButton")
-        self.animation_rename_button.clicked.connect(self._rename_animation)
-        animation_actions.addWidget(self.animation_rename_button)
-        self.animation_duplicate_button = QPushButton("Duplicate", self.chars_editor)
-        self.animation_duplicate_button.setObjectName("duplicateAnimationButton")
-        self.animation_duplicate_button.clicked.connect(self._duplicate_animation)
-        animation_actions.addWidget(self.animation_duplicate_button)
-        self.animation_delete_button = QPushButton("Delete animation", self.chars_editor)
-        self.animation_delete_button.setObjectName("deleteAnimationButton")
-        self.animation_delete_button.clicked.connect(self._delete_animation)
-        animation_actions.addWidget(self.animation_delete_button)
-        chars_layout.addLayout(animation_actions)
-        frame_order = QHBoxLayout()
-        self.animation_frame_index = QSpinBox(self.chars_editor)
-        self.animation_frame_index.setObjectName("animationFrameIndex")
-        self.animation_frame_index.setPrefix("Frame ")
-        frame_order.addWidget(self.animation_frame_index)
-        self.animation_frame_left = QPushButton("←", self.chars_editor)
-        self.animation_frame_left.setObjectName("moveAnimationFrameLeftButton")
-        self.animation_frame_left.clicked.connect(lambda: self._move_animation_frame(-1))
-        frame_order.addWidget(self.animation_frame_left)
-        self.animation_frame_right = QPushButton("→", self.chars_editor)
-        self.animation_frame_right.setObjectName("moveAnimationFrameRightButton")
-        self.animation_frame_right.clicked.connect(lambda: self._move_animation_frame(1))
-        frame_order.addWidget(self.animation_frame_right)
-        chars_layout.addLayout(frame_order)
-        self.animation_fps = QSpinBox(self.chars_editor)
-        self.animation_fps.setObjectName("animationFps")
-        self.animation_fps.setRange(1, 60)
-        self.animation_fps.setPrefix("FPS ")
-        self.animation_fps.valueChanged.connect(self._set_animation_fps)
-        chars_layout.addWidget(self.animation_fps)
-        self.animation_preview = QLabel("Select an animation to preview it.", self.chars_editor)
-        self.animation_preview.setObjectName("animationPreview")
-        self.animation_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        chars_layout.addWidget(self.animation_preview)
-        self.animation_assignments: dict[str, QComboBox] = {}
-        for kind in ("walk", "jump", "attack"):
-            selector = QComboBox(self.chars_editor)
-            selector.setObjectName(f"{kind}AnimationSelector")
-            self._prepare_visual_selector(selector, f"{kind.title()} animation")
-            selector.currentIndexChanged.connect(lambda _value, kind=kind: self._set_animation_assignment(kind))
-            self.animation_assignments[kind] = selector
-            chars_layout.addWidget(selector)
-        self.chars_editor.setWidget(chars_content)
-        self.editor_stack.addWidget(self.chars_editor)
-        self.rules_editor = QScrollArea(self.editor_stack)
-        self.rules_editor.setObjectName("rulesEditor")
-        self.rules_editor.setWidgetResizable(True)
-        self.rules_editor.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        rules_content = QFrame(self.rules_editor)
-        rules_content.setObjectName("rulesEditorContent")
-        rules_layout = QVBoxLayout(rules_content)
-        rules_layout.setContentsMargins(20, 18, 20, 28)
-        rules_layout.setSpacing(8)
-        rules_layout.addWidget(QLabel("GAME STYLE", self.rules_editor))
-        self.game_style = QComboBox(self.rules_editor)
-        self.game_style.setObjectName("gameStyleSelector")
-        self._prepare_visual_selector(self.game_style, "Game style")
-        for label, colour, glyph in (
-            ("platformer", "#4878d8", "↟"), ("topdown", "#78d878", "✦"),
-            ("runner", "#f8d878", "→"), ("racer", "#f87878", "R"),
-            ("smb", "#c87848", "M"),
-        ):
-            self._add_visual_choice(self.game_style, label, colour=colour, glyph=glyph)
-        self.game_style.currentTextChanged.connect(self._set_game_style)
-        rules_layout.addWidget(self.game_style)
-        self.game_options: dict[str, QSpinBox] = {}
-        for key, label, minimum, maximum in (
-            ("autoscrollSpeed", "Runner scroll speed", 1, 4),
-            ("racerTopSpeed", "Racer top speed", 1, 4),
-            ("racerLaps", "Racer laps", 1, 9),
-            ("racerCheckpoints", "Racer checkpoints", 1, 2),
-        ):
-            control = QSpinBox(self.rules_editor)
-            control.setObjectName(f"{key}Control")
-            control.setAccessibleName(label)
-            control.setPrefix(f"{label}: ")
-            control.setRange(minimum, maximum)
-            control.valueChanged.connect(lambda value, key=key: self._set_game_option(key, value))
-            self.game_options[key] = control
-            rules_layout.addWidget(control)
-        rules_layout.addWidget(QLabel("PLAYER 1", self.rules_editor))
-        self.player_options: dict[str, QSpinBox] = {}
-        for key, label, minimum, maximum in (
-            ("startX", "Start X", 0, 240), ("startY", "Start Y", 16, 200),
-            ("walkSpeed", "Walk speed", 1, 4), ("jumpHeight", "Jump height", 8, 40),
-            ("maxHp", "Max HP", 0, 9),
-        ):
-            control = QSpinBox(self.rules_editor)
-            control.setObjectName(f"player{key[0].upper()}{key[1:]}Control")
-            control.setAccessibleName(label)
-            control.setPrefix(f"{label}: ")
-            control.setRange(minimum, maximum)
-            control.valueChanged.connect(lambda value, key=key: self._set_player_option(key, value))
-            self.player_options[key] = control
-            rules_layout.addWidget(control)
-        self.attack_button = QComboBox(self.rules_editor)
-        self.attack_button.setObjectName("attackButtonSelector")
-        self._prepare_visual_selector(self.attack_button, "Player attack button")
-        self._add_visual_choice(self.attack_button, "none", colour="#787898", glyph="–")
-        self._add_visual_choice(self.attack_button, "a", colour="#f87878", glyph="A")
-        self._add_visual_choice(self.attack_button, "b", colour="#f8d878", glyph="B")
-        self.attack_button.currentTextChanged.connect(lambda value: self._set_player_option("attackButton", value))
-        rules_layout.addWidget(self.attack_button)
-        rules_layout.addWidget(QLabel("GLOBAL PHYSICS", self.rules_editor))
-        self.global_options: dict[str, QSpinBox] = {}
-        for key, label, minimum, maximum in (("gravityPx", "Gravity", 0, 4), ("jumpSpeedPx", "Jump speed", 1, 6)):
-            control = QSpinBox(self.rules_editor); control.setRange(minimum, maximum); control.setPrefix(f"{label}: "); control.valueChanged.connect(lambda value, key=key: self._set_global_option(key, value)); self.global_options[key] = control; rules_layout.addWidget(control)
-        self.walk_bob = QCheckBox("Bob when walking", self.rules_editor)
-        self.walk_bob.toggled.connect(lambda value: self._set_global_option("bobWhenWalking", value))
-        rules_layout.addWidget(self.walk_bob)
-        self.player2_enabled = QCheckBox("Enable Player 2", self.rules_editor)
-        self.player2_enabled.toggled.connect(self._set_player2_enabled)
-        rules_layout.addWidget(self.player2_enabled)
-        self.player2_options: dict[str, QSpinBox] = {}
-        for key, minimum, maximum in (("startX", 0, 240), ("startY", 16, 200), ("walkSpeed", 1, 4), ("jumpHeight", 8, 40), ("maxHp", 0, 9)):
-            control = QSpinBox(self.rules_editor); control.setRange(minimum, maximum); control.setPrefix(f"P2 {key}: "); control.valueChanged.connect(lambda value, key=key: self._set_player2_option(key, value)); self.player2_options[key] = control; rules_layout.addWidget(control)
-        self.damage_amount = QSpinBox(self.rules_editor); self.damage_amount.setRange(1, 9); self.damage_amount.setPrefix("Damage: "); self.damage_amount.valueChanged.connect(lambda value: self._set_damage_option("amount", value)); rules_layout.addWidget(self.damage_amount)
-        self.damage_iframes = QSpinBox(self.rules_editor); self.damage_iframes.setRange(0, 120); self.damage_iframes.setPrefix("Invincibility frames: "); self.damage_iframes.valueChanged.connect(lambda value: self._set_damage_option("invincibilityFrames", value)); rules_layout.addWidget(self.damage_iframes)
-        self.damage_checkpoints = QCheckBox("Damage checkpoints", self.rules_editor); self.damage_checkpoints.toggled.connect(lambda value: self._set_damage_option("checkpoints", value)); rules_layout.addWidget(self.damage_checkpoints)
-        self.pickups_enabled = QCheckBox("Enable pickups", self.rules_editor); self.pickups_enabled.toggled.connect(self._set_pickups_enabled); rules_layout.addWidget(self.pickups_enabled)
-        rules_layout.addWidget(QLabel("SPAWN EFFECT", self.rules_editor))
-        self.spawn_enabled = QCheckBox("Effect when entering a trigger tile", self.rules_editor)
-        self.spawn_enabled.setObjectName("spawnEffectEnabled")
-        self.spawn_enabled.toggled.connect(self._set_spawn_enabled)
-        rules_layout.addWidget(self.spawn_enabled)
-        self.spawn_sprite = QComboBox(self.rules_editor)
-        self.spawn_sprite.setObjectName("spawnEffectSprite")
-        self._prepare_visual_selector(self.spawn_sprite, "Spawn effect sprite")
-        self.spawn_sprite.currentIndexChanged.connect(self._set_spawn_sprite)
-        rules_layout.addWidget(self.spawn_sprite)
-        self.spawn_ttl = QSpinBox(self.rules_editor)
-        self.spawn_ttl.setObjectName("spawnEffectLifetime")
-        self.spawn_ttl.setRange(1, 120)
-        self.spawn_ttl.setPrefix("Effect frames: ")
-        self.spawn_ttl.setAccessibleName("Spawn effect lifetime in frames")
-        self.spawn_ttl.valueChanged.connect(self._set_spawn_ttl)
-        rules_layout.addWidget(self.spawn_ttl)
-        rules_layout.addWidget(QLabel("HUD", self.rules_editor))
-        self.hud_enabled = QCheckBox("Show hearts for player health", self.rules_editor)
-        self.hud_enabled.setObjectName("hudEnabled")
-        self.hud_enabled.toggled.connect(self._set_hud_enabled)
-        rules_layout.addWidget(self.hud_enabled)
-        self.hud_hint = QLabel("Tag a small sprite as ‘hud’ in CHARS to choose the heart art.", self.rules_editor)
-        self.hud_hint.setObjectName("hudSpriteHint")
-        self.hud_hint.setWordWrap(True)
-        rules_layout.addWidget(self.hud_hint)
-        rules_layout.addWidget(QLabel("DOORS", self.rules_editor))
-        self.doors_enabled = QCheckBox("Teleport when entering a Door tile", self.rules_editor)
-        self.doors_enabled.setObjectName("doorsEnabled")
-        self.doors_enabled.toggled.connect(self._set_doors_enabled)
-        rules_layout.addWidget(self.doors_enabled)
-        self.doors_spawn_x = QSpinBox(self.rules_editor)
-        self.doors_spawn_y = QSpinBox(self.rules_editor)
-        self.doors_target_bg = QSpinBox(self.rules_editor)
-        for control, minimum, maximum, prefix, key in (
-            (self.doors_spawn_x, 0, 240, "Door spawn X: ", "spawnX"),
-            (self.doors_spawn_y, 16, 200, "Door spawn Y: ", "spawnY"),
-            (self.doors_target_bg, -1, 9, "Target background: ", "targetBgIdx"),
-        ):
-            control.setRange(minimum, maximum)
-            control.setPrefix(prefix)
-            control.valueChanged.connect(lambda value, key=key: self._set_doors_option(key, value))
-            rules_layout.addWidget(control)
-        self.doors_hint = QLabel("Use -1 for a same-room shortcut; 0+ swaps to that background.", self.rules_editor)
-        self.doors_hint.setWordWrap(True)
-        rules_layout.addWidget(self.doors_hint)
-        rules_layout.addWidget(QLabel("DIALOGUE", self.rules_editor))
-        self.dialogue_enabled = QCheckBox("Enable NPC dialogue", self.rules_editor)
-        self.dialogue_enabled.setObjectName("dialogueEnabled")
-        self.dialogue_enabled.toggled.connect(self._set_dialogue_enabled)
-        rules_layout.addWidget(self.dialogue_enabled)
-        self.dialogue_lines: dict[str, QLineEdit] = {}
-        for key, label in (("text", "Line 1"), ("text2", "Line 2"), ("text3", "Line 3")):
-            control = QLineEdit(self.rules_editor)
-            control.setObjectName(f"dialogue{key.title()}Input")
-            control.setMaxLength(28)
-            control.setPlaceholderText(f"{label} (up to 28 characters)")
-            control.editingFinished.connect(lambda key=key, control=control: self._set_dialogue_text(key, control.text()))
-            self.dialogue_lines[key] = control
-            rules_layout.addWidget(control)
-        self.dialogue_proximity = QSpinBox(self.rules_editor); self.dialogue_proximity.setRange(1, 6); self.dialogue_proximity.setPrefix("Talk distance (tiles): "); self.dialogue_proximity.valueChanged.connect(lambda value: self._set_dialogue_option("proximity", value)); rules_layout.addWidget(self.dialogue_proximity)
-        self.dialogue_pause = QCheckBox("Pause while dialogue is open", self.rules_editor); self.dialogue_pause.toggled.connect(lambda value: self._set_dialogue_option("pauseOnOpen", value)); rules_layout.addWidget(self.dialogue_pause)
-        self.dialogue_auto_close = QSpinBox(self.rules_editor); self.dialogue_auto_close.setRange(0, 240); self.dialogue_auto_close.setPrefix("Auto-close frames: "); self.dialogue_auto_close.valueChanged.connect(lambda value: self._set_dialogue_option("autoClose", value)); rules_layout.addWidget(self.dialogue_auto_close)
-        rules_layout.addWidget(QLabel("WIN CONDITION", self.rules_editor))
-        self.win_enabled = QCheckBox("Enable a win condition", self.rules_editor)
-        self.win_enabled.setObjectName("winConditionEnabled")
-        self.win_enabled.toggled.connect(self._set_win_condition_enabled)
-        rules_layout.addWidget(self.win_enabled)
-        self.win_type = QComboBox(self.rules_editor)
-        self._prepare_visual_selector(self.win_type, "Win condition type")
-        self._add_visual_choice(self.win_type, "reach_tile", colour="#78d878", glyph="★")
-        self._add_visual_choice(self.win_type, "all_pickups_collected", colour="#f8d878", glyph="+")
-        self.win_type.currentTextChanged.connect(lambda value: self._set_win_condition_option("type", value))
-        rules_layout.addWidget(self.win_type)
-        self.win_behaviour = QComboBox(self.rules_editor)
-        self._prepare_visual_selector(self.win_behaviour, "Winning tile type")
-        for value, colour, glyph in (("trigger", "#f8d878", "!"), ("door", "#78d8d8", "D"), ("solid_ground", "#787898", "■"), ("wall", "#c87848", "W"), ("platform", "#78d878", "="), ("ladder", "#f8d878", "H")):
-            self._add_visual_choice(self.win_behaviour, value, colour=colour, glyph=glyph)
-        self.win_behaviour.currentTextChanged.connect(lambda value: self._set_win_condition_option("behaviourType", value))
-        rules_layout.addWidget(self.win_behaviour)
-        self.damage_respawn_hp = QSpinBox(self.rules_editor); self.damage_respawn_hp.setRange(1, 9); self.damage_respawn_hp.setPrefix("Respawn HP: "); self.damage_respawn_hp.valueChanged.connect(lambda value: self._set_damage_option("respawnHp", value)); rules_layout.addWidget(self.damage_respawn_hp)
-        self.stomp_defeat = QCheckBox("Stomp defeats enemies", self.rules_editor); self.stomp_defeat.toggled.connect(lambda value: self._set_damage_option("stompDefeat", value)); rules_layout.addWidget(self.stomp_defeat)
-        self.stomp_bounce = QSpinBox(self.rules_editor); self.stomp_bounce.setRange(1, 30); self.stomp_bounce.setPrefix("Stomp bounce: "); self.stomp_bounce.valueChanged.connect(lambda value: self._set_damage_option("stompBounce", value)); rules_layout.addWidget(self.stomp_bounce)
-        self.rules_editor.setWidget(rules_content)
-        self.editor_stack.addWidget(self.rules_editor)
-        self.sound_editor = QFrame(self.editor_stack)
-        self.sound_editor.setObjectName("soundEditor")
-        sound_layout = QVBoxLayout(self.sound_editor)
-        sound_layout.addWidget(QLabel("MUSIC & SOUND EFFECTS", self.sound_editor))
-        self.song_list = QListWidget(self.sound_editor)
-        self.song_list.setObjectName("songList")
-        self.song_list.setAccessibleName("Project songs")
-        sound_layout.addWidget(self.song_list)
-        song_actions = QHBoxLayout()
-        for label, callback in (("Import song", lambda: self._import_audio(False)), ("Make default", self._make_default_song), ("Remove song", self._remove_song)):
-            button = QPushButton(label, self.sound_editor)
-            button.clicked.connect(callback)
-            song_actions.addWidget(button)
-        sound_layout.addLayout(song_actions)
-        self.sfx_label = QLabel("No SFX pack loaded", self.sound_editor)
-        self.sfx_label.setObjectName("sfxStatus")
-        sound_layout.addWidget(self.sfx_label)
-        sfx_actions = QHBoxLayout()
-        for label, callback in (("Import SFX", lambda: self._import_audio(True)), ("Remove SFX", self._remove_sfx)):
-            button = QPushButton(label, self.sound_editor)
-            button.clicked.connect(callback)
-            sfx_actions.addWidget(button)
-        sound_layout.addLayout(sfx_actions)
-        self.audio_budget = QLabel(self.sound_editor)
-        self.audio_budget.setObjectName("audioBudget")
-        self.audio_budget.setWordWrap(True)
-        sound_layout.addWidget(self.audio_budget)
-        self.editor_stack.addWidget(self.sound_editor)
 
-        # The running game. Same stage, same bezel — the CRT finally shows a game
-        # instead of framing an editor form.
+        # A mode that edits *on the screen* puts its canvas inside the bezel.
+        for mode in self._modes.values():
+            widget = mode.stage_widget()
+            if widget is not None:
+                self.screen_stack.addWidget(widget)
+
+        # The running game. Same stage, same bezel.
         self.nes_screen = NesScreen(self.screen_stack)
         self.screen_stack.addWidget(self.nes_screen)
-
         screen_layout.addWidget(self.screen_stack)
         tv_layout.addWidget(screen)
-        # The television is one page of the editor stack — shown for WORLD and
-        # while a game is running; the other modes get a plain editor panel.
-        self.editor_stack.insertWidget(0, self.television)
+        self.editor_stack.addWidget(self.television)
+
+        # Everything else is a plain editor panel.
+        for mode in self._modes.values():
+            if not mode.uses_stage:
+                self.editor_stack.addWidget(mode)
+
         layout.addWidget(self.editor_stack, 1)
 
         self.controls_hint = QLabel(EmulatorSession.CONTROLS_HINT, stage)
@@ -1228,1772 +381,324 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.controls_hint)
         return stage
 
-    def _create_quest_panel(self) -> QWidget:
-        panel = QFrame(self)
-        panel.setObjectName("questPanel")
-        panel.setMinimumWidth(230)
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(18, 20, 18, 20)
-
-        title = QLabel("QUEST LOG", panel)
-        title.setObjectName("modeTitle")
-        layout.addWidget(title)
-
-        # Real quests, derived from the project. The previous contents were a
-        # hardcoded checklist of *developer* milestones ("Launch a real Qt
-        # application"), which told the pupil nothing about their own game.
-        self.quest_heading = QLabel("Your game", panel)
-        self.quest_heading.setObjectName("questHeading")
-        layout.addWidget(self.quest_heading)
-
-        self._quest_labels: list[QLabel] = []
-        for _ in range(len(self.QUESTS)):
-            item = QLabel(panel)
-            item.setWordWrap(True)
-            layout.addWidget(item)
-            self._quest_labels.append(item)
-        layout.addStretch(1)
-        return panel
-
-    # Each quest is (label, predicate) — the predicate reads the live document.
-    QUESTS: tuple[tuple[str, Callable[[ProjectDocument], bool]], ...] = (
-        ("Meet your hero", ProjectDocument.has_player_sprite),
-        ("Draw a tile", ProjectDocument.has_drawn_background_tile),
-        ("Build some ground", ProjectDocument.has_painted_nametable),
-        ("Add a second screen", ProjectDocument.has_multiple_screens),
-        ("Take it for a spin", ProjectDocument.has_been_built),
-    )
-
-    def _refresh_quests(self) -> None:
-        for label, (text, done_for) in zip(self._quest_labels, self.QUESTS):
-            try:
-                done = bool(done_for(self._document))
-            except Exception:  # a quest must never break the editor
-                done = False
-            label.setText(("✓  " if done else "○  ") + text)
-            label.setObjectName("questComplete" if done else "questPending")
-            # Re-polish so the objectName change actually restyles the label.
-            label.style().unpolish(label)
-            label.style().polish(label)
+    # ---- modes ------------------------------------------------------------
 
     def select_mode(self, mode: str) -> None:
-        """Select a workspace mode and update its contextual introduction."""
+        """Show a mode: its page in the stage, its dock in the inspector."""
 
-        if mode not in self._mode_buttons:
+        if mode not in self._modes:
             raise ValueError(f"Unknown Studio mode: {mode}")
-        # Stop the game before returning to an editor: the running screen and the
-        # editors share one stage. `restore_mode=False` because we are already
-        # switching mode — restoring here would recurse.
-        if self._emulator.is_running():
-            self._stop_play(restore_mode=False)
+        target = self._modes[mode]
+        if target.min_level > self._level:
+            self._nudge_locked_mode(target)
+            return
+
+        # The running game and the editors share one stage.
+        if self.build_play.is_playing:
+            self.build_play.stop(restore_mode=False)
+
+        if self._mode in self._modes and self._mode != mode:
+            self._modes[self._mode].on_leave()
+
         self._mode = mode
-        if mode == "WORLD" and mode in self._stale_modes:
-            self._load_document_world()
         self._mode_buttons[mode].setChecked(True)
-        self.mode_title.setText(mode)
-        self.mode_help.setText(
-            {
-                "WORLD": "Build screens, paint tile types, and place game objects.",
-                "CHARS": "Create characters, roles, frames, and animations.",
-                "TILES": "Edit the shared 8×8 graphics used by worlds and characters.",
-                "PALS": "Choose authentic NES background and sprite colours.",
-                "RULES": "Configure players, enemies, doors, dialogue, and winning.",
-                "SOUND": "Import songs and sound effects and watch the ROM budget.",
-                "CODE": "Inspect or edit the generated C and 6502 assembly source.",
-            }[mode]
-        )
+        self.mode_title.setText(target.title)
+        self.mode_help.setText(target.help_text)
+        self.locked_notice.setVisible(False)
+        self.dock_stack.setCurrentIndex(list(self._modes).index(mode))
+
+        self.editor_stack.setCurrentWidget(self.television if target.uses_stage else target)
+        stage_widget = target.stage_widget()
+        if stage_widget is not None:
+            self.screen_stack.setCurrentWidget(stage_widget)
+
+        self._refresh_mode(mode)
+        target.on_enter()
         self.statusBar().showMessage(f"{mode.title()} mode selected")
-        world_enabled = mode == "WORLD"
-        self.context_dock.setVisible(world_enabled)
-        for button in self._tool_buttons.values():
-            button.setEnabled(world_enabled)
-        self.tile_value.setEnabled(world_enabled)
-        self.palette_value.setEnabled(world_enabled)
-        self.behaviour_value.setEnabled(world_enabled)
-        self.world_canvas.setEnabled(world_enabled)
-        self.background_selector.setEnabled(world_enabled)
-        # A registry, not a nested ternary plus six sequential `if mode ==`
-        # blocks: adding a mode used to mean editing four places in this method.
-        page = self._mode_pages()[mode]
-        self.editor_stack.setCurrentWidget(page)
-        if world_enabled:
-            self.screen_stack.setCurrentWidget(self.world_canvas)
-        for refresh in self._mode_refreshers(mode):
-            refresh()
-        self._stale_modes.discard(mode)
-        if world_enabled:
-            self._select_world_tool(self.world_canvas.tool)
 
-    def _refresh_code_preview(self) -> None:
-        saved = self._document.custom_source(self._code_language)
-        if saved == "Select CODE to generate a preview.":
-            saved = None
-        if saved is not None:
-            source = saved
-        elif self._code_language == "asm":
-            source = self._default_asm_source()
-        else:
-            source = self._generated_c_source()
-        # Populating the editor must not count as the pupil editing it.
-        # blockSignals() is not enough — the syntax highlighter re-touches the
-        # document afterwards, so textChanged fires outside the blocked window.
-        # That wrote the *generated* source straight into customMainC and
-        # silently ejected the project into hand-edited mode just for opening
-        # CODE. Remember what we loaded and ignore a "change" back to it.
-        self._code_loaded_text = source
-        self.code_preview.blockSignals(True)
-        self.code_preview.setPlainText(source)
-        self.code_preview.blockSignals(False)
-        self.code_c_button.setChecked(self._code_language == "c")
-        self.code_asm_button.setChecked(self._code_language == "asm")
-        self.code_language_note.setText("Editable cc65 source" if self._code_language == "c" else "Editable ca65 source")
-        self.code_preview.setAccessibleName(f"Editable {'C' if self._code_language == 'c' else '6502 assembly'} source")
-        self._code_highlighter.language = self._code_language
-        self._code_highlighter.rehighlight()
-        self.statusBar().showMessage(f"Loaded editable {'C' if self._code_language == 'c' else 'assembly'} source")
+    def _nudge_locked_mode(self, mode: Mode) -> None:
+        """A locked mode stays visible, and says how to unlock it.
 
-    def _generated_c_source(self) -> str:
-        if not self._resource_locator.source_checkout:
-            return "// Generated source is unavailable: this installation lacks the engine bundle.\n"
-        try:
-            return CodegenDifferential(self._resource_locator.root).assemble(
-                self._document.snapshot()
-            )
-        except Exception as exc:
-            self.statusBar().showMessage("Could not generate CODE preview")
-            return f"// Could not generate C source:\n// {exc}\n"
-
-    def _default_asm_source(self) -> str:
-        path = self._resource_locator.root / "steps" / "Step_Playground" / "src" / "main_asm.s"
-        try:
-            return path.read_text(encoding="utf-8")
-        except OSError:
-            return "; Assembly starter is unavailable in this installation.\n"
-
-    def _select_code_language(self, language: str) -> None:
-        if language not in {"c", "asm"} or language == self._code_language:
-            return
-        self._save_code_source()
-        self._code_language = language
-        self._refresh_code_preview()
-
-    def _save_code_source(self) -> None:
-        if not hasattr(self, "_code_language"):
-            return
-        text = self.code_preview.toPlainText()
-        if text == getattr(self, "_code_loaded_text", None):
-            return  # the editor was populated, not edited
-        self._document.set_custom_source(self._code_language, text)
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _refresh_palette_editor(self) -> None:
-        for palette in range(4):
-            for slot, colour in enumerate(self._document.background_palette(palette)):
-                control = self._background_palette_controls[palette * 3 + slot]
-                control.blockSignals(True)
-                control.setValue(colour)
-                control.blockSignals(False)
-                self._style_palette_control(control, colour)
-            for slot, colour in enumerate(self._document.sprite_palette(palette)):
-                control = self._sprite_palette_controls[palette * 3 + slot]
-                control.blockSignals(True)
-                control.setValue(colour)
-                control.blockSignals(False)
-                self._style_palette_control(control, colour)
-        for colour, button in enumerate(self._master_palette_buttons):
-            swatch = nes_qcolor(colour)
-            text = "#080810" if is_light(colour) else "#f8f8f8"
-            button.setStyleSheet(f"background: {swatch.name()}; color: {text}; font-weight: 800; padding: 0;")
-        self._refresh_recent_palette_colours()
-
-    def _set_background_palette_slot(self, palette: int, slot: int, colour: int) -> None:
-        self._document.set_background_palette_slot(palette, slot, colour)
-        self._document.remember_palette_colour(colour)
-        self._style_palette_control(self._background_palette_controls[palette * 3 + slot], colour)
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"BG{palette} palette slot {slot + 1} set to 0x{colour:02X}")
-
-    def _set_sprite_palette_slot(self, palette: int, slot: int, colour: int) -> None:
-        self._document.set_sprite_palette_slot(palette, slot, colour)
-        self._document.remember_palette_colour(colour)
-        self._style_palette_control(self._sprite_palette_controls[palette * 3 + slot], colour)
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"SP{palette} palette slot {slot + 1} set to 0x{colour:02X}")
-
-    def _apply_master_palette_colour(self, colour: int) -> None:
-        target = self.palette_target.currentData()
-        if not isinstance(target, tuple) or len(target) != 3:
-            return
-        bank, palette, slot = target
-        control = (self._background_palette_controls if bank == "bg" else self._sprite_palette_controls)[int(palette) * 3 + int(slot)]
-        control.setValue(colour)
-        self._refresh_recent_palette_colours()
-
-    def _refresh_recent_palette_colours(self) -> None:
-        while self._recent_palette_buttons:
-            button = self._recent_palette_buttons.pop()
-            self.palette_recent_row.removeWidget(button); button.deleteLater()
-        for colour in self._document.palette_recent_colours():
-            button = QPushButton(f"{colour:02X}", self.palette_editor)
-            button.setAccessibleName(f"Reuse recent NES colour {colour:02X}")
-            button.setFixedSize(42, 28)
-            swatch = nes_qcolor(colour)
-            button.setStyleSheet(f"background: {swatch.name()}; color: {'#080810' if is_light(colour) else '#f8f8f8'}; font-weight: 800; padding: 0;")
-            button.clicked.connect(lambda _checked=False, colour=colour: self._apply_master_palette_colour(colour))
-            self._recent_palette_buttons.append(button); self.palette_recent_row.addWidget(button)
-
-    def _refresh_tile_editor(self, _index: int | None = None) -> None:
-        pixels = self._tile_pixels()
-        colours = self._tile_ramp()
-        for value, button in enumerate(self._tile_pen_buttons):
-            button.setStyleSheet(
-                f"background: {colours[value]}; "
-                f"color: {'#f8f8f8' if value == 0 else '#080810'}; font-weight: 800;"
-            )
-        for row in range(8):
-            for column in range(8):
-                value = pixels[row][column]
-                button = self._tile_pixel_buttons[row * 8 + column]
-                button.setText("")
-                button.setStyleSheet(f"background: {colours[value]}; border: 1px solid #34345f; padding: 0;")
-        self.tile_default_behaviour.blockSignals(True)
-        self.tile_default_behaviour.setValue(self._document.background_tile_default_behaviour(self.tile_selector.value()) or 0)
-        self.tile_default_behaviour.setEnabled(self.tile_bank.currentData() != "sprite")
-        self.tile_default_behaviour.blockSignals(False)
-        background = self.tile_bank.currentData() != "sprite"
-        self.tile_name.blockSignals(True)
-        tiles = self._document.state.get("bg_tiles" if background else "sprite_tiles") or []
-        tile = tiles[self.tile_selector.value()] if self.tile_selector.value() < len(tiles) else {}
-        self.tile_name.setText(str(tile.get("name") or "") if isinstance(tile, dict) else "")
-        self.tile_name.setEnabled(True)
-        self.tile_name.blockSignals(False)
-        selected = self.tile_selector.value()
-        used = self._tile_usage(self.tile_bank.currentData())
-        for index, button in enumerate(self._tile_library_buttons):
-            is_selected, count = index == selected, used.get(index, 0)
-            background = "#f8d878" if is_selected else "#4878d8" if count else "#292949"
-            foreground = "#080810" if is_selected else "#f8f8f8"
-            button.setIcon(
-                self._tile_thumbnail(
-                    index, bank=self._tile_bank(), palette=self._tile_preview_palette_index()
-                )
-            )
-            button.setStyleSheet(f"background: {background}; color: {foreground}; padding: 0; border: {'2px solid #f8f8f8' if is_selected else '1px solid #5b5b90'};")
-            button.setToolTip(f"Tile 0x{index:02X} — used {count} time{'s' if count != 1 else ''}")
-
-    def _tile_usage(self, bank: str) -> dict[int, int]:
-        usage: dict[int, int] = {}
-        if bank == "sprite":
-            for sprite in self._document.state.get("sprites") or []:
-                for row in sprite.get("cells", []) if isinstance(sprite, dict) else []:
-                    for cell in row if isinstance(row, list) else []:
-                        if isinstance(cell, dict):
-                            tile = int(cell.get("tile", 0)); usage[tile] = usage.get(tile, 0) + 1
-            return usage
-        for background in self._document.state.get("backgrounds") or []:
-            for row in background.get("nametable", []) if isinstance(background, dict) else []:
-                for cell in row if isinstance(row, list) else []:
-                    tile = int(cell.get("tile", 0)) if isinstance(cell, dict) else 0
-                    usage[tile] = usage.get(tile, 0) + 1
-        return usage
-
-    def _cycle_tile_pixel(self, column: int, row: int) -> None:
-        index = self.tile_selector.value()
-        value = self._tile_pen
-        if self.tile_bank.currentData() == "sprite":
-            self._document.set_sprite_tile_pixel(index, column, row, value)
-        else:
-            self._document.set_background_tile_pixel(index, column, row, value)
-        self._refresh_tile_editor()
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Tile 0x{index:02X} pixel {column}, {row} set to {value}")
-
-    def _transform_tile(self, operation: str) -> None:
-        index = self.tile_selector.value()
-        if self.tile_bank.currentData() == "sprite":
-            self._document.transform_sprite_tile(index, operation)
-        else:
-            self._document.transform_background_tile(index, operation)
-        self._refresh_tile_editor()
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Applied {operation.replace('_', ' ')} to tile 0x{index:02X}")
-
-    def _duplicate_tile(self) -> None:
-        try:
-            index = self._document.duplicate_sprite_tile(self.tile_selector.value()) if self.tile_bank.currentData() == "sprite" else self._document.duplicate_background_tile(self.tile_selector.value())
-        except ValueError as exc:
-            QMessageBox.information(self, "Duplicate tile", str(exc))
-            return
-        self.tile_selector.setValue(index)
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Duplicated tile into 0x{index:02X}")
-
-    def _copy_tile(self) -> None:
-        self._tile_clipboard = [row[:] for row in self._tile_pixels()]
-        self.statusBar().showMessage(f"Copied tile 0x{self.tile_selector.value():02X}")
-
-    def _step_tile_selector(self, delta: int) -> None:
-        self.tile_selector.setValue(max(0, min(255, self.tile_selector.value() + delta)))
-
-    def _edit_world_tile_pixels(self) -> None:
-        """Follow the WORLD paint tile into its shared 8×8 pixel editor."""
-
-        self.tile_bank.setCurrentIndex(0)
-        self.tile_selector.setValue(self.tile_value.value())
-        self.select_mode("TILES")
-        self.statusBar().showMessage("Editing the current WORLD paint tile in TILES")
-
-    def _paste_tile(self) -> None:
-        if self._tile_clipboard is None:
-            self.statusBar().showMessage("Nothing to paste — copy a tile first")
-            return
-        index = self.tile_selector.value()
-        for row, pixels in enumerate(self._tile_clipboard):
-            for column, value in enumerate(pixels):
-                if self.tile_bank.currentData() == "sprite": self._document.set_sprite_tile_pixel(index, column, row, value)
-                else: self._document.set_background_tile_pixel(index, column, row, value)
-        self._session.schedule_save(); self._refresh_tile_editor(); self._update_document_title()
-        self.statusBar().showMessage(f"Pasted into tile 0x{index:02X}")
-
-    def _set_tile_name(self) -> None:
-        if self.tile_bank.currentData() == "sprite":
-            self._document.set_sprite_tile_metadata(self.tile_selector.value(), name=self.tile_name.text())
-        else:
-            self._document.set_background_tile_metadata(self.tile_selector.value(), name=self.tile_name.text())
-        self._session.schedule_save(); self._refresh_tile_editor(); self._update_document_title()
-
-    def _set_tile_pen(self, value: int) -> None:
-        self._tile_pen = value
-        self.statusBar().showMessage(f"Tile pen set to colour {value}")
-
-    def _swap_tile(self) -> None:
-        first = self.tile_selector.value()
-        second, accepted = QInputDialog.getInt(self, "Swap tile slots", "Swap with tile (hex shown in library):", first, 0, 255)
-        if not accepted or second == first:
-            return
-        self._document.swap_tile_slots(str(self.tile_bank.currentData()), first, second)
-        self._session.schedule_save(); self.tile_selector.setValue(second); self._refresh_tile_editor(); self._update_document_title()
-        self.statusBar().showMessage(f"Swapped tile slots 0x{first:02X} and 0x{second:02X}; references followed the artwork")
-
-    def _set_tile_default_behaviour(self, value: int) -> None:
-        if self.tile_bank.currentData() != "sprite":
-            self._document.set_background_tile_metadata(self.tile_selector.value(), default_behaviour=value)
-            self._session.schedule_save()
-            self._update_document_title()
-
-    def _tile_pixels(self) -> list[list[int]]:
-        if self.tile_bank.currentData() == "sprite":
-            return self._document.sprite_tile_pixels(self.tile_selector.value())
-        return self._document.background_tile_pixels(self.tile_selector.value())
-
-    def _refresh_scene_editor(self, selected: int | None = None) -> None:
-        if selected is None: selected = self.scene_list.currentRow()
-        self.scene_sprite.blockSignals(True)
-        self.scene_sprite.clear()
-        for index, name in enumerate(self._document.sprite_names()):
-            sprite = (self._document.state.get("sprites") or [])[index]
-            role = str(sprite.get("role") or "other")
-            if role != "player":
-                colour = {
-                    "enemy": "#f87878", "item": "#f8d878", "npc": "#b8b8d8",
-                    "powerup": "#78d878", "projectile": "#f878d8",
-                }.get(role, "#7878d8")
-                self._add_visual_choice(self.scene_sprite, name, index, colour=colour, glyph=role[:1])
-        self.scene_sprite.blockSignals(False)
-        self.scene_list.blockSignals(True)
-        self.scene_list.clear()
-        for instance in self._document.scene_instances():
-            sprite_index = int(instance.get("spriteIdx") or 0)
-            names = self._document.sprite_names()
-            name = names[sprite_index] if 0 <= sprite_index < len(names) else "Character"
-            self.scene_list.addItem(f"{name} @ {instance.get('x', 0)},{instance.get('y', 0)} ({instance.get('ai', 'static')})")
-        self.scene_list.setCurrentRow(selected if 0 <= selected < self.scene_list.count() else -1)
-        self.scene_list.blockSignals(False)
-        self._select_scene_instance(self.scene_list.currentRow())
-        self._sync_canvas_entities()
-
-    def _sync_canvas_entities(self) -> None:
-        x_offset, y_offset = self._world_screen_x * 256, self._world_screen_y * 240
-        sprites = self._document.state.get("sprites") or []
-        visible = []
-        images: list[QImage | None] = []
-        for index, instance in enumerate(self._document.scene_instances()):
-            x, y = int(instance.get("x", 0)) - x_offset, int(instance.get("y", 0)) - y_offset
-            if not (0 <= x <= 255 and 0 <= y <= 239):
-                continue
-            visible.append({"index": index, "x": x, "y": y})
-            # Draw the entity as its real sprite, not an anonymous red square.
-            sprite_index = int(instance.get("sprite", 0))
-            sprite = sprites[sprite_index] if 0 <= sprite_index < len(sprites) else None
-            images.append(
-                render_sprite(self._document, sprite) if isinstance(sprite, dict) else None
-            )
-        self.world_canvas.set_entities(visible)
-        self.world_canvas.set_entity_images(images)
-
-    def _select_canvas_entity(self, visible_index: int) -> None:
-        entities = self.world_canvas._entities
-        if 0 <= visible_index < len(entities):
-            self.scene_list.setCurrentRow(entities[visible_index]["index"])
-
-    def _move_canvas_entity(self, visible_index: int, x: int, y: int) -> None:
-        entities = self.world_canvas._entities
-        if not 0 <= visible_index < len(entities): return
-        index = entities[visible_index]["index"]
-        self._document.update_scene_instance(index, x=x + self._world_screen_x * 256, y=y + self._world_screen_y * 240)
-        self._session.schedule_save(); self._refresh_scene_editor(index); self._update_document_title()
-
-    def _select_scene_instance(self, index: int) -> None:
-        instances = self._document.scene_instances()
-        instance = instances[index] if 0 <= index < len(instances) else None
-        for control, key, default in ((self.scene_x, "x", 0), (self.scene_y, "y", 0)):
-            control.blockSignals(True); control.setValue(int(instance.get(key, default)) if instance else default); control.blockSignals(False)
-        self.scene_ai.blockSignals(True)
-        self.scene_ai.setCurrentText(str(instance.get("ai", "static")) if instance else "static")
-        self.scene_ai.blockSignals(False)
-        self.scene_speed.blockSignals(True); self.scene_speed.setValue(int(instance.get("speed", 1)) if instance else 1); self.scene_speed.blockSignals(False)
-        self.scene_text.blockSignals(True); self.scene_text.setText(str(instance.get("text", "")) if instance else ""); self.scene_text.blockSignals(False)
-
-    def _add_scene_instance(self) -> None:
-        sprite = self.scene_sprite.currentData()
-        if sprite is None:
-            QMessageBox.information(self, "Add entity", "Create a non-player character in CHARS first.")
-            return
-        index = self._document.add_scene_instance(int(sprite))
-        self._session.schedule_save()
-        self._refresh_scene_editor(index)
-        self._update_document_title()
-
-    def _remove_scene_instance(self) -> None:
-        index = self.scene_list.currentRow()
-        if index >= 0:
-            self._document.delete_scene_instance(index)
-            self._session.schedule_save()
-            self._refresh_scene_editor(index)
-            self._update_document_title()
-
-    def _update_scene_instance(self, _value: int | None = None) -> None:
-        index = self.scene_list.currentRow()
-        if index >= 0:
-            self._document.update_scene_instance(index, x=self.scene_x.value(), y=self.scene_y.value(), ai=self.scene_ai.currentText(), speed=self.scene_speed.value(), text=self.scene_text.text())
-            self._session.schedule_save()
-            self._refresh_scene_editor(index)
-            self._update_document_title()
-
-    def _refresh_sprite_editor(self, selected: int | None = None) -> None:
-        current = self.sprite_list.currentRow() if selected is None else selected
-        role_filter = self.sprite_filter.currentData()
-        self.sprite_list.blockSignals(True)
-        self.sprite_list.clear()
-        self._visible_sprite_indices: list[int] = []
-        for index, name in enumerate(self._document.sprite_names()):
-            sprite = self._document.state["sprites"][index]
-            if role_filter is not None and sprite.get("role", "other") != role_filter:
-                continue
-            self.sprite_list.addItem(
-                QListWidgetItem(self._sprite_thumbnail(sprite), f"{name} ({sprite.get('role', 'other')})")
-            )
-            self._visible_sprite_indices.append(index)
-        self.sprite_list.setCurrentRow(
-            max(0, min(current, self.sprite_list.count() - 1)) if self.sprite_list.count() else -1
-        )
-        self.sprite_list.blockSignals(False)
-        self._select_sprite(self.sprite_list.currentRow())
-
-    def _select_sprite(self, index: int) -> None:
-        index = self._visible_sprite_indices[index] if 0 <= index < len(self._visible_sprite_indices) else -1
-        enabled = index >= 0 and index < len(self._document.sprite_names())
-        self.sprite_role.setEnabled(enabled)
-        self.sprite_flying.setEnabled(enabled)
-        self.sprite_width.setEnabled(enabled)
-        self.sprite_height.setEnabled(enabled)
-        if not enabled:
-            return
-        sprite = self._document.state["sprites"][index]
-        self.sprite_role.blockSignals(True)
-        self.sprite_role.setCurrentText(str(sprite.get("role") or "other"))
-        self.sprite_role.blockSignals(False)
-        self.sprite_flying.blockSignals(True)
-        self.sprite_flying.setChecked(bool(sprite.get("flying", False)))
-        self.sprite_flying.blockSignals(False)
-        for control, value in ((self.sprite_width, int(sprite.get("width") or 1)), (self.sprite_height, int(sprite.get("height") or 1))):
-            control.blockSignals(True)
-            control.setValue(min(8, max(1, value)))
-            control.blockSignals(False)
-        self.sprite_cell_x.setMaximum(self.sprite_width.value() - 1)
-        self.sprite_cell_y.setMaximum(self.sprite_height.value() - 1)
-        self._refresh_sprite_cell()
-
-    def _current_sprite_index(self) -> int:
-        row = self.sprite_list.currentRow()
-        return self._visible_sprite_indices[row] if 0 <= row < len(self._visible_sprite_indices) else -1
-
-    def _new_sprite(self) -> None:
-        name, accepted = QInputDialog.getText(self, "New sprite", "Name:", text="Sprite")
-        if accepted:
-            self._refresh_sprite_editor(self._document.add_sprite(name))
-            self._session.schedule_save()
-
-    def _duplicate_sprite(self) -> None:
-        index = self._current_sprite_index()
-        if index < 0:
-            return
-        name, accepted = QInputDialog.getText(self, "Duplicate sprite", "Name:", text=f"{self._document.sprite_names()[index]} copy")
-        if accepted:
-            self._refresh_sprite_editor(self._document.duplicate_sprite(index, name))
-            self._session.schedule_save()
-
-    def _rename_sprite(self) -> None:
-        index = self._current_sprite_index()
-        if index < 0:
-            return
-        name, accepted = QInputDialog.getText(self, "Rename sprite", "Name:", text=self._document.sprite_names()[index])
-        if accepted:
-            self._document.rename_sprite(index, name)
-            self._refresh_sprite_editor(index)
-            self._session.schedule_save()
-
-    def _delete_sprite(self) -> None:
-        index = self._current_sprite_index()
-        if index >= 0:
-            self._document.delete_sprite(index)
-            self._refresh_sprite_editor(index)
-            self._session.schedule_save()
-
-    def _set_sprite_role(self, role: str) -> None:
-        index = self._current_sprite_index()
-        if index >= 0:
-            self._document.set_sprite_role(index, role)
-            self._refresh_sprite_editor(index)
-            self._session.schedule_save()
-
-    def _set_sprite_flying(self, flying: bool) -> None:
-        index = self._current_sprite_index()
-        if index >= 0:
-            self._document.set_sprite_flying(index, flying)
-            self._session.schedule_save()
-
-    def _resize_sprite(self, _value: int) -> None:
-        index = self._current_sprite_index()
-        if index >= 0:
-            self._document.resize_sprite(index, self.sprite_width.value(), self.sprite_height.value())
-            self._session.schedule_save()
-
-    def _refresh_sprite_cell(self, _value: int | None = None) -> None:
-        index = self._current_sprite_index()
-        if index < 0:
-            return
-        cell = self._document.state["sprites"][index]["cells"][self.sprite_cell_y.value()][self.sprite_cell_x.value()]
-        for control, value in ((self.sprite_cell_tile, int(cell.get("tile", 0))), (self.sprite_cell_palette, int(cell.get("palette", 0)))):
-            control.blockSignals(True); control.setValue(value); control.blockSignals(False)
-        for control, key in ((self.sprite_cell_flip_h, "flipH"), (self.sprite_cell_flip_v, "flipV"), (self.sprite_cell_priority, "priority"), (self.sprite_cell_empty, "empty")):
-            control.blockSignals(True); control.setChecked(bool(cell.get(key, False))); control.blockSignals(False)
-
-    def _set_sprite_cell(self, _value: int) -> None:
-        index = self._current_sprite_index()
-        if index >= 0:
-            self._document.set_sprite_cell(index, self.sprite_cell_x.value(), self.sprite_cell_y.value(), tile=self.sprite_cell_tile.value(), palette=self.sprite_cell_palette.value(), flip_h=self.sprite_cell_flip_h.isChecked(), flip_v=self.sprite_cell_flip_v.isChecked(), priority=self.sprite_cell_priority.isChecked(), empty=self.sprite_cell_empty.isChecked())
-            self._session.schedule_save()
-
-    def _edit_selected_sprite_pixels(self) -> None:
-        index = self._current_sprite_index()
-        if index < 0:
-            return
-        cell = self._document.state["sprites"][index]["cells"][self.sprite_cell_y.value()][self.sprite_cell_x.value()]
-        self.tile_bank.setCurrentIndex(1)
-        self.tile_selector.setValue(int(cell.get("tile", 0)))
-        self.select_mode("TILES")
-        self.statusBar().showMessage("Editing selected sprite cell pixels")
-
-    def _new_animation(self) -> None:
-        name, accepted = QInputDialog.getText(self, "New animation", "Name:", text="Animation")
-        if not accepted:
-            return
-        try:
-            sprite = self._current_sprite_index()
-            index = self._document.add_animation(name, frames=[sprite] if sprite >= 0 else [])
-        except ValueError as exc:
-            QMessageBox.warning(self, "Could not create animation", str(exc))
-            return
-        self._session.schedule_save()
-        self._refresh_animation_list(index)
-        self._update_document_title()
-        self.statusBar().showMessage(f"Created animation {name.strip()}")
-
-    def _select_animation(self, index: int) -> None:
-        self._animation_preview_frame = 0
-        animations = self._document.state.get("animations") or []
-        animation = animations[index] if 0 <= index < len(animations) and isinstance(animations[index], dict) else None
-        self.animation_fps.blockSignals(True)
-        self.animation_fps.setValue(int(animation.get("fps", 8)) if animation else 8)
-        self.animation_fps.blockSignals(False)
-        has_animation = animation is not None
-        self.animation_add_frame_button.setEnabled(has_animation and self._current_sprite_index() >= 0)
-        self.animation_remove_frame_button.setEnabled(bool(animation and animation.get("frames")))
-        self.animation_rename_button.setEnabled(has_animation)
-        self.animation_duplicate_button.setEnabled(has_animation)
-        self.animation_delete_button.setEnabled(has_animation)
-        frame_count = len(animation.get("frames") or []) if animation else 0
-        self.animation_frame_index.blockSignals(True); self.animation_frame_index.setRange(0, max(0, frame_count - 1)); self.animation_frame_index.setValue(min(self.animation_frame_index.value(), max(0, frame_count - 1))); self.animation_frame_index.setEnabled(frame_count > 0); self.animation_frame_index.blockSignals(False)
-        self.animation_frame_left.setEnabled(frame_count > 1 and self.animation_frame_index.value() > 0)
-        self.animation_frame_right.setEnabled(frame_count > 1 and self.animation_frame_index.value() < frame_count - 1)
-        self._refresh_animation_preview()
-
-    def _advance_animation_preview(self) -> None:
-        if self.editor_stack.currentWidget() is not self.chars_editor:
-            return
-        animation = self.animation_list.currentRow()
-        animations = self._document.state.get("animations") or []
-        if not 0 <= animation < len(animations) or not isinstance(animations[animation], dict):
-            return
-        frames = animations[animation].get("frames") or []
-        if frames:
-            self._animation_preview_frame = (self._animation_preview_frame + 1) % len(frames)
-            self._refresh_animation_preview()
-
-    def _refresh_animation_preview(self) -> None:
-        index = self.animation_list.currentRow()
-        animations = self._document.state.get("animations") or []
-        if not 0 <= index < len(animations) or not isinstance(animations[index], dict):
-            self.animation_preview.setText("Select an animation to preview it.")
-            return
-        animation = animations[index]
-        frames = animation.get("frames") or []
-        if not frames:
-            self.animation_preview.setText("Add sprite frames to preview this animation.")
-            return
-        frame = int(frames[self._animation_preview_frame % len(frames)])
-        names = self._document.sprite_names()
-        name = names[frame] if 0 <= frame < len(names) else "Missing sprite"
-        self.animation_preview.setText(f"▶ {name}  ·  frame {self._animation_preview_frame % len(frames) + 1}/{len(frames)}  ·  {animation.get('fps', 8)} FPS")
-
-    def _refresh_animation_list(self, selected: int | None = None) -> None:
-        if selected is None:
-            selected = self.animation_list.currentRow()
-        self.animation_list.clear()
-        for animation in self._document.state.get("animations") or []:
-            if isinstance(animation, dict):
-                self.animation_list.addItem(
-                    f"{animation.get('name') or 'Animation'} — {animation.get('fps', 8)} fps ({len(animation.get('frames') or [])} frames)"
-                )
-        self.animation_list.setCurrentRow(selected if 0 <= selected < self.animation_list.count() else -1)
-        animations = self._document.state.get("animations") or []
-        assignments = self._document.state.get("animation_assignments") or {}
-        for kind, selector in self.animation_assignments.items():
-            selector.blockSignals(True)
-            selector.clear()
-            self._add_visual_choice(selector, f"{kind.title()}: (none)", None, colour="#787898", glyph="–")
-            for index, animation in enumerate(animations):
-                if isinstance(animation, dict):
-                    self._add_visual_choice(
-                        selector,
-                        f"{kind.title()}: {animation.get('name') or 'Animation'}",
-                        index,
-                        colour="#78d8d8",
-                        glyph=str(index + 1),
-                    )
-            assigned = assignments.get(kind) if isinstance(assignments, dict) else None
-            selected_index = next((index for index, animation in enumerate(animations) if isinstance(animation, dict) and animation.get("id") == assigned), -1)
-            selector.setCurrentIndex(selected_index + 1)
-            selector.blockSignals(False)
-
-    def _append_selected_sprite_frame(self) -> None:
-        animation, sprite = self.animation_list.currentRow(), self._current_sprite_index()
-        if animation >= 0 and sprite >= 0:
-            self._document.append_animation_frame(animation, sprite)
-            self._session.schedule_save()
-            self._refresh_animation_list(animation)
-
-    def _remove_last_animation_frame(self) -> None:
-        animation = self.animation_list.currentRow()
-        if animation < 0:
-            return
-        try:
-            self._document.remove_animation_frame(animation)
-        except ValueError:
-            return
-        self._session.schedule_save()
-        self._refresh_animation_list(animation)
-
-    def _move_animation_frame(self, offset: int) -> None:
-        animation, source = self.animation_list.currentRow(), self.animation_frame_index.value()
-        if animation < 0:
-            return
-        destination = source + offset
-        try:
-            self._document.move_animation_frame(animation, source, destination)
-        except IndexError:
-            return
-        self._session.schedule_save(); self._refresh_animation_list(animation)
-        self.animation_frame_index.setValue(destination)
-
-    def _delete_animation(self) -> None:
-        animation = self.animation_list.currentRow()
-        if animation >= 0:
-            self._document.delete_animation(animation)
-            self._session.schedule_save()
-            self._refresh_animation_list(animation)
-
-    def _rename_animation(self) -> None:
-        index = self.animation_list.currentRow()
-        if index < 0:
-            return
-        current = self._document.state["animations"][index].get("name") or "Animation"
-        name, accepted = QInputDialog.getText(self, "Rename animation", "Name:", text=str(current))
-        if accepted and name.strip():
-            self._document.update_animation(index, name=name)
-            self._session.schedule_save(); self._refresh_animation_list(index); self._update_document_title()
-
-    def _duplicate_animation(self) -> None:
-        index = self.animation_list.currentRow()
-        if index < 0:
-            return
-        current = self._document.state["animations"][index].get("name") or "Animation"
-        name, accepted = QInputDialog.getText(self, "Duplicate animation", "Name:", text=f"{current} copy")
-        if accepted and name.strip():
-            duplicate = self._document.duplicate_animation(index, name)
-            self._session.schedule_save(); self._refresh_animation_list(duplicate)
-            self._update_document_title()
-
-    def _set_animation_fps(self, fps: int) -> None:
-        animation = self.animation_list.currentRow()
-        if animation >= 0:
-            self._document.update_animation(animation, fps=fps)
-            self._session.schedule_save()
-            self._refresh_animation_list(animation)
-
-    def _set_animation_assignment(self, kind: str) -> None:
-        selector = self.animation_assignments[kind]
-        self._document.set_animation_assignment(kind, selector.currentData())
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _refresh_rules_editor(self) -> None:
-        builder = self._document.state.get("builder") or {}
-        config = ((builder.get("modules") or {}).get("game") or {}).get("config") or {}
-        style = config.get("type", "platformer")
-        self.game_style.blockSignals(True)
-        self.game_style.setCurrentText(style if style in {"platformer", "topdown", "runner", "racer", "smb"} else "platformer")
-        self.game_style.blockSignals(False)
-        for key, default in (("autoscrollSpeed", 2), ("racerTopSpeed", 3), ("racerLaps", 3), ("racerCheckpoints", 1)):
-            control = self.game_options[key]
-            control.blockSignals(True)
-            control.setValue(int(config.get(key, default)))
-            control.blockSignals(False)
-        player = (((builder.get("modules") or {}).get("players") or {}).get("submodules") or {}).get("player1") or {}
-        player_config = player.get("config") if isinstance(player, dict) else {}
-        player_config = player_config if isinstance(player_config, dict) else {}
-        for key, default in (("startX", 60), ("startY", 120), ("walkSpeed", 1), ("jumpHeight", 20), ("maxHp", 0)):
-            control = self.player_options[key]
-            control.blockSignals(True)
-            control.setValue(int(player_config.get(key, default)))
-            control.blockSignals(False)
-        self.attack_button.blockSignals(True)
-        self.attack_button.setCurrentText(str(player_config.get("attackButton", "none")))
-        self.attack_button.blockSignals(False)
-        globals_config = (((builder.get("modules") or {}).get("globals") or {}).get("config") or {})
-        for key, default in (("gravityPx", 1), ("jumpSpeedPx", 2)):
-            self.global_options[key].blockSignals(True); self.global_options[key].setValue(int(globals_config.get(key, default))); self.global_options[key].blockSignals(False)
-        self.walk_bob.blockSignals(True); self.walk_bob.setChecked(bool(globals_config.get("bobWhenWalking", False))); self.walk_bob.blockSignals(False)
-        player2 = (((builder.get("modules") or {}).get("players") or {}).get("submodules") or {}).get("player2") or {}
-        config2 = player2.get("config") if isinstance(player2, dict) else {}
-        self.player2_enabled.blockSignals(True); self.player2_enabled.setChecked(bool(player2.get("enabled", False)) if isinstance(player2, dict) else False); self.player2_enabled.blockSignals(False)
-        for key, default in (("startX", 180), ("startY", 120), ("walkSpeed", 1), ("jumpHeight", 20), ("maxHp", 0)):
-            self.player2_options[key].blockSignals(True); self.player2_options[key].setValue(int((config2 or {}).get(key, default))); self.player2_options[key].setEnabled(self.player2_enabled.isChecked()); self.player2_options[key].blockSignals(False)
-        damage = (((builder.get("modules") or {}).get("damage") or {}).get("config") or {})
-        for control, key, default in ((self.damage_amount, "amount", 1), (self.damage_iframes, "invincibilityFrames", 30)):
-            control.blockSignals(True); control.setValue(int(damage.get(key, default))); control.blockSignals(False)
-        self.damage_checkpoints.blockSignals(True); self.damage_checkpoints.setChecked(bool(damage.get("checkpoints", False))); self.damage_checkpoints.blockSignals(False)
-        for control, key, default in ((self.damage_respawn_hp, "respawnHp", 1), (self.stomp_bounce, "stompBounce", 12)):
-            control.blockSignals(True); control.setValue(int(damage.get(key, default))); control.blockSignals(False)
-        self.stomp_defeat.blockSignals(True); self.stomp_defeat.setChecked(bool(damage.get("stompDefeat", False))); self.stomp_defeat.blockSignals(False)
-        pickups = ((builder.get("modules") or {}).get("pickups") or {})
-        self.pickups_enabled.blockSignals(True); self.pickups_enabled.setChecked(bool(pickups.get("enabled", False)) if isinstance(pickups, dict) else False); self.pickups_enabled.blockSignals(False)
-        spawn = ((builder.get("modules") or {}).get("spawn") or {})
-        spawn_config = spawn.get("config") if isinstance(spawn, dict) else {}
-        spawn_config = spawn_config if isinstance(spawn_config, dict) else {}
-        self.spawn_enabled.blockSignals(True); self.spawn_enabled.setChecked(bool(spawn.get("enabled", False)) if isinstance(spawn, dict) else False); self.spawn_enabled.blockSignals(False)
-        self.spawn_sprite.blockSignals(True)
-        self.spawn_sprite.clear()
-        for index, name in enumerate(self._document.sprite_names()):
-            sprite = (self._document.state.get("sprites") or [])[index]
-            role = str(sprite.get("role") or "other") if isinstance(sprite, dict) else "other"
-            colour = {"enemy": "#f87878", "hud": "#f8d878", "powerup": "#78d878"}.get(role, "#7878d8")
-            self._add_visual_choice(self.spawn_sprite, name, index, colour=colour, glyph=role[:1])
-        selected_sprite = int(spawn_config.get("spriteIdx", 0))
-        selected_index = self.spawn_sprite.findData(selected_sprite)
-        self.spawn_sprite.setCurrentIndex(selected_index if selected_index >= 0 else 0)
-        self.spawn_sprite.setEnabled(self.spawn_sprite.count() > 0)
-        self.spawn_sprite.blockSignals(False)
-        self.spawn_ttl.blockSignals(True); self.spawn_ttl.setValue(int(spawn_config.get("ttl", 24))); self.spawn_ttl.blockSignals(False)
-        hud = ((builder.get("modules") or {}).get("hud") or {})
-        self.hud_enabled.blockSignals(True); self.hud_enabled.setChecked(bool(hud.get("enabled", False)) if isinstance(hud, dict) else False); self.hud_enabled.blockSignals(False)
-        has_hud_sprite = any(
-            isinstance(sprite, dict) and sprite.get("role") == "hud"
-            for sprite in self._document.state.get("sprites") or []
-        )
-        self.hud_hint.setText(
-            "HUD sprite found — its tiles will be used for the hearts."
-            if has_hud_sprite
-            else "Tag a small sprite as ‘hud’ in CHARS to choose the heart art."
-        )
-        doors = ((builder.get("modules") or {}).get("doors") or {})
-        doors_config = doors.get("config") if isinstance(doors, dict) else {}
-        doors_config = doors_config if isinstance(doors_config, dict) else {}
-        self.doors_enabled.blockSignals(True); self.doors_enabled.setChecked(bool(doors.get("enabled", False)) if isinstance(doors, dict) else False); self.doors_enabled.blockSignals(False)
-        for control, key, default in ((self.doors_spawn_x, "spawnX", 24), (self.doors_spawn_y, "spawnY", 120), (self.doors_target_bg, "targetBgIdx", -1)):
-            control.blockSignals(True); control.setValue(int(doors_config.get(key, default))); control.setEnabled(self.doors_enabled.isChecked()); control.blockSignals(False)
-        dialogue = ((builder.get("modules") or {}).get("dialogue") or {})
-        dialogue_config = dialogue.get("config") if isinstance(dialogue, dict) else {}
-        dialogue_config = dialogue_config if isinstance(dialogue_config, dict) else {}
-        self.dialogue_enabled.blockSignals(True); self.dialogue_enabled.setChecked(bool(dialogue.get("enabled", False)) if isinstance(dialogue, dict) else False); self.dialogue_enabled.blockSignals(False)
-        for key, control in self.dialogue_lines.items():
-            control.blockSignals(True); control.setText(str(dialogue_config.get(key, "HELLO" if key == "text" else ""))); control.setEnabled(self.dialogue_enabled.isChecked()); control.blockSignals(False)
-        for control, key, default in ((self.dialogue_proximity, "proximity", 2), (self.dialogue_auto_close, "autoClose", 0)):
-            control.blockSignals(True); control.setValue(int(dialogue_config.get(key, default))); control.setEnabled(self.dialogue_enabled.isChecked()); control.blockSignals(False)
-        self.dialogue_pause.blockSignals(True); self.dialogue_pause.setChecked(bool(dialogue_config.get("pauseOnOpen", True))); self.dialogue_pause.setEnabled(self.dialogue_enabled.isChecked()); self.dialogue_pause.blockSignals(False)
-        win = ((builder.get("modules") or {}).get("win_condition") or {})
-        win_config = win.get("config") if isinstance(win, dict) else {}
-        win_config = win_config if isinstance(win_config, dict) else {}
-        self.win_enabled.blockSignals(True); self.win_enabled.setChecked(bool(win.get("enabled", False)) if isinstance(win, dict) else False); self.win_enabled.blockSignals(False)
-        for control, key, default in ((self.win_type, "type", "reach_tile"), (self.win_behaviour, "behaviourType", "trigger")):
-            control.blockSignals(True); control.setCurrentText(str(win_config.get(key, default))); control.setEnabled(self.win_enabled.isChecked()); control.blockSignals(False)
-
-    def _set_game_style(self, style: str) -> None:
-        self._document.set_game_style(style)
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _set_game_option(self, key: str, value: int) -> None:
-        self._document.set_game_option(key, value)
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _set_player_option(self, key: str, value: int | str) -> None:
-        self._document.set_player_option(key, value)
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _set_global_option(self, key: str, value: int | bool) -> None:
-        self._document.set_global_option(key, value)
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _set_player2_enabled(self, enabled: bool) -> None:
-        self._document.set_player2_enabled(enabled)
-        for control in self.player2_options.values(): control.setEnabled(enabled)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_player2_option(self, key: str, value: int) -> None:
-        self._document.set_player2_option(key, value)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_damage_option(self, key: str, value: int | bool) -> None:
-        self._document.set_damage_option(key, value)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_pickups_enabled(self, enabled: bool) -> None:
-        self._document.set_pickups_enabled(enabled)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_spawn_enabled(self, enabled: bool) -> None:
-        self._document.set_spawn_enabled(enabled)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_spawn_sprite(self, _index: int) -> None:
-        sprite = self.spawn_sprite.currentData()
-        if isinstance(sprite, int):
-            self._document.set_spawn_option("spriteIdx", sprite)
-            self._session.schedule_save(); self._update_document_title()
-
-    def _set_spawn_ttl(self, value: int) -> None:
-        self._document.set_spawn_option("ttl", value)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_hud_enabled(self, enabled: bool) -> None:
-        self._document.set_hud_enabled(enabled)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_doors_enabled(self, enabled: bool) -> None:
-        self._document.set_doors_enabled(enabled)
-        for control in (self.doors_spawn_x, self.doors_spawn_y, self.doors_target_bg):
-            control.setEnabled(enabled)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_doors_option(self, key: str, value: int) -> None:
-        self._document.set_doors_option(key, value)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_dialogue_enabled(self, enabled: bool) -> None:
-        self._document.set_dialogue_enabled(enabled)
-        for control in (*self.dialogue_lines.values(), self.dialogue_proximity, self.dialogue_pause, self.dialogue_auto_close):
-            control.setEnabled(enabled)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_dialogue_text(self, key: str, value: str) -> None:
-        self._set_dialogue_option(key, value)
-
-    def _set_dialogue_option(self, key: str, value: str | int | bool) -> None:
-        self._document.set_dialogue_option(key, value)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_win_condition_enabled(self, enabled: bool) -> None:
-        self._document.set_win_condition_enabled(enabled)
-        self.win_type.setEnabled(enabled); self.win_behaviour.setEnabled(enabled)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _set_win_condition_option(self, key: str, value: str) -> None:
-        self._document.set_win_condition_option(key, value)
-        self._session.schedule_save(); self._update_document_title()
-
-    def _refresh_sound_editor(self) -> None:
-        audio = self._document.state.get("audio") or {}
-        songs = audio.get("songs") if isinstance(audio, dict) and isinstance(audio.get("songs"), list) else []
-        default = int(audio.get("defaultSongIdx") or 0) if isinstance(audio, dict) else 0
-        self.song_list.clear()
-        for index, song in enumerate(songs):
-            if isinstance(song, dict):
-                marker = "★ " if index == default else "☆ "
-                self.song_list.addItem(f"{marker}{song.get('name') or song.get('filename') or f'song {index}'} — {int(song.get('size') or len(str(song.get('asm') or '').encode('utf-8')))} bytes")
-        sfx = audio.get("sfx") if isinstance(audio, dict) else None
-        self.sfx_label.setText(f"SFX: {sfx.get('name') or sfx.get('filename')}" if isinstance(sfx, dict) else "No SFX pack loaded")
-        used = sum(int(song.get("size") or len(str(song.get("asm") or "").encode("utf-8"))) for song in songs if isinstance(song, dict)) + (int(sfx.get("size") or len(str(sfx.get("asm") or "").encode("utf-8"))) if isinstance(sfx, dict) else 0)
-        self.audio_budget.setText(f"Audio uses ~{used / 1024:.1f} KB ({round(used / 32768 * 100)}% of a 32 KB cartridge).")
-
-    def _import_audio(self, sfx: bool) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Import SFX" if sfx else "Import song", "", "Assembly source (*.s *.asm)")
-        if not path:
-            return
-        try:
-            asm = Path(path).read_text(encoding="utf-8")
-            if sfx:
-                self._document.set_audio_sfx(path, asm)
-            else:
-                self._document.add_audio_song(path, asm)
-        except (OSError, ValueError) as exc:
-            QMessageBox.warning(self, "Could not import audio", str(exc))
-            return
-        self._session.schedule_save()
-        self._refresh_sound_editor()
-        self._update_document_title()
-
-    def _make_default_song(self) -> None:
-        index = self.song_list.currentRow()
-        if index >= 0:
-            self._document.set_default_song(index)
-            self._session.schedule_save()
-            self._refresh_sound_editor()
-
-    def _remove_song(self) -> None:
-        index = self.song_list.currentRow()
-        if index >= 0:
-            self._document.remove_audio_song(index)
-            self._session.schedule_save()
-            self._refresh_sound_editor()
-
-    def _remove_sfx(self) -> None:
-        self._document.clear_audio_sfx()
-        self._session.schedule_save()
-        self._refresh_sound_editor()
-
-    def _select_world_tool(self, tool: str) -> None:
-        self.world_canvas.set_tool(tool)
-        self._tool_buttons[tool].setChecked(True)
-        self.statusBar().showMessage(f"WORLD {tool.title()} tool — click or drag on the NES screen")
-
-    def _copy_world_region(self) -> None:
-        self.world_canvas.copy_selection()
-        left, top, right, bottom = self.world_canvas.selection
-        self.statusBar().showMessage(f"Copied WORLD region {right - left + 1} × {bottom - top + 1}")
-
-    def _paste_world_region(self) -> None:
-        if self.world_canvas.paste_selection():
-            self.statusBar().showMessage("Pasted WORLD region")
-        else:
-            self.statusBar().showMessage("Nothing to paste — copy a WORLD region first")
-
-    def _world_cell_changed(self, col: int, row: int, value: int) -> None:
-        if self._document.background_tile_mode() == "16x16" and self.metatile_list.currentRow() >= 0:
-            self._document.stamp_metatile(col + self._world_screen_x * 32, row + self._world_screen_y * 30, self.metatile_list.currentRow())
-            self._world_value_changed("metatile")
-            return
-        self._document.set_world_tile(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
-        default_behaviour = self._document.background_tile_default_behaviour(value)
-        if default_behaviour is not None and self.world_canvas.tool in {"paint", "fill"}:
-            self._document.set_world_behaviour(col + self._world_screen_x * 32, row + self._world_screen_y * 30, default_behaviour)
-        self._world_value_changed(f"tile {value}")
-
-    def _world_palette_changed(self, col: int, row: int, value: int) -> None:
-        self._document.set_world_palette(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
-        self._world_value_changed(f"palette {value}")
-
-    def _world_behaviour_changed(self, col: int, row: int, value: int) -> None:
-        self._document.set_world_behaviour(col + self._world_screen_x * 32, row + self._world_screen_y * 30, value)
-        self._world_value_changed(f"behaviour {value}")
-
-    def _world_value_changed(self, description: str) -> None:
-        self._session.schedule_save()
-        self._update_document_title()
-        self._refresh_world_frame()
-        self.statusBar().showMessage(f"WORLD changed to {description}")
-
-    def _refresh_world_frame(self) -> None:
-        """Re-render the WORLD screen from the document.
-
-        This is what makes WORLD show the pupil's actual tile art and palettes
-        instead of a placeholder colour per tile index.
+        Hiding it would tell a pupil nothing. This tells them the mode exists,
+        what it is for, and exactly which switch turns it on.
         """
 
-        self.world_canvas.set_frame(
-            render_nametable(self._document, self._world_screen_x, self._world_screen_y)
+        self.locked_notice.setText(
+            f"{mode.title} is a {mode.min_level.label} mode.\n\n{mode.help_text}\n\n"
+            f"Set your level to {mode.min_level.label} in the top bar to open it."
         )
-        self.world_canvas.set_conflicts(
-            attribute_conflicts(self._document, self._world_screen_x, self._world_screen_y)
-        )
-        self._refresh_quests()
-
-    def _load_document_world(self) -> None:
-        self._sync_background_selector()
-        show_grid, show_attributes = self._document.world_grid_options()
-        self.world_canvas.set_grid_options(show_grid=show_grid, show_attributes=show_attributes)
-        for checkbox, value in ((self.grid_toggle, show_grid), (self.attribute_toggle, show_attributes)):
-            checkbox.blockSignals(True)
-            checkbox.setChecked(value)
-            checkbox.blockSignals(False)
-        self.universal_background.blockSignals(True)
-        self.universal_background.setValue(self._document.universal_background)
-        self.universal_background.blockSignals(False)
-        self.world_canvas.load_world(
-            self._document.world_tiles(self._world_screen_x, self._world_screen_y),
-            self._document.world_palettes(self._world_screen_x, self._world_screen_y),
-            self._document.world_behaviours(self._world_screen_x, self._world_screen_y),
-        )
-        self._sync_canvas_entities()
-        self._refresh_world_frame()
-
-    def _set_world_grid_options(self, _checked: bool) -> None:
-        show_grid, show_attributes = self.grid_toggle.isChecked(), self.attribute_toggle.isChecked()
-        self.world_canvas.set_grid_options(show_grid=show_grid, show_attributes=show_attributes)
-        self._document.set_world_grid_options(show_grid=show_grid, show_attributes=show_attributes)
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _world_grid_shortcut_changed(self, show_grid: bool, show_attributes: bool) -> None:
-        self.grid_toggle.blockSignals(True)
-        self.grid_toggle.setChecked(show_grid)
-        self.grid_toggle.blockSignals(False)
-        self._document.set_world_grid_options(show_grid=show_grid, show_attributes=show_attributes)
-        self._session.schedule_save()
-        self._update_document_title()
-
-    def _set_universal_background(self, colour: int) -> None:
-        self._document.set_universal_background(colour)
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Universal backdrop set to 0x{colour:02X}")
-
-    def _sync_background_selector(self) -> None:
-        self.background_selector.blockSignals(True)
-        self.background_selector.clear()
-        colours = ("#4878d8", "#78d878", "#78d8d8", "#f8d878", "#f878d8", "#c87848")
-        for index, name in enumerate(self._document.background_names()):
-            self._add_visual_choice(
-                self.background_selector,
-                name,
-                index,
-                colour=colours[index % len(colours)],
-                glyph=str(index + 1),
-            )
-        self.background_selector.setCurrentIndex(self._document.selected_background_index)
-        self.background_selector.blockSignals(False)
-        self._sync_world_layout()
-
-    def _sync_world_layout(self) -> None:
-        self.world_layout.blockSignals(True)
-        dimensions = self._document.background_dimensions()
-        for index in range(self.world_layout.count()):
-            if self.world_layout.itemData(index) == dimensions:
-                self.world_layout.setCurrentIndex(index)
-                break
-        self.world_layout.blockSignals(False)
-        screens_x, screens_y = dimensions
-        self._world_screen_x = min(self._world_screen_x, screens_x - 1)
-        self._world_screen_y = min(self._world_screen_y, screens_y - 1)
-        for widget, maximum, value in (
-            (self.world_screen_x, screens_x - 1, self._world_screen_x),
-            (self.world_screen_y, screens_y - 1, self._world_screen_y),
-        ):
-            widget.blockSignals(True)
-            widget.setRange(0, maximum)
-            widget.setValue(value)
-            widget.blockSignals(False)
-
-    def _select_world_screen(self, _value: int) -> None:
-        self._world_screen_x = self.world_screen_x.value()
-        self._world_screen_y = self.world_screen_y.value()
-        self._load_document_world()
+        self.locked_notice.setVisible(True)
+        self._mode_buttons[self._mode].setChecked(True)
         self.statusBar().showMessage(
-            f"Editing WORLD screen {self._world_screen_x + 1}, {self._world_screen_y + 1}"
+            f"{mode.title} unlocks at {mode.min_level.label} — change your level in the top bar"
         )
 
-    def _select_background(self, index: int) -> None:
-        if index < 0 or index == self._document.selected_background_index:
-            return
+    def _refresh_mode(self, mode: str) -> None:
+        self._stale_modes.discard(mode)
         try:
-            self._document.select_background(index)
-        except (IndexError, ProjectFormatError) as exc:
-            QMessageBox.critical(self, "Could not open background", str(exc))
-            self._sync_background_selector()
+            self._modes[mode].refresh()
+        except Exception as exc:  # one broken editor must not take the app down
+            self.statusBar().showMessage(f"Could not refresh {mode}: {exc}")
+
+    def refresh_all_editors(self) -> None:
+        """The document changed underneath every mode — undo, redo, or a switch.
+
+        Refresh only the mode the pupil is looking at; mark the rest stale, to be
+        refreshed when they are next opened. Refreshing them all eagerly meant
+        every undo re-ran CODE's refresh, which invokes the cc65 codegen — seconds
+        of work per keystroke-sized edit, and 178 s for one test file.
+        """
+
+        self._stale_modes = set(MODE_NAMES)
+        self._refresh_mode(self._mode)
+        self.attention.refresh()
+
+    def after_project_replaced(self) -> None:
+        """The document was swapped underneath us by a restore."""
+
+        self.store.rebind(self.session)
+        self.build_play.forget_rom()
+        self.refresh_all_editors()
+        self.update_document_title()
+
+    def switch_to_project(self, project_id: str) -> None:
+        if self.build_play.is_playing:
+            self.build_play.stop()
+        self.session.switch(project_id)
+        self.after_project_replaced()
+
+    # ---- levels -----------------------------------------------------------
+
+    def set_level(self, level: Level) -> None:
+        """Unlock the modes at or below `level`.
+
+        Programmatic on purpose, so callers and tests can drive it without the
+        combo box.
+        """
+
+        self._level = level
+        self._settings.setValue("studio/level", int(level))
+        self.level_select.blockSignals(True)
+        self.level_select.setCurrentIndex(int(level))
+        self.level_select.blockSignals(False)
+        self._sync_locked_modes()
+        self.attention.refresh()
+        if self._modes[self._mode].min_level > level:
+            self.select_mode("WORLD")
+        self.statusBar().showMessage(f"Level set to {level.label}")
+
+    def _level_chosen(self, _index: int) -> None:
+        level = self.level_select.currentData()
+        if isinstance(level, Level):
+            self.set_level(level)
+
+    def _sync_locked_modes(self) -> None:
+        for mode_id, button in self._mode_buttons.items():
+            locked = self._modes[mode_id].min_level > self._level
+            button.setText(f"🔒 {mode_id}" if locked else mode_id)
+            button.setProperty("locked", "true" if locked else "false")
+            self.repolish(button)
+
+    # ---- chrome -----------------------------------------------------------
+
+    def resizeEvent(self, event: object) -> None:  # noqa: N802 - Qt API spelling
+        super().resizeEvent(event)
+        self._update_responsive_chrome()
+
+    def _update_responsive_chrome(self) -> None:
+        """Keep the centre editor usable at the documented minimum window size."""
+
+        compact = self.width() < 1160
+        if hasattr(self, "attention"):
+            self.attention.setVisible(not compact)
+        if "TILES" in self._modes:
+            self._modes["TILES"].set_compact(compact)
+
+    @staticmethod
+    def repolish(widget: QWidget) -> None:
+        """Make Qt re-read a widget's style after its objectName or a property
+        changed. Without this the stylesheet keeps applying the old rule."""
+
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+
+    def set_mode_shortcuts_enabled(self, enabled: bool) -> None:
+        for shortcut in self._mode_shortcuts:
+            shortcut.setEnabled(enabled)
+
+    def update_document_title(self) -> None:
+        document = self.document
+        marker = " *" if document.dirty else ""
+        self.setWindowTitle(f"{document.name}{marker} — {APP_DISPLAY_NAME}")
+        if hasattr(self, "project_name") and not self.project_name.hasFocus():
+            self.project_name.blockSignals(True)
+            self.project_name.setText(document.name)
+            self.project_name.blockSignals(False)
+
+    def _rename_project(self) -> None:
+        name = self.project_name.text().strip()
+        if not name or name == self.document.name:
             return
-        self._load_document_world()
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Opened WORLD background {self._document.background_names()[index]}")
+        self.document.state["name"] = name
+        self.document.dirty = True
+        self.document_edited(f"Renamed to “{name}”")
 
-    def _set_world_layout(self, index: int) -> None:
-        dimensions = self.world_layout.itemData(index)
-        if not isinstance(dimensions, tuple):
-            return
-        try:
-            self._document.set_background_dimensions(*dimensions)
-        except (ValueError, ProjectFormatError) as exc:
-            QMessageBox.warning(self, "Could not change WORLD layout", str(exc))
-            self._sync_world_layout()
-            return
-        self._load_document_world()
-        self._session.schedule_save()
-        self._update_document_title()
+    def mark_unsaved(self) -> None:
+        if hasattr(self, "save_dot"):
+            self.save_dot.setObjectName("saveDotPending")
+            self.save_dot.setToolTip("Unsaved changes — saving shortly")
+            self.save_dot.setAccessibleName("Unsaved changes")
+            self.repolish(self.save_dot)
 
-    def _refresh_metatile_mode(self) -> None:
-        metatile = self._document.background_tile_mode() == "16x16"
-        self.metatile_mode_button.setText("Revert to 8×8 tiles" if metatile else "Promote to 16×16 blocks")
-        self.metatile_list.setEnabled(metatile)
-        self.metatile_list.clear()
-        if metatile:
-            for index, block in enumerate(self._document.state["backgrounds"][self._document.selected_background_index].get("metatiles") or []):
-                self.metatile_list.addItem(f"Block {index}: {block.get('tiles', [0, 0, 0, 0])}")
-        self._select_metatile(self.metatile_list.currentRow())
-
-    def _toggle_metatile_mode(self) -> None:
-        if self._document.background_tile_mode() == "16x16":
-            self._document.revert_selected_background_to_tiles()
-        else:
-            self._document.promote_selected_background_to_metatiles()
-        self._session.schedule_save()
-        self._refresh_metatile_mode()
-        self._update_document_title()
-        self.statusBar().showMessage("WORLD tile mode changed")
-
-    def _add_metatile(self) -> None:
-        try: index = self._document.add_metatile()
-        except ValueError: return
-        self._session.schedule_save(); self._refresh_metatile_mode(); self.metatile_list.setCurrentRow(index); self._update_document_title()
-
-    def _delete_metatile(self) -> None:
-        if self._document.delete_metatile(self.metatile_list.currentRow()):
-            self._session.schedule_save(); self._refresh_metatile_mode(); self._update_document_title()
-
-    def _select_metatile(self, index: int) -> None:
-        blocks = self._document.state["backgrounds"][self._document.selected_background_index].get("metatiles") or []
-        block = blocks[index] if 0 <= index < len(blocks) else None
-        controls = self.metatile_tiles + [self.metatile_palette, self.metatile_behaviour]
-        values = (block.get("tiles", [0, 0, 0, 0]) + [block.get("palette", 0), block.get("behaviour", 0)]) if block else [0] * 6
-        for control, value in zip(controls, values): control.blockSignals(True); control.setValue(value); control.setEnabled(block is not None); control.blockSignals(False)
-
-    def _update_metatile(self, _value: int) -> None:
-        index = self.metatile_list.currentRow()
-        if index >= 0:
-            self._document.set_metatile(index, tiles=[control.value() for control in self.metatile_tiles], palette=self.metatile_palette.value(), behaviour=self.metatile_behaviour.value())
-            self._session.schedule_save(); self._refresh_metatile_mode(); self.metatile_list.setCurrentRow(index); self._update_document_title()
-
-    def _new_background(self) -> None:
-        self._create_background(duplicate=False)
-
-    def _duplicate_background(self) -> None:
-        self._create_background(duplicate=True)
-
-    def _create_background(self, *, duplicate: bool) -> None:
-        suggested = (
-            f"{self._document.background_names()[self._document.selected_background_index]} copy"
-            if duplicate
-            else f"Room {len(self._document.background_names()) + 1}"
-        )
-        name, accepted = QInputDialog.getText(self, "WORLD background", "Name:", text=suggested)
-        if not accepted:
-            return
-        try:
-            index = self._document.add_background(name, duplicate_selected=duplicate)
-        except (ValueError, ProjectFormatError) as exc:
-            QMessageBox.warning(self, "Could not create background", str(exc))
-            return
-        self._load_document_world()
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Created WORLD background {self._document.background_names()[index]}")
-
-    def _rename_background(self) -> None:
-        index = self._document.selected_background_index
-        name, accepted = QInputDialog.getText(
-            self, "Rename WORLD background", "Name:", text=self._document.background_names()[index]
-        )
-        if not accepted:
-            return
-        try:
-            self._document.rename_background(index, name)
-        except (ValueError, IndexError, ProjectFormatError) as exc:
-            QMessageBox.warning(self, "Could not rename background", str(exc))
-            return
-        self._sync_background_selector()
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Renamed WORLD background to {self._document.background_names()[index]}")
-
-    def _delete_background(self) -> None:
-        index = self._document.selected_background_index
-        if len(self._document.background_names()) == 1:
-            QMessageBox.information(self, "WORLD background", "A project must keep at least one background.")
-            return
-        name = self._document.background_names()[index]
-        if QMessageBox.question(self, "Delete WORLD background", f"Delete {name}?") != QMessageBox.StandardButton.Yes:
-            return
-        self._document.delete_background(index)
-        self._load_document_world()
-        self._session.schedule_save()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Deleted WORLD background {name}")
-
-    def _world_cursor_changed(self, col: int, row: int) -> None:
-        self.statusBar().showMessage(f"WORLD cell ({col}, {row}) — {self.world_canvas.tool.title()} tool")
-
-    def _undo(self) -> None:
-        if self._store.undo():
-            self.statusBar().showMessage("Undone")
-
-    def _redo(self) -> None:
-        if self._store.redo():
-            self.statusBar().showMessage("Redone")
+    def mark_saved(self) -> None:
+        if hasattr(self, "save_dot"):
+            self.save_dot.setObjectName("saveDotSaved")
+            self.save_dot.setToolTip("All changes saved")
+            self.save_dot.setAccessibleName("All changes saved")
+            self.repolish(self.save_dot)
+        self.update_document_title()
 
     def _document_restored(self) -> None:
         """The document was replaced by an undo or redo — re-read it."""
 
-        self._refresh_all_editors()
-        self._update_document_title()
+        self.refresh_all_editors()
+        self.update_document_title()
 
-    def _update_document_title(self) -> None:
-        marker = " *" if self._document.dirty else ""
-        self.setWindowTitle(f"{self._document.name}{marker} — {APP_DISPLAY_NAME}")
+    # ---- accessibility ----------------------------------------------------
 
-    def open_project_path(self, path: str) -> bool:
-        """Import a project file as a *new* stored project and switch to it.
+    def apply_accessibility(self, preferences: Accessibility) -> None:
+        self._accessibility = preferences
+        preferences.save(self._settings)
+        application = QApplication.instance()
+        if application is not None:
+            apply_theme(application, preferences)
+        self.emulator.set_reduce_flashing(preferences.reduce_flashing)
+        self._sync_locked_modes()
 
-        Opening a file must never overwrite the project the user currently has
-        open, so this imports alongside it rather than replacing its row.
-        """
+    def _open_preferences(self) -> None:
+        dialog = PreferencesDialog(self._accessibility, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.apply_accessibility(dialog.preferences())
+            self.statusBar().showMessage("Preferences applied")
 
-        try:
-            if self._document.dirty:
-                self._session.snapshot_before("open")
-            result = import_project(self._storage.repository, path)
-            self._session.switch(result.project.project_id)
-        except (OSError, ProjectFormatError, RuntimeError, ValueError) as exc:
-            QMessageBox.critical(self, "Could not open project", str(exc))
-            return False
-        self._document = self._session.document
-        self._document.path = Path(path)
-        self._load_document_world()
-        self._update_document_title()
-        self.statusBar().showMessage(f"Opened {path} as a new project")
-        return True
+    # ---- undo -------------------------------------------------------------
 
-    def save_project_path(self, path: str) -> bool:
-        try:
-            self._session.flush()
-            export_project(path, self._document)
-        except (AtomicExportError, OSError, RuntimeError) as exc:
-            QMessageBox.critical(self, "Could not save project", str(exc))
-            return False
-        self._document.path = Path(path)
-        self._update_document_title()
-        self.statusBar().showMessage(f"Saved {path}")
-        return True
+    def _undo(self) -> None:
+        if self.store.undo():
+            self.statusBar().showMessage("Undone")
 
-    def _flush_autosave(self) -> None:
-        """Compatibility slot for the former recovery timer; now flushes SQLite."""
+    def _redo(self) -> None:
+        if self.store.redo():
+            self.statusBar().showMessage("Redone")
 
-        if self._document.dirty:
-            self._session.flush()
-            self.statusBar().showMessage("Saved local project")
+    # ---- playing ----------------------------------------------------------
 
-    def _snapshot_if_changed(self) -> None:
-        if self._document.dirty:
-            self._session.flush()
-            self._storage.repository.snapshot(
-                self._session.project_id, self._document.to_json(), reason="auto_30s"
-            )
+    def _emulator_failed(self, message: str) -> None:
+        self.build_play.stop()
+        QMessageBox.critical(self, "The game stopped", message)
 
-    def _build_rom(self) -> None:
-        if self._build_thread is not None:
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if self.build_play.handle_key(event, True):
             return
-        self._session.snapshot_before("before_build")
-        detached = ProjectDocument.from_json(self._document.to_json())
-        worker = _BuildWorker(self._build_controller, detached)
-        thread = QThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.succeeded.connect(self._build_succeeded)
-        worker.failed.connect(self._build_failed)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._build_finished)
-        self._build_thread = thread
-        self._build_worker = worker
-        self.play_button.setEnabled(False)
-        self.statusBar().showMessage("Building ROM in a background worker…")
-        thread.start()
+        super().keyPressEvent(event)
 
-    def _build_succeeded(self, result: NativeBuildResult) -> None:
-        self._last_rom = result.rom
-        self._last_build_log = result.log
-        self.export_rom_action.setEnabled(True)
-        self.play_action.setEnabled(self._fceux is not None)
-        self._document.mark_built()
-        self._session.schedule_save()
-        self._refresh_quests()
-        self.statusBar().showMessage(f"Built ROM ({len(result.rom):,} bytes) — ready to export")
-        if self._play_after_build:
-            self._play_after_build = False
-            self._run_rom(result.rom)
-
-    def _build_failed(self, message: str) -> None:
-        self._play_after_build = False
-        self.statusBar().showMessage(f"ROM build failed: {message}")
-        # A transient status line is not enough for a compile error the pupil
-        # has to act on; show the failure and keep the log available.
-        self._last_build_log = message
-        dialog = QMessageBox(self)
-        dialog.setIcon(QMessageBox.Icon.Critical)
-        dialog.setWindowTitle("ROM build failed")
-        dialog.setText("The ROM could not be built.")
-        dialog.setDetailedText(message)
-        dialog.exec()
-
-    def _build_finished(self) -> None:
-        self._build_thread = None
-        self._build_worker = None
-        self.play_button.setEnabled(True)
-
-    def _export_built_rom(self) -> None:
-        if self._last_rom is None:
+    def keyReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if self.build_play.handle_key(event, False):
             return
-        path, _filter = QFileDialog.getSaveFileName(self, "Export NES ROM", "game.nes", "NES ROM (*.nes)")
-        if not path:
-            return
-        if not path.casefold().endswith(".nes"):
-            path += ".nes"
-        destination = QSaveFile(path)
-        if not destination.open(QIODevice.OpenModeFlag.WriteOnly):
-            QMessageBox.critical(self, "Could not export ROM", destination.errorString())
-            return
-        if destination.write(self._last_rom) != len(self._last_rom) or not destination.commit():
-            destination.cancelWriting()
-            QMessageBox.critical(self, "Could not export ROM", destination.errorString())
-            return
-        self.statusBar().showMessage(f"Exported ROM to {path}")
+        super().keyReleaseEvent(event)
 
-    def _launch_last_rom(self) -> None:
-        if self._last_rom is None or self._fceux is None:
-            self.statusBar().showMessage("FCEUX is not installed — export the ROM and open it manually")
-            return
-        try:
-            target = self._fceux.launch(
-                self._last_rom, self._storage.data_root / "roms" / "latest.nes"
-            )
-        except EmulatorLaunchError as exc:
-            QMessageBox.critical(self, "Could not launch FCEUX", str(exc))
-            return
-        self.statusBar().showMessage(f"Launched FCEUX with {target}")
+    def open_tutorial_picker(self) -> None:
+        TutorialPickerDialog(self.tutorial, self).exec()
 
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
-        self._emulator.stop()
-        self._snapshot_timer.stop()
-        self._flush_autosave()
-        self._storage.close()
-        super().closeEvent(event)
-
-    def _open_project(self) -> None:
-        path, _filter = QFileDialog.getOpenFileName(
-            self, "Open NES Studio Project", "", "NES Studio projects (*.json);;JSON files (*.json)"
-        )
-        if path:
-            self.open_project_path(path)
-
-    def _save_project_as(self) -> None:
-        suggested = str(self._document.path or Path(f"{self._document.name}.json"))
-        path, _filter = QFileDialog.getSaveFileName(
-            self, "Save NES Studio Project", suggested, "NES Studio projects (*.json)"
-        )
-        if path:
-            if not path.casefold().endswith(".json"):
-                path += ".json"
-            self.save_project_path(path)
-
-    def recover_autosave(self) -> bool:
-        snapshots = self._storage.repository.snapshots(self._session.project_id)
-        if not snapshots:
-            self.statusBar().showMessage("No local project snapshot is available")
-            return False
-        try:
-            self._session.flush()
-            self._storage.repository.restore_snapshot(
-                self._session.project_id,
-                snapshots[0].snapshot_id,
-                expected_revision=self._session.project.revision,
-            )
-            self._session.reload(flush=False)
-        except (KeyError, RuntimeError, ValueError) as exc:
-            QMessageBox.critical(self, "Could not restore project snapshot", str(exc))
-            return False
-        self._document = self._session.document
-        self._load_document_world()
-        self._update_document_title()
-        self.statusBar().showMessage("Restored the latest local project snapshot")
-        return True
-
-    def _recover_autosave(self) -> None:
-        self.recover_autosave()
-
-    def new_project(self, style: str = "scratch", name: str = "Untitled Game") -> None:
-        """Create a project from a starter and switch to it.
-
-        Programmatic on purpose — it must never open a dialog, so callers and
-        tests can drive it directly. `_prompt_new_project` is the menu path.
-        """
-
-        self._session.snapshot_before("new")
-        try:
-            project = self._storage.create_starter(style, name=name)
-        except (KeyError, OSError, ValueError) as exc:
-            QMessageBox.critical(self, "Could not create the game", str(exc))
-            return
-        self._switch_to_project(project.project_id)
-        self.statusBar().showMessage(f"Created “{name}”")
-
-    def _prompt_new_project(self) -> None:
-        """Ask which starter to use — all seven, not just `scratch`."""
-
-        dialog = NewProjectDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        chosen, ok = QInputDialog.getText(self, "Name your game", "Name:", text="My game")
-        if not ok or not chosen.strip():
-            return
-        self.new_project(dialog.selected_style(), chosen.strip())
-
-    def open_project_catalog(self) -> None:
-        """Switch, rename, duplicate or delete a project."""
-
-        if self._document.dirty:
-            self._session.flush()
-        dialog = ProjectCatalogDialog(self._storage, self._session.project_id, self)
-        dialog.exec()
-        if dialog.chosen_project_id and dialog.chosen_project_id != self._session.project_id:
-            self._switch_to_project(dialog.chosen_project_id)
-            self.statusBar().showMessage(f"Opened “{self._document.name}”")
-
-    def _switch_to_project(self, project_id: str) -> None:
-        if self._emulator.is_running():
-            self._stop_play()
-        self._session.switch(project_id)
-        self._document = self._session.document
-        self._store.rebind(self._session)
-        self._last_rom = None
-        self._refresh_all_editors()
-        self._load_document_world()
-        self._update_document_title()
-
-    def _mode_pages(self) -> dict:
-        return {
-            "WORLD": self.television,
-            "CHARS": self.chars_editor,
-            "TILES": self.tile_editor,
-            "PALS": self.palette_editor,
-            "RULES": self.rules_editor,
-            "SOUND": self.sound_editor,
-            "CODE": self.code_editor,
-        }
-
-    def _mode_refreshers(self, mode: str) -> tuple:
-        return {
-            "WORLD": (self._refresh_scene_editor, self._refresh_metatile_mode),
-            "PALS": (self._refresh_palette_editor,),
-            "TILES": (self._refresh_tile_editor,),
-            "CHARS": (self._refresh_sprite_editor, self._refresh_animation_list),
-            "RULES": (self._refresh_rules_editor,),
-            "SOUND": (self._refresh_sound_editor,),
-            "CODE": (self._refresh_code_preview,),
-        }.get(mode, ())
-
-    def _refresh_mode(self, mode: str) -> None:
-        self._stale_modes.discard(mode)
-        for refresh in self._mode_refreshers(mode):
-            try:
-                refresh()
-            except Exception:  # one broken editor must not block the app
-                continue
-
-    def _refresh_all_editors(self) -> None:
-        """The document changed underneath every mode — undo, redo, or a project
-        switch.
-
-        Refresh only the mode the pupil is looking at and mark the rest stale, to
-        be refreshed when they are next opened. Refreshing them all eagerly meant
-        every undo re-ran `_refresh_code_preview`, which invokes the cc65 codegen
-        — seconds of work per keystroke-sized edit.
-        """
-
-        self._stale_modes = set(MODE_NAMES)
-        if self._mode == "WORLD":
-            self._load_document_world()
-        self._refresh_mode(self._mode)
-
-    def _apply_theme(self) -> None:
-        # Applied to the *application*, not this window. A QDialog is a
-        # top-level window, so it does not inherit a QMainWindow stylesheet —
-        # setting it here left every dialog (the project catalog, the starter
-        # picker) rendering as light-on-light default Qt chrome.
-        target = QApplication.instance() or self
-        target.setStyleSheet(
-            """
-            QDialog { background: #191933; color: #f8f8f8; }
-            QDialog QLabel { color: #d8d8f8; }
-            QInputDialog QLineEdit { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; padding: 6px; }
-            QMessageBox { background: #191933; }
-            QMessageBox QLabel { color: #f8f8f8; }
-            QMainWindow, #studioWorkspace { background: #0f0f1b; color: #f8f8f8; }
-            QMenuBar, QMenu, QStatusBar { background: #191933; color: #f8f8f8; }
-            QLabel { color: #d8d8f8; }
-            QMenuBar::item:selected, QMenu::item:selected { background: #4b4b9b; }
-            #modeRail { background: #191933; border-right: 2px solid #4b4b9b; }
-            #brandLabel { color: #f8d878; font-weight: 900; font-size: 17px; padding-bottom: 12px; }
-            #modeRail QPushButton { background: transparent; color: #b8b8d8; border: 1px solid transparent; padding: 10px 3px; font-weight: 700; }
-            #modeRail QPushButton:hover { border-color: #7878c8; color: white; }
-            #modeRail QPushButton:checked { background: #383878; color: #f8f8f8; border-color: #9898e8; }
-            #contextDock, #contextDockContent, #questPanel { background: #202044; }
-            #contextDock { border-right: 1px solid #4b4b7b; }
-            #questPanel { border-left: 1px solid #4b4b7b; }
-            #modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
-            #modeHelp { color: #c8c8e8; padding: 6px 0 18px 0; }
-            #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
-            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent, #charsEditor, #charsEditorContent, #paletteEditor, #paletteEditorContent, #soundEditor, #codeEditor { background: #181828; border: 1px solid #34345f; border-radius: 6px; }
-            #rulesEditor QLabel { color: #d8d8f8; font-weight: 700; padding-top: 8px; }
-            #rulesEditor QCheckBox { min-height: 26px; spacing: 8px; }
-            #rulesEditor QSpinBox, #rulesEditor QComboBox, #rulesEditor QLineEdit { min-height: 30px; margin-bottom: 4px; }
-            QScrollBar:vertical { background: #15152b; width: 14px; margin: 2px; }
-            QScrollBar::handle:vertical { background: #6868a8; min-height: 36px; border-radius: 5px; }
-            QScrollBar::handle:vertical:hover { background: #9898e8; }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-            QPushButton { background: #383878; color: white; border: 1px solid #7878c8; border-radius: 3px; padding: 8px; }
-            QPushButton:disabled { background: #292949; color: #787898; border-color: #484868; }
-            QComboBox { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; border-radius: 4px; padding: 3px 8px; }
-            QComboBox:hover, QComboBox:focus { border-color: #f8d878; background: #34346a; }
-            QComboBox::drop-down { width: 28px; border-left: 1px solid #7878c8; background: #383878; }
-            QComboBox::down-arrow { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #f8d878; margin-right: 7px; }
-            QComboBox QAbstractItemView { background: #202044; color: #f8f8f8; border: 1px solid #9898e8; selection-background-color: #4b4b9b; selection-color: white; outline: 0; }
-            QSpinBox { background: #292958; color: #f8f8f8; border: 1px solid #5b5b90; border-radius: 3px; padding: 4px; }
-            QListWidget { background: #181832; border: 1px solid #4b4b7b; border-radius: 4px; padding: 3px; }
-            QListWidget::item { padding: 5px; border-radius: 3px; }
-            QListWidget::item:selected { background: #4b4b9b; color: white; }
-            #codePreview { background: #151528; color: #f0f0ff; border: 1px solid #4b4b7b; selection-background-color: #4b4b9b; selection-color: white; font-family: monospace; }
-            #stagePanel { background: #101024; }
-            #liveBadge { color: #78d878; font-weight: 800; }
-            #controlsHint { color: #b8b8d8; padding: 8px 2px 0 2px; }
-            #television { background: #585868; border: 8px solid #303044; border-radius: 18px; }
-            #nesScreen { background: #181828; border: 4px solid #080810; }
-            #previewMessage { color: #a8e8f8; font-size: 17px; }
-            #questHeading { color: white; font-weight: 700; padding: 10px 0; }
-            #questComplete { color: #78d878; padding: 5px 0; }
-            #questPending { color: #b8b8d8; padding: 5px 0; }
-            QSplitter::handle { background: #4b4b7b; width: 2px; }
-            """
-        )
+    # ---- menus ------------------------------------------------------------
 
     def _create_menus(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
-        new_action = QAction("&New Project", self)
-        new_action.setShortcut(QKeySequence.StandardKey.New)
-        new_action.triggered.connect(self._prompt_new_project)
-        file_menu.addAction(new_action)
-        catalog_action = QAction("&My Games…", self)
-        catalog_action.setObjectName("projectCatalogAction")
-        catalog_action.setShortcut(QKeySequence("Ctrl+M"))
-        catalog_action.triggered.connect(self.open_project_catalog)
-        file_menu.addAction(catalog_action)
-        open_action = QAction("&Open Project File…", self)
-        open_action.setShortcut(QKeySequence.StandardKey.Open)
-        open_action.triggered.connect(self._open_project)
-        file_menu.addAction(open_action)
-        save_action = QAction("&Save", self)
-        save_action.setObjectName("saveAction")
-        save_action.setShortcut(QKeySequence.StandardKey.Save)
-        save_action.triggered.connect(self._save_project)
-        file_menu.addAction(save_action)
-        save_as_action = QAction("Save Project &As…", self)
-        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
-        save_as_action.triggered.connect(self._save_project_as)
-        file_menu.addAction(save_as_action)
-        recover_action = QAction("&Restore Latest Snapshot", self)
-        recover_action.setObjectName("recoverAutosaveAction")
-        recover_action.triggered.connect(self._recover_autosave)
-        file_menu.addAction(recover_action)
-        self.export_rom_action = QAction("Export Built &ROM…", self)
-        self.export_rom_action.setEnabled(False)
-        self.export_rom_action.triggered.connect(self._export_built_rom)
-        file_menu.addAction(self.export_rom_action)
+        self._action(file_menu, "&New Project", lambda: self.projects.prompt_new(), QKeySequence.StandardKey.New)
+        self._action(file_menu, "&My Games…", lambda: self.projects.open_catalog(), "Ctrl+M", "projectCatalogAction")
+        self._action(file_menu, "&Open Project File…", lambda: self.projects.open_file(), QKeySequence.StandardKey.Open)
+        self._action(file_menu, "&Save", lambda: self.projects.save(), QKeySequence.StandardKey.Save, "saveAction")
+        self._action(file_menu, "Save Project &As…", lambda: self.projects.save_as(), QKeySequence.StandardKey.SaveAs)
         file_menu.addSeparator()
-        exit_action = QAction("E&xit", self)
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
+        self._action(file_menu, "&Time Machine…", lambda: self.projects.open_time_machine(), "Ctrl+H", "timeMachineAction")
+        self._action(file_menu, "&Restore Latest Snapshot", lambda: self.projects.recover_autosave(), None, "recoverAutosaveAction")
+        file_menu.addSeparator()
+
+        imports = file_menu.addMenu("&Import")
+        self._action(imports, "Tiles (.chr)…", lambda: self.assets.import_chr())
+        self._action(imports, "Palette (.pal)…", lambda: self.assets.import_pal())
+        self._action(imports, "Nametable (.nam)…", lambda: self.assets.import_nam())
+        exports = file_menu.addMenu("&Export")
+        self._action(exports, "Tiles (.chr)…", lambda: self.assets.export_chr())
+        self._action(exports, "Palette (.pal)…", lambda: self.assets.export_pal())
+        self._action(exports, "Nametable (.nam)…", lambda: self.assets.export_nam())
+        self.export_rom_action = self._action(
+            exports, "Built &ROM…", lambda: self.build_play.export_rom(), None, "exportRomAction"
+        )
+        self.export_rom_action.setEnabled(False)
+        file_menu.addSeparator()
+        self._action(file_menu, "E&xit", self.close)
 
         edit_menu = self.menuBar().addMenu("&Edit")
-        self.undo_action = QAction("&Undo", self)
-        self.undo_action.setObjectName("undoAction")
-        self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        self.undo_action = self._action(
+            edit_menu, "&Undo", self._undo, QKeySequence.StandardKey.Undo, "undoAction"
+        )
         self.undo_action.setEnabled(False)
-        self.undo_action.triggered.connect(self._undo)
-        edit_menu.addAction(self.undo_action)
-        self.redo_action = QAction("&Redo", self)
-        self.redo_action.setObjectName("redoAction")
-        self.redo_action.setShortcut(QKeySequence.StandardKey.Redo)
+        self.redo_action = self._action(
+            edit_menu, "&Redo", self._redo, QKeySequence.StandardKey.Redo, "redoAction"
+        )
         self.redo_action.setEnabled(False)
-        self.redo_action.triggered.connect(self._redo)
-        edit_menu.addAction(self.redo_action)
-        # Undo now covers every mode, not just WORLD.
-        self._store.can_undo_changed.connect(self.undo_action.setEnabled)
-        self._store.can_redo_changed.connect(self.redo_action.setEnabled)
+        # Undo covers every mode, not just WORLD.
+        self.store.can_undo_changed.connect(self.undo_action.setEnabled)
+        self.store.can_redo_changed.connect(self.redo_action.setEnabled)
+        edit_menu.addSeparator()
+        self._action(edit_menu, "&Preferences…", self._open_preferences, "Ctrl+,", "preferencesAction")
 
         view_menu = self.menuBar().addMenu("&View")
-        diagnostics_action = QAction("&Diagnostics…", self)
-        diagnostics_action.triggered.connect(self._show_diagnostics)
-        view_menu.addAction(diagnostics_action)
+        self._action(view_menu, "&Diagnostics…", self._show_diagnostics)
 
         build_menu = self.menuBar().addMenu("&Build")
-        build_action = QAction("&Build ROM", self)
-        build_action.setShortcut(QKeySequence("F5"))
-        build_action.triggered.connect(self._build_rom)
-        build_menu.addAction(build_action)
-        self.play_action = QAction("Open in &FCEUX", self)
-        self.play_action.setEnabled(False)
-        self.play_action.triggered.connect(self._launch_last_rom)
-        build_menu.addAction(self.play_action)
+        self._action(build_menu, "&Build ROM", lambda: self.build_play.build(), "F5")
+        self._action(build_menu, "&Play", lambda: self.build_play.toggle_play(), "F6")
+        self.fceux_action = self._action(
+            build_menu, "Open in &FCEUX", lambda: self.build_play.launch_fceux()
+        )
+        self.fceux_action.setEnabled(False)
 
         help_menu = self.menuBar().addMenu("&Help")
-        about_action = QAction("&About NES Studio", self)
-        about_action.triggered.connect(self._show_about)
-        help_menu.addAction(about_action)
+        self._action(help_menu, "&Tutorials…", self.open_tutorial_picker)
+        self._action(help_menu, "&About NES Studio", self._show_about)
 
-    def _install_mode_shortcuts(self) -> None:
-        """Bind 1..N to the mode rail, matching the rail's visible order."""
+    def _action(
+        self,
+        menu,
+        text: str,
+        callback: Callable[[], object],
+        shortcut: object = None,
+        name: str = "",
+    ) -> QAction:
+        action = QAction(text, self)
+        if name:
+            action.setObjectName(name)
+        if shortcut is not None:
+            action.setShortcut(
+                shortcut
+                if isinstance(shortcut, QKeySequence.StandardKey)
+                else QKeySequence(shortcut)
+            )
+        action.triggered.connect(lambda _checked=False: callback())
+        menu.addAction(action)
+        return action
+
+    def _install_shortcuts(self) -> None:
+        """Bind 1..8 to the mode rail, matching the rail's visible order."""
 
         self._mode_shortcuts: list[QShortcut] = []
         for index, mode in enumerate(MODE_NAMES, start=1):
             shortcut = QShortcut(QKeySequence(str(index)), self)
             shortcut.activated.connect(lambda mode=mode: self.select_mode(mode))
             self._mode_shortcuts.append(shortcut)
-
-    # ---- Play -------------------------------------------------------------
-
-    def _toggle_play(self) -> None:
-        if self._emulator.is_running():
-            self._stop_play()
-        else:
-            self._start_play()
-
-    def _start_play(self) -> None:
-        """Build if needed, then run the game in the stage."""
-
-        if not core_available():
-            QMessageBox.warning(
-                self,
-                "Cannot play here",
-                "The embedded NES core is not installed. Build and export the ROM,"
-                " or install the nes_core wheel.",
-            )
-            return
-        if self._last_rom is None:
-            # Nothing built yet — build first and play when it lands.
-            self._play_after_build = True
-            self._build_rom()
-            return
-        self._run_rom(self._last_rom)
-
-    def _run_rom(self, rom: bytes) -> None:
-        try:
-            self._emulator.start(rom)
-        except (EmulatorUnavailable, RuntimeError) as exc:
-            QMessageBox.critical(self, "Could not start the game", str(exc))
-            return
-        self.editor_stack.setCurrentWidget(self.television)
-        self.screen_stack.setCurrentWidget(self.nes_screen)
-        self.nes_screen.setFocus()
-        self.launch_button.setText("■ STOP")
-        self.live_badge.setText("● PLAYING")
-        self.controls_hint.setVisible(True)
-        # Player 2's Start/Select are 1 and 2, which would otherwise switch mode.
-        for shortcut in self._mode_shortcuts:
-            shortcut.setEnabled(False)
-        self.statusBar().showMessage("Playing — press Escape to stop")
-
-    def _stop_play(self, *, restore_mode: bool = True) -> None:
-        self._emulator.stop()
-        self.launch_button.setText("▶ PLAY")
-        self.live_badge.setText("● LIVE")
-        self.controls_hint.setVisible(False)
-        for shortcut in self._mode_shortcuts:
-            shortcut.setEnabled(True)
-        if restore_mode:
-            self.select_mode(self._mode)
-        self.statusBar().showMessage("Stopped")
-
-    def _emulator_failed(self, message: str) -> None:
-        self._stop_play()
-        QMessageBox.critical(self, "The game stopped", message)
-
-    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt API
-        if self._emulator.is_running():
-            if event.key() == Qt.Key.Key_Escape:
-                self._stop_play()
-                return
-            if not event.isAutoRepeat() and self._emulator.handle_key(event.key(), True):
-                return
-        super().keyPressEvent(event)
-
-    def keyReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
-        if self._emulator.is_running() and not event.isAutoRepeat():
-            if self._emulator.handle_key(event.key(), False):
-                return
-        super().keyReleaseEvent(event)
-
-    def _save_project(self) -> None:
-        """Flush the active project to local storage.
-
-        The real store is SQLite, so 'Save' is a flush — not the JSON export
-        that 'Save Project As…' performs.
-        """
-
-        try:
-            saved = self._session.flush()
-        except Exception as exc:  # repository/schema failures must not crash
-            QMessageBox.critical(self, "Could not save project", str(exc))
-            return
-        self._update_document_title()
-        self.statusBar().showMessage("Saved project" if saved else "No changes to save")
+        self._sync_locked_modes()
 
     def _show_diagnostics(self) -> None:
         self._diagnostics = DiagnosticsDialog(self._resource_locator, self)
@@ -3004,5 +709,36 @@ class MainWindow(QMainWindow):
             self,
             "About NES Studio",
             f"{APP_DISPLAY_NAME} {APP_VERSION}\n\n"
-            "A native Linux sibling of the supported NES Studio web application.",
+            "A native Linux sibling of the supported NES Studio web application.\n\n"
+            "Keys: 1–8 switch mode · Ctrl+S save · F5 build · F6 play · "
+            "Ctrl+Z undo · Ctrl+M my games · Ctrl+H time machine.",
         )
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API
+        self.emulator.stop()
+        self._snapshot_timer.stop()
+        for mode in self._modes.values():
+            mode.on_leave()
+        self.projects.flush_autosave()
+        self.storage.close()
+        super().closeEvent(event)
+
+    # ---- compatibility for callers and tests ------------------------------
+
+    def new_project(self, style: str = "scratch", name: str = "Untitled Game") -> None:
+        self.projects.new(style, name)
+
+    def open_project_path(self, path: str) -> bool:
+        return self.projects.open_path(path)
+
+    def save_project_path(self, path: str) -> bool:
+        return self.projects.save_to(path)
+
+    def recover_autosave(self) -> bool:
+        return self.projects.recover_autosave()
+
+    def open_project_catalog(self) -> None:
+        self.projects.open_catalog()
+
+    def open_time_machine(self) -> None:
+        self.projects.open_time_machine()

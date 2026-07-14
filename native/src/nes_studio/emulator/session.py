@@ -13,8 +13,28 @@ from __future__ import annotations
 import array
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtMultimedia import QAudio, QAudioFormat, QAudioSink
+
+
+def _mean_brightness(image: QImage) -> float:
+    """Average luminance of a frame, sampled on a grid.
+
+    Every pixel would be 61,440 reads per frame in Python — far too slow for a
+    16 ms budget. A 16x16 grid is 256 reads and is more than enough to spot a
+    full-screen flash, which by definition is not a local change.
+    """
+
+    total = 0
+    samples = 0
+    for y in range(0, image.height(), 15):
+        for x in range(0, image.width(), 16):
+            colour = image.pixelColor(x, y)
+            total += (
+                0.299 * colour.red() + 0.587 * colour.green() + 0.114 * colour.blue()
+            )
+            samples += 1
+    return total / samples if samples else 0.0
 
 SAMPLE_RATE = 44100
 FRAME_RATE = 60
@@ -110,6 +130,8 @@ class EmulatorSession(QObject):
         self._running = False
         self._muted = False
         self._audio_ok = False
+        self._reduce_flashing = False
+        self._previous_frame: QImage | None = None
 
     # ---- lifecycle --------------------------------------------------------
 
@@ -177,6 +199,20 @@ class EmulatorSession(QObject):
     def set_muted(self, muted: bool) -> None:
         self._muted = muted
 
+    def set_reduce_flashing(self, reduce: bool) -> None:
+        """Damp rapid full-screen brightness swings.
+
+        A pupil's game can strobe the whole screen — that is what the hardware
+        does, and we are not going to change their ROM. But a classroom cannot
+        know in advance who is photosensitive, so this blends a frame with the
+        one before it when the average brightness jumps hard. The game is
+        unchanged; only what we *show* is softened.
+        """
+
+        self._reduce_flashing = reduce
+        if not reduce:
+            self._previous_frame = None
+
     # ---- the loop ---------------------------------------------------------
 
     def _tick(self) -> None:
@@ -223,7 +259,31 @@ class EmulatorSession(QObject):
             image = QImage(
                 pixels, 256, 240, 256 * 4, QImage.Format.Format_RGBX8888
             ).copy()
+            if self._reduce_flashing:
+                image = self._damp_flash(image)
             self.frame_ready.emit(image)
+
+    #: A brightness jump bigger than this (0-255) between consecutive frames is a
+    #: flash, not a scene change.
+    FLASH_THRESHOLD = 40
+
+    def _damp_flash(self, frame: QImage) -> QImage:
+        """Blend with the previous frame when the screen brightness jumps hard."""
+
+        previous = self._previous_frame
+        self._previous_frame = frame
+        if previous is None or previous.size() != frame.size():
+            return frame
+        if abs(_mean_brightness(frame) - _mean_brightness(previous)) < self.FLASH_THRESHOLD:
+            return frame
+
+        blended = QImage(previous)
+        painter = QPainter(blended)
+        painter.setOpacity(0.5)
+        painter.drawImage(0, 0, frame)
+        painter.end()
+        self._previous_frame = blended
+        return blended
 
     @staticmethod
     def _pcm(samples) -> bytes:

@@ -27,6 +27,8 @@ class WorldCanvas(QWidget):
     palette_changed = Signal(int, int, int)
     behaviour_changed = Signal(int, int, int)
     cursor_changed = Signal(int, int)
+    #: Right-click on a cell: adopt its tile, palette and behaviour as the pen.
+    picked = Signal(int, int)
     stroke_began = Signal()
     stroke_ended = Signal()
     grid_options_changed = Signal(bool, bool)
@@ -62,6 +64,7 @@ class WorldCanvas(QWidget):
         self._entity_images: list[QImage | None] = []
         self._conflicts: list[tuple[int, int]] = []
         self._show_conflicts = True
+        self._zoom = 1.0
         self._update_accessible_cell()
 
     def set_frame(self, image: QImage | None) -> None:
@@ -175,6 +178,11 @@ class WorldCanvas(QWidget):
     def set_entities(self, entities: list[dict[str, int]]) -> None:
         self._entities = [dict(entity) for entity in entities]
         self.update()
+
+    def entities(self) -> list[dict[str, int]]:
+        """The entities currently drawn, in the order the signals index them."""
+
+        return self._entities
 
     def edit_cell(self, col: int, row: int) -> bool:
         """Apply the active tool; return whether the model changed."""
@@ -347,6 +355,23 @@ class WorldCanvas(QWidget):
         if not 0 <= col < self.COLS or not 0 <= row < self.ROWS:
             raise IndexError(f"WORLD cell outside {self.COLS}x{self.ROWS}: {col}, {row}")
 
+    def set_zoom(self, zoom: float) -> None:
+        """Magnify the screen. 1.0 is 'fit the widget'.
+
+        Pixel art at fit-to-window is often too small to place a single tile
+        deliberately. Zooming keeps the cell under the cursor honest — every
+        coordinate here is derived from `_grid_geometry`, so nothing else needs
+        to know.
+        """
+
+        self._zoom = max(1.0, min(4.0, float(zoom)))
+        self.updateGeometry()
+        self.update()
+
+    @property
+    def zoom(self) -> float:
+        return self._zoom
+
     def _grid_geometry(self) -> tuple[float, float, float]:
         scale = max(
             1 / self.TILE_PIXELS,
@@ -355,6 +380,7 @@ class WorldCanvas(QWidget):
                 self.height() / (self.ROWS * self.TILE_PIXELS),
             ),
         )
+        scale *= self._zoom
         tile = self.TILE_PIXELS * scale
         width, height = tile * self.COLS, tile * self.ROWS
         return tile, (self.width() - width) / 2, (self.height() - height) / 2
@@ -452,6 +478,14 @@ class WorldCanvas(QWidget):
         )
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API
+        if event.button() == Qt.MouseButton.RightButton:
+            # Eyedropper. Copying a cell you already like beats hunting for its
+            # tile index in a 256-slot library.
+            cell = self._cell_at(event.position())
+            if cell is not None:
+                self._select_cell(*cell)
+                self.picked.emit(*cell)
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             cell = self._cell_at(event.position())
             if cell is not None:

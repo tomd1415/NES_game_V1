@@ -4,7 +4,7 @@ from PySide6.QtTest import QSignalSpy
 
 from nes_studio.core.project_document import ProjectDocument
 from nes_studio.integrations.direct_build import NativeBuildResult
-from nes_studio.ui.main_window import _BuildWorker
+from nes_studio.ui.build_play import BuildWorker as _BuildWorker
 
 
 def test_build_worker_reports_artifact_without_touching_the_qt_ui(qapp) -> None:

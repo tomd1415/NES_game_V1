@@ -1,0 +1,148 @@
+/* NES Studio — native theme.
+ *
+ * Was a 47-line QSS string inlined in `main_window.py`, keyed entirely by
+ * objectName, which meant every new widget had to be manually registered in it
+ * or it rendered wrong — and no test caught that. Twice it shipped: the PALS
+ * panel rendered white-on-white, and every QDialog rendered as light-on-light
+ * default Qt chrome.
+ *
+ * Chrome colours are sourced from the real NES system palette, as the web's are
+ * (`studio.html:15-45`); each is documented with the index it comes from, so a
+ * colour here is a colour the machine can actually produce.
+ *
+ *   $0F  #000000  ink          $01  #001FB2  deep blue
+ *   $02  #2404C8  violet       $11  #0D57FF  bright blue
+ *   $12  #4B30FF  indigo       $16  #C72E00  red
+ *   $21  #53AEFF  sky          $28  #BDC700  gold
+ *   $2A  #43F611  green        $2C  #2CD5F6  cyan
+ *   $30  #FFFFFF  white        $31  #B6E1FF  pale sky
+ *   $3D  #B8B8B8  grey
+ *
+ * Applied to the *application*, not the window: a QDialog is a top-level window
+ * and does not inherit a QMainWindow stylesheet.
+ */
+
+/* ---- surfaces ---------------------------------------------------------- */
+
+QMainWindow, #studioWorkspace { background: #0f0f1b; color: #f8f8f8; }
+QDialog { background: #191933; color: #f8f8f8; }
+QDialog QLabel { color: #d8d8f8; }
+QMessageBox { background: #191933; }
+QMessageBox QLabel { color: #f8f8f8; }
+QInputDialog QLineEdit { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; padding: 6px; }
+QMenuBar, QMenu, QStatusBar { background: #191933; color: #f8f8f8; }
+QMenuBar::item:selected, QMenu::item:selected { background: #4b4b9b; }
+QLabel { color: #d8d8f8; }
+QToolTip { background: #202044; color: #f8f8f8; border: 1px solid #7878c8; padding: 4px; }
+
+/* ---- app bar ----------------------------------------------------------- */
+
+#appBar { background: #191933; border-bottom: 2px solid #4b4b9b; }
+#appBar QPushButton { padding: 7px 14px; font-weight: 700; }
+#projectName { background: transparent; color: #f8f8f8; border: 1px solid transparent; font-size: 16px; font-weight: 800; padding: 4px 8px; }
+#projectName:hover { border-color: #4b4b7b; }
+#projectName:focus { background: #292958; border-color: #f8d878; }
+#saveDot { font-size: 15px; padding: 0 8px; }
+#saveDotSaved { color: #43f611; }     /* NES $2A */
+#saveDotPending { color: #bdc700; }   /* NES $28 */
+#playButton { background: #2a7a2a; border-color: #43f611; }
+#playButton:hover { background: #35a035; }
+#stopButton { background: #8a2a2a; border-color: #c72e00; }
+#levelSelect { min-width: 130px; }
+
+/* ---- mode rail --------------------------------------------------------- */
+
+#modeRail { background: #191933; border-right: 2px solid #4b4b9b; }
+#brandLabel { color: #f8d878; font-weight: 900; font-size: 17px; padding-bottom: 12px; }
+#modeRail QPushButton { background: transparent; color: #b8b8d8; border: 1px solid transparent; padding: 10px 3px; font-weight: 700; text-align: center; }
+#modeRail QPushButton:hover { border-color: #7878c8; color: white; }
+#modeRail QPushButton:checked { background: #383878; color: #f8f8f8; border-color: #9898e8; }
+/* A locked mode stays *visible*, dimmed, with a padlock — a pupil should be
+ * able to see what is ahead of them, not have it vanish. */
+#modeRail QPushButton[locked="true"] { color: #5b5b90; }
+#modeRail QPushButton[locked="true"]:hover { border-color: #5b5b90; color: #7878a8; }
+
+/* ---- docks and panels -------------------------------------------------- */
+
+#contextDock, #contextDockContent, #questPanel { background: #202044; }
+#contextDock { border-right: 1px solid #4b4b7b; }
+#questPanel { border-left: 1px solid #4b4b7b; }
+#modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
+#modeHelp { color: #c8c8e8; padding: 6px 0 12px 0; }
+#sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 10px; }
+#questHeading { color: white; font-weight: 700; padding: 10px 0; }
+#questComplete { color: #78d878; padding: 5px 0; }
+#questPending { color: #b8b8d8; padding: 5px 0; }
+
+/* ---- editors ----------------------------------------------------------- */
+
+#rulesEditor, #rulesEditorContent,
+#styleEditor, #styleEditorContent,
+#tileEditor, #tileEditorContent,
+#charsEditor, #charsEditorContent,
+#paletteEditor, #paletteEditorContent,
+#soundEditor, #soundEditorContent,
+#codeEditor {
+    background: #181828;
+    border: 1px solid #34345f;
+    border-radius: 6px;
+}
+
+#settingsCard { background: #202038; border: 1px solid #34345f; border-radius: 6px; }
+#cardTitle { color: #f8d878; font-weight: 800; font-size: 14px; }
+#cardSubtitle { color: #a8a8c8; padding-bottom: 4px; }
+#fieldLabel { color: #d8d8f8; font-weight: 600; padding-top: 0; }
+#settingsCard QSpinBox, #settingsCard QComboBox, #settingsCard QLineEdit { min-height: 28px; }
+#settingsCard QCheckBox { min-height: 26px; spacing: 8px; }
+
+#codePreview, #buildLog { background: #151528; color: #f0f0ff; border: 1px solid #4b4b7b; selection-background-color: #4b4b9b; selection-color: white; font-family: monospace; }
+#buildLogFailed { color: #f87878; font-weight: 800; padding-top: 10px; }
+#codeEjectionWarning { color: #f8d878; }
+#sharedTileNote, #oamNote, #charsPenHint, #tileUsageLabel { color: #a8a8c8; }
+#worldConflictLabel { color: #f87878; }
+#spriteCanvas { border: 1px solid #34345f; }
+
+/* ---- the television ---------------------------------------------------- */
+
+#stagePanel { background: #101024; }
+#television { background: #585868; border: 8px solid #303044; border-radius: 18px; }
+#nesScreen { background: #181828; border: 4px solid #080810; }
+#liveBadge { color: #78d878; font-weight: 800; }
+#controlsHint { color: #b8b8d8; padding: 8px 2px 0 2px; }
+#previewMessage { color: #a8e8f8; font-size: 17px; }
+
+/* ---- validators -------------------------------------------------------- */
+
+#validatorList { background: transparent; border: 0; }
+#validatorError { color: #f87878; font-weight: 700; }
+#validatorWarning { color: #f8d878; }
+#validatorInfo { color: #a8c8e8; }
+#validatorFixButton { padding: 3px 8px; font-weight: 700; }
+#validatorClean { color: #78d878; }
+
+/* ---- controls ---------------------------------------------------------- */
+
+QPushButton { background: #383878; color: white; border: 1px solid #7878c8; border-radius: 3px; padding: 8px; }
+QPushButton:hover { background: #4b4b9b; }
+QPushButton:disabled { background: #292949; color: #787898; border-color: #484868; }
+QComboBox { background: #292958; color: #f8f8f8; border: 1px solid #7878c8; border-radius: 4px; padding: 3px 8px; }
+QComboBox:hover, QComboBox:focus { border-color: #f8d878; background: #34346a; }
+QComboBox::drop-down { width: 28px; border-left: 1px solid #7878c8; background: #383878; }
+QComboBox::down-arrow { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #f8d878; margin-right: 7px; }
+QComboBox QAbstractItemView { background: #202044; color: #f8f8f8; border: 1px solid #9898e8; selection-background-color: #4b4b9b; selection-color: white; outline: 0; }
+QSpinBox { background: #292958; color: #f8f8f8; border: 1px solid #5b5b90; border-radius: 3px; padding: 4px; }
+QSpinBox:focus { border-color: #f8d878; }
+QLineEdit { background: #292958; color: #f8f8f8; border: 1px solid #5b5b90; border-radius: 3px; padding: 5px; }
+QLineEdit:focus { border-color: #f8d878; }
+QCheckBox { color: #d8d8f8; }
+QListWidget { background: #181832; border: 1px solid #4b4b7b; border-radius: 4px; padding: 3px; }
+QListWidget::item { padding: 5px; border-radius: 3px; }
+QListWidget::item:selected { background: #4b4b9b; color: white; }
+QSplitter::handle { background: #4b4b7b; width: 2px; }
+QScrollBar:vertical { background: #15152b; width: 14px; margin: 2px; }
+QScrollBar::handle:vertical { background: #6868a8; min-height: 36px; border-radius: 5px; }
+QScrollBar::handle:vertical:hover { background: #9898e8; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: #15152b; height: 14px; margin: 2px; }
+QScrollBar::handle:horizontal { background: #6868a8; min-width: 36px; border-radius: 5px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
