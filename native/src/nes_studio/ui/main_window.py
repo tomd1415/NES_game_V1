@@ -620,18 +620,24 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.launch_button)
         layout.addLayout(toolbar)
 
-        television = QFrame(stage)
-        television.setObjectName("television")
-        television.setAccessibleName("Live NES game preview")
-        tv_layout = QVBoxLayout(television)
+        # The CRT bezel frames an NES screen — and *only* an NES screen. It used
+        # to wrap the whole editor stack, so RULES rendered as forty spin boxes
+        # inside a television.
+        self.editor_stack = QStackedWidget(stage)
+        self.editor_stack.setObjectName("editorStack")
+
+        self.television = QFrame(self.editor_stack)
+        self.television.setObjectName("television")
+        self.television.setAccessibleName("Live NES game preview")
+        tv_layout = QVBoxLayout(self.television)
         tv_layout.setContentsMargins(24, 24, 24, 24)
-        screen = QFrame(television)
+        screen = QFrame(self.television)
         screen.setObjectName("nesScreen")
         screen_layout = QVBoxLayout(screen)
         screen_layout.setContentsMargins(0, 0, 0, 0)
-        self.editor_stack = QStackedWidget(screen)
-        self.editor_stack.setObjectName("editorStack")
-        self.world_canvas = WorldCanvas(self.editor_stack)
+        self.screen_stack = QStackedWidget(screen)
+        self.screen_stack.setObjectName("screenStack")
+        self.world_canvas = WorldCanvas(self.screen_stack)
         self.world_canvas.cell_changed.connect(self._world_cell_changed)
         self.world_canvas.palette_changed.connect(self._world_palette_changed)
         self.world_canvas.behaviour_changed.connect(self._world_behaviour_changed)
@@ -641,7 +647,7 @@ class MainWindow(QMainWindow):
         self.world_canvas.grid_options_changed.connect(self._world_grid_shortcut_changed)
         self.world_canvas.entity_selected.connect(self._select_canvas_entity)
         self.world_canvas.entity_moved.connect(self._move_canvas_entity)
-        self.editor_stack.addWidget(self.world_canvas)
+        self.screen_stack.addWidget(self.world_canvas)
         self.code_editor = QFrame(self.editor_stack)
         self.code_editor.setObjectName("codeEditor")
         code_layout = QVBoxLayout(self.code_editor)
@@ -1205,12 +1211,15 @@ class MainWindow(QMainWindow):
 
         # The running game. Same stage, same bezel — the CRT finally shows a game
         # instead of framing an editor form.
-        self.nes_screen = NesScreen(self.editor_stack)
-        self.editor_stack.addWidget(self.nes_screen)
+        self.nes_screen = NesScreen(self.screen_stack)
+        self.screen_stack.addWidget(self.nes_screen)
 
-        screen_layout.addWidget(self.editor_stack)
+        screen_layout.addWidget(self.screen_stack)
         tv_layout.addWidget(screen)
-        layout.addWidget(television, 1)
+        # The television is one page of the editor stack — shown for WORLD and
+        # while a game is running; the other modes get a plain editor panel.
+        self.editor_stack.insertWidget(0, self.television)
+        layout.addWidget(self.editor_stack, 1)
 
         self.controls_hint = QLabel(EmulatorSession.CONTROLS_HINT, stage)
         self.controls_hint.setObjectName("controlsHint")
@@ -1278,10 +1287,8 @@ class MainWindow(QMainWindow):
         if self._emulator.is_running():
             self._stop_play(restore_mode=False)
         self._mode = mode
-        if mode in self._stale_modes:
-            self._refresh_mode(mode)
-            if mode == "WORLD":
-                self._load_document_world()
+        if mode == "WORLD" and mode in self._stale_modes:
+            self._load_document_world()
         self._mode_buttons[mode].setChecked(True)
         self.mode_title.setText(mode)
         self.mode_help.setText(
@@ -1305,25 +1312,16 @@ class MainWindow(QMainWindow):
         self.behaviour_value.setEnabled(world_enabled)
         self.world_canvas.setEnabled(world_enabled)
         self.background_selector.setEnabled(world_enabled)
-        self.editor_stack.setCurrentWidget(
-            self.code_editor if mode == "CODE" else self.palette_editor if mode == "PALS" else self.tile_editor if mode == "TILES" else self.chars_editor if mode == "CHARS" else self.rules_editor if mode == "RULES" else self.sound_editor if mode == "SOUND" else self.world_canvas
-        )
-        if mode == "CODE":
-            self._refresh_code_preview()
-        if mode == "PALS":
-            self._refresh_palette_editor()
-        if mode == "TILES":
-            self._refresh_tile_editor()
-        if mode == "CHARS":
-            self._refresh_sprite_editor()
-            self._refresh_animation_list()
-        if mode == "RULES":
-            self._refresh_rules_editor()
-        if mode == "SOUND":
-            self._refresh_sound_editor()
+        # A registry, not a nested ternary plus six sequential `if mode ==`
+        # blocks: adding a mode used to mean editing four places in this method.
+        page = self._mode_pages()[mode]
+        self.editor_stack.setCurrentWidget(page)
         if world_enabled:
-            self._refresh_metatile_mode()
-            self._refresh_scene_editor()
+            self.screen_stack.setCurrentWidget(self.world_canvas)
+        for refresh in self._mode_refreshers(mode):
+            refresh()
+        self._stale_modes.discard(mode)
+        if world_enabled:
             self._select_world_tool(self.world_canvas.tool)
 
     def _refresh_code_preview(self) -> None:
@@ -2720,6 +2718,17 @@ class MainWindow(QMainWindow):
         self._load_document_world()
         self._update_document_title()
 
+    def _mode_pages(self) -> dict:
+        return {
+            "WORLD": self.television,
+            "CHARS": self.chars_editor,
+            "TILES": self.tile_editor,
+            "PALS": self.palette_editor,
+            "RULES": self.rules_editor,
+            "SOUND": self.sound_editor,
+            "CODE": self.code_editor,
+        }
+
     def _mode_refreshers(self, mode: str) -> tuple:
         return {
             "WORLD": (self._refresh_scene_editor, self._refresh_metatile_mode),
@@ -2782,7 +2791,7 @@ class MainWindow(QMainWindow):
             #modeTitle { color: #f8d878; font-size: 20px; font-weight: 800; }
             #modeHelp { color: #c8c8e8; padding: 6px 0 18px 0; }
             #sectionLabel { color: #78d8d8; font-weight: 800; padding-top: 8px; }
-            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent, #charsEditor, #charsEditorContent, #paletteEditor, #paletteEditorContent { background: #181828; }
+            #rulesEditor, #rulesEditorContent, #tileEditor, #tileEditorContent, #charsEditor, #charsEditorContent, #paletteEditor, #paletteEditorContent, #soundEditor, #codeEditor { background: #181828; border: 1px solid #34345f; border-radius: 6px; }
             #rulesEditor QLabel { color: #d8d8f8; font-weight: 700; padding-top: 8px; }
             #rulesEditor QCheckBox { min-height: 26px; spacing: 8px; }
             #rulesEditor QSpinBox, #rulesEditor QComboBox, #rulesEditor QLineEdit { min-height: 30px; margin-bottom: 4px; }
@@ -2930,7 +2939,8 @@ class MainWindow(QMainWindow):
         except (EmulatorUnavailable, RuntimeError) as exc:
             QMessageBox.critical(self, "Could not start the game", str(exc))
             return
-        self.editor_stack.setCurrentWidget(self.nes_screen)
+        self.editor_stack.setCurrentWidget(self.television)
+        self.screen_stack.setCurrentWidget(self.nes_screen)
         self.nes_screen.setFocus()
         self.launch_button.setText("■ STOP")
         self.live_badge.setText("● PLAYING")
