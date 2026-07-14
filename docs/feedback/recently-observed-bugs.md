@@ -1,6 +1,13 @@
 # Recent bugs and feature requests
 
 1. Have a fill option for the background tile
+   *Done (Studio).* The WORLD stage toolbar has a **🪣 Fill** tool (under
+   "More tools") that flood-fills the connected region of same-tile cells from
+   where you click — for background tiles (tile + palette), and it also works
+   with the Colour, Type (behaviour) and Erase tools. Implemented in
+   `studio-world.js` (`floodFill`/`floodGeneric`); now guarded by
+   `tools/studio-tests/world.spec.js` ("Fill floods a connected same-tile region
+   and respects its boundary").
 2. The 'door' or any movement to a new background when there are more than screen in the background
 appears to get confused and show the wrong background for one of the screens.
    *FIXED 2026-07-10 (engine v63).* Was reproduced on FCEUX: a door from a
