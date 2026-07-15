@@ -257,26 +257,29 @@ class CharsMouseTests(StudioTest):
 
 
 class TilePixelMouseTests(StudioTest):
-    def test_dragging_across_the_pixel_grid_draws_a_line(self) -> None:
-        """`_PixelCell` exists *because* `QPushButton.clicked` cannot drag — so
-        the drag path is bespoke code, and it was never driven by a mouse."""
+    """The pixel editor is one self-painting widget (`_PixelGrid`), so a drag is
+    a single press → moves → release on that one widget — the same shape as a
+    real mouse, and the thing the old 64-button grid could not do on a real
+    display."""
 
-        window = self.window("scratch")
+    def grid(self, window):
         window.select_mode("TILES")
         tiles = window.modes["TILES"]
-        tiles.select_tile(11, bank="bg")
-        tiles.set_pen(3)
         tiles.pixel_canvas.show()
         self.application.processEvents()
+        return tiles
 
-        start = tiles.pixel_buttons[2 * 8 + 1]
-        press(start, QPoint(16, 16))
+    def test_dragging_across_the_pixel_grid_draws_a_line(self) -> None:
+        window = self.window("scratch")
+        tiles = self.grid(window)
+        tiles.select_tile(11, bank="bg")
+        tiles.set_pen(3)
+        canvas = tiles.pixel_canvas
+
+        press(canvas, canvas.cell_centre(1, 2))
         for column in range(2, 6):
-            target = tiles.pixel_buttons[2 * 8 + column]
-            # Moves keep arriving at the widget that was pressed; the cell under
-            # the cursor is found from the position.
-            move(start, start.mapFromGlobal(target.mapToGlobal(QPoint(16, 16))))
-        release(start, QPoint(16, 16))
+            move(canvas, canvas.cell_centre(column, 2))
+        release(canvas, canvas.cell_centre(5, 2))
 
         pixels = window.document.background_tile_pixels(11)
         self.assertTrue(
@@ -284,21 +287,29 @@ class TilePixelMouseTests(StudioTest):
             f"the drag drew {[pixels[2][c] for c in range(1, 6)]}, not a line",
         )
 
+    def test_a_single_press_is_one_pixel(self) -> None:
+        window = self.window("scratch")
+        tiles = self.grid(window)
+        tiles.select_tile(4, bank="bg")
+        tiles.set_pen(1)
+        canvas = tiles.pixel_canvas
+
+        press(canvas, canvas.cell_centre(6, 3))
+        release(canvas, canvas.cell_centre(6, 3))
+
+        self.assertEqual(window.document.background_tile_pixels(4)[3][6], 1)
+
     def test_a_pixel_drag_is_one_undo_step(self) -> None:
         window = self.window("scratch")
-        window.select_mode("TILES")
-        tiles = window.modes["TILES"]
+        tiles = self.grid(window)
         tiles.select_tile(12, bank="bg")
         tiles.set_pen(2)
-        tiles.pixel_canvas.show()
-        self.application.processEvents()
+        canvas = tiles.pixel_canvas
 
-        start = tiles.pixel_buttons[0]
-        press(start, QPoint(16, 16))
+        press(canvas, canvas.cell_centre(0, 0))
         for column in range(1, 5):
-            target = tiles.pixel_buttons[column]
-            move(start, start.mapFromGlobal(target.mapToGlobal(QPoint(16, 16))))
-        release(start, QPoint(16, 16))
+            move(canvas, canvas.cell_centre(column, 0))
+        release(canvas, canvas.cell_centre(4, 0))
 
         self.assertTrue(window.store.undo())
         pixels = window.document.background_tile_pixels(12)

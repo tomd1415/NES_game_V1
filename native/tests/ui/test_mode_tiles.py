@@ -34,7 +34,7 @@ class TilesModeTests(StudioTest):
         tiles.select_tile(7, bank="bg")
         tiles.set_pen(1)
 
-        tiles.pixel_buttons[4 * 8 + 3].click()
+        tiles.paint_pixel(3, 4)
 
         self.assertEqual(window.document.background_tile_pixels(7)[4][3], 1)
 
@@ -43,11 +43,11 @@ class TilesModeTests(StudioTest):
         tiles = self.tiles(window)
         tiles.select_tile(7, bank="bg")
         tiles.set_pen(1)
-        tiles.pixel_buttons[4 * 8 + 3].click()
+        tiles.paint_pixel(3, 4)
 
         tiles.select_tile(7, bank="sprite")
         tiles.set_pen(3)
-        tiles.pixel_buttons[4 * 8 + 3].click()
+        tiles.paint_pixel(3, 4)
 
         self.assertEqual(window.document.sprite_tile_pixels(7)[4][3], 3)
         self.assertEqual(window.document.background_tile_pixels(7)[4][3], 1)
@@ -72,7 +72,7 @@ class TilesModeTests(StudioTest):
         tiles = self.tiles(window)
         tiles.select_tile(7, bank="bg")
         tiles.set_pen(1)
-        tiles.pixel_buttons[4 * 8 + 3].click()
+        tiles.paint_pixel(3, 4)
 
         tiles._copy()
         tiles.select_tile(8)

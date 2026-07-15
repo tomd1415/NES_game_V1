@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QPoint, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QInputDialog,
@@ -89,19 +88,16 @@ class TilesMode(Mode):
         pen_row.addStretch(1)
         layout.addLayout(pen_row)
 
-        self.pixel_canvas = QFrame(content)
-        self.pixel_canvas.setObjectName("tilePixelCanvas")
-        self.pixel_canvas.setFixedSize(256, 256)
-        grid = QGridLayout(self.pixel_canvas)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(0)
-        grid.setVerticalSpacing(0)
-        self.pixel_buttons: list[_PixelCell] = []
-        for row in range(8):
-            for column in range(8):
-                cell = _PixelCell(self, column, row, self.pixel_canvas)
-                self.pixel_buttons.append(cell)
-                grid.addWidget(cell, row, column)
+        # One self-painting widget, not 64 QPushButtons. The button grid could
+        # not be dragged across on a real display: the pressed button had to
+        # forward the mouse grab to its neighbours through `childAt`, and every
+        # painted pixel re-ran `setStyleSheet` on all 64 buttons — which, mid-drag
+        # on a real compositor, dropped the grab, so only the first pixel landed.
+        # A single widget owns the whole stroke, exactly as the CHARS canvas does.
+        self.pixel_canvas = _PixelGrid(content)
+        self.pixel_canvas.stroke_began.connect(self.begin_paint)
+        self.pixel_canvas.stroke_ended.connect(self.end_paint)
+        self.pixel_canvas.painted.connect(self.paint_pixel)
         layout.addWidget(self.pixel_canvas, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addStretch(1)
 
@@ -321,13 +317,7 @@ class TilesMode(Mode):
                 f"background: {colours[value]}; "
                 f"color: {'#f8f8f8' if value == 0 else '#080810'}; font-weight: 800;"
             )
-        for row in range(8):
-            for column in range(8):
-                cell = self.pixel_buttons[row * 8 + column]
-                cell.setStyleSheet(
-                    f"background: {colours[pixels[row][column]]}; "
-                    "border: 1px solid #34345f; padding: 0;"
-                )
+        self.pixel_canvas.set_pixels(pixels, colours)
 
         background = self.bank != "sprite"
         self.tile_default_behaviour.blockSignals(True)
@@ -483,50 +473,91 @@ class TilesMode(Mode):
             self.edited("Tile default behaviour changed")
 
 
-class _PixelCell(QPushButton):
-    """One pixel of the 8x8 editor.
+class _PixelGrid(QWidget):
+    """The 8x8 pixel editor: one widget that paints itself and owns the drag.
 
-    A `QPushButton` connected to `clicked` only paints on release, one pixel at
-    a time — you could not drag a line. This tracks the drag: pressing paints,
-    and dragging across neighbours paints them too, which is how every pixel
-    editor a pupil has used behaves.
+    This replaced a grid of 64 `QPushButton`s. That grid could not be dragged
+    across on a real display — the pressed button had to forward the mouse grab
+    to its neighbours by hit-testing `childAt` on every move, and each painted
+    pixel re-ran `setStyleSheet` on all 64 buttons, which on a real compositor
+    dropped the grab mid-stroke so only the first pixel landed.
+
+    A single widget holds the grab for the whole stroke. It is deliberately dumb:
+    it is handed the 8x8 values and the four ramp colours to draw, and it emits
+    which cell was painted. The mode owns the document. (The same split as the
+    CHARS `SpriteCanvas`.)
     """
 
-    def __init__(self, mode: TilesMode, column: int, row: int, parent: QWidget) -> None:
+    CELLS = 8
+
+    painted = Signal(int, int)  # column, row
+    stroke_began = Signal()
+    stroke_ended = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._mode = mode
-        self._column = column
-        self._row = row
-        self.setFixedSize(32, 32)
-        self.setObjectName(f"backgroundTilePixel{column}_{row}")
-        self.setAccessibleName(f"Tile pixel {column}, {row}")
-        self.setMouseTracking(True)
+        self.setObjectName("tilePixelCanvas")
+        self.setFixedSize(256, 256)
+        self.setAccessibleName("Tile pixel editor")
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self._pixels = [[0] * self.CELLS for _ in range(self.CELLS)]
+        self._ramp: tuple[str, ...] = ("#101018",) * 4
+        self._painting = False
+
+    def set_pixels(self, pixels: list[list[int]], ramp: tuple[str, ...]) -> None:
+        self._pixels = pixels
+        self._ramp = ramp
+        self.update()
+
+    def _cell_size(self) -> float:
+        return self.width() / self.CELLS
+
+    def _cell_at(self, position) -> tuple[int, int] | None:
+        size = self._cell_size()
+        column = int(position.x() // size)
+        row = int(position.y() // size)
+        if 0 <= column < self.CELLS and 0 <= row < self.CELLS:
+            return column, row
+        return None
+
+    def cell_centre(self, column: int, row: int) -> QPoint:
+        """Where a cell is drawn — so a test can click the pixel it means to."""
+
+        size = self._cell_size()
+        return QPointF((column + 0.5) * size, (row + 0.5) * size).toPoint()
+
+    def paintEvent(self, _event) -> None:  # noqa: N802 - Qt API
+        painter = QPainter(self)
+        size = self._cell_size()
+        for row in range(self.CELLS):
+            for column in range(self.CELLS):
+                value = self._pixels[row][column] if row < len(self._pixels) else 0
+                rect = QRectF(column * size, row * size, size, size)
+                painter.fillRect(rect, QColor(self._ramp[value & 3]))
+        painter.setPen(QPen(QColor("#34345f"), 1))
+        for index in range(self.CELLS + 1):
+            offset = index * size
+            painter.drawLine(QPointF(offset, 0), QPointF(offset, self.height()))
+            painter.drawLine(QPointF(0, offset), QPointF(self.width(), offset))
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt API
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._mode.begin_paint()
-            self._mode.paint_pixel(self._column, self._row)
-            event.accept()
+        if event.button() != Qt.MouseButton.LeftButton:
             return
-        super().mousePressEvent(event)
+        cell = self._cell_at(event.position())
+        if cell is None:
+            return
+        self._painting = True
+        self.stroke_began.emit()
+        self.painted.emit(*cell)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt API
-        if event.buttons() & Qt.MouseButton.LeftButton:
-            # The press was on some other cell; Qt keeps sending us the move
-            # events, so find the cell actually under the cursor.
-            target = self.parent().childAt(self.mapToParent(event.position().toPoint()))
-            if isinstance(target, _PixelCell):
-                target._mode.paint_pixel(target._column, target._row)
-            event.accept()
+        if not self._painting or not (event.buttons() & Qt.MouseButton.LeftButton):
             return
-        super().mouseMoveEvent(event)
+        cell = self._cell_at(event.position())
+        if cell is not None:
+            self.painted.emit(*cell)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt API
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._mode.end_paint()
-            event.accept()
-            return
-        super().mouseReleaseEvent(event)
-
-    def click(self) -> None:  # keeps `button.click()` working for tests and a11y
-        self._mode.paint_pixel(self._column, self._row)
+        if event.button() == Qt.MouseButton.LeftButton and self._painting:
+            self._painting = False
+            self.stroke_ended.emit()
