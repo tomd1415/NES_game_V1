@@ -1142,6 +1142,38 @@ def _scene_sprite_xy(item, world_w, world_h):
     return x, y
 
 
+def _scene_room_of(item):
+    """The background index a scene sprite belongs to (per-room instances, v75).
+    Untagged instances default to room 0 — the historical single-scene behaviour."""
+    try:
+        return max(0, int(item.get("bg", 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _scene_is_perroom(scene_sprites):
+    """True when the placed scene sprites span more than one background — the
+    only case where per-room activation changes anything.  When every entity is
+    room 0 (or untagged) this is False, so existing single-scene projects (and
+    all goldens) build byte-identically.
+
+    v1 restriction: only when every entity fits in a single byte (x, y <= 255).
+    Per-room parks off-room actors at ss_y = 0xFF; that is reliably off-screen
+    only for 8-bit / single-screen-room layouts.  Multi-screen (wide) rooms are a
+    follow-up — they fall back to the shared-scene behaviour."""
+    sprites = scene_sprites or []
+    rooms = {_scene_room_of(it) for it in sprites}
+    if len(rooms) <= 1:
+        return False
+    for it in sprites:
+        try:
+            if int(it.get("x", 0)) > 255 or int(it.get("y", 0)) > 255:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
 def build_scene_asminc(state, player_idx, scene_sprites, start_x, start_y):
     """ca65-flavoured counterpart to build_scene_inc.
 
@@ -2007,6 +2039,20 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             arr("ss_anim_frame", anim_zero, mutable=True),
             arr("ss_anim_tick", anim_zero, mutable=True),
         ]
+
+        # Per-room scene instances (engine v75): when the placed entities span
+        # more than one background, tag each with its room and remember its home
+        # position, so the template can activate only the current room's entities
+        # on a door transition (see scene_set_active_bg in platformer.c).  Emitted
+        # only in the multi-room case, so single-scene projects stay byte-identical.
+        if _scene_is_perroom(scene_sprites):
+            rooms = [_scene_room_of(it) for it in scene_sprites]
+            lines += [
+                "#define BW_SCENE_PERROOM 1",
+                arr("ss_room", rooms),
+                arr("ss_home_x", xs, wide=wide_pos),
+                arr("ss_home_y", ys, wide=wide_pos),
+            ]
 
     # --- Per-background nametables (Phase B+ Round 3 + T2.1 fix) ----
     # For multi-background door transitions we emit each painted
@@ -3045,6 +3091,11 @@ def _build_rom(body):
     )
     nes_asm_scene = bool(
         asm_ready and is_scroll and num_static > 0 and not has_scene_anim
+        # Per-room scene instances (v75) draw through the C scene loop so a
+        # BW_SCENE_PERROOM-gated skip can drop parked (off-room, ss_y=0xFF) actors
+        # before they reach OAM. The hand-written ASM draw has no such skip, so
+        # fall back to the (byte-identical) C draw for multi-room projects.
+        and not _scene_is_perroom(scene_sprites)
     )
     # Scene-sprite AI on hand-written 6502 (Phase 2b): the generic ai_update loop
     # (walker/chaser/flyer/patrol) + the bw_sprite_blocked probe. SHIPPED BY
@@ -3058,6 +3109,11 @@ def _build_rom(body):
     # PLAYGROUND_NO_ASM=1 falls back to the pure-C AI (kill switch, below).
     nes_asm_ai = bool(
         asm_ready and custom_main_c is not None and "ss_ai_type[" in custom_main_c
+        # Per-room scene instances (v75) park off-room actors at ss_y=0xFF; the
+        # C AI bodies guard `ss_y < 0xEF` so a parked chaser/flyer stays put, but
+        # the hand-written ASM AI loop does not. Fall back to the (byte-identical)
+        # C AI for multi-room projects so parked actors never crawl back on screen.
+        and not _scene_is_perroom(scene_sprites)
     )
     # Player update on hand-written 6502 (Phase 2c). SHIPPED BY DEFAULT (engine v43)
     # for SINGLE-PLAYER builds: all six single-player models (top-down, platformer,

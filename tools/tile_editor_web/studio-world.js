@@ -39,6 +39,14 @@
     return node.config.instances;
   }
   function nextInstId(list) { var m = 0; list.forEach(function (i) { if ((i.id | 0) > m) m = i.id | 0; }); return m + 1; }
+  // Engine v75 — which room (background index) an instance belongs to; legacy
+  // instances with no `bg` default to room 0.
+  function instBg(inst) { return inst.bg | 0; }
+  // The instances placed in the currently-selected background — the WORLD stage
+  // only shows/edits one room at a time so entities don't bleed between rooms.
+  function sceneInstancesForBg(ctx, bgIdx) {
+    return sceneInstances(ctx).filter(function (i) { return instBg(i) === bgIdx; });
+  }
   function spriteSize(state, idx) {
     var sp = (state.sprites || [])[idx];
     return { w: (sp && sp.width ? sp.width : 2) * 8, h: (sp && sp.height ? sp.height : 2) * 8 };
@@ -50,7 +58,7 @@
   }
   function instanceAt(ctx, px, py) {
     var state = ctx.getState();
-    var list = sceneInstances(ctx);
+    var list = sceneInstancesForBg(ctx, state.selectedBgIdx | 0);
     for (var i = list.length - 1; i >= 0; i--) {
       var sz = spriteSize(state, list[i].spriteIdx);
       if (px >= list[i].x && px < list[i].x + sz.w && py >= list[i].y && py < list[i].y + sz.h) return list[i];
@@ -291,15 +299,17 @@
   }
 
   // Prepend (grow left/up) pushes existing content over by one screen, so any
-  // stored WORLD coordinates on this bg must move with it.  Scene instances,
-  // blocks and the player start are a single (not-yet-per-bg) set, so shift them
-  // only for single-background games where the mapping is unambiguous; doors
-  // carry a bg index, so shift just this bg's doors either way.
+  // stored WORLD coordinates on this bg must move with it.  Scene instances now
+  // carry a `bg` (engine v75 per-room), so shift exactly this room's entities;
+  // doors also carry a bg index, so shift just this bg's doors.
   function shiftWorldCoords(ctx, bgIdx, dxTiles, dyTiles) {
     var s = ctx.getState();
     var dpx = dxTiles * 8, dpy = dyTiles * 8;
+    // Scene instances carry a `bg` (per-room), so shift exactly this room's.
+    sceneInstancesForBg(ctx, bgIdx).forEach(function (i) { i.x = (i.x | 0) + dpx; i.y = (i.y | 0) + dpy; });
+    // Blocks + the player start are still a single (not-yet-per-room) set, so
+    // only shift them for unambiguous single-background games.
     var single = (s.backgrounds || []).length === 1;
-    if (single) sceneInstances(ctx).forEach(function (i) { i.x = (i.x | 0) + dpx; i.y = (i.y | 0) + dpy; });
     var m = s.builder && s.builder.modules;
     if (!m) return;
     if (m.doors && m.doors.config && Array.isArray(m.doors.config.doorList)) {
@@ -518,6 +528,9 @@
     var inst = { id: nextInstId(list), spriteIdx: idx,
       x: Math.max(0, Math.min(maxX, Math.round(w.x - sz.w / 2))),
       y: Math.max(0, Math.min(maxY, Math.round(w.y - sz.h / 2))),
+      // Engine v75 — the entity belongs to the room (background) it's placed on,
+      // so multi-room games can have different enemies/pickups per room.
+      bg: state.selectedBgIdx | 0,
       ai: 'static', speed: 1 };
     list.push(inst);
     selInst = inst.id;
@@ -541,7 +554,8 @@
   function drawInstances(g) {
     if (!_octx) return;
     var state = _octx.getState();
-    var list = sceneInstances(_octx);
+    // Only the current room's entities (engine v75 per-room instances).
+    var list = sceneInstancesForBg(_octx, state.selectedBgIdx | 0);
     // The overlay canvas is one screen; instances hold WORLD coords (bug #14),
     // so shift by the current view offset and skip any that fall off this screen.
     var o = off(_octx);
@@ -972,7 +986,14 @@
     entSec.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Character to place' }), placeSel]));
     entSec.appendChild(el('div', { class: 'dock-note', text: 'Pick the 🧍 Place tool, then click the screen to drop a character. Click one to select and drag it.' }));
 
-    var list = sceneInstances(ctx);
+    // Only this room's entities (engine v75 per-room). Delete still splices from
+    // the full list so ids stay unique across rooms.
+    if ((s.backgrounds || []).length > 1) {
+      entSec.appendChild(el('div', { class: 'dock-note',
+        text: 'Entities belong to this room. Switch background above to place different enemies in another room.' }));
+    }
+    var full = sceneInstances(ctx);
+    var list = sceneInstancesForBg(ctx, s.selectedBgIdx | 0);
     list.forEach(function (inst) {
       var sp = chars[inst.spriteIdx];
       var row = el('div', { class: 'entity-row ent-row' + (inst.id === selInst ? ' sel' : '') }, [
@@ -980,7 +1001,7 @@
         el('button', { class: 'icon-btn', title: 'Delete', text: '🗑', onclick: function (e) {
           e.stopPropagation();
           ctx.pushUndo();
-          var i = list.indexOf(inst); if (i >= 0) list.splice(i, 1);
+          var i = full.indexOf(inst); if (i >= 0) full.splice(i, 1);
           if (selInst === inst.id) selInst = null;
           ctx.markDirty(); ctx.renderDock(); ctx.renderLive();
         } }),

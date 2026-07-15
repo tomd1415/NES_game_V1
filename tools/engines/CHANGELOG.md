@@ -9,6 +9,40 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v75 — 2026-07-15 — Per-room scene instances: different enemies/pickups per room (#14, opt-in)
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; off unless entities span >1 room)
+Scene instances (enemies, pickups, NPCs) used to be a single flat set shared by
+every room — in a multi-background door game, an enemy placed anywhere showed up in
+*every* room at that screen position (feedback #14). Now each instance carries a
+**`bg`** (which room it belongs to), and the engine activates only the current
+room's entities.
+
+- **Editor (`studio-world.js`):** placing an entity tags it with the selected
+  background; the WORLD overlay, hit-testing, entity list and the grow-a-screen
+  coordinate shift all operate per-room, so entities no longer bleed between rooms.
+- **Client (`play-pipeline.js`):** `deriveSceneSprites` carries each instance's `bg`
+  through to the build (untagged/legacy instances default to room 0).
+- **Server (`playground_server.py`):** when the placed entities span more than one
+  room, `scene.inc` emits `#define BW_SCENE_PERROOM 1` plus `ss_room[]` /
+  `ss_home_x[]` / `ss_home_y[]`. Such projects are also driven through the C scene
+  draw + AI loops (`NES_ASM_SCENE`/`NES_ASM_AI` forced off) so a parked actor is
+  dropped before OAM and the C AI's own `ss_y<0xEF` guard keeps it parked.
+- **Engine (`platformer.c`):** `scene_set_active_bg(n)` restores room `n`'s entities
+  to their authored home position and parks every other room's actor at `ss_y=0xFF`
+  (the existing "defeated" sentinel the draw/collision/C-AI loops already ignore).
+  It runs at boot and inside `load_background_n` on every door transition, so a room
+  only ever shows — and only ever collides with — the entities placed in it.
+  Re-entering a room respawns its entities at home (classic NES room behaviour).
+
+Every detector/hook is `#ifdef BW_SCENE_PERROOM`, emitted only for multi-room
+projects, so single-scene projects — and all goldens — build byte-identically.
+**v1 restriction:** only when all entities fit an 8-bit layout (x, y ≤ 255, i.e.
+single-screen rooms); wider multi-screen rooms fall back to the shared-scene
+behaviour (a follow-up). Verified end-to-end in jsnes by
+`tools/builder-tests/per-room.mjs` (boot shows only room 0's entity; a control with
+both entities in room 0 shows both; walking through a door swaps the active room).
+
 ## v74 — 2026-07-14 — Event sound effects: play SFX on jump / pickup / hurt / win (#7/#27, opt-in)
 
 ### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; off by default)

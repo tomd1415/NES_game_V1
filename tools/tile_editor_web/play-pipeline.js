@@ -209,6 +209,10 @@
           spriteIdx: inst.spriteIdx | 0,
           x: inst.x | 0,
           y: inst.y | 0,
+          // Engine v75 — which room (background) this entity belongs to; the
+          // server activates only the current room's entities on a door
+          // transition. Untagged/legacy instances default to room 0.
+          bg: inst.bg | 0,
         });
       }
       return out;
