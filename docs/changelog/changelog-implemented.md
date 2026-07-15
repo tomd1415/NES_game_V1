@@ -21,7 +21,7 @@ deferred.
 
 ---
 
-## Engine v11 → v74 + Studio hardening (bring-forward summary) — 2026-07-14
+## Engine v11 → v75 + Studio hardening (bring-forward summary) — 2026-07-14
 
 A high-level catch-up covering everything that shipped **since** the v10 entry
 below. The authoritative, per-version detail lives in
@@ -70,6 +70,13 @@ off-by-default) and both suites green (`node tools/builder-tests/run-all.mjs`,
   SOUND dock's **"Play sounds on game events"** toggle. Gated + off by default
   (goldens byte-identical); guarded by `sfx-events.mjs`. Actual audio is pending
   an attended FCEUX playtest before it's called fully done.
+- **Per-room scene instances — v75 (#14).** Entities used to be one flat set
+  shared by every room; now each carries a `bg`, the WORLD editor edits one
+  room's entities at a time, and the engine activates only the current room's
+  entities — swapping them on each door transition (re-entering a room respawns
+  them). Different enemies/pickups per room, at last. Gated `#ifdef
+  BW_SCENE_PERROOM` (multi-room only → single-scene byte-identical); verified in
+  jsnes by `per-room.mjs`. v1 covers single-screen-room layouts.
 - **Studio UX + safety.** A Games menu (open/manage saved games, available even
   when signed out), a fix for focus theft on load (#36), the reactions matrix
   (#20), the invincibility-frames floor (#35, now engine v73), thumbnail crop

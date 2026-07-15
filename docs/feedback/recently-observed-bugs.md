@@ -151,9 +151,17 @@ was a massive improvement.
     world-space (screen-local click + view offset), clamped to the whole
     `worldCols×worldRows`, and the overlay culls entities off the shown screen
     (the engine already supported world-pixel scene sprites — `scene-multiscreen.mjs`).
-    Still open: scene instances are **not yet per-background** (one shared scene
-    list across all `backgrounds[]`), so "different enemies per room" needs a
-    per-bg scene model + codegen change — tracked as a follow-up.
+    *Completed 2026-07-15 (engine v75) — different enemies per room.* Scene
+    instances are now **per-background**: each carries a `bg`, the WORLD editor
+    shows/edits one room's entities at a time, and the engine activates only the
+    current room's entities (parking the rest off-screen), swapping them on every
+    door transition — so a room only ever shows and collides with the enemies /
+    pickups placed in it, and re-entering a room respawns them. Gated
+    `#ifdef BW_SCENE_PERROOM` (multi-room projects only → single-scene byte-identical);
+    verified end-to-end in jsnes by `builder-tests/per-room.mjs` (boot filter,
+    control, and a walk-through-a-door room swap). v1 covers single-screen-room
+    (8-bit) layouts; wider multi-screen rooms fall back to the shared scene — a
+    follow-up.
 15. There is currently no way for a player to kill an enemy, we should add some options like jumping on top of enemy or shooting etc.
     *Status 2026-07-06:* the **SMB style already has both** — stomp (goomba/koopa
     `ai`, engine v4) and fireballs (shooting). What's missing is a **stomp for
