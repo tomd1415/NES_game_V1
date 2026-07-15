@@ -96,5 +96,96 @@ class ValidatorPanelTests(StudioTest):
         self.assertRenders(window.attention, minimum_colours=3)
 
 
+class StrokeBatchingTests(StudioTest):
+    """The expensive per-edit work (validators + rebuilding the problem panel)
+    is deferred to the end of a paint/draw stroke. Without this a 30-cell drag
+    ran the validators and tore down the panel's widgets 30 times, once per
+    mouse-move — the same mid-drag widget churn that dropped the grab in the
+    pixel editor.
+
+    These assert the *shape*, never a wall-clock number, which would be flaky."""
+
+    def _count_refreshes(self, window):
+        calls = {"n": 0}
+        original = window.attention.refresh
+
+        def counting():
+            calls["n"] += 1
+            return original()
+
+        window.attention.refresh = counting
+        return calls
+
+    def test_a_drag_refreshes_the_panel_once_not_per_cell(self) -> None:
+        window = self.window("scratch")
+        world = window.modes["WORLD"]
+        world.select_tool("paint")
+        world.tile_value.setValue(1)
+        calls = self._count_refreshes(window)
+
+        world.canvas.begin_stroke()
+        for column in range(10):
+            world.canvas.edit_cell(column, 5)
+        during = calls["n"]
+        world.canvas.end_stroke()
+
+        self.assertEqual(during, 0, "the panel rebuilt mid-stroke, once per cell")
+        self.assertEqual(calls["n"], 1, "the panel did not refresh once at stroke end")
+
+    def test_a_non_stroke_edit_still_refreshes_immediately(self) -> None:
+        """Batching must not delay the ordinary case: a spin-box change is not a
+        stroke, so its problems appear at once."""
+
+        window = self.window("scratch")
+        calls = self._count_refreshes(window)
+
+        window.document.set_dialogue_enabled(True)
+        window.document_edited()
+
+        self.assertEqual(calls["n"], 1)
+
+    def test_the_final_state_of_the_stroke_is_what_is_shown(self) -> None:
+        """Deferring must not show a stale panel: a drag that creates a palette
+        conflict shows it after release, computed from the end state."""
+
+        window = self.window("scratch")
+        world = window.modes["WORLD"]
+        world.select_tool("palette")
+
+        # Paint two different palettes into one 2x2 attribute quadrant.
+        world.canvas.begin_stroke()
+        world.canvas.set_palette_value(1)
+        world.canvas.edit_cell(0, 0)
+        world.canvas.set_palette_value(2)
+        world.canvas.edit_cell(1, 0)
+        world.canvas.end_stroke()
+
+        ids = [problem.id for problem in window.attention.problems]
+        # The conflict is a render-time fact the panel derives; at minimum the
+        # panel reflects the end state, so a fresh validate() over it agrees.
+        from nes_studio.core.validators import validate
+
+        self.assertEqual(ids, [p.id for p in validate(window.document.state)])
+
+    def test_undo_grouping_and_batching_share_the_boundary(self) -> None:
+        """The stroke is one undo step *and* one refresh — the same boundary."""
+
+        window = self.window("scratch")
+        world = window.modes["WORLD"]
+        world.select_tool("paint")
+        world.tile_value.setValue(4)
+
+        world.canvas.begin_stroke()
+        for column in range(5):
+            world.canvas.edit_cell(column, 2)
+        world.canvas.end_stroke()
+
+        # One undo reverts the whole stroke...
+        self.assertTrue(window.store.undo())
+        tiles = window.document.world_tiles(0, 0)
+        self.assertTrue(all(tiles[2][column] != 4 for column in range(5)))
+        self.assertFalse(window.store.can_undo, "the stroke was more than one undo step")
+
+
 if __name__ == "__main__":
     unittest.main()

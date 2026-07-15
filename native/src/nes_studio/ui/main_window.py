@@ -68,6 +68,9 @@ class MainWindow(QMainWindow):
         self._mode = "WORLD"
         self._mode_buttons: dict[str, QPushButton] = {}
         self._modes: dict[str, Mode] = {}
+        #: >0 while a paint/draw stroke is in progress. The undo macro and the
+        #: deferral of the expensive per-edit refresh share this one boundary.
+        self._stroke_depth = 0
 
         self.fceux = FceuxLauncher.discover()
         self.emulator = EmulatorSession(self)
@@ -151,14 +154,37 @@ class MainWindow(QMainWindow):
         One place, so no mode has to *remember* to save, retitle and re-check.
         `DocumentStore` hooks the session's `saveScheduled`, so this is also what
         makes the edit undoable.
+
+        The cheap parts run every time. The expensive parts — validating the whole
+        project and rebuilding the problem panel — are deferred while a stroke is
+        in progress: a 30-cell paint-drag would otherwise run the validators and
+        tear down the panel's widgets 30 times, once per mouse-move, when only the
+        stroke's final state is worth showing. `end_stroke()` runs them once.
         """
 
         self.session.schedule_save()
         self.update_document_title()
-        self.attention.refresh()
-        self.tutorial.check()
+        if self._stroke_depth == 0:
+            self.attention.refresh()
+            self.tutorial.check()
         if message:
             self.statusBar().showMessage(message)
+
+    def begin_stroke(self) -> None:
+        """Open a paint/draw stroke. Groups undo, and batches the expensive
+        refresh, until the matching `end_stroke()`."""
+
+        self.store.begin_macro()
+        self._stroke_depth += 1
+
+    def end_stroke(self, text: str = "edit") -> None:
+        self.store.end_macro(text)
+        if self._stroke_depth > 0:
+            self._stroke_depth -= 1
+        if self._stroke_depth == 0:
+            # The whole stroke, refreshed once.
+            self.attention.refresh()
+            self.tutorial.check()
 
     # ---- layout -----------------------------------------------------------
 

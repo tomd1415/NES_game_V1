@@ -114,12 +114,14 @@ class ModeContext:
         return self._window.level
 
     def begin_stroke(self) -> None:
-        """Group everything until `end_stroke()` into a single undo step."""
+        """Open a stroke: everything until `end_stroke()` is one undo step, and
+        the expensive per-edit work (validators, the problem panel) is deferred to
+        the end rather than run on every mouse-move."""
 
-        self.store.begin_macro()
+        self._window.begin_stroke()
 
     def end_stroke(self, text: str = "edit") -> None:
-        self.store.end_macro(text)
+        self._window.end_stroke(text)
 
 
 class Mode(QWidget):
