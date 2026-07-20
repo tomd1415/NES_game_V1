@@ -154,7 +154,7 @@ references the old name, this is your lookup table.
 
 | New path | What it tracks |
 | -------- | -------------- |
-| `docs/plans/current/2026-04-26-fixes-and-features.md` | The post-Phase-4 plan: fixes the 27 outstanding pupil-reported items in tiered order. |
+| `docs/plans/current/2026-04-26-fixes-and-features.md` | The post-Phase-4 plan: fixed the 27 pupil-reported items outstanding *at that time*, in tiered order. Historical — for live status see [`STATUS.md`](STATUS.md). |
 | `docs/plans/current/2026-07-05-studio-redesign.md` | The UI/UX redesign execution tracker — what has landed (Phases 0–3) and the remaining backlog, cross-linked to `docs/design/`. |
 
 ### Feedback / changelog (now in `docs/feedback/` and `docs/changelog/`)
