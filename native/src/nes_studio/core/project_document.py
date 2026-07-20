@@ -13,6 +13,12 @@ from typing import Any
 from .migrations import CURRENT_SCHEMA_VERSION, migrate_project
 from .editing import delete_metatile, promote_background_to_metatiles, swap_tile_slots
 
+#: The furthest a scene entity's top-left corner may sit, in pixels. These match
+#: the web builder and the project contract exactly; the UI spin-boxes and the
+#: three validation sites below all read them so the bound lives in one place.
+SCENE_X_MAX = 504
+SCENE_Y_MAX = 464
+
 
 class ProjectFormatError(ValueError):
     """Raised when a project cannot provide an editable WORLD grid."""
@@ -791,7 +797,7 @@ class ProjectDocument:
         return self._scene_node()["config"]["instances"]
 
     def add_scene_instance(self, sprite_index: int, *, x: int = 120, y: int = 120) -> int:
-        if not 0 <= sprite_index < len(self._sprites()) or not 0 <= x <= 504 or not 0 <= y <= 464:
+        if not 0 <= sprite_index < len(self._sprites()) or not 0 <= x <= SCENE_X_MAX or not 0 <= y <= SCENE_Y_MAX:
             raise ValueError("Scene instance is outside the project")
         instances = self.scene_instances()
         identifier = max((int(instance.get("id") or 0) for instance in instances if isinstance(instance, dict)), default=0) + 1
@@ -809,10 +815,10 @@ class ProjectDocument:
             if not 0 <= sprite_index < len(self._sprites()): raise ValueError("Sprite index outside project")
             changes["spriteIdx"] = sprite_index
         if x is not None:
-            if not 0 <= x <= 504: raise ValueError("Scene X must be 0..504")
+            if not 0 <= x <= SCENE_X_MAX: raise ValueError("Scene X must be 0..504")
             changes["x"] = x
         if y is not None:
-            if not 0 <= y <= 464: raise ValueError("Scene Y must be 0..464")
+            if not 0 <= y <= SCENE_Y_MAX: raise ValueError("Scene Y must be 0..464")
             changes["y"] = y
         if ai is not None:
             if ai not in {"static", "walker", "chaser", "goomba", "koopa", "item", "flyer", "patrol"}: raise ValueError("Unknown scene AI")

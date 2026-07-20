@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...core.project_document import ProjectFormatError
+from ...core.project_document import SCENE_X_MAX, SCENE_Y_MAX, ProjectFormatError
 from ...render.framebuffer import attribute_conflicts, render_nametable, render_sprite
 from ..widgets.budget import BudgetMeter
 from ..widgets.visuals import add_visual_choice, prepare_visual_selector, role_colour
@@ -176,6 +176,7 @@ class WorldMode(Mode):
         layout.addWidget(self.tile_value)
         self.edit_world_tile_button = QPushButton("Edit this tile's pixels", dock)
         self.edit_world_tile_button.setObjectName("editWorldTileButton")
+        self.edit_world_tile_button.setAccessibleName("Edit WORLD tile pixels")
         self.edit_world_tile_button.setAccessibleDescription(
             "Open the current WORLD paint tile in the shared tile pixel editor"
         )
@@ -210,6 +211,10 @@ class WorldMode(Mode):
         layout.addWidget(blocks_label)
         self.metatile_mode_button = QPushButton("Promote to 16×16 blocks", dock)
         self.metatile_mode_button.setObjectName("metatileModeButton")
+        self.metatile_mode_button.setToolTip(
+            "Group four 8×8 tiles into one reusable 16×16 block, so you can paint "
+            "bigger pieces of the world at once."
+        )
         self.metatile_mode_button.clicked.connect(self._toggle_metatile_mode)
         layout.addWidget(self.metatile_mode_button)
         self.metatile_list = QListWidget(dock)
@@ -223,6 +228,7 @@ class WorldMode(Mode):
         ):
             button = QPushButton(label, dock)
             button.setObjectName(name)
+            button.setAccessibleName(label)
             button.clicked.connect(callback)
             block_actions.addWidget(button)
         layout.addLayout(block_actions)
@@ -307,24 +313,25 @@ class WorldMode(Mode):
         self.scene_list.setMaximumHeight(110)
         layout.addWidget(self.scene_list)
         scene_actions = QHBoxLayout()
-        for label, name, callback in (
-            ("Add entity", "addSceneInstanceButton", self._add_entity),
-            ("Remove", "removeSceneInstanceButton", self._remove_entity),
+        for label, name, accessible, callback in (
+            ("Add entity", "addSceneInstanceButton", "Add entity", self._add_entity),
+            ("Remove", "removeSceneInstanceButton", "Remove entity", self._remove_entity),
         ):
             button = QPushButton(label, dock)
             button.setObjectName(name)
+            button.setAccessibleName(accessible)
             button.clicked.connect(callback)
             scene_actions.addWidget(button)
         layout.addLayout(scene_actions)
         position = QHBoxLayout()
         self.scene_x = QSpinBox(dock)
         self.scene_x.setObjectName("sceneX")
-        self.scene_x.setRange(0, 504)
+        self.scene_x.setRange(0, SCENE_X_MAX)
         self.scene_x.setPrefix("X ")
         position.addWidget(self.scene_x)
         self.scene_y = QSpinBox(dock)
         self.scene_y.setObjectName("sceneY")
-        self.scene_y.setRange(0, 464)
+        self.scene_y.setRange(0, SCENE_Y_MAX)
         self.scene_y.setPrefix("Y ")
         position.addWidget(self.scene_y)
         layout.addLayout(position)
