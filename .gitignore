@@ -5,7 +5,7 @@ level.nam
 game.chr
 scene.inc
 *.bak
-
+.devcontainer/
 # Runtime gallery entries — pupil publishes land here; the playground
 # server creates the dir at startup (GALLERY_DIR.mkdir). Never commit them.
 tools/gallery/
