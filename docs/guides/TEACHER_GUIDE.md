@@ -142,7 +142,7 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-Then `systemctl enable --now nesgame`. Pupils open `http://<lxc-ip>:8765/sprites.html`.
+Then `systemctl enable --now nesgame`. Pupils open `http://<lxc-ip>:8765/studio.html`.
 
 ### Configuration (`.env` or env vars)
 

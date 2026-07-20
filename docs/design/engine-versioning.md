@@ -32,7 +32,7 @@ archived and every v1 game keeps working.
   server and the JS both read (proposed `tools/engines/ENGINE_VERSION`).
 - **Project stamp** — `state.engineVersion` records the engine a project was
   **authored/last-built** against. Written on save + on successful build.
-  Absent ⇒ treat as v1 (the current shipped engine).
+  Absent ⇒ treat as v1 (the pre-versioning baseline, not the current engine).
 - **ROM stamp** — the build records the engine version in the returned build
   metadata, and (stretch) in a fixed ROM location / iNES trainer/comment so a
   downloaded `.nes` is self-identifying.
