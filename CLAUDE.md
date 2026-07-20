@@ -42,6 +42,9 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
 
 ## Where to start
 
+- **Current status — read this first:** [`docs/STATUS.md`](docs/STATUS.md).
+  Engine version, test state, what's open, what's blocked and on whom. It's a
+  living file: refresh it when an engine version ships or a session ends.
 - Docs index: [`docs/README.md`](docs/README.md).
 - Studio redesign status: `docs/plans/current/2026-07-05-studio-redesign.md`.
 - Engine work sequencing/risk:

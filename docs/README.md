@@ -10,6 +10,7 @@ of how we got here.
 
 | Folder | What's in it |
 | ------ | ------------ |
+| [`STATUS.md`](STATUS.md) | *(file, not a folder)* The living "where we are now" baseline — engine version, test state, open items, blockers. Read first, update last. |
 | [`guides/`](guides/) | Pupil-, teacher- and developer-facing reference docs. These change less often than plans and tend to grow in place. |
 | [`design/`](design/) | Design intent for the UI/UX redesign — vision, principles, wireframes, component specs, and design decisions. Plans say *what/when*; design docs say *why/how it should look and feel*. The redesign roadmap lives in [`design/phased-plan.md`](design/phased-plan.md). |
 | [`plans/current/`](plans/current/) | Active plan(s) the project is currently executing against. Should be a small number of files at any time. |
@@ -26,8 +27,10 @@ Repository-wide contribution, ownership and cross-team review rules live in
   [README](../README.md), then
   [`guides/PUPIL_GUIDE.md`](guides/PUPIL_GUIDE.md) for the editor
   walkthrough.
-- **Picking up active work?** Work is now feedback-driven — the running list of
-  open items (with fixes recorded inline as they land) is
+- **Picking up active work?** Start with [`STATUS.md`](STATUS.md) — the living
+  "where we are now" file: current engine version, test state, what's open and
+  what's blocked waiting on a human. Then, work is feedback-driven — the running
+  list of open items (with fixes recorded inline as they land) is
   [`feedback/recently-observed-bugs.md`](feedback/recently-observed-bugs.md), and
   the Studio "what's done / what's left" tracker is
   [`plans/current/2026-07-05-studio-redesign.md`](plans/current/2026-07-05-studio-redesign.md).
@@ -65,7 +68,9 @@ Repository-wide contribution, ownership and cross-team review rules live in
   cross-reference each other.
 - **Adding a feature?**  Prepend a section at the top of
   [`changelog/changelog-implemented.md`](changelog/changelog-implemented.md)
-  when it ships, and link the planning entry it came from.
+  when it ships, and link the planning entry it came from. If it shipped an
+  engine version or closed a numbered feedback item, also refresh
+  [`STATUS.md`](STATUS.md).
 - **Pupil reported a bug?**  Append to
   [`feedback/recently-observed-bugs.md`](feedback/recently-observed-bugs.md)
   *first*, then add (or link) it under the matching tier in the
