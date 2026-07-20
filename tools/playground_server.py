@@ -19,8 +19,10 @@ Start from the repo root with:
 
     python3 tools/playground_server.py
 
-then browse http://127.0.0.1:8765/sprites.html  (or let the VSCode task
-'Start Playground Server' do it for you -- runs on folder open).
+then browse http://127.0.0.1:8765/studio.html  (Studio is the primary
+editor; the legacy index/sprites/code pages are still served).  Or let
+the VSCode task 'Start Playground Server' do it for you -- runs on folder
+open.
 """
 
 from __future__ import annotations
@@ -4656,8 +4658,7 @@ def main():
         if _ping_existing_playground(probe_host, PORT):
             print(
                 f"Playground server already running on http://{probe_host}:{PORT}/ -- nothing to do.\n"
-                f"  Editor:  http://{probe_host}:{PORT}/index.html\n"
-                f"  Sprites: http://{probe_host}:{PORT}/sprites.html",
+                f"  Studio (primary): http://{probe_host}:{PORT}/studio.html",
                 file=sys.stderr, flush=True,
             )
             return
@@ -4672,9 +4673,8 @@ def main():
     fceux_note = f"fceux: {FCEUX_PATH}" if FCEUX_PATH else "fceux: not installed (browser mode only)"
     banner = (
         f"Playground server listening on {display_host}:{PORT}\n"
-        f"  Editor:    http://{probe_host}:{PORT}/index.html\n"
-        f"  Sprites:   http://{probe_host}:{PORT}/sprites.html\n"
-        f"  Code:      http://{probe_host}:{PORT}/code.html\n"
+        f"  Studio (primary):  http://{probe_host}:{PORT}/studio.html\n"
+        f"  Legacy pages:      index.html / sprites.html / code.html (still served)\n"
         f"  {fceux_note}\n"
         f"Press Ctrl-C to stop."
     )
