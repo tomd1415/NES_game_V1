@@ -47,12 +47,22 @@ Roughly **28 of the 38 items are done.**
 
 ### Needs a human at a keyboard (attended)
 
-- **#7 / #27 — FCEUX audio playtest.** *The clearest blocker.* The feature
-  shipped in v74 but cannot be marked done: jsnes APU inspection is too fragile
-  to verify audio automatically, so someone has to listen to it. See
-  [`guides/DEBUGGING_FCEUX.md`](guides/DEBUGGING_FCEUX.md).
-- **#15 — stomp feel tuning.** `BW_STOMP_MARGIN=8` / `BW_STOMP_BOUNCE=12` need a
-  human judging whether the bounce feels right.
+**Prepped and ready — see
+[`guides/PLAYTEST-CHECKLIST.md`](guides/PLAYTEST-CHECKLIST.md).** Run
+`node scripts/make-playtest-roms.mjs` to build the ROMs (gitignored;
+regenerate after any engine change), then play them somewhere with sound and
+tick the boxes. **Not in the dev container** — it has fceux but no display and
+no audio device.
+
+- **#7 / #27 — event-sound playtest.** *The clearest blocker.* Shipped in v74.
+  The suite proves the SFX code is *linked* (events-ON and events-OFF ROMs
+  differ, re-verified 2026-07-26 for the playtest ROM), but not that it is
+  audible or right — jsnes APU inspection is too fragile to trust. Someone has
+  to listen to four events: jump, pickup, hurt, win.
+- **#15 — stomp feel tuning.** Three ROMs are built to A/B: the current
+  `MARGIN 8 / BOUNCE 12`, a springier `BOUNCE 18`, and a more forgiving
+  `MARGIN 12`. Pick a winner. (`stompBounce` is a Damage-module setting;
+  `BW_STOMP_MARGIN` is currently fixed behind an `#ifndef`.)
 
 ### Blocked on a pupil repro, not on engineering
 
