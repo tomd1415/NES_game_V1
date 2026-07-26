@@ -221,6 +221,25 @@ unsigned char attr;
 
 //@ insert: declarations
 
+/* --- Player-1 OAM span (item #37) ---------------------------------------
+ * Where Player 1's OAM entries start.  The SMB background status bar parks a
+ * sprite-0 split marker in slot 0, so the player fills from slot 1 (byte 4)
+ * instead of byte 0.  Declared after the declarations slot so BW_SMB_HUD_BG
+ * is already defined.
+ *
+ * BW_P1_OAM_FITS is the compile-time question "can Player 1 possibly overrun
+ * the 256-byte shadow buffer?".  The Builder caps a player at 64 tile cells
+ * (player-oam-budget), which is exactly 256 bytes — so with the split marker
+ * also taking 4, a 64-cell player needs 260 and does NOT fit.  When it does
+ * fit (every ordinary project) the runtime guard below compiles out entirely
+ * and the emitted code — and the ROM — is byte-identical to before. */
+#if defined(BW_SMB_HUD_BG) && defined(SCROLL_BUILD)
+#define BW_OAM_P1_BASE 4
+#else
+#define BW_OAM_P1_BASE 0
+#endif
+#define BW_P1_OAM_FITS ((BW_OAM_P1_BASE + PLAYER_TILES_PER_FRAME * 4) <= 256)
+
 #ifdef BW_SMB_JUMP
 /* SMB style — signed 8.8 fixed-point horizontal velocity + a sub-pixel X
  * accumulator, so the player accelerates to a run/walk max, decelerates by
@@ -2373,9 +2392,9 @@ void main(void) {
         oam_buf[1] = BW_HUDBG_SOLID_TILE;
         oam_buf[2] = 0x20;
         oam_buf[3] = 8;
-        oam_idx = 4;
+        oam_idx = BW_OAM_P1_BASE;
 #else
-        oam_idx = 0;
+        oam_idx = BW_OAM_P1_BASE;
 #endif
 
         // --- Player -------------------------------------------------------
@@ -2404,7 +2423,18 @@ void main(void) {
         draw_player();
 #else
         for (r = 0; r < PLAYER_H; r++) {
+#if !BW_P1_OAM_FITS
+            /* Item #37 — a 64-cell player plus the sprite-0 split marker needs
+             * 260 of the 256 bytes, so the last cell would write past
+             * oam_buf[255] into $0300.  Guard exactly like the P2 / scene /
+             * spawn writers.  Compiled out (byte-identical) whenever the
+             * player provably fits, which is every ordinary project. */
+            if (oam_idx > 252) break;
+#endif
             for (c = 0; c < PLAYER_W; c++) {
+#if !BW_P1_OAM_FITS
+                if (oam_idx > 252) break;
+#endif
 #ifdef SCROLL_BUILD
 #if BW_BOB_WHEN_WALKING
                 sy = world_to_screen_y((unsigned int)py + (r << 3) + bob);
@@ -2775,10 +2805,14 @@ void main(void) {
             unsigned char hud_y = 8;
             unsigned char hud_h;
             unsigned char hud_r, hud_c;
-            for (hud_h = 0; hud_h < player_hp; hud_h++) {
-                for (hud_r = 0; hud_r < HUD_H; hud_r++) {
-                    for (hud_c = 0; hud_c < HUD_W; hud_c++) {
-                        if (oam_idx > 252) break;   /* OAM full (64 hw sprites) */
+            /* Item #37 — the overflow test belongs in every loop condition, not
+             * just the innermost.  A bare `break` inside the cell loop left the
+             * row and heart loops spinning: with 9 HP and 2x2 hearts that is 36
+             * pointless iterations per frame, all inside the pre-vblank window
+             * we are trying to keep cheap on a crowded scene. */
+            for (hud_h = 0; hud_h < player_hp && oam_idx <= 252; hud_h++) {
+                for (hud_r = 0; hud_r < HUD_H && oam_idx <= 252; hud_r++) {
+                    for (hud_c = 0; hud_c < HUD_W && oam_idx <= 252; hud_c++) {
                         oam_buf[oam_idx++] =hud_y + (hud_r << 3);
                         oam_buf[oam_idx++] =hud_tiles[hud_r * HUD_W + hud_c];
                         oam_buf[oam_idx++] =hud_attrs[hud_r * HUD_W + hud_c];
@@ -2801,10 +2835,11 @@ void main(void) {
             unsigned char step = (HUD_W << 3) + 4;
             /* Right edge - first heart width, then step leftwards. */
             unsigned char hud_x = 248 - (HUD_W << 3);
-            for (hud_h = 0; hud_h < player2_hp; hud_h++) {
-                for (hud_r = 0; hud_r < HUD_H; hud_r++) {
-                    for (hud_c = 0; hud_c < HUD_W; hud_c++) {
-                        if (oam_idx > 252) break;   /* OAM full (64 hw sprites) */
+            /* Item #37 — see the P1 heart block: test in every loop condition
+             * so a full buffer stops all three loops, not just the innermost. */
+            for (hud_h = 0; hud_h < player2_hp && oam_idx <= 252; hud_h++) {
+                for (hud_r = 0; hud_r < HUD_H && oam_idx <= 252; hud_r++) {
+                    for (hud_c = 0; hud_c < HUD_W && oam_idx <= 252; hud_c++) {
                         oam_buf[oam_idx++] =hud_y + (hud_r << 3);
                         oam_buf[oam_idx++] =hud_tiles[hud_r * HUD_W + hud_c];
                         oam_buf[oam_idx++] =hud_attrs[hud_r * HUD_W + hud_c];

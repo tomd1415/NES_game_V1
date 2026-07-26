@@ -9,6 +9,64 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v76 — 2026-07-26 — Player 1's OAM cursor can no longer wrap or overrun (#37)
+
+### Changed (goldens UNCHANGED; `_rom-equiv` re-pinned — see "Byte-identity" below)
+Two silent OAM-corruption bugs on the Player 1 draw, both in the "random mess on
+screen / the emulator froze for no reason" class of feedback **#37**. Neither
+crashed — they quietly scribbled over memory or over other sprites, which is why
+they never produced a clean repro. Found by probing `oam_idx` immediately after
+the player draw; both are covered by
+[`tools/builder-tests/render-p1-oam-cursor.mjs`](../builder-tests/render-p1-oam-cursor.mjs).
+
+- **ASM draw (`pdraw_asm.s`, on by default for scroll builds).** `draw_player`
+  tracks the OAM cursor in **Y — 8 bits**. A 64-cell (8×8) player spans exactly
+  256 bytes, so the closing `sty _oam_idx` stored 256 mod 256 = **0**. The
+  player's own pixels landed correctly, but the cursor came back at 0, so P2,
+  scene instances, spawn effects and the HUD all read an "empty" buffer and drew
+  **over the player** — and their `oam_idx > 252` guards never tripped. With the
+  background status bar on (`BW_SMB_HUD_BG` starts the player at byte 4) the
+  player's last cells additionally wrapped onto `oam_buf[0..3]` and wiped the
+  **sprite-0 split marker** that holds the status bar over the scrolling
+  playfield. Fix: `playground_server.py` no longer selects `NES_ASM_PDRAW`
+  unless the span ends strictly inside the page — `base + W*H*4 < 256`, note the
+  strict `<`, since the writes are fine at exactly 256 but the cursor store is
+  not. Those builds use the C draw instead.
+- **C draw (character bob, or `PLAYGROUND_NO_PDRAW`).** `oam_idx` is a real
+  `unsigned int` there and the P1 loop had **no bound at all**, so 8×8 + the
+  background status bar drove it to **260** — a genuine out-of-bounds write 4
+  bytes past `oam_buf[255]` into `$0300`. Fix: `platformer.c` gained
+  `BW_OAM_P1_BASE` / `BW_P1_OAM_FITS` and an `oam_idx > 252` bound in both the
+  row and column loops, matching the P2 / scene / spawn writers.
+
+### Changed — HUD heart loops exit properly
+The `if (oam_idx > 252) break;` in the P1/P2 heart blocks sat in the innermost of
+**three** nested loops, so a full buffer stopped the cell loop while the row and
+heart loops kept spinning and re-entering it (9 HP × 2×2 hearts ≈ 36 wasted
+iterations per frame, inside the pre-vblank window we are trying to keep cheap on
+a crowded scene). The test now lives in all three loop conditions.
+
+### Changed — the Builder warns before the engine has to cope
+`player-oam-overflow` (V11) did not count the status bar's sprite-0 split marker,
+so an 8×8 player passed at exactly 64 and then needed 65 slots. It now adds the
+marker when the background status bar is on, and says so in the message.
+
+**Byte-identity:** both goldens are unchanged. The OAM-cursor fixes are fully
+byte-preserving — `BW_P1_OAM_FITS` compiles the new bound out entirely whenever
+the player provably fits (every ordinary project), and the ASM-selection and
+validator changes emit nothing new.
+
+The **heart-loop change is not** byte-preserving, and deliberately so: any
+project with the HP HUD emits different code, so the `_rom-equiv` "everything on"
+fixture was re-pinned `0aed6e95` → `972cb215`. That drift was isolated before
+re-pinning — reverting only the heart loops reproduces `0aed6e95` exactly, which
+is what confirms the other three changes are byte-clean.
+
+**Not fixed here:** `draw_player` still uses an 8-bit cursor. Widening it to 16
+bits (as `draw_player2` already does) would cost every scroll build ROM bytes for
+a case the server now routes around. If a future change makes big players common,
+that is the follow-up.
+
 ## v75 — 2026-07-15 — Per-room scene instances: different enemies/pickups per room (#14, opt-in)
 
 ### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; off unless entities span >1 room)

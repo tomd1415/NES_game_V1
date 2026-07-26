@@ -20,7 +20,15 @@ import * as H from './lib/render-harness.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
-//   0aed6e95… is the value with the 2-PLAYER ASM player physics shipped by default
+//   972cb215… is the value from engine v76 (item #37). The HUD heart blocks moved
+//     their `oam_idx > 252` test out of the innermost of three nested loops and
+//     into all three loop conditions, so a full OAM buffer now stops the heart and
+//     row loops too instead of letting them spin and re-enter. Deliberate: this
+//     fixture has the HP HUD on, so its emitted code legitimately changes. Verified
+//     to be the ONLY cause — reverting just the heart loops reproduces 0aed6e95
+//     exactly, so v76's P1 OAM guard, ASM-draw selection change and validator
+//     change are all byte-preserving here.
+//   0aed6e95… was the value with the 2-PLAYER ASM player physics shipped by default
 //     (engine v50). This fixture is a 2-player platformer, so P1 now runs the ASM
 //     plat_update and P2 the ASM p2_plat_update. Both are A/B-proven byte-behaviour-
 //     identical to the C (asm-player.mjs runPlatformer + runP2Platformer, matched
@@ -32,7 +40,7 @@ import * as H from './lib/render-harness.mjs';
 //     AI still in cc65 C; set PLAYGROUND_NO_ASM=1 to rebuild the pure-C engine).
 //   8172e353… was engine v19 (NES_ASM_LEAF always + NES_ASM_SCROLL for scroll).
 //   42a45ca8… was the pure-C -Os value; ce62ec47… the no-opt value.
-const EXPECT = '0aed6e95684bc3bbd665353759f2a003dad45bf6';
+const EXPECT = '972cb2158ee736f027b069242958c3f2d723a5ee';
 
 const PORT = 18834;
 

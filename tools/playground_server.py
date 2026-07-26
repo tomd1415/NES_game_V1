@@ -3204,8 +3204,42 @@ def _build_rom(body):
     # with a custom main.c engage it; the stock/golden + 1-screen _rom-equiv fixtures
     # are outside that envelope, so both goldens stay byte-identical. PLAYGROUND_
     # NO_ASM=1 remains the whole-engine kill switch (skips this with everything else).
+    #
+    # ITEM #37 — big players must NOT take this path. draw_player tracks the OAM
+    # cursor in Y (`ldy _oam_idx` ... `sty _oam_idx`), which is 8-bit, so the
+    # player's span has to end strictly INSIDE one 256-byte page. Note the
+    # boundary is `< 256`, not `<= 256`: the individual writes are fine at
+    # exactly 256, but the closing `sty` then stores 256 mod 256 = 0, leaving
+    # oam_idx at 0 (or 4) instead of 256. Two distinct ways that corrupts:
+    #
+    #   * every later writer (P2, scene, spawn, HUD) reads that cursor, decides
+    #     the buffer is empty, and draws over the player from slot 0 — and the
+    #     `oam_idx > 252` guards never trip;
+    #   * with the background status bar on (BW_SMB_HUD_BG starts the player at
+    #     byte 4) the player's own last cells wrap onto oam_buf[0..3] and wipe
+    #     the sprite-0 split marker, breaking the mid-frame scroll split.
+    #
+    # Silent corruption, no crash — exactly the "random mess / freeze" class in
+    # feedback item 37. A 64-cell player is reachable: the Builder allows 8x8.
+    #
+    # The C loop handles all of this correctly (oam_idx is `unsigned int`, and
+    # the template's BW_P1_OAM_FITS guard bounds it), so the fix is to leave the
+    # ASM draw out for those configs and let the C run. It costs those rare
+    # projects the ASM draw's speed; everything that fits keeps the ASM path and
+    # stays byte-identical.
+    _pd_sprites = state.get("sprites") or []
+    _pd_pw = _pd_ph = 2
+    if isinstance(player_idx, int) and 0 <= player_idx < len(_pd_sprites):
+        _pd_ps = _pd_sprites[player_idx] or {}
+        _pd_pw = int(_pd_ps.get("width") or 2)
+        _pd_ph = int(_pd_ps.get("height") or 2)
+    # Base mirrors the template's BW_OAM_P1_BASE.
+    _pd_oam_base = 4 if (is_scroll and "#define BW_SMB_HUD_BG 1" in (custom_main_c or "")) else 0
+    _pd_oam_fits = (_pd_oam_base + _pd_pw * _pd_ph * 4) < 256
+
     nes_asm_pdraw = bool(
         asm_ready and custom_main_c is not None and is_scroll
+        and _pd_oam_fits                                # item #37: 8-bit Y cursor must not wrap
         and not os.environ.get("PLAYGROUND_NO_PDRAW")   # granular kill switch (draw only)
     )
 
