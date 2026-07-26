@@ -92,6 +92,24 @@
       '  border-radius: 3px; padding: 0 5px; font-size: 0.9em;',
       '}',
       '.shared-emu-dialog.single-player .emu-p2-controls { display: none; }',
+      // Crash banner (item #37).  Sits between the canvas and the controls
+      // hint so it can't be missed, but doesn't reflow the canvas away.
+      // Colours are literal rather than var()-based: the host page's theme
+      // properties don't include a "danger" colour, and this must stay
+      // legible on both the dark editor theme and the a11y high-contrast one.
+      '.shared-emu-dialog .emu-crash {',
+      '  margin-top: 10px; padding: 10px 12px;',
+      '  background: #4a1d1d; color: #ffe4e4;',
+      '  border: 2px solid #d05a5a; border-radius: 6px;',
+      '  text-align: center; line-height: 1.5;',
+      '}',
+      '.shared-emu-dialog .emu-crash[hidden] { display: none; }',
+      '.shared-emu-dialog .emu-crash p { margin: 0 0 8px; }',
+      '.shared-emu-dialog .emu-crash button {',
+      '  background: #ffe4e4; color: #4a1d1d;',
+      '  border: 1px solid #d05a5a; border-radius: 4px;',
+      '  padding: 5px 14px; font-size: 1em; cursor: pointer;',
+      '}',
     ].join('\n');
     document.head.appendChild(style);
 
@@ -106,6 +124,12 @@
       '  <button type="button" class="close-fab" id="emu-close" title="Close">×</button>' +
       '</div>' +
       '<canvas id="emu-canvas" width="256" height="240"></canvas>' +
+      // role="alert" so a screen reader announces the stop without the pupil
+      // having to notice the colour change.
+      '<div class="emu-crash" id="emu-crash" role="alert" hidden>' +
+      '  <p id="emu-crash-text">The game stopped.</p>' +
+      '  <button type="button" id="emu-crash-retry">Start the game again</button>' +
+      '</div>' +
       '<div class="emu-status">' +
       '  <div><strong>Player 1:</strong> Arrow keys move · <kbd>F</kbd>&nbsp;= jump (A) · <kbd>D</kbd>&nbsp;= B · <kbd>Enter</kbd>&nbsp;= Start · <kbd>Right&nbsp;Shift</kbd>&nbsp;= Select</div>' +
       '  <div class="emu-p2-controls"><strong>Player 2:</strong> <kbd>I</kbd>/<kbd>J</kbd>/<kbd>K</kbd>/<kbd>L</kbd> move · <kbd>O</kbd>&nbsp;= jump (A) · <kbd>U</kbd>&nbsp;= B · <kbd>1</kbd>&nbsp;= Start · <kbd>2</kbd>&nbsp;= Select</div>' +
@@ -169,6 +193,73 @@
   }
 
   // --------------------------------------------------------------------
+  // Frame-loop watchdog (feedback item #37 — "the emulator froze for no
+  // reason").  Two failure modes it catches, both previously silent:
+  //
+  //   'stalled' — ticks keep firing but jsnes stops producing frames, so
+  //               the canvas holds the last image forever.
+  //   'slow'    — emulation is so far behind real time that the page is
+  //               effectively unusable (a pathological ROM, not a merely
+  //               slow device).
+  //
+  // A third mode — a thrown error inside `nes.frame()` — is handled by the
+  // try/catch at the call site rather than here: an exception in a
+  // setInterval callback does NOT stop the interval, so before this the
+  // loop threw 60×/second into a console the pupil never sees while the
+  // game sat frozen.
+  //
+  // LIMITATION, deliberately not papered over: if a ROM drives jsnes into a
+  // genuinely infinite *synchronous* loop inside `nes.frame()`, nothing on
+  // this thread can preempt it — no timer, no watchdog. Only a worker or a
+  // patched jsnes could, and both are much larger changes. This catches the
+  // recoverable cases and leaves the tab usable; it is not a total guarantee.
+  //
+  // Pure + DOM-free so it is unit-testable headlessly (see
+  // builder-tests/emulator-watchdog.mjs).  `tick()` takes how long the last
+  // batch of frames took and how many frames it actually rendered, and
+  // returns null (healthy) or { reason } once a threshold is breached.
+  //
+  // Thresholds are deliberately conservative — a false "your game stopped"
+  // on a working game is worse than a freeze, and these run on locked-down
+  // school Chromebooks where a GC pause or a background tab can spike one
+  // tick. Only a *sustained* streak trips it.
+  // --------------------------------------------------------------------
+  var WATCHDOG_DEFAULTS = {
+    slowTickMs: 750,   // one tick's emulation taking this long is pathological…
+    slowStreak: 8,     // …and it must do so this many ticks running (~6 s).
+    stallTicks: 120,   // ticks yielding zero frames before we call it stalled.
+  };
+  function createFrameWatchdog(cfg) {
+    cfg = cfg || {};
+    var slowTickMs = cfg.slowTickMs > 0 ? cfg.slowTickMs : WATCHDOG_DEFAULTS.slowTickMs;
+    var slowStreak = cfg.slowStreak > 0 ? cfg.slowStreak : WATCHDOG_DEFAULTS.slowStreak;
+    var stallTicks = cfg.stallTicks > 0 ? cfg.stallTicks : WATCHDOG_DEFAULTS.stallTicks;
+    var slow = 0, stalled = 0, tripped = false;
+    return {
+      tick: function (durationMs, framesRendered) {
+        // Once tripped, stay tripped until reset() — the caller has already
+        // torn the loop down, so further ticks are noise.
+        if (tripped) return null;
+        if (framesRendered > 0) stalled = 0; else stalled++;
+        if (durationMs >= slowTickMs) slow++; else slow = 0;
+        if (stalled >= stallTicks) { tripped = true; return { reason: 'stalled' }; }
+        if (slow >= slowStreak)    { tripped = true; return { reason: 'slow' }; }
+        return null;
+      },
+      reset: function () { slow = 0; stalled = 0; tripped = false; },
+    };
+  }
+
+  // Pupil-facing wording for each failure mode.  Plain language, no jargon,
+  // and it never blames the pupil — several of these are our bugs.
+  var CRASH_MESSAGES = {
+    crash:   'The game stopped because of an error. Your work is safe — nothing has been lost.',
+    stalled: 'The game stopped responding. Your work is safe — nothing has been lost.',
+    slow:    'The game is running far too slowly to play, so it has been stopped. Your work is safe.',
+    load:    'This game could not be started. Try building it again — your work is safe.',
+  };
+
+  // --------------------------------------------------------------------
   // Open the dialog, load ROM, run.  Returns a Promise that resolves
   // when the dialog closes, so pages can sequence things if they want.
   // --------------------------------------------------------------------
@@ -210,9 +301,21 @@
     const ac = ensureAudioContext();
     const nesSampleRate = ac ? ac.sampleRate : 44100; // deterministic default if no audio
 
+    // Counts frames jsnes has actually painted.  The watchdog compares it
+    // across a tick to tell "emulating slowly" from "not emulating at all".
+    let framesRendered = 0;
+
+    // Set once the frame loop has been torn down by a failure.  The audio
+    // callback checks it: with nothing writing the ring buffer any more, a
+    // still-connected ScriptProcessor would keep replaying the last ~93 ms
+    // of samples in a loop — a drone under the crash banner.  Declared up
+    // here because onaudioprocess closes over it below.
+    let emulationHalted = false;
+
     const nes = new jsnes.NES({
       sampleRate: nesSampleRate,
       onFrame(buf) {
+        framesRendered++;
         for (let i = 0; i < buf.length; i++) frame[i] = 0xff000000 | buf[i];
         ctx.putImageData(img, 0, 0);
       },
@@ -224,7 +327,18 @@
     });
     let romStr = '';
     for (let i = 0; i < rom.length; i++) romStr += String.fromCharCode(rom[i]);
-    nes.loadROM(romStr);
+    // A malformed / truncated ROM makes loadROM throw.  Before item #37 that
+    // rejected open() before showModal() ever ran, so the pupil clicked Play
+    // and *nothing happened at all* — no dialog, no message. Now we open the
+    // dialog anyway and say so; `romLoaded` keeps the frame loop from starting
+    // on a NES that has no cartridge in it.
+    let romLoaded = true;
+    try {
+      nes.loadROM(romStr);
+    } catch (err) {
+      romLoaded = false;
+      try { console.error('[emulator] loadROM failed', err); } catch (_) {}
+    }
 
     let scriptNode = null;
     if (ac) {
@@ -238,7 +352,7 @@
       scriptNode.onaudioprocess = (e) => {
         const out0 = e.outputBuffer.getChannelData(0);
         const out1 = e.outputBuffer.getChannelData(1);
-        if (audioMuted) {
+        if (audioMuted || emulationHalted) {
           // Drain the ring buffer even when muted so the producer
           // doesn't keep overwriting itself + producing audible
           // glitches when un-muted.
@@ -321,27 +435,103 @@
     const FRAME_MS = 1000 / 60;   // NES NTSC: 60.0988 Hz; close enough.
     const CATCHUP_CAP = 4;
     let lastTick = performance.now();
-    const intervalId = setInterval(() => {
-      const now = performance.now();
-      let elapsed = now - lastTick;
-      // Tab-resume: cap so we don't churn through dozens of frames
-      // in one go (which would block the main thread for hundreds
-      // of ms and cause an audible lurch on its own).
-      if (elapsed > CATCHUP_CAP * FRAME_MS) {
-        elapsed = FRAME_MS;
-        lastTick = now - FRAME_MS;
-      }
-      let frames = Math.max(1, Math.floor(elapsed / FRAME_MS));
-      if (frames > CATCHUP_CAP) frames = CATCHUP_CAP;
-      for (let i = 0; i < frames; i++) nes.frame();
-      lastTick += frames * FRAME_MS;
-    }, FRAME_MS);
+
+    // --- item #37: stoppable loop + crash banner ---------------------
+    // The loop is restartable (the banner's retry button reboots the ROM),
+    // so the interval handle is mutable and torn down through stopLoop().
+    const watchdog = createFrameWatchdog(opts.watchdog);
+    const crashBox   = document.getElementById('emu-crash');
+    const crashText  = document.getElementById('emu-crash-text');
+    const crashRetry = document.getElementById('emu-crash-retry');
+    let loopId = null;
+
+    function stopLoop() {
+      if (loopId !== null) { clearInterval(loopId); loopId = null; }
+    }
+
+    function showCrash(reason) {
+      if (!crashBox) return;
+      if (crashText) crashText.textContent = CRASH_MESSAGES[reason] || CRASH_MESSAGES.crash;
+      crashBox.hidden = false;
+      // The ROM can't be rebooted if it never loaded — only a fresh build can
+      // fix that, so don't offer a retry that is certain to fail.
+      if (crashRetry) crashRetry.hidden = (reason === 'load');
+    }
+
+    function hideCrash() {
+      if (crashBox) crashBox.hidden = true;
+    }
+
+    // Single exit path for every failure mode: kill the loop first (so a
+    // repeating fault can't keep firing), then tell the pupil.
+    function onEmulationFailure(reason, err) {
+      stopLoop();
+      emulationHalted = true;   // silence the now-unfed audio ring buffer
+      if (err) { try { console.error('[emulator] ' + reason, err); } catch (_) {} }
+      showCrash(reason);
+    }
+
+    function startLoop() {
+      stopLoop();
+      emulationHalted = false;
+      watchdog.reset();
+      lastTick = performance.now();
+      loopId = setInterval(() => {
+        const now = performance.now();
+        let elapsed = now - lastTick;
+        // Tab-resume: cap so we don't churn through dozens of frames
+        // in one go (which would block the main thread for hundreds
+        // of ms and cause an audible lurch on its own).
+        if (elapsed > CATCHUP_CAP * FRAME_MS) {
+          elapsed = FRAME_MS;
+          lastTick = now - FRAME_MS;
+        }
+        let frames = Math.max(1, Math.floor(elapsed / FRAME_MS));
+        if (frames > CATCHUP_CAP) frames = CATCHUP_CAP;
+        const framesBefore = framesRendered;
+        const emuStart = performance.now();
+        try {
+          for (let i = 0; i < frames; i++) nes.frame();
+        } catch (err) {
+          // Without this the interval survives the throw and re-throws every
+          // tick forever, which is exactly what "it froze for no reason"
+          // looked like from the pupil's side.
+          onEmulationFailure('crash', err);
+          return;
+        }
+        lastTick += frames * FRAME_MS;
+        const verdict = watchdog.tick(performance.now() - emuStart,
+                                      framesRendered - framesBefore);
+        if (verdict) onEmulationFailure(verdict.reason, null);
+      }, FRAME_MS);
+    }
+
+    if (crashRetry) {
+      crashRetry.onclick = () => {
+        hideCrash();
+        try {
+          nes.reloadROM();          // jsnes: reboot the cart already loaded
+        } catch (err) {
+          onEmulationFailure('crash', err);
+          return;
+        }
+        startLoop();
+      };
+    }
+
+    // Start emulating — unless the cartridge never loaded, in which case the
+    // dialog opens showing only the banner.
+    hideCrash();
+    if (romLoaded) startLoop();
+    else onEmulationFailure('load', null);
 
     dlg.showModal();
 
     return new Promise(resolve => {
       const close = () => {
-        if (intervalId) clearInterval(intervalId);
+        stopLoop();
+        hideCrash();
+        if (crashRetry) crashRetry.onclick = null;
         window.removeEventListener('keydown', kd);
         window.removeEventListener('keyup',   ku);
         if (scriptNode) {
@@ -487,5 +677,9 @@
     stepPreviewFrames: stepPreviewFrames,
     contentBBox: contentBBox,
     PREVIEW_FRAMES: PREVIEW_FRAMES,
+    // Exported for the headless watchdog test (builder-tests/emulator-watchdog.mjs).
+    createFrameWatchdog: createFrameWatchdog,
+    WATCHDOG_DEFAULTS: WATCHDOG_DEFAULTS,
+    CRASH_MESSAGES: CRASH_MESSAGES,
   };
 })();
