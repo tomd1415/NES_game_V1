@@ -21,6 +21,44 @@ deferred.
 
 ---
 
+## Engine v76 + emulator watchdog — item #37 hardening — 2026-07-26
+
+Repro-independent hardening for **#37** ("the game keeps crashing" / "the
+emulator froze for no reason"). No pupil repro had ever been captured, so this
+went after the failure modes that are *silent by construction* — the ones that
+would never produce a clean bug report.
+
+- **Emulator watchdog + crash banner (browser only, no engine change).** The
+  jsnes frame loop had no error handling, and an exception inside `nes.frame()`
+  does **not** stop a `setInterval` — so a fault re-threw 60×/second into a
+  console the pupil never sees while the game sat frozen. Now: try/catch around
+  the frame batch, a pure frame watchdog for the two silent modes (`stalled` —
+  ticks firing but no frames painted; `slow` — emulation so far behind the page
+  is unusable), and a plain-language banner with a retry that reboots the cart.
+  `loadROM` is guarded too: a malformed ROM used to reject before `showModal()`,
+  so Play did nothing at all. Audio is silenced on failure (otherwise the
+  unfed ring buffer drones the last ~93 ms under the banner). Thresholds are
+  deliberately conservative — a false "your game stopped" is worse than a
+  freeze on a school Chromebook. Guarded by `emulator-watchdog.mjs`.
+- **Player 1 OAM cursor — v76 (#37).** Two real corruption bugs, found by
+  probing `oam_idx` immediately after the player draw. (a) The ASM
+  `draw_player` — the *default* for scroll builds — tracked the OAM cursor in
+  **Y, which is 8-bit**. A 64-cell (8×8) player spans exactly 256 bytes, so the
+  closing `sty` stored 0; the player drew fine but every later writer (P2,
+  scene, spawn, HUD) then read an "empty" buffer and painted over it, and their
+  `oam_idx > 252` guards never tripped. With the background status bar on, the
+  player's last cells also wiped the sprite-0 split marker. (b) The C draw had
+  **no bound at all**, so 8×8 + that status bar wrote 4 bytes past
+  `oam_buf[255]`. Fixed by a compile-time-gated bound in the template and by the
+  server not selecting the ASM draw when the span would wrap. Also: the HUD
+  heart loops now exit all three nested loops instead of just the innermost, and
+  the Builder's OAM budget counts the split marker. Guarded by
+  `render-p1-oam-cursor.mjs`; both goldens byte-identical, `_rom-equiv`
+  deliberately re-pinned for the heart-loop change.
+- **Still open on #37:** a pupil repro, for anything these two didn't cover. A
+  genuinely infinite *synchronous* loop inside `nes.frame()` remains
+  un-preemptable from the page's thread.
+
 ## Engine v11 → v75 + Studio hardening (bring-forward summary) — 2026-07-14
 
 A high-level catch-up covering everything that shipped **since** the v10 entry

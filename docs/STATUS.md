@@ -4,13 +4,17 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-07-20
+- **Last updated:** 2026-07-26
 - **Branch:** `main`
-- **Engine version:** **v75** (per-room scene instances)
+- **Engine version:** **v76** (Player 1 OAM cursor can no longer wrap or overrun)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  verified 2026-07-20)
-- **Studio E2E:** not re-run at the time of writing (`npx playwright test`)
+  verified 2026-07-26)
+- **Studio E2E:** ⚠️ **cannot run in the dev container** — Playwright's browser
+  download is blocked by the egress allowlist and no system browser is present
+  (`npx playwright install` times out on `cdn.playwright.dev`). Run
+  `npx playwright test` somewhere with network access, or allowlist that host.
+  Last known state: not re-run since before 2026-07-20.
 
 ## How work is tracked
 
@@ -32,6 +36,7 @@ Roughly **28 of the 38 items are done.**
 
 | Version | Closed |
 | ------- | ------ |
+| v76 | #37 — two silent OAM-corruption bugs on the Player 1 draw (see below) |
 | v75 | #14 — per-room scene instances (place enemies/players per background) |
 | v74 | #7 / #27 — event sound effects on jump / pickup / hurt / win |
 | v73 | #35 — invincibility frames floored at 10 (no more instant kill) |
@@ -52,11 +57,30 @@ Roughly **28 of the 38 items are done.**
 ### Blocked on a pupil repro, not on engineering
 
 - **#34** — collision feels "1 pixel across" on Start.
-- **#37** — random emulator crash/freeze. *Partly actionable without the repro:*
-  the plan flags unguarded player/P2 OAM loops and a jsnes loop with no
-  watchdog. That hardening is worth doing regardless.
 - **#28** — NPC dialogue misbehaving; the font-tile class of bug is fixed, a
   fresh symptom capture is needed before more coding.
+- **#37** — random crash/freeze. **The repro-independent hardening is now done**
+  (2026-07-26); a pupil repro is still wanted for anything left over. What
+  shipped:
+  - *Browser* — the jsnes frame loop had no error handling, and an exception
+    inside `nes.frame()` does not stop a `setInterval`, so a fault re-threw
+    60×/second into a console no pupil sees while the game sat frozen. Now
+    try/catch + a frame watchdog (stalled / pathologically slow) + a
+    plain-language banner with a retry. `loadROM` is guarded too — a malformed
+    ROM used to make Play do nothing at all.
+  - *Engine (v76)* — two silent OAM-corruption bugs on the Player 1 draw, found
+    by probing `oam_idx` after the draw. The ASM `draw_player` tracked the
+    cursor in **Y (8-bit)**, so a 64-cell player wrapped it to 0 and everything
+    drawn afterwards painted over the player; the C path had no bound at all and
+    wrote 4 bytes past `oam_buf[255]`. Both fixed and regression-tested
+    (`render-p1-oam-cursor.mjs`), plus the HUD heart loops now exit all three
+    nested loops and the Builder counts the status bar's sprite-0 marker.
+  - *Known limitation, documented not papered over:* a genuinely infinite
+    **synchronous** loop inside `nes.frame()` still cannot be preempted from the
+    page's own thread. That would need a worker or a patched jsnes.
+  - *Follow-up if big players ever become common:* `draw_player` still uses an
+    8-bit cursor; the server routes around it rather than widening it to 16 bits,
+    which would cost every scroll build ROM bytes.
 
 ### Not started / parked
 
@@ -91,11 +115,16 @@ speculatively.
 
 ## Open questions to confirm
 
-- **Is `main` actually deployed?** #10's notes say the live site runs on a
-  separate host and needs `main` deployed plus the Python server restarted to
-  pick up the wide-scroll work. Nothing confirms that happened.
+- ~~**Is `main` actually deployed?**~~ **Resolved 2026-07-26** — confirmed by the
+  maintainer: the separate host runs current `main` with the server restarted,
+  so #10's wide-scroll work is live. Note this needs redoing for **v76**.
 - `.devcontainer/` is untracked in the working tree — decide whether it gets
   committed.
+- **Studio E2E has not been run since before 2026-07-20** and cannot run in this
+  container (see the header). The v76 engine change and the emulator watchdog are
+  both covered by the Node suite, but the watchdog's *DOM* behaviour — banner,
+  retry button, teardown on close — is only guarded at the source level. Worth an
+  E2E pass somewhere with network access.
 
 ## Standing guardrails
 

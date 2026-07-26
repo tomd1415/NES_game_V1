@@ -844,15 +844,41 @@ Root causes below were verified against the current code on 2026-06-17.
 
 37. **"My game keeps crashing" / "emulator froze for no reason."**
     (Feedback F2, F11, F13; reporters D and A.)  Generic, no repro.
-    OAM-overflow guards from the June sweep cover the scene-sprite and
-    HUD fill loops, but the player / Player-2 OAM loops
-    (`platformer.c` ≈999 and ≈1099) are **unguarded** (bounded by sprite
-    size, so only a risk with a very large player), and the in-browser
-    jsnes frame loop (`emulator.js` ≈287) has **no watchdog** — a
-    malformed/oversized ROM or a tight vblank can hang it with no
-    recovery banner.  Status: **NEEDS REPRO** + harden (bound the
-    player loops; add a jsnes try/catch + frame-time watchdog).  Plan
+    Status: **HARDENED 2026-07-26** (engine v76 + emulator watchdog) —
+    **still NEEDS REPRO** for anything the hardening didn't cover.  Plan
     §B-10.
+
+    The original §B-10 note is partly superseded; recording what was
+    actually found, since two of the three guesses were wrong:
+
+    - The **Player-2** loops were *already* guarded — BR-03 did that and
+      left **Player 1** as the only unguarded one.  (The `≈999` / `≈1099`
+      line numbers are long stale.)
+    - The real Player-1 bug was **not** "only a risk with a very large
+      player": it was reachable at the Builder's own maximum.  Probing
+      `oam_idx` right after the player draw showed the ASM `draw_player`
+      — the **default** for scroll builds — tracks the cursor in **Y,
+      8-bit**, so a 64-cell (8×8) player wrapped it to 0.  The player
+      drew correctly, then P2 / scene / spawn / HUD all read an "empty"
+      buffer and painted over it, with their own `oam_idx > 252` guards
+      never tripping.  With the background status bar on (it parks a
+      sprite-0 split marker in slot 0) the player's last cells also wiped
+      that marker, breaking the scroll split.  Separately, the **C** draw
+      path had no bound at all and wrote 4 bytes past `oam_buf[255]`.
+      Both fixed; regression test `render-p1-oam-cursor.mjs`.
+    - The **jsnes watchdog** guess was right, and the sharper version of
+      it is that an exception inside `nes.frame()` does **not** stop a
+      `setInterval` — so a fault re-threw 60×/second into a console no
+      pupil sees, while the game sat frozen.  Now try/catch + a
+      stalled/slow watchdog + a plain-language banner with retry.
+      `loadROM` is guarded too (a malformed ROM used to make Play do
+      *nothing*, with no dialog at all).  Test `emulator-watchdog.mjs`.
+
+    **Not covered — still worth a repro for:** a genuinely infinite
+    *synchronous* loop inside `nes.frame()` cannot be preempted from the
+    page's own thread by any timer; that needs a worker or a patched
+    jsnes.  If a pupil can still freeze it, that is the likely shape, so
+    the checklist below is still worth filling in.
 
 38. **A jump animation plays the walk (or another) animation in the
     air.**  (Feedback F16, reporter T.)  `_resolve_animation` in
