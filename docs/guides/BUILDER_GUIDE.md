@@ -23,13 +23,13 @@ typed fields.
 Pressing **▶ Play** triggers the following pipeline:
 
 1. The Builder's client-side **assembler**
-   ([builder-assembler.js](tools/tile_editor_web/builder-assembler.js))
+   ([builder-assembler.js](../../tools/tile_editor_web/builder-assembler.js))
    loads `builder-templates/platformer.c` and walks every enabled
    module in a deterministic order, asking each to contribute
    either a named-region substitution (`//>> id … //<<`) or an
    appendage into a named insertion slot (`//@ insert: <slot>`).
 2. The shared **Play pipeline**
-   ([play-pipeline.js](tools/tile_editor_web/play-pipeline.js))
+   ([play-pipeline.js](../../tools/tile_editor_web/play-pipeline.js))
    takes the assembler output, derives player / scene sprites
    from the Builder state, injects sensible fallbacks (a stub
    player sprite when the project has none, a default Builder
@@ -38,14 +38,14 @@ Pressing **▶ Play** triggers the following pipeline:
    whole payload to `/play`.  Every editor page calls the same
    helper, so clicking Play on Backgrounds / Sprites / Behaviour /
    Builder / Code all produce the same ROM from the same state.
-3. [playground_server.py](tools/playground_server.py) emits the
+3. [playground_server.py](../../tools/playground_server.py) emits the
    scene include files (`scene.inc`, `palettes.inc`, etc.), swaps
    `main.c` for the Builder's version, runs `cc65`, and hands
    back the ROM bytes.
 4. One of three things happens depending on the pupil's chosen
    run mode:
    - **In browser** — the shared
-     [emulator.js](tools/tile_editor_web/emulator.js) opens a
+     [emulator.js](../../tools/tile_editor_web/emulator.js) opens a
      `<dialog>` hosting jsnes and runs the ROM in-page.  Same
      dialog + keyboard mapping on every page.
    - **Download** — the `⬇ ROM` button saves the `.nes` bytes
@@ -429,16 +429,16 @@ If you're adding a new module:
    and back-fill it in the `migrateBuilderFields` helpers on
    sprites.html and index.html.
 2. **Module definition** — add `modules['<id>']` to
-   [builder-modules.js](tools/tile_editor_web/builder-modules.js)
+   [builder-modules.js](../../tools/tile_editor_web/builder-modules.js)
    with `label`, `description`, `defaultConfig`, `schema` (typed
    fields) and an optional `applyToTemplate(template, node, state)`
    transform that returns a new template string.
 3. **Assembly order** — add the id to `MODULE_ORDER` in
-   [builder-assembler.js](tools/tile_editor_web/builder-assembler.js)
+   [builder-assembler.js](../../tools/tile_editor_web/builder-assembler.js)
    at the right position (earlier modules can't see later
    modules' declarations).
 4. **Validation** — add a small function to the array in
-   [builder-validators.js](tools/tile_editor_web/builder-validators.js)
+   [builder-validators.js](../../tools/tile_editor_web/builder-validators.js)
    with a clear `message` + `fix` + optional `jumpTo`.
 5. **Documentation** — add a row to §2 above + update the
    tests reference in §6 if you added a smoke suite.

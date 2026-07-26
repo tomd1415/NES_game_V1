@@ -13,7 +13,22 @@ or an individual suite:
 node tools/builder-tests/round2-dialogue.mjs
 ```
 
-## What each suite covers
+## Adding a suite
+
+`run-all.mjs` **auto-discovers** every `.mjs` file in this directory — there is
+no list to register in. Drop a file here that spawns its own server on a unique
+port and exits non-zero on failure, and it runs. (That is also why the helper
+`_rom-equiv.mjs` is named with a leading underscore: it is self-asserting and
+harmless to run, so it can stay in the sweep.)
+
+## What some suites cover
+
+> The tables below are a **selective guide, not an index.** There are ~113
+> suites and ~29 are described here; the newer ones (engine v50+, the Studio
+> era) mostly are not. Auto-discovery means an undocumented suite still runs,
+> so treat a gap here as missing prose, never as missing coverage. To see the
+> real list: `ls tools/builder-tests/*.mjs`, or read the header comment of any
+> suite — each one opens with what it guards and why.
 
 | File                     | Scope                                                                 |
 | ------------------------ | --------------------------------------------------------------------- |

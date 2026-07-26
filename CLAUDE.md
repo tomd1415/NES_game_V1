@@ -2,9 +2,10 @@
 
 A NES game-maker for schools: a browser editor (`tools/tile_editor_web/`) +
 a Python build server (`tools/playground_server.py`) that runs **cc65** to
-produce real `.nes` ROMs. Two front-ends exist today: the original seven
-pages (default) and the new unified **Studio** (`studio.html`), which shipped
-via the `redesign/ui-ux` → `main` merge.
+produce real `.nes` ROMs. Two front-ends exist today: the unified **Studio**
+(`studio.html`) is the **primary** one and where work happens; the original
+seven pages are still served but are critical-fix-only. Build for the Studio
+unless a change is specifically about keeping the legacy pages alive.
 
 ## ⚠️ The NES engine is VERSIONED — read before changing ROM output
 

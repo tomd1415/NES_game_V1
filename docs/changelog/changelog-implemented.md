@@ -18,6 +18,16 @@ deferred.
 > `docs/README.md` if you click an old link and hit a 404 — the
 > file you wanted is in `docs/guides/`, `docs/plans/archive/`, or
 > `docs/feedback/`.
+>
+> **What *was* rewritten (2026-07-26).**  That policy covers the
+> *moved docs* only.  Links to **source files** (`platformer.c`,
+> `playground_server.py`, `sprites.html`, …) were a separate
+> problem: they were written repo-root-relative from a file that
+> lives in `docs/changelog/`, so they 404'd from day one and never
+> described any historical state.  Those are now correct relative
+> paths.  The top-level `README.md` link was fixed for the same
+> reason — that file never moved.  Nothing pointing at a *relocated*
+> doc was touched.
 
 ---
 
@@ -1596,7 +1606,7 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
   / Ctrl-Space / Ctrl-S shortcuts.
 
 - **6.5 Build timestamp + safe rebuild task.** `run_play` in
-  [tools/playground_server.py](tools/playground_server.py) now
+  [tools/playground_server.py](../../tools/playground_server.py) now
   returns `built_iso`, `built_epoch` and `build_time_ms` with every
   ROM. The Sprites-page status banner and the Code-page build
   summary display the build time (e.g. "built 14:02:37 · 1120 ms"),
@@ -1614,7 +1624,7 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
 - **7.1 Extended sprite roles.** Five new role options —
   `tool`, `powerup`, `pickup`, `projectile`, `decoration` — joined
   the existing `player` / `npc` / `enemy` / `item` / `other` set in
-  [tools/tile_editor_web/sprites.html](tools/tile_editor_web/sprites.html)
+  [tools/tile_editor_web/sprites.html](../../tools/tile_editor_web/sprites.html)
   (both `ROLE_COLOURS` / `ROLE_LABELS` maps, the filter `<select>`,
   the per-sprite role `<select>`, and the state migrator). Colour
   coding now drives ten distinct hues in the scene-sprite list.
@@ -1623,13 +1633,13 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
   `ROLE_OTHER 9` into `scene.inc` and `.define ROLE_*` into
   `scene.asminc`, and appends an `ss_role[]` byte table so snippets
   can filter by role. The zero-sprite stub and the
-  [code.html](tools/tile_editor_web/code.html) `HINT_SYMBOLS`
+  [code.html](../../tools/tile_editor_web/code.html) `HINT_SYMBOLS`
   autocomplete list both pick up the new identifiers.
 - **7.2 Enemy walker + chaser snippets.** New
-  [snippets/enemy-walker.c](snippets/enemy-walker.c) paces every
+  [snippets/enemy-walker.c](../../snippets/enemy-walker.c) paces every
   ROLE_ENEMY scene sprite left-right (with per-sprite direction in
   a static `enemy_dir[16]` ring) and flips at the screen edge.
-  [snippets/enemy-chaser.c](snippets/enemy-chaser.c) nudges each
+  [snippets/enemy-chaser.c](../../snippets/enemy-chaser.c) nudges each
   ROLE_ENEMY sprite one pixel towards `(px, py)` per frame. For
   these to work, `playground_server.build_scene_inc` now emits
   `ss_x` / `ss_y` as mutable `static unsigned char` arrays (all
@@ -1638,21 +1648,21 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
   snippets can freely write to the arrays and existing read-only
   snippets like `solid-obstacles` keep working.
 - **7.3 Follower snippet.**
-  [snippets/follower-npc.c](snippets/follower-npc.c) keeps the
+  [snippets/follower-npc.c](../../snippets/follower-npc.c) keeps the
   last 32 `(px, py)` samples in a static ring buffer and snaps the
   first ROLE_NPC sprite to the tail entry. Pupils tweak
   `#define FOLLOW_LAG 24` for a closer or more distant trail.
   `trail_primed` guards the first `FOLLOW_LAG` frames so the
   follower doesn't teleport through garbage.
 - **7.4 NPC dialogue snippet + `draw_text` helper.**
-  [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+  [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c)
   now defines `draw_text(row, col, text)` and
   `clear_text_row(row, col, width)`. Each wraps its PPU writes in
   its own `waitvsync()` + `PPU_MASK = 0` window, so they are safe
   to call from the `magic_button` region (which runs before the
   main vblank). The helpers are exposed to autocomplete via
   `HINT_SYMBOLS`.
-  [snippets/npc-dialogue.c](snippets/npc-dialogue.c) detects when
+  [snippets/npc-dialogue.c](../../snippets/npc-dialogue.c) detects when
   the player overlaps the first ROLE_NPC scene sprite, and on a B
   edge toggles the dialogue text on or off. The string is a
   zero-terminated array of CHR tile indices exposed at the top of
@@ -1694,7 +1704,7 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
   matches the clipped output rect. No keyboard shortcut — toolbar
   only, to keep the key surface minimal.
   All changes in
-  [sprites.html](tools/tile_editor_web/sprites.html); Backgrounds page
+  [sprites.html](../../tools/tile_editor_web/sprites.html); Backgrounds page
   untouched. Session-only state — no schema changes.
 
 ### Sprint 8 — 2026-04-20 palette UX + drawing tools
@@ -1702,10 +1712,10 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
 - **8.2 Palette editor refactor.** Both pages now share one palette
   idiom: an **active-palette editor** with the NES master grid inline,
   and an **overview list** showing every palette with a radio selector.
-  On [index.html](tools/tile_editor_web/index.html) the editor has a
+  On [index.html](../../tools/tile_editor_web/index.html) the editor has a
   BG / Sprite kind toggle + `P0..P3` buttons and the overview shows
   eight rows (BG0–BG3, SP0–SP3). On
-  [sprites.html](tools/tile_editor_web/sprites.html) the editor is
+  [sprites.html](../../tools/tile_editor_web/sprites.html) the editor is
   locked to the sprite kind (BG palettes live in a collapsible
   read-only ref) and the overview shows the four sprite palettes.
   A single `assignColourToSlot(kind, palIdx, slot, nesIdx)` helper is
@@ -1843,7 +1853,7 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
 ### Sprint 11 S-1 slice 1 — 2026-04-21 full-world nametable data
 
 - **Full-world nametable emitter.** New `build_bg_world_h()` +
-  `build_bg_world_c()` in [playground_server.py](tools/playground_server.py)
+  `build_bg_world_c()` in [playground_server.py](../../tools/playground_server.py)
   write `src/bg_world.h` and `src/bg_world.c` alongside the existing
   `scene.inc` / `collision.h` / `behaviour.c`.  Covers the full
   `SCREEN_COLS × screens_x` by `SCREEN_ROWS × screens_y` painted
@@ -1853,8 +1863,8 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
   world so the scroll core can copy one attribute column per 16
   px of travel.
 - **Committed 1×1 stubs** at
-  [steps/Step_Playground/src/bg_world.h](steps/Step_Playground/src/bg_world.h)
-  and [bg_world.c](steps/Step_Playground/src/bg_world.c) so a fresh
+  [steps/Step_Playground/src/bg_world.h](../../steps/Step_Playground/src/bg_world.h)
+  and [bg_world.c](../../steps/Step_Playground/src/bg_world.c) so a fresh
   `make -C steps/Step_Playground` works from a clean checkout
   before the server has ever run — same pattern as the Sprint 10
   `collision.h` / `behaviour.c` stubs.
@@ -1872,8 +1882,8 @@ status, and the deferred §T3.1/§T3.2 scroll-streamer work:
 ### Sprint 11 S-1 slice 2 — 2026-04-21 scroll core API
 
 - **New engine files** at
-  [steps/Step_Playground/src/scroll.h](steps/Step_Playground/src/scroll.h)
-  and [scroll.c](steps/Step_Playground/src/scroll.c).  Committed as
+  [steps/Step_Playground/src/scroll.h](../../steps/Step_Playground/src/scroll.h)
+  and [scroll.c](../../steps/Step_Playground/src/scroll.c).  Committed as
   hand-written engine sources (copied into builds via the existing
   `shutil.copytree(STEP_DIR, ...)` path, same as `graphics.s`), so
   no server-side emitter is needed.
@@ -1968,14 +1978,14 @@ buildable after each.
   code linked), with a byte shuffle in the RODATA fill area from
   the new objects.  Plan explicitly allows this.
 - **One-shot nametable load.**  New
-  [load_world_bg()](steps/Step_Playground/src/scroll.c) copies up
+  [load_world_bg()](../../steps/Step_Playground/src/scroll.c) copies up
   to two screens per scrolling axis from `bg_world_tiles[]` +
   `bg_world_attrs[]` into `$2000` / `$2400` / `$2800` / `$2C00`.
   Replaces the `graphics.s` `load_background()` call under
   `SCROLL_BUILD`; the 1x1 path still calls the asm routine, so the
   committed `level.nam` path is untouched.
 - **Column / row streaming.**  New
-  [scroll_stream()](steps/Step_Playground/src/scroll.c) runs in
+  [scroll_stream()](../../steps/Step_Playground/src/scroll.c) runs in
   VBlank.  When `cam_x >> 3` changes it writes a 30-tile column
   into the off-screen nametable; when `cam_y >> 3` changes it
   writes a 32-tile row.  Bit 5 of the target column / row picks
@@ -2006,7 +2016,7 @@ buildable after each.
 
 **Known limitations (slice 3d / follow-ups).**
 
-- **iNES mirror byte** in [cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg)
+- **iNES mirror byte** in [cfg/nes.cfg](../../steps/Step_Playground/cfg/nes.cfg)
   is hard-coded to `NES_MIRRORING = 1` (V-mirror, good for
   H-scroll).  Pure-V-scroll worlds will show mirror-seam artefacts
   until the server picks cfg based on which axis scrolls.
@@ -2036,7 +2046,7 @@ at [feedback-plan.md](feedback-plan.md).
   `<details class="feedback-block">` just above the dialog's
   *Close / Got it* row.  Closed by default; expands in place.
 - **Shared module.**  New
-  [feedback.js](tools/tile_editor_web/feedback.js) (~200 lines)
+  [feedback.js](../../tools/tile_editor_web/feedback.js) (~200 lines)
   builds a three-radio + textarea + optional-name form, shows a
   live `n / 500` character count, disables *Send* until a category
   is picked and the message is non-empty, POSTs JSON to
@@ -2045,7 +2055,7 @@ at [feedback-plan.md](feedback-plan.md).
   Styles are injected from the module itself so the four HTML
   files stay clean.
 - **Server endpoint.**  `POST /feedback` handled in
-  [playground_server.py](tools/playground_server.py) alongside the
+  [playground_server.py](../../tools/playground_server.py) alongside the
   existing `/play` branch.  Validates category ∈ `{feature,
   broken, general}`, message 1-500 chars, name / project ≤ 80,
   body ≤ 4 kB; appends a single JSONL line to
@@ -2313,12 +2323,12 @@ First slice of Phase A — the infrastructure and one working module
   page nav of every editor page.  Toolbar mirrors the other pages
   (File ▾ / Edit / Run groups, save-status dot, Play + ? in Run).
 - **Three client-side JS modules, no Python changes:**
-  - [tools/tile_editor_web/builder-assembler.js](tools/tile_editor_web/builder-assembler.js)
+  - [tools/tile_editor_web/builder-assembler.js](../../tools/tile_editor_web/builder-assembler.js)
     — pure `assemble(state, templateText)` function with
     `replaceRegion()` (rewrites the body between `//>> id: … //<<`
     markers), `appendToSlot()` (for later insertion points),
     `stripSlotMarkers()`, and `findSpriteByRole()` helpers.
-  - [tools/tile_editor_web/builder-modules.js](tools/tile_editor_web/builder-modules.js)
+  - [tools/tile_editor_web/builder-modules.js](../../tools/tile_editor_web/builder-modules.js)
     — module catalogue keyed by dotted id (`game`, `players`,
     `players.player1`).  Each entry carries `label`, `description`,
     `defaultConfig`, a typed `schema`, and an optional
@@ -2326,11 +2336,11 @@ First slice of Phase A — the infrastructure and one working module
     Chunk 1 ships `game` (type picker — platformer only today,
     topdown disabled with a tooltip) and `players.player1`
     (startX, startY, walkSpeed, jumpHeight, maxHp).
-  - [tools/tile_editor_web/builder-validators.js](tools/tile_editor_web/builder-validators.js)
+  - [tools/tile_editor_web/builder-validators.js](../../tools/tile_editor_web/builder-validators.js)
     — an array of small `(state) -> problem | null` functions.
     Chunk 1 ships two: **no-player-role** (error, blocks Play) and
     **no-walk-animation** (warn only — game still runs without).
-- **Template loaded via HTTP.**  [tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+- **Template loaded via HTTP.**  [tools/tile_editor_web/builder-templates/platformer.c](../../tools/tile_editor_web/builder-templates/platformer.c)
   is a verbatim copy of `steps/Step_Playground/src/main.c` — the
   Builder page fetches it on init, runs it through the assembler
   on every state change, shows the result in the Preview pane.
@@ -2426,7 +2436,7 @@ the `sceneSprites` wiring that places role-tagged sprites into the
 scene automatically.
 
 - **Three insertion slots** added to
-  [builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c):
+  [builder-templates/platformer.c](../../tools/tile_editor_web/builder-templates/platformer.c):
   `//@ insert: declarations` (module-scope variables, just before
   `void main()`), `//@ insert: init` (one-time startup code, right
   before the `while (1)`), and `//@ insert: per_frame` (per-frame
@@ -2438,7 +2448,7 @@ scene automatically.
   a loop into `per_frame` that paces every `ROLE_ENEMY` sprite
   left/right at the chosen speed (1–4 px/frame), using a
   builder-local `bw_enemy_dir[16]` direction table.  The emitted
-  code mirrors the existing [snippets/enemy-walker.c](snippets/enemy-walker.c)
+  code mirrors the existing [snippets/enemy-walker.c](../../snippets/enemy-walker.c)
   so anyone who knows the snippet library will recognise the
   pattern.  Variable names are `bw_*`-prefixed to avoid clashing
   with pupil code if they later eject to the Code page.
@@ -2539,7 +2549,7 @@ the `//@ insert:` slots added in chunk 2.
 - **`enemies.chaser` module** (disabled by default).  Ticking it
   emits a per-frame loop that nudges every `ROLE_ENEMY` sprite one
   pixel at a time (configurable 1–3 px/frame) toward the player's
-  `(px, py)`.  Same pattern as [snippets/enemy-chaser.c](snippets/enemy-chaser.c).
+  `(px, py)`.  Same pattern as [snippets/enemy-chaser.c](../../snippets/enemy-chaser.c).
 - **`pickups` module** (disabled by default).  Sprites tagged
   `ROLE_PICKUP` on the Sprites page disappear when the player
   touches them (AABB overlap in the emitted code); a `bw_pickup_count`
@@ -3611,7 +3621,7 @@ pressing B to open an NPC dialog box.
 
 The `/tmp/builder-*-smoke.mjs` files that accumulated during
 Phase A / B / B+ moved into a proper home at
-[tools/builder-tests/](tools/builder-tests/).  They survive
+[tools/builder-tests/](../../tools/builder-tests).  They survive
 sessions now.  New files:
 
 - `tools/builder-tests/run-all.mjs` — single entry point.
@@ -3639,7 +3649,7 @@ byte-identical invariant + 8 smoke suites.
   their BG tile set — `A = 0x41`, `Z = 0x5A`, `0..9 = 0x30..0x39`),
   the tagged-animation `(role, style)` matrix, and the
   regression-test protocol.
-- **[README.md](README.md)** — new §"Building a whole game
+- **[README.md](../../README.md)** — new §"Building a whole game
   without typing C (Builder page)" with a short description +
   link to BUILDER_GUIDE.md, including the P2 keyboard cluster.
 - **[PUPIL_GUIDE.md](PUPIL_GUIDE.md)** — new §"Building a whole
@@ -3858,14 +3868,14 @@ features and was still hanging around:
   confirmed — so it was cut entirely:
   - `modules['enemies']`, `modules['enemies.walker']`,
     `modules['enemies.chaser']` definitions removed from
-    [builder-modules.js](tools/tile_editor_web/builder-modules.js).
+    [builder-modules.js](../../tools/tile_editor_web/builder-modules.js).
   - `'enemies'` dropped from `MODULE_ORDER` in
-    [builder-assembler.js](tools/tile_editor_web/builder-assembler.js).
+    [builder-assembler.js](../../tools/tile_editor_web/builder-assembler.js).
   - The `enemies:` entry (with its walker/chaser submodules)
     removed from the default state in `BuilderDefaults()`.
   - Validators V3 (`walker-no-enemies`) and V6
     (`walker-and-chaser`) deleted from
-    [builder-validators.js](tools/tile_editor_web/builder-validators.js).
+    [builder-validators.js](../../tools/tile_editor_web/builder-validators.js).
   - `sceneHasInstances()` helper removed — its only callers
     were the deleted modules.
   - BUILDER_GUIDE.md §2's "enemies.walker / enemies.chaser"
@@ -3882,7 +3892,7 @@ features and was still hanging around:
   nametable cells — which visually looked right in the editor
   but showed through a BG palette at runtime (nametable cells
   can only reference BG palettes).  Three edits fix this on
-  [index.html](tools/tile_editor_web/index.html):
+  [index.html](../../tools/tile_editor_web/index.html):
   - Palette-kind toggle: Sprite button removed; only BG
     remains.
   - "All palettes" overview: `groups` array trimmed to the BG
@@ -3911,7 +3921,7 @@ even a brand-new empty project plays.  Also adds a Download-ROM
 button and a browser-vs-local-fceux selector everywhere.
 
 **New shared module —
-[play-pipeline.js](tools/tile_editor_web/play-pipeline.js).**
+[play-pipeline.js](../../tools/tile_editor_web/play-pipeline.js).**
 Single source of truth for the Play flow.  Public surface:
 
 - `PlayPipeline.capabilities()` — cached probe of `/capabilities`
@@ -3962,7 +3972,7 @@ produce a ROM now shows a `<select>` labelled "In browser" /
 the Local option greys out with an explanatory label.
 
 **Tests — new
-[tools/builder-tests/shared-play.mjs](tools/builder-tests/shared-play.mjs):**
+[tools/builder-tests/shared-play.mjs](../../tools/builder-tests/shared-play.mjs):**
 
 - P1: empty state (no sprites, no Builder tree) → payload has a
   stub player at idx 0, empty sceneSprites, non-trivial
@@ -3995,8 +4005,8 @@ floor into the sky.  Root cause: the on-ladder branch decremented
 climbing into.
 
 Fix in both
-[tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
-**and** [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+[tools/tile_editor_web/builder-templates/platformer.c](../../tools/tile_editor_web/builder-templates/platformer.c)
+**and** [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c)
 (symmetric so the byte-identical-baseline invariant still holds):
 the climb-up / climb-down blocks now probe the target tile row
 the same way the gravity loop probes `foot_row`.  The step is
@@ -4031,7 +4041,7 @@ as a giant bar.  On top of that, the first column was `1.4fr`
 with only a 24×24 thumbnail inside, leaving a visible gap to
 the left of every row.
 
-Fix in [builder.html](tools/tile_editor_web/builder.html):
+Fix in [builder.html](../../tools/tile_editor_web/builder.html):
 
 - Grid template now has exactly seven columns, one per child:
   `28px  minmax(0,1fr)  auto  64px  64px  auto  28px`.  Thumb
@@ -4065,7 +4075,7 @@ changed since before the migration — I just wired up the wrong
 URL).  The fetch 404'd, `caps.fceux` was always falsy, and every
 page disabled the Local option.
 
-Fix in [play-pipeline.js](tools/tile_editor_web/play-pipeline.js):
+Fix in [play-pipeline.js](../../tools/tile_editor_web/play-pipeline.js):
 probe `/health` instead.  Live confirmation on this machine:
 `curl /health` returns `{ok: true, fceux: true, modes:
 ["browser","native"]}`; the mode-selector dropdown on every
@@ -4079,7 +4089,7 @@ Download-ROM button as they had after Batch A.
 
 Extracted the Builder's embedded jsnes dialog +
 `openEmulator()` + `ensureJsnes()` into a new shared module
-[emulator.js](tools/tile_editor_web/emulator.js), exposing
+[emulator.js](../../tools/tile_editor_web/emulator.js), exposing
 `window.NesEmulator.open(rom, { hasP2 })`.  The module:
 
 - Lazy-loads `jsnes.min.js` only on the first Play (zero cost
@@ -4098,19 +4108,19 @@ Extracted the Builder's embedded jsnes dialog +
 
 **Per-page wiring:**
 
-- **Builder** ([builder.html](tools/tile_editor_web/builder.html)):
+- **Builder** ([builder.html](../../tools/tile_editor_web/builder.html)):
   deleted the inline `ensureJsnes` + `openEmulator` +
   `decodeRomBase64` (≈80 lines).  `onRom` now calls
   `NesEmulator.open(rom, { hasP2 })` — same behaviour, one
   source of truth.
-- **Backgrounds** ([index.html](tools/tile_editor_web/index.html)):
+- **Backgrounds** ([index.html](../../tools/tile_editor_web/index.html)):
   added `<script src="emulator.js">`, changed Play mode labels
   from "Download ROM / Local" to "In browser / Local (fceux)",
   and replaced the download-on-play callback with
   `NesEmulator.open`.  The `⬇ ROM` button still downloads
   explicitly — pupils who want the .nes for an external
   emulator get it with one click.
-- **Behaviour** ([behaviour.html](tools/tile_editor_web/behaviour.html)):
+- **Behaviour** ([behaviour.html](../../tools/tile_editor_web/behaviour.html)):
   same treatment as Backgrounds.
 - **Sprites** + **Code** pages intentionally untouched — they
   already ship richer emulators with pause / reset / fullscreen
@@ -4129,7 +4139,7 @@ the same game I get in the browser.  The game in the browser is
 the correct one."
 
 Root cause in
-[tools/playground_server.py](tools/playground_server.py)
+[tools/playground_server.py](../../tools/playground_server.py)
 `run_play()`.  The customMainC / customMainAsm build paths
 compile in a throwaway temp directory and return `rom_bytes` —
 they deliberately do not touch the shared `STEP_DIR / "game.nes"`
@@ -4210,7 +4220,7 @@ moment the Local mode started working.
 
 1. Carve a page-aligned 256-byte region at `$0200` via a new
    `OAM` memory + segment in
-   [steps/Step_Playground/cfg/nes.cfg](steps/Step_Playground/cfg/nes.cfg).
+   [steps/Step_Playground/cfg/nes.cfg](../../steps/Step_Playground/cfg/nes.cfg).
    (The comment in the file always claimed the page was
    reserved "for ppu memory write buffer" but nothing was
    actually using it.)
@@ -4236,9 +4246,9 @@ moment the Local mode started working.
    ~1450 cycles, comfortably inside budget.
 
 Applied symmetrically to both
-[steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+[steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c)
 and
-[tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+[tools/tile_editor_web/builder-templates/platformer.c](../../tools/tile_editor_web/builder-templates/platformer.c)
 so the byte-identical-baseline invariant still holds — the
 regression test compiles the stock main.c and the Builder
 template, compares SHA-1 hashes, and they match because the
@@ -4279,7 +4289,7 @@ out the last of the ten pupil-feedback entries from
 
 **1.1 — Scroll streaming cap (defensive pre-emptive, pending
 pupil fceux verification).**  `scroll_stream()` in
-[steps/Step_Playground/src/scroll.c](steps/Step_Playground/src/scroll.c)
+[steps/Step_Playground/src/scroll.c](../../steps/Step_Playground/src/scroll.c)
 now caps itself to **one column + one row transfer per vblank**
 (the `while` loops became `if`s, with the remainder caught up
 on subsequent frames).  The previous code could stack multiple
@@ -4294,7 +4304,7 @@ required to confirm scroll flicker is gone.
 
 **1.2 — Shared help popover with page tabs + Feedback (items 3
 from the pupil-fix list).**  New module
-[tools/tile_editor_web/help.js](tools/tile_editor_web/help.js)
+[tools/tile_editor_web/help.js](../../tools/tile_editor_web/help.js)
 exposing `HelpPopover.attachPageTabs(dialog, currentPageId)` +
 `HelpPopover.maybeAutoOpen(openFn)`.  Every page's existing
 `<dialog id="help-dialog">` keeps its owned content; the helper
@@ -4361,7 +4371,7 @@ so palette edits update the picker live.
 ### Scroll-stream hotfix — 2026-04-24 follow-up
 
 The Phase 1.1 cap turned the `while` loops in
-[scroll.c](steps/Step_Playground/src/scroll.c) into `if`s, but
+[scroll.c](../../steps/Step_Playground/src/scroll.c) into `if`s, but
 kept the internal `if (col >= BG_WORLD_COLS) continue;` guards
 — which are only legal inside a real loop.  Cc65 rejects
 `continue` outside a loop.  The byte-identical-baseline
@@ -4376,7 +4386,7 @@ block ... }`.  Same behaviour, no `continue`, compiles cleanly
 for scrolling and non-scrolling builds alike.
 
 New regression guard in
-[tools/builder-tests/run-all.mjs](tools/builder-tests/run-all.mjs)
+[tools/builder-tests/run-all.mjs](../../tools/builder-tests/run-all.mjs)
 greps scroll.c (with comments stripped to avoid false
 positives) for bare `continue;` statements.  Any match is an
 error — scroll.c has no legitimate loops that would need one.
@@ -4410,9 +4420,9 @@ That's risky in three ways:
    guarantees the refresh happens early.
 
 Reordered both
-[steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+[steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c)
 and
-[tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+[tools/tile_editor_web/builder-templates/platformer.c](../../tools/tile_editor_web/builder-templates/platformer.c)
 so the vblank sequence is now:
 
 ```c
@@ -4473,8 +4483,8 @@ makes their first pick.
 already wired (2026-04-13 work) so no change needed there.
 
 Changes land on
-[index.html](tools/tile_editor_web/index.html) and
-[sprites.html](tools/tile_editor_web/sprites.html) symmetrically
+[index.html](../../tools/tile_editor_web/index.html) and
+[sprites.html](../../tools/tile_editor_web/sprites.html) symmetrically
 — the master-grid and palette-slot markup is near-identical
 between the two pages so the helpers are duplicated (kept inline
 for page-local simplicity; not worth extracting to a shared
@@ -4490,7 +4500,7 @@ page — frame thumbnails, a **+ Add frame** button, and a
 below.
 
 Markup + render function (`renderAnimStrip`) added to
-[sprites.html](tools/tile_editor_web/sprites.html).  Hooks into
+[sprites.html](../../tools/tile_editor_web/sprites.html).  Hooks into
 the existing `renderAnimations` fan-out so the strip stays in
 sync whenever the animation list, selected animation, or frame
 order changes.  Clicking a thumbnail jumps the preview to that
@@ -4551,7 +4561,7 @@ This session closed the remaining gaps from the plan spec:
   filled-variant choice.
 
 All tool changes are confined to
-[sprites.html](tools/tile_editor_web/sprites.html); no template
+[sprites.html](../../tools/tile_editor_web/sprites.html); no template
 or emitted-C touched, so the byte-identical baseline is
 unaffected.  `run-all.mjs` green — 15 syntax checks, 5
 invariants, ROM baseline, 9 smoke suites.
@@ -4571,7 +4581,7 @@ P2 jump animation).
 ### Sprites page polish — 2026-04-25 strip & tools
 
 Two pupil-feedback follow-ups on the Sprites page, both
-[sprites.html](tools/tile_editor_web/sprites.html)-only.
+[sprites.html](../../tools/tile_editor_web/sprites.html)-only.
 
 **Animation strip is now context-sensitive.**  The inline strip
 above the composition canvas was always visible after Phase 2.3,
@@ -4631,7 +4641,7 @@ the existing Step_Playground `main.c`, gated by a new
 `BW_GAME_STYLE` macro.
 
 - **`game` module**:
-  [tools/tile_editor_web/builder-modules.js](tools/tile_editor_web/builder-modules.js)
+  [tools/tile_editor_web/builder-modules.js](../../tools/tile_editor_web/builder-modules.js)
   re-enables the Top-down enum option, gains an `applyToTemplate`
   that emits `#define BW_GAME_STYLE 1` only when top-down is
   picked.  Platformer (default) emits nothing — keeps the
@@ -4639,9 +4649,9 @@ the existing Step_Playground `main.c`, gated by a new
   macro evaluates to 0 in cc65's preprocessor (`#if UNDEFINED
   == 0` is true).
 - **Templates**: both
-  [tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+  [tools/tile_editor_web/builder-templates/platformer.c](../../tools/tile_editor_web/builder-templates/platformer.c)
   and
-  [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c)
+  [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c)
   gained symmetric `#if BW_GAME_STYLE == 0 / == 1` blocks
   around:
   - The player's vertical-movement section (ladders + jump +
@@ -4656,7 +4666,7 @@ the existing Step_Playground `main.c`, gated by a new
     keypresses as walking too (`pad & 0x0F` instead of the
     platformer's `pad & 0x03`).
 - **Smoke suite**:
-  [tools/builder-tests/topdown.mjs](tools/builder-tests/topdown.mjs)
+  [tools/builder-tests/topdown.mjs](../../tools/builder-tests/topdown.mjs)
   with four cases (T1–T4): default state emits no
   BW_GAME_STYLE override, explicit platformer matches default,
   top-down emits exactly one `#define BW_GAME_STYLE 1`, and
@@ -4710,7 +4720,7 @@ level multi-line text from Phase 3.2.
   `text` field that's only meaningful when the matching
   sprite has `role === 'npc'`.
 - **Builder UI**:
-  [tools/tile_editor_web/builder.html](tools/tile_editor_web/builder.html)
+  [tools/tile_editor_web/builder.html](../../tools/tile_editor_web/builder.html)
   scene-instance rows now render an extra `.scene-instance-
   text` row below NPC instances with a "💬 says:" label and
   a 28-char text input.  Non-NPC instances render the row
@@ -4753,7 +4763,7 @@ the runtime swaps to those frames while P2 is airborne.
   count macro is 0 and the gated render block compiles out.
 - **Template**: new `p2_jump_frame` / `p2_jump_tick`
   globals in
-  [tools/tile_editor_web/builder-templates/platformer.c](tools/tile_editor_web/builder-templates/platformer.c)
+  [tools/tile_editor_web/builder-templates/platformer.c](../../tools/tile_editor_web/builder-templates/platformer.c)
   (gated behind `ANIM_PLAYER2_JUMP_COUNT > 0`).  The P2
   render block was a pure walk-or-static fork; it's now
   walk-OR-jump-or-static with priority **jump > walk >

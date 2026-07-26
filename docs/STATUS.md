@@ -25,12 +25,18 @@ Work is feedback-driven. The authoritative sources, in order:
    [`feedback/PUPIL_FEEDBACK.md`](feedback/PUPIL_FEEDBACK.md) is an unnumbered,
    largely superseded themed log — don't mistake it for the numbered list.)
 2. [`changelog/changelog-implemented.md`](changelog/changelog-implemented.md) —
-   its "Engine v11 → v75 bring-forward summary" is the cross-reference of which
-   engine version closed which `#n`.
+   newest section first; the "Engine v11 → v75 bring-forward summary" is the
+   bulk cross-reference of which engine version closed which `#n`, with later
+   sections above it for what shipped since.
 3. [`tools/engines/CHANGELOG.md`](../tools/engines/CHANGELOG.md) — per-version
    engine detail.
 
-Roughly **28 of the 38 items are done.**
+**About 29 of the 38 are done**, leaving ~9 genuinely open. Treat that as a
+rough tally, not a metric — the items are marked up in prose ("*Done*",
+"*FIXED 2026-07-10 (engine v63)*", …) with no machine-readable status, so the
+number is hand-maintained and drifts. **The grouping in "What is genuinely
+open" below is the authoritative part** — it says not just what is open but
+what each one is waiting on.
 
 ## Recent engine versions
 

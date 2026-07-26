@@ -63,16 +63,16 @@ floor row vanished while scrolling left.
 
 **Cause.**  cc65's optimiser was eliding the
 `PPU_CTRL = PPU_CTRL_BASE | PPU_CTRL_STRIDE_COL` write that precedes
-the 30-tile `PPU_DATA` column burst in [scroll.c](steps/Step_Playground/src/scroll.c),
+the 30-tile `PPU_DATA` column burst in [scroll.c](../../../steps/Step_Playground/src/scroll.c),
 because the next syntactic access to the same address was another
 assignment further down (`PPU_CTRL = PPU_CTRL_BASE`) — so the column
 burst ran with whatever stride `scroll_apply_ppu` had left behind
 (+1) and smeared the column across one nametable row.
 
 **Fix.**  Qualified the PPU/OAM register macros `volatile` in
-[scroll.c](steps/Step_Playground/src/scroll.c),
-[main.c](steps/Step_Playground/src/main.c), and
-[platformer.c](tools/tile_editor_web/builder-templates/platformer.c).
+[scroll.c](../../../steps/Step_Playground/src/scroll.c),
+[main.c](../../../steps/Step_Playground/src/main.c), and
+[platformer.c](../../../tools/tile_editor_web/builder-templates/platformer.c).
 Builder regression suite (10 smoke suites + byte-identical-ROM
 invariant) green after the change.  The earlier preventive measures
 (stride reset at the end of `scroll_stream`, one-transfer-per-vblank
@@ -123,13 +123,13 @@ first, tabs for every other page, a Feedback tab always present.
 lifecycle controls.  Behaviour, Builder and Code previously shipped
 a thinner subset (no **Migration backup**, no **Recover from
 snapshot**); both now appear in their menus and work via a shared
-[project-menu.js](tools/tile_editor_web/project-menu.js) module that
+[project-menu.js](../../../tools/tile_editor_web/project-menu.js) module that
 lazily injects a recovery dialog and wires the handlers without
 clashing with Backgrounds' / Sprites' existing inline wiring.
 
 **What shipped.**
 
-- New [project-menu.js](tools/tile_editor_web/project-menu.js) —
+- New [project-menu.js](../../../tools/tile_editor_web/project-menu.js) —
   exposes `ProjectMenu.wire(opts)` (idempotent — won't double-attach
   on a second call) and `ProjectMenu.openRecoveryDialog(opts)`.
   Lazily injects a `<dialog id="recovery-dialog">` if the page
@@ -140,9 +140,9 @@ clashing with Backgrounds' / Sprites' existing inline wiring.
   Storage on init.
 - HTML additions: `<button id="btn-recover">` and `<button
   id="btn-migration-download" hidden>` added to
-  [behaviour.html](tools/tile_editor_web/behaviour.html),
-  [builder.html](tools/tile_editor_web/builder.html), and
-  [code.html](tools/tile_editor_web/code.html); each page now
+  [behaviour.html](../../../tools/tile_editor_web/behaviour.html),
+  [builder.html](../../../tools/tile_editor_web/builder.html), and
+  [code.html](../../../tools/tile_editor_web/code.html); each page now
   loads `project-menu.js` after `storage.js` and calls
   `ProjectMenu.wire()` once during init.
 - Backgrounds + Sprites untouched — their inline handlers already
@@ -158,7 +158,7 @@ controls (Duplicate / Delete / Migration / Save / Open / Recover)
 that Behaviour, Builder and Code were missing.
 
 **Tests.**  New
-[project-menu.mjs](tools/builder-tests/project-menu.mjs) suite
+[project-menu.mjs](../../../tools/builder-tests/project-menu.mjs) suite
 asserts every page declares the universal buttons (with the New
 exception explicit), the three thin-menu pages load and invoke
 `project-menu.js`, the shared module wires both handlers as
@@ -395,7 +395,7 @@ needs its own focused session.  **Order by risk, safest first:**
 ### 4.1 — Accessibility pass (M) — DONE 2026-04-25
 
 **Outcome.**  Shipped a shared
-[a11y.js](tools/tile_editor_web/a11y.js) module that auto-injects
+[a11y.js](../../../tools/tile_editor_web/a11y.js) module that auto-injects
 two controls into every editor page's `<header class="app-header">`
 on load:
 
@@ -424,7 +424,7 @@ changes beyond the script tag — every page shares the exact same
 `:root` block, confirmed via diff.
 
 **Tests.**  New
-[tools/builder-tests/a11y.mjs](tools/builder-tests/a11y.mjs) smoke
+[tools/builder-tests/a11y.mjs](../../../tools/builder-tests/a11y.mjs) smoke
 suite drives a11y.js through a minimal DOM shim, asserts the public
 `A11y.apply / A11y.current` API behaves, the high-contrast `<style>`
 block injects, the controls land in `.app-header`, and a `change`
@@ -443,7 +443,7 @@ each other's work.
 **What shipped.**
 
 - **Server endpoints** in
-  [playground_server.py](tools/playground_server.py):
+  [playground_server.py](../../../tools/playground_server.py):
   `POST /gallery/publish` (validates body, slugifies title, writes
   rom.nes / preview.png / project.json / metadata.json into
   `tools/gallery/<slug>/`), `GET /gallery/list` (returns metadata
@@ -454,23 +454,23 @@ each other's work.
   rejected via a strict slug regex; payload caps at 4 MB per
   publish (1 MB ROM, 512 KB preview, the rest project state).
 - **Gallery page** at
-  [gallery.html](tools/tile_editor_web/gallery.html) — card grid
+  [gallery.html](../../../tools/tile_editor_web/gallery.html) — card grid
   (preview, title, description, pupil handle, timestamp), per-card
   ▶ Play (loads ROM into the shared `NesEmulator` dialog), ⬇ ROM,
   ⬇ Project (JSON for remix), 🗑 Remove.  Same `<header>` as the
   other pages, so `a11y.js` text-size + theme controls work here
   too.
 - **Publish button** on the Builder page
-  ([builder.html](tools/tile_editor_web/builder.html)) — opens a
+  ([builder.html](../../../tools/tile_editor_web/builder.html)) — opens a
   modal that re-uses the existing `PlayPipeline.play()` build path
   (no second build step), runs the freshly built ROM in a hidden
   jsnes instance for ~30 frames to capture the preview PNG, then
   POSTs `{ title, description, pupil_handle, project, rom_b64,
   preview_b64, source_page }` to `/gallery/publish`.
 - **Gallery nav link** added to every editor page
-  ([index](tools/tile_editor_web/index.html), [sprites](tools/tile_editor_web/sprites.html),
-  [behaviour](tools/tile_editor_web/behaviour.html), [builder](tools/tile_editor_web/builder.html),
-  [code](tools/tile_editor_web/code.html)).
+  ([index](../../../tools/tile_editor_web/index.html), [sprites](../../../tools/tile_editor_web/sprites.html),
+  [behaviour](../../../tools/tile_editor_web/behaviour.html), [builder](../../../tools/tile_editor_web/builder.html),
+  [code](../../../tools/tile_editor_web/code.html)).
 
 **Forward-compatible with future accounts (§4.6).**  Each entry's
 metadata.json reserves an `owner` slot (always `null` today) and
@@ -479,7 +479,7 @@ publish auto-fills the handle from the signed-in identity, populates
 `owner`, and `/gallery/remove` becomes teacher-gated.
 
 **Tests.**  New
-[gallery.mjs](tools/builder-tests/gallery.mjs) covers the full
+[gallery.mjs](../../../tools/builder-tests/gallery.mjs) covers the full
 round-trip: empty list → reject missing title → publish (returns
 slug) → all four files on disk → list shows the entry with handle +
 null owner → ROM bytes match → project JSON round-trips →
@@ -567,7 +567,7 @@ ROM produced by this toolchain comes back with iNES byte 6 = `0x03`
 regardless of the cfg (verified empirically before committing the
 fix).  Reaching the 4-screen bit through `cfg/nes.cfg` is therefore
 a dead end on this toolchain.  Instead,
-[playground_server.py](tools/playground_server.py) gained a tiny
+[playground_server.py](../../../tools/playground_server.py) gained a tiny
 `_patch_ines_four_screen` helper that, for builds whose state has
 any vertical-scroll background, ORs `0x08` into byte 6 of the
 returned ROM bytes after the build finishes.  Cost: one byte of
@@ -577,7 +577,7 @@ that's the right choice and it's what the byte-identical-baseline
 test pins down.
 
 **Tests.**  New
-[four-screen.mjs](tools/builder-tests/four-screen.mjs) regression
+[four-screen.mjs](../../../tools/builder-tests/four-screen.mjs) regression
 suite builds a 1×1, 2×1, 1×2 and 2×2 ROM and asserts the byte 6
 4-screen bit reflects the project's `screens_y`.  Wired into
 `run-all.mjs`; the byte-identical-baseline invariant for 1×1 still

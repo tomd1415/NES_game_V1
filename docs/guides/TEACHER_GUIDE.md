@@ -167,7 +167,7 @@ Pupils can optionally sign in (📁 menu → **Account (optional)**) to save pro
 
 ### Phase 3a — pupil-editable `main.c` (the Code page)
 
-[tools/tile_editor_web/code.html](tools/tile_editor_web/code.html) adds a third editor tab that opens the stock [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c) in a CodeMirror 5 editor. The pupil's edited source is saved to `state.customMainC` in the shared `nes_tile_editor.current.v1` localStorage record (null = "use the built-in template").
+[tools/tile_editor_web/code.html](../../tools/tile_editor_web/code.html) adds a third editor tab that opens the stock [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c) in a CodeMirror 5 editor. The pupil's edited source is saved to `state.customMainC` in the shared `nes_tile_editor.current.v1` localStorage record (null = "use the built-in template").
 
 On Play, the Code page posts `customMainC` alongside the usual scene payload. The server:
 
@@ -201,7 +201,7 @@ The Code page has two modes, toggled in its header:
 
 `//>>` requires an identifier (`[A-Za-z_][A-Za-z0-9_]*`) followed by a colon and free-text hint; `//<<` stands alone on its own line. Anything cc65 accepts between the two is fine. The C compiler treats both lines as ordinary comments so builds in Advanced mode, at the terminal, or via `make -C steps/Step_Playground` are unaffected.
 
-**Seed regions in [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c):**
+**Seed regions in [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c):**
 
 - `walk_speed` — how many pixels the player moves per frame (a module-scope variable referenced by the LEFT / RIGHT branches).
 - `player_start` — where the player spawns (`px = PLAYER_X; py = PLAYER_Y; ground_y = PLAYER_Y;`).
@@ -209,7 +209,7 @@ The Code page has two modes, toggled in its header:
 
 Add more by dropping `//>> … //<<` pairs around any block you want pupils to tweak in a given lesson.
 
-**Autocomplete.** The editor vendors `codemirror/addon/hint/show-hint` and ships a custom hint source (`nesHint` in [code.html](tools/tile_editor_web/code.html)) that offers:
+**Autocomplete.** The editor vendors `codemirror/addon/hint/show-hint` and ships a custom hint source (`nesHint` in [code.html](../../tools/tile_editor_web/code.html)) that offers:
 
 - Generated scene symbols (`PLAYER_X`, `player_tiles`, `walk_tiles`, `NUM_STATIC_SPRITES`, `palette_bytes`, the `ss_*` arrays, etc.).
 - NES MMIO macros the template defines (`PPU_CTRL`, `OAM_DATA`, `JOYPAD1`, …).
@@ -245,9 +245,9 @@ The `/*! LESSON … */` is a plain C block comment — `cc65` ignores it, `make 
 
 | File                                            | Region(s) unlocked         | Teaching goal                                             |
 |-------------------------------------------------|----------------------------|-----------------------------------------------------------|
-| [lessons/01-move-player.c](lessons/01-move-player.c)    | `player_start`             | Change three numbers to reposition the spawn.             |
-| [lessons/02-speed-and-jump.c](lessons/02-speed-and-jump.c) | `walk_speed`, `jump_height` | Tune two constants to change game feel.                   |
-| [lessons/03-magic-button.c](lessons/03-magic-button.c)  | `magic_button`             | Write a per-frame `if (pad & 0x40)` branch for the B button. |
+| [lessons/01-move-player.c](../../lessons/01-move-player.c)    | `player_start`             | Change three numbers to reposition the spawn.             |
+| [lessons/02-speed-and-jump.c](../../lessons/02-speed-and-jump.c) | `walk_speed`, `jump_height` | Tune two constants to change game feel.                   |
+| [lessons/03-magic-button.c](../../lessons/03-magic-button.c)  | `magic_button`             | Write a per-frame `if (pad & 0x40)` branch for the B button. |
 
 **Server endpoints:**
 
@@ -294,25 +294,25 @@ A sibling of the lesson library: `snippets/` at the repo root holds short blocks
 
 | File                                                                     | Fits region    | Effect                                                     |
 |--------------------------------------------------------------------------|----------------|------------------------------------------------------------|
-| [snippets/teleport-on-b.c](snippets/teleport-on-b.c)                     | `magic_button` | Pressing B warps the hero to the top-left corner.          |
-| [snippets/sprint-on-a.c](snippets/sprint-on-a.c)                         | `magic_button` | Hold A to double walking speed.                            |
-| [snippets/run-on-b.c](snippets/run-on-b.c)                               | `magic_button` | Hold B to triple walking speed.                            |
-| [snippets/wrap-screen.c](snippets/wrap-screen.c)                         | `magic_button` | Walking off either edge re-enters from the other side.     |
-| [snippets/wrap-vertical.c](snippets/wrap-vertical.c)                     | `magic_button` | Flying off the top/bottom re-enters from the other side.   |
-| [snippets/rainbow-background.c](snippets/rainbow-background.c)           | `magic_button` | Rewrites PPU $3F00 every frame for a palette strobe.       |
-| [snippets/rainbow-player.c](snippets/rainbow-player.c)                   | `magic_button` | Cycles the player's primary colour every frame.            |
-| [snippets/auto-bounce.c](snippets/auto-bounce.c)                         | `magic_button` | Re-fires a jump the instant the hero lands.                |
-| [snippets/fly-on-a.c](snippets/fly-on-a.c)                               | `magic_button` | Hold A to rise; release to fall.                           |
-| [snippets/fast-fall.c](snippets/fast-fall.c)                             | `magic_button` | Hold DOWN while airborne to slam back down.                |
-| [snippets/double-jump.c](snippets/double-jump.c)                         | `magic_button` | A second A-press mid-air gives one extra bounce.           |
-| [snippets/dash-on-b.c](snippets/dash-on-b.c)                             | `magic_button` | Tap B for a short horizontal dash in the facing direction. |
-| [snippets/high-jump.c](snippets/high-jump.c)                             | `magic_button` | Boosts every jump so it travels roughly twice as high.     |
-| [snippets/freeze-on-start.c](snippets/freeze-on-start.c)                 | `magic_button` | Hold START to pause gravity so you can walk on air.        |
-| [snippets/auto-walk-right.c](snippets/auto-walk-right.c)                 | `magic_button` | Autopilot: the player walks right without input.           |
-| [snippets/bounce-off-walls.c](snippets/bounce-off-walls.c)               | `magic_button` | Autopilot with direction flip at each screen edge.         |
-| [snippets/solid-obstacles.c](snippets/solid-obstacles.c)                 | `magic_button` | Scene sprites block horizontal movement (walls).           |
-| [snippets/stand-on-obstacles.c](snippets/stand-on-obstacles.c)           | `magic_button` | Scene sprites become platforms you can stand on.           |
-| [snippets/screen-shake-on-landing.c](snippets/screen-shake-on-landing.c) | `magic_button` | PPU scroll wobbles for 8 frames after each landing.        |
+| [snippets/teleport-on-b.c](../../snippets/teleport-on-b.c)                     | `magic_button` | Pressing B warps the hero to the top-left corner.          |
+| [snippets/sprint-on-a.c](../../snippets/sprint-on-a.c)                         | `magic_button` | Hold A to double walking speed.                            |
+| [snippets/run-on-b.c](../../snippets/run-on-b.c)                               | `magic_button` | Hold B to triple walking speed.                            |
+| [snippets/wrap-screen.c](../../snippets/wrap-screen.c)                         | `magic_button` | Walking off either edge re-enters from the other side.     |
+| [snippets/wrap-vertical.c](../../snippets/wrap-vertical.c)                     | `magic_button` | Flying off the top/bottom re-enters from the other side.   |
+| [snippets/rainbow-background.c](../../snippets/rainbow-background.c)           | `magic_button` | Rewrites PPU $3F00 every frame for a palette strobe.       |
+| [snippets/rainbow-player.c](../../snippets/rainbow-player.c)                   | `magic_button` | Cycles the player's primary colour every frame.            |
+| [snippets/auto-bounce.c](../../snippets/auto-bounce.c)                         | `magic_button` | Re-fires a jump the instant the hero lands.                |
+| [snippets/fly-on-a.c](../../snippets/fly-on-a.c)                               | `magic_button` | Hold A to rise; release to fall.                           |
+| [snippets/fast-fall.c](../../snippets/fast-fall.c)                             | `magic_button` | Hold DOWN while airborne to slam back down.                |
+| [snippets/double-jump.c](../../snippets/double-jump.c)                         | `magic_button` | A second A-press mid-air gives one extra bounce.           |
+| [snippets/dash-on-b.c](../../snippets/dash-on-b.c)                             | `magic_button` | Tap B for a short horizontal dash in the facing direction. |
+| [snippets/high-jump.c](../../snippets/high-jump.c)                             | `magic_button` | Boosts every jump so it travels roughly twice as high.     |
+| [snippets/freeze-on-start.c](../../snippets/freeze-on-start.c)                 | `magic_button` | Hold START to pause gravity so you can walk on air.        |
+| [snippets/auto-walk-right.c](../../snippets/auto-walk-right.c)                 | `magic_button` | Autopilot: the player walks right without input.           |
+| [snippets/bounce-off-walls.c](../../snippets/bounce-off-walls.c)               | `magic_button` | Autopilot with direction flip at each screen edge.         |
+| [snippets/solid-obstacles.c](../../snippets/solid-obstacles.c)                 | `magic_button` | Scene sprites block horizontal movement (walls).           |
+| [snippets/stand-on-obstacles.c](../../snippets/stand-on-obstacles.c)           | `magic_button` | Scene sprites become platforms you can stand on.           |
+| [snippets/screen-shake-on-landing.c](../../snippets/screen-shake-on-landing.c) | `magic_button` | PPU scroll wobbles for 8 frames after each landing.        |
 
 **Server endpoints:**
 
@@ -334,7 +334,7 @@ Unknown ids 404 (same id-validation as lessons: `[A-Za-z0-9][A-Za-z0-9._-]*`). T
 
 ### Phase 3e — Assembly mode (C / 6502 toggle)
 
-The Code page carries a second mode-toggle pair beside **Guided / Advanced**: **C / Asm**. Advanced pupils can flip the editor's source between [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c) (cc65) and a standalone 6502 starter at [steps/Step_Playground/src/main.s.starter](steps/Step_Playground/src/main.s.starter) (ca65). Each language keeps its own working copy inside the same shared state blob (`state.customMainC`, `state.customMainAsm`), so switching back and forth never loses work.
+The Code page carries a second mode-toggle pair beside **Guided / Advanced**: **C / Asm**. Advanced pupils can flip the editor's source between [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c) (cc65) and a standalone 6502 starter at [steps/Step_Playground/src/main.s.starter](../../steps/Step_Playground/src/main.s.starter) (ca65). Each language keeps its own working copy inside the same shared state blob (`state.customMainC`, `state.customMainAsm`), so switching back and forth never loses work.
 
 **Why a standalone asm starter (no `nes.lib`).** The starter writes its own `.segment "HEADER"` iNES bytes and its own `.segment "VECTORS"` block, and the asm build path links `main.o + graphics.o` directly with `ld65 -C cfg/nes.cfg` — no crt0, no `nes.lib`. This keeps the boot path visible end-to-end: `reset:` disables rendering, double-waits for vblank, writes palettes, calls `_load_background`, sets `PPU_CTRL`/`PPU_MASK`/scroll, then drops into `game_loop`. An empty `.segment "STARTUP"` stub silences the nes.cfg-declared segment without pulling any runtime in.
 
@@ -414,7 +414,7 @@ Response on success:
 }
 ```
 
-Browser mode decodes `rom_b64` and hands it either to the page's embedded `jsnes.NES.loadROM()` (Builder / Sprites / Code / Backgrounds / Behaviour — all now share [tools/tile_editor_web/emulator.js](tools/tile_editor_web/emulator.js)) or to a blob URL for the Download-ROM flow. Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load — [play-pipeline.js](tools/tile_editor_web/play-pipeline.js)'s `capabilities()` caches the probe for the page's lifetime.
+Browser mode decodes `rom_b64` and hands it either to the page's embedded `jsnes.NES.loadROM()` (Builder / Sprites / Code / Backgrounds / Behaviour — all now share [tools/tile_editor_web/emulator.js](../../tools/tile_editor_web/emulator.js)) or to a blob URL for the Download-ROM flow. Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load — [play-pipeline.js](../../tools/tile_editor_web/play-pipeline.js)'s `capabilities()` caches the probe for the page's lifetime.
 
 **Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, `ss_*` arrays (extra static sprites), and the animation tables **`walk_tiles` / `walk_attrs` / `WALK_FRAME_COUNT` / `WALK_FRAME_TICKS`** (and the `jump_*` equivalents). If you rename any of these symbols, update `build_scene_inc()` in the server to match.
 

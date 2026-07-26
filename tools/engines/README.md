@@ -25,7 +25,9 @@ were authored for.
 This scheme began at **v1** (baseline) with the first engine feature — per-door
 destinations — shipping as **v2**, always snapshotting v1 first so every v1 game
 keeps a working fallback. The engine is now well past that; see
-[`CHANGELOG.md`](CHANGELOG.md) for the current version (v75 at the time of writing)
-and every step in between.
+[`CHANGELOG.md`](CHANGELOG.md) (newest entry first) for what shipped in each
+version. The authoritative current number is `ENGINE_VERSION` in this directory —
+deliberately not repeated here, because a hard-coded version in prose goes stale
+the next time one ships.
 
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md).

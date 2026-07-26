@@ -1,5 +1,16 @@
 # Handoff: doc-cleanup + STATUS baseline — 2026-07-26
 
+> ✅ **CONSUMED — this handoff has been acted on. Do not pick work from it.**
+> The receiving session answered its one open thread: the user chose *all* the
+> candidates, in order. Shipped the same day — the emulator watchdog and engine
+> **v76** (both feedback #37), the Studio-first README rewrite, and the attended
+> playtests prepped (`scripts/make-playtest-roms.mjs` +
+> [`guides/PLAYTEST-CHECKLIST.md`](../guides/PLAYTEST-CHECKLIST.md)).
+> `main` is deployed and up to date was confirmed, closing that question for #10.
+>
+> Kept as a record of *how the session was handed over*, not as a live to-do.
+> **For current state read [`docs/STATUS.md`](../STATUS.md).**
+
 **Goal:** land a durable "where we are now" baseline and sweep stale doc references, no
 ROM/engine risk. **Done looks like:** STATUS.md exists and is wired into session-start reads;
 no stale `v72`/legacy-primary references in the touched docs; all committed to `main`.
