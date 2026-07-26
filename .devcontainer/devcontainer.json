@@ -1,0 +1,58 @@
+{
+  "name": "nesgame",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": { "TZ": "Europe/London" }
+  },
+  // NET_ADMIN/NET_RAW let init-firewall.sh program iptables in the container's own netns.
+  // --dns pins a reachable resolver: under slirp4netns the inherited one can be an
+  // unreachable loopback address, which only bites AFTER the default-DROP lands.
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--dns=1.1.1.1"
+  ],
+  // ROOTLESS GOTCHA: the host user maps to container root, so a non-root remoteUser
+  // cannot write the bind-mounted workspace. Container-root here is NOT host root — it is
+  // the unprivileged project user, so this is safe and ownership agrees both ways.
+  // Dev-server ports, published to the HOST LOOPBACK only (never 0.0.0.0 — this box has a
+  // public IP). Reach them from a laptop with ssh -L, not by binding wider.
+  "appPort": ["127.0.0.1:8765:8765"],
+  "remoteUser": "root",
+  "updateRemoteUserUID": false,
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=nesgame-claude-config,target=/root/.claude,type=volume",
+    "source=nesgame-bashhistory,target=/commandhistory,type=volume",
+    // Shared skills repo, read-write so Claude can author skills.
+    "source=${localEnv:HOME}/claude-skills,target=/root/.claude/skills,type=bind",
+    // ssh config + PUBLIC keys only (read-only). No private key ever enters the container.
+    "source=${localEnv:HOME}/.ssh-container,target=/root/.ssh,type=bind,readonly",
+    // Shared agent guidance, mounted as a DIRECTORY (a file bind pins its inode, so
+    // edits to the host copy would not be seen). postStart copies it into the writable
+    // .claude volume as user-level memory, which Claude loads automatically.
+    "source=/usr/local/share/claude-guidance,target=/claude-guidance,type=bind,readonly",
+    // Forwarded agent supplies the private keys without exposing them.
+    "source=${localEnv:XDG_RUNTIME_DIR}/ssh-agent,target=/ssh-agent,type=bind"
+  ],
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/root/.claude",
+    // init-firewall.sh opens INPUT for these; without it the default INPUT DROP
+    // silently swallows connections to a published port.
+    "DEV_PORTS": "8765",
+    // Claude Code refuses bypass-permissions as root; this marks the container as a
+    // sandbox so the isolation (rootless + firewall) is the boundary instead of prompts.
+    "IS_SANDBOX": "1",
+    "SSH_AUTH_SOCK": "/ssh-agent/socket",
+    // known_hosts must live on a WRITABLE path — /root/.ssh is mounted read-only.
+    "GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/root/.claude/known_hosts",
+    "GIT_AUTHOR_NAME": "Tom Duguid",
+    "GIT_AUTHOR_EMAIL": "tomd1415@gmail.com",
+    "GIT_COMMITTER_NAME": "Tom Duguid",
+    "GIT_COMMITTER_EMAIL": "tomd1415@gmail.com"
+  },
+  // waitFor ensures the container is never "ready" before egress is locked down.
+  "postStartCommand": "sh /claude-guidance/container-init.sh",
+  "waitFor": "postStartCommand"
+}
