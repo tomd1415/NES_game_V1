@@ -61,9 +61,14 @@ project's standing rule — see item 16's "don't fix blind" note).
 > across the sprite body via a shared `bw_sprite_blocked()` helper (emitted
 > into the `declarations` slot), reversing/stopping at SOLID_GROUND / WALL
 > and the screen edge.  Kept the literal `255` clamp (`ss_x` is a u8
-> single-screen coord — `WORLD_W_PX` would overflow it).  Enemy-vs-enemy
-> overlap is the remaining follow-up.  `run-all.mjs` guard added; suite
-> green incl. byte-identical.
+> single-screen coord — `WORLD_W_PX` would overflow it).  `run-all.mjs` guard
+> added; suite green incl. byte-identical.
+>
+> **The enemy-vs-enemy follow-up shipped 2026-07-27 as engine v77** — an AABB
+> separation pass behind a new off-by-default Globals toggle ("Enemies bump into
+> each other"), with walkers/patrols/hoppers turning around rather than grinding
+> together.  Bug item 30 is now fully closed; detail in
+> [`tools/engines/CHANGELOG.md`](../../../tools/engines/CHANGELOG.md) under v77.
 
 - **Feedback:** F1a + F10 (K).  **Bug item:** 30.  **Status:** OPEN, high
   confidence.  Two pupil reports → one root cause.

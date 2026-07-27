@@ -726,8 +726,21 @@ Root causes below were verified against the current code on 2026-06-17.
     screen clamp was kept (correct — `ss_x` is a u8 single-screen
     coord, not a world coord).  Guarded in `run-all.mjs`; byte-identical
     baseline unaffected (helper only emits when an enemy moves).
-    Enemy-vs-enemy overlap remains a follow-up (needs an AABB pass).
     Plan §B-1.
+    **FIXED 2026-07-27 (engine v77)** — the follow-up AABB pass landed, so
+    this item is now *fully* closed.  New Globals toggle **"Enemies bump
+    into each other"** (`globals.enemyBump`, default **off**): once per
+    frame, after every AI has moved, each overlapping pair is pushed 1px
+    apart along the shallower axis, and walkers / patrols / hoppers turn
+    around rather than grinding together — push-apart alone would have
+    recreated the very 1px jitter this item reports.  Chasers and flyers
+    are push-apart only (they steer by the player, so there is no
+    direction to reverse).  Works on both build paths with no new 6502:
+    under `NES_ASM_AI` the pass flips `ss_ai_state[]` instead of the
+    flag the compiled-out C blocks would have consumed.  Byte-identical
+    with the box unticked.  `tools/builder-tests/enemy-bump.mjs`
+    (both paths, with a control run proving the walkers really do collide)
+    + `tools/studio-tests/enemy-bump.spec.js` (the toggle is reachable).
 
 31. **NPC dialogue glitches the stage, especially on gallery projects.**
     (Feedback F1b + F23, reporters K and A.)  Dialogue draws text as
