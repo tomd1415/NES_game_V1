@@ -4,27 +4,29 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-07-26
+- **Last updated:** 2026-07-27
 - **Branch:** `main`
 - **Engine version:** **v76** (Player 1 OAM cursor can no longer wrap or overrun)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  verified 2026-07-26)
-- **Studio E2E:** ✅ **134 passed** (2026-07-27, ~3.4 min) — 129 existing plus 5
-  new in `emulator-crash-banner.spec.js`. First run since before 2026-07-20, so
-  this is also the first confirmation the suite survives engine v76 and the
-  emulator watchdog.
-  - ⚠️ **Run against *system* Chromium 150** (`apt-get install chromium`, pointed
-    at via a throwaway config), **not** Playwright's own build. Playwright 1.61.1
-    expects Chromium 149, so treat this as strong evidence, not proof.
-  - ⚠️ **The container has still never been rebuilt.** The Dockerfile now bakes
-    Chromium at build time (2026-07-27), because `cdn.playwright.dev` rotates IPs
-    and the egress allowlist pins them once at startup — but Docker is
-    deliberately unavailable *inside* the container, so that change is unverified.
-    Rebuild on the host, then re-run `npx playwright test` plainly (no override)
-    to confirm. The apt-installed Chromium lives in the container's writable
-    layer and disappears on rebuild — which is fine, the image supplies the
-    proper one.
+  verified 2026-07-27)
+- **Studio E2E:** ✅ **134 passed** (2026-07-27, 3.0 min) — 129 existing plus 5
+  new in `emulator-crash-banner.spec.js`. Confirms the suite survives engine v76
+  and the emulator watchdog.
+  - ✅ **Run the normal way** — `npx playwright test` from the repo root, no
+    config override, against the image's **own baked Chromium** (build 1228,
+    matching Playwright 1.61.1). The earlier caveats are retired: the container
+    *has* now been rebuilt on the host (image built 2026-07-27 21:26), which was
+    the last unverified link. The throwaway-config / system-Chromium-150 workaround
+    is no longer needed and shouldn't be reused.
+  - Why Chromium is *baked* rather than allowlisted: `init-firewall.sh` resolves
+    each allowed host's A records once at container start and pins the IPs, and
+    `cdn.playwright.dev` rotates them, so a runtime download fails mid-session.
+    Build time has unrestricted egress. `ARG PLAYWRIGHT_VERSION` in the Dockerfile
+    **must** match `package-lock.json`; the builder-tests suite fails if they drift.
+  - The rebuild also exposed a half-linked global `claude` bin from
+    `npm install -g`; the Dockerfile now repairs it at build time and fails the
+    build if it stays broken, so an agent-less image can't ship silently.
 
 ## How work is tracked
 
@@ -143,9 +145,13 @@ speculatively.
 
 - ~~**Is `main` actually deployed?**~~ **Resolved 2026-07-26** — confirmed by the
   maintainer: the separate host runs current `main` with the server restarted,
-  so #10's wide-scroll work is live. Note this needs redoing for **v76**.
-- `.devcontainer/` is untracked in the working tree — decide whether it gets
-  committed.
+  so #10's wide-scroll work is live. **Still needs redoing for v76** — the live
+  host was confirmed current at v75, so it is one engine version behind. Needs
+  `main` deployed plus the Python server restarted. Host-side, not a session job.
+- ~~**Should `.devcontainer/` be committed?**~~ **Resolved 2026-07-21** — it is
+  tracked (`d87ebcd`). Remaining wrinkle: it expects `$HOME/claude-skills` and
+  `/usr/local/share/claude-guidance` **on the host**, so a fresh clone elsewhere
+  would need those paths (or the mounts trimmed) before it builds.
 - ~~**The emulator crash banner has no E2E coverage.**~~ **Closed 2026-07-27** —
   `tools/studio-tests/emulator-crash-banner.spec.js` covers all four failure
   modes in a real browser: malformed ROM (dialog opens and explains, instead of

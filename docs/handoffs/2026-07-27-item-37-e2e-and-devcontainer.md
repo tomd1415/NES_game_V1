@@ -1,5 +1,21 @@
 # Handoff: #37 hardening, docs audit, Playwright in the container — 2026-07-27
 
+> ✅ **CONSUMED — this handoff has been acted on. Do not pick work from it.**
+> The container **was** rebuilt on the host (image built 2026-07-27 21:26), and the
+> receiving session confirmed the discriminating test: `npx playwright test` plain,
+> no `--config` override, against the image's own baked Chromium →
+> **134 passed (3.0 min)**. `node tools/builder-tests/run-all.mjs` green alongside it.
+> The rebuild also surfaced and fixed a half-linked global `claude` bin
+> (`.devcontainer/Dockerfile`, commit `539d632`) — repaired at build time and now a
+> hard build failure if it stays broken.
+>
+> **Still open, and now tracked in [`docs/STATUS.md`](../STATUS.md) instead:** the two
+> attended playtests (#7/#27 event sounds, #15 stomp feel) and the v76 redeploy.
+> Both need a human, not a session.
+>
+> Kept as a record of *how the session was handed over*, not as a live to-do.
+> **For current state read [`docs/STATUS.md`](../STATUS.md).**
+
 **Goal:** close feedback **#37** and get Studio E2E running again. **Done looks like:** the
 dev container rebuilt on the host and `npx playwright test` green *without* the system-Chromium
 override, plus the two attended playtests judged. Everything else listed here is **finished and

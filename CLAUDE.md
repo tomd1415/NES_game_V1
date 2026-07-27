@@ -46,10 +46,6 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
 - **Current status — read this first:** [`docs/STATUS.md`](docs/STATUS.md).
   Engine version, test state, what's open, what's blocked and on whom. It's a
   living file: refresh it when an engine version ships or a session ends.
-- **Live handoff (delete this line when it's resolved):**
-  [`docs/handoffs/2026-07-27-item-37-e2e-and-devcontainer.md`](docs/handoffs/2026-07-27-item-37-e2e-and-devcontainer.md)
-  — dev container needs rebuilding on the **host** (Playwright now baked in but
-  never built), then the two attended playtests.
 - Docs index: [`docs/README.md`](docs/README.md).
 - Studio redesign status: `docs/plans/current/2026-07-05-studio-redesign.md`.
 - Engine work sequencing/risk:
