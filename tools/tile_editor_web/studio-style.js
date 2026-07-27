@@ -33,7 +33,7 @@
   // The globals module isn't in the default tree — create it on first edit.
   function globalsNode(s) {
     var m = s.builder.modules;
-    if (!m.globals) m.globals = { enabled: true, config: { gravityPx: 1, jumpSpeedPx: 2, bobWhenWalking: false } };
+    if (!m.globals) m.globals = { enabled: true, config: { gravityPx: 1, jumpSpeedPx: 2, bobWhenWalking: false, enemyBump: false } };
     m.globals.enabled = true;
     m.globals.config = m.globals.config || {};
     return m.globals;
@@ -188,6 +188,24 @@
     dock.appendChild(sec);
   }
 
+  // Enemies — settings that apply to EVERY game type, so this renders after the
+  // type-specific section rather than inside each one.  (#30, engine v77.)
+  function renderEnemies(dock, ctx, s) {
+    var g = globalsNode(s).config;
+    var sec = UI.section('Enemies');
+    var w = el('label', { class: 'switch' });
+    var cb = el('input', { type: 'checkbox' }); cb.checked = !!g.enemyBump;
+    cb.addEventListener('change', function () {
+      ctx.pushUndo(); g.enemyBump = cb.checked; ctx.markDirty();
+    });
+    w.appendChild(cb); w.appendChild(el('span', { text: 'Enemies bump into each other' }));
+    sec.appendChild(el('div', { class: 'sfield' }, [w]));
+    sec.appendChild(el('div', { class: 'shelp', text: 'Stops enemies standing inside ' +
+      'one another. When two of them touch they are nudged apart, and ones that walk ' +
+      'turn around. Chasers and flyers still head for the player, they just cannot overlap.' }));
+    dock.appendChild(sec);
+  }
+
   function renderDock(dock, ctx) {
     var s = ctx.getState();
     var gc = gameCfg(s);
@@ -199,6 +217,7 @@
     else if (t === 'racer') renderRacer(dock, ctx, s, gc);
     else if (t === 'runner' || t === 'autorunner') renderRunner(dock, ctx, s, gc);
     else if (t === 'topdown') renderTopdown(dock, ctx, s);
+    renderEnemies(dock, ctx, s);
     dock.appendChild(el('div', { class: 'dock-section' }, [
       el('div', { class: 'dock-note', text: 'Shared behaviours (damage, dialogue, win condition, reactions) live in ⚙ Rules.' }),
     ]));
