@@ -10,9 +10,10 @@ work cold, and the file to refresh *last* before putting work down.
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
   verified 2026-07-26)
-- **Studio E2E:** ✅ **129 passed** (2026-07-27, ~3.2 min) — first run since
-  before 2026-07-20, so this is the first confirmation the suite survives engine
-  v76 and the emulator watchdog.
+- **Studio E2E:** ✅ **134 passed** (2026-07-27, ~3.4 min) — 129 existing plus 5
+  new in `emulator-crash-banner.spec.js`. First run since before 2026-07-20, so
+  this is also the first confirmation the suite survives engine v76 and the
+  emulator watchdog.
   - ⚠️ **Run against *system* Chromium 150** (`apt-get install chromium`, pointed
     at via a throwaway config), **not** Playwright's own build. Playwright 1.61.1
     expects Chromium 149, so treat this as strong evidence, not proof.
@@ -145,13 +146,14 @@ speculatively.
   so #10's wide-scroll work is live. Note this needs redoing for **v76**.
 - `.devcontainer/` is untracked in the working tree — decide whether it gets
   committed.
-- **The emulator crash banner has no E2E coverage.** The 2026-07-27 run was
-  green across all 129 specs, but **none of them touch it** — `grep -rl
-  "emu-crash" tools/studio-tests/` returns nothing. So "E2E is green" says
-  nothing about the #37 watchdog UI: the banner appearing, the retry button
-  rebooting the ROM, and the loop being torn down on close are still guarded
-  only by source-level assertions in `emulator-watchdog.mjs`. A spec that forces
-  a fault and asserts the banner is the obvious next test to write.
+- ~~**The emulator crash banner has no E2E coverage.**~~ **Closed 2026-07-27** —
+  `tools/studio-tests/emulator-crash-banner.spec.js` covers all four failure
+  modes in a real browser: malformed ROM (dialog opens and explains, instead of
+  Play doing nothing), a `nes.frame()` throw (banner shown *and* the loop torn
+  down, not left re-throwing 60×/s), a watchdog stall, retry rebooting the cart,
+  and closing the dialog leaving no orphaned interval. Mutation-tested — removing
+  the `loadROM` guard, the watchdog verdict, `close()`'s `stopLoop()`, or the
+  frame `try/catch` each fails a specific test.
 
 ## Standing guardrails
 
