@@ -31,7 +31,23 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN apt-get update && apt-get install -y --no-install-recommends pipx \
     && rm -rf /var/lib/apt/lists/* \
     && pipx install pytest && pipx inject pytest pytest-cov \
-    && npm install -g vitest jest
+    && npm install -g vitest jest \
+    # The `npm install -g @anthropic-ai/claude-code` earlier intermittently leaves its
+    # global bin half-linked — an orphaned .claude-XXXX stub and no working `claude` —
+    # which only surfaces later as `exec: "claude": executable file not found in $PATH`.
+    # Repair it HERE, at build time: egress is unrestricted during a build, so the
+    # native binary behind `claude.exe` can (re)download. Then FAIL THE BUILD if `claude`
+    # still will not run, so an agent-less image is never shipped silently. Do NOT try to
+    # repair this in a RUNNING container — the egress firewall blocks the native-binary
+    # download and leaves it worse ("claude native binary not installed").
+    && rm -f /usr/local/bin/.claude-* \
+    && { claude --version >/dev/null 2>&1 \
+         || npm rebuild -g @anthropic-ai/claude-code >/dev/null 2>&1 || true; } \
+    && { claude --version >/dev/null 2>&1 \
+         || { npm uninstall -g @anthropic-ai/claude-code >/dev/null 2>&1; \
+              npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; } || true; } \
+    && { claude --version >/dev/null 2>&1 \
+         || { echo "FATAL: claude unusable after install+repair" >&2; exit 1; }; }
 ENV PATH="/root/.local/bin:${PATH}"
 
 # Playwright + Chromium, baked at build (no per-create download, no rotating-CDN egress
