@@ -10,11 +10,14 @@ work cold, and the file to refresh *last* before putting work down.
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
   verified 2026-07-26)
-- **Studio E2E:** ⚠️ **cannot run in the dev container** — Playwright's browser
-  download is blocked by the egress allowlist and no system browser is present
-  (`npx playwright install` times out on `cdn.playwright.dev`). Run
-  `npx playwright test` somewhere with network access, or allowlist that host.
-  Last known state: not re-run since before 2026-07-20.
+- **Studio E2E:** ⚠️ **needs a container rebuild, then re-running.** The dev
+  container now bakes Chromium into the image at build time
+  (`.devcontainer/Dockerfile`, 2026-07-27) — it previously had no browser at
+  all, and `npx playwright install` cannot fetch one at runtime because
+  `cdn.playwright.dev` rotates IPs and the egress allowlist pins them once at
+  startup. **This has not been verified by an actual build** (Docker is
+  deliberately unavailable inside the container). After a rebuild, run
+  `npx playwright test`. Last actually-run: before 2026-07-20.
 
 ## How work is tracked
 
@@ -136,11 +139,13 @@ speculatively.
   so #10's wide-scroll work is live. Note this needs redoing for **v76**.
 - `.devcontainer/` is untracked in the working tree — decide whether it gets
   committed.
-- **Studio E2E has not been run since before 2026-07-20** and cannot run in this
-  container (see the header). The v76 engine change and the emulator watchdog are
-  both covered by the Node suite, but the watchdog's *DOM* behaviour — banner,
-  retry button, teardown on close — is only guarded at the source level. Worth an
-  E2E pass somewhere with network access.
+- **Studio E2E has not been run since before 2026-07-20.** The container can now
+  run it in principle (Chromium is baked into the image as of 2026-07-27) but
+  **that image has never been built** — see the header. First job after a
+  rebuild: `npx playwright test`. It matters because the v76 engine change and
+  the emulator watchdog are covered by the Node suite, but the watchdog's *DOM*
+  behaviour — banner, retry button, teardown on close — is only guarded at the
+  source level.
 
 ## Standing guardrails
 

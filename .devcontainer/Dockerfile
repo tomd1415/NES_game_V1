@@ -36,7 +36,26 @@ ENV PATH="/root/.local/bin:${PATH}"
 
 # Playwright + Chromium, baked at build (no per-create download, no rotating-CDN egress
 # problem at runtime; --with-deps pulls the browser's apt libraries into the image).
-# (Playwright not enabled for this project)
+#
+# Baked, NOT allowlisted at runtime, on purpose: init-firewall.sh resolves each allowed
+# host's A records ONCE at container start and pins the IPs in an ipset. cdn.playwright.dev
+# is a rotating CDN, so an allowlist entry goes stale mid-session and the download fails
+# anyway. Downloading at build time — when the firewall does not yet apply — is reliable.
+#
+# PLAYWRIGHT_VERSION MUST match the @playwright/test version resolved in the repo's
+# package-lock.json: browser builds are keyed to the Playwright version (a mismatch gives
+# the "Executable doesn't exist at .../chromium_headless_shell-<N>" error at test time,
+# which is exactly what a floating "^1.49.0" produced before this was pinned). The
+# builder-tests suite has an invariant that fails if the two drift apart — if it does,
+# bump the ARG below and rebuild the container.
+#
+# Installing `chromium` also pulls chromium_headless_shell + ffmpeg, which is what
+# playwright.config.js's single chromium project needs. Browsers land in
+# /root/.cache/ms-playwright — deliberately NOT a mounted path, so they survive in the
+# image and are not shadowed by the workspace bind mount.
+ARG PLAYWRIGHT_VERSION=1.61.1
+RUN npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /root/.claude /commandhistory
 

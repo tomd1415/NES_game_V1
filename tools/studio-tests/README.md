@@ -15,6 +15,20 @@ npx playwright install chromium   # once — the browser
 npm run test:e2e            # all Studio browser tests
 ```
 
+### In the dev container
+
+Skip the `npx playwright install` step — the image **bakes Chromium in at build
+time** (`.devcontainer/Dockerfile`), because `cdn.playwright.dev` is a rotating
+CDN that the egress allowlist cannot pin, so downloading at runtime fails. Just
+`npm run test:e2e`.
+
+If you get **"Executable doesn't exist at …/chromium_headless_shell-\<N\>"**, the
+image is stale: `package-lock.json` has floated to a Playwright whose browser
+build the image does not carry. Rebuild the container (`Dev Containers: Rebuild
+Container`, or `devcontainer build`). `run-all.mjs` has an invariant that fails
+on that drift before you ever hit it here — it names the version to put in the
+Dockerfile's `ARG PLAYWRIGHT_VERSION`.
+
 Playwright owns the server lifecycle (see [`../../playwright.config.js`](../../playwright.config.js)):
 it boots `tools/playground_server.py` on port **18790** with a throwaway
 accounts DB, waits for `/health`, then runs the specs. No manual server
