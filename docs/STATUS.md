@@ -10,14 +10,20 @@ work cold, and the file to refresh *last* before putting work down.
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
   verified 2026-07-26)
-- **Studio E2E:** ⚠️ **needs a container rebuild, then re-running.** The dev
-  container now bakes Chromium into the image at build time
-  (`.devcontainer/Dockerfile`, 2026-07-27) — it previously had no browser at
-  all, and `npx playwright install` cannot fetch one at runtime because
-  `cdn.playwright.dev` rotates IPs and the egress allowlist pins them once at
-  startup. **This has not been verified by an actual build** (Docker is
-  deliberately unavailable inside the container). After a rebuild, run
-  `npx playwright test`. Last actually-run: before 2026-07-20.
+- **Studio E2E:** ✅ **129 passed** (2026-07-27, ~3.2 min) — first run since
+  before 2026-07-20, so this is the first confirmation the suite survives engine
+  v76 and the emulator watchdog.
+  - ⚠️ **Run against *system* Chromium 150** (`apt-get install chromium`, pointed
+    at via a throwaway config), **not** Playwright's own build. Playwright 1.61.1
+    expects Chromium 149, so treat this as strong evidence, not proof.
+  - ⚠️ **The container has still never been rebuilt.** The Dockerfile now bakes
+    Chromium at build time (2026-07-27), because `cdn.playwright.dev` rotates IPs
+    and the egress allowlist pins them once at startup — but Docker is
+    deliberately unavailable *inside* the container, so that change is unverified.
+    Rebuild on the host, then re-run `npx playwright test` plainly (no override)
+    to confirm. The apt-installed Chromium lives in the container's writable
+    layer and disappears on rebuild — which is fine, the image supplies the
+    proper one.
 
 ## How work is tracked
 
@@ -139,13 +145,13 @@ speculatively.
   so #10's wide-scroll work is live. Note this needs redoing for **v76**.
 - `.devcontainer/` is untracked in the working tree — decide whether it gets
   committed.
-- **Studio E2E has not been run since before 2026-07-20.** The container can now
-  run it in principle (Chromium is baked into the image as of 2026-07-27) but
-  **that image has never been built** — see the header. First job after a
-  rebuild: `npx playwright test`. It matters because the v76 engine change and
-  the emulator watchdog are covered by the Node suite, but the watchdog's *DOM*
-  behaviour — banner, retry button, teardown on close — is only guarded at the
-  source level.
+- **The emulator crash banner has no E2E coverage.** The 2026-07-27 run was
+  green across all 129 specs, but **none of them touch it** — `grep -rl
+  "emu-crash" tools/studio-tests/` returns nothing. So "E2E is green" says
+  nothing about the #37 watchdog UI: the banner appearing, the retry button
+  rebooting the ROM, and the loop being torn down on close are still guarded
+  only by source-level assertions in `emulator-watchdog.mjs`. A spec that forces
+  a fault and asserts the banner is the obvious next test to write.
 
 ## Standing guardrails
 
