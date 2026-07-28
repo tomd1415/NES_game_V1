@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import subprocess
 import time
 import traceback
@@ -12,6 +13,34 @@ from typing import Any, Callable
 from . import build as build_core
 
 BuildCallable = Callable[[dict[str, Any]], tuple[bytes, str]]
+
+_OVERFLOW_RE = re.compile(r"overflows memory area '(\w+)' by (\d+) bytes")
+
+
+def friendly_build_error(log: str) -> str:
+    """Turn an obscure ld65 "memory area overflow" into a message a teacher or
+    pupil can act on, while keeping the raw linker output for debugging.
+
+    NES cartridges are tiny (NROM = 32KB of program space), so a big level plus
+    its graphics can simply not fit.  Rather than surface
+    "Segment 'RODATA' overflows memory area 'ROM0' by 5950 bytes", explain what
+    that means and how to make the game smaller."""
+    match = _OVERFLOW_RE.search(log or "")
+    if not match:
+        return log
+    over = int(match.group(2))
+    return (
+        f"Your game is about {over} bytes too big to fit on the NES cartridge "
+        "(they only hold 32KB in total). To make it fit, try one or more of:\n"
+        "  • make the level a few screens shorter;\n"
+        "  • reuse repeated sections (flat floor, repeated blocks) so the level "
+        "packs down smaller;\n"
+        "  • use fewer different background tiles;\n"
+        "  • remove some sprites or animation frames.\n\n"
+        "(If your level is wide and this only started recently, the playground "
+        "server may need restarting so it can compress wide levels.)\n\n"
+        "----- technical details -----\n" + log
+    )
 
 
 class PlayService:
@@ -45,7 +74,7 @@ class PlayService:
             return {
                 "ok": False,
                 "stage": "build",
-                "log": str(exc),
+                "log": friendly_build_error(str(exc)),
                 "build_time_ms": int((self.clock() - started) * 1000),
             }
         except Exception as exc:

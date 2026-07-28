@@ -55,6 +55,12 @@ class CBuildInputs:
     audio_songs_asm: str | None = None
     audio_sfx_asm: str | None = None
     asm_flags: tuple[str, ...] = ()
+    # Engine v74 — event SFX (jump/pickup/hurt/win). Only meaningful alongside a
+    # real sfx pack; the caller is responsible for that gating.
+    bw_sfx_events: bool = False
+    # SMB background status bar on a scrolling world: drive its sprite-0 PPU push
+    # from the NMI so the strip renders on time under heavy frame load.
+    hud_nmi: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,9 +119,20 @@ class BuildService:
                 (root / "src" / "audio_songs.s").write_text(stage_audio_asm(inputs.audio_songs_asm))
                 (root / "src" / "audio_sfx.s").write_text(stage_audio_asm(inputs.audio_sfx_asm))
                 arguments.append("USE_AUDIO=1")
+                if inputs.bw_sfx_events:  # engine v74 — event SFX (jump/pickup/hurt/win)
+                    arguments.append("BW_SFX_EVENTS=1")
                 if self.audio_engine_directory is None:
                     raise BuildError("audio build requested without an audio engine directory")
                 arguments.append(f"FAMISTUDIO_DIR={self.audio_engine_directory}")
+            # SMB background status bar on a scrolling world: HUD_NMI=1 links
+            # src/hud_crt0.o (the NMI hook that calls hud_present()), fixing the
+            # "header flickers after the first screen" case. Only for scroll
+            # builds — a 1-screen bg HUD has no split and defines no hud_present
+            # symbol for the crt0 to import. Independent of the ASM kill switch:
+            # hud_present is C and calls scroll_apply_ppu/scroll_stream whether
+            # those resolve to the ASM or the C definitions.
+            if inputs.hud_nmi:
+                arguments.append("HUD_NMI=1")
             return self._run(root, arguments)
 
     def build_asm(self, inputs: AsmBuildInputs, makefile: str) -> tuple[bytes, str]:

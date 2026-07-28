@@ -31,6 +31,10 @@ class RequestParameters:
 class AudioAssets:
     songs_asm: str | None
     sfx_asm: str | None
+    # True only when the pupil supplied a REAL sfx pack. The auto-stub below has
+    # a single null entry, so calling famistudio_sfx_play against it would read
+    # past the (empty) sound table — event SFX must stay off for a stub.
+    sfx_is_real: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,11 +93,12 @@ def normalize_audio(
 ) -> AudioAssets:
     songs = _audio_source(body, "audioSongsAsm")
     sfx = _audio_source(body, "audioSfxAsm")
+    sfx_is_real = sfx is not None
     if songs and not sfx:
         sfx = sfx_stub
     elif sfx and not songs:
         songs = songs_stub
-    return AudioAssets(songs, sfx)
+    return AudioAssets(songs, sfx, sfx_is_real)
 
 
 def _audio_source(body: dict[str, Any], key: str) -> str | None:
@@ -129,6 +134,12 @@ def select_asm_features(
             "\n#define BW_GAME_STYLE 3",
         )
     ) and not smb_style
+    # Per-room scene instances (v75) park off-room actors at ss_y=0xFF. The C
+    # scene draw skips them (BW_SCENE_PERROOM) before they reach OAM and the C AI
+    # bodies guard `ss_y < 0xEF` so a parked chaser/flyer stays put — the
+    # hand-written ASM draw and AI loop do neither. Fall back to the
+    # (byte-identical) C paths for multi-room projects.
+    per_room = scene.scene_is_perroom(parameters.scene_sprites)
     sprites = parameters.state.get("sprites") or []
     player2_enabled = (
         parameters.player_index_2 >= 0
@@ -142,8 +153,9 @@ def select_asm_features(
         scene=asm_ready
         and scroll
         and len(parameters.scene_sprites) > 0
-        and not has_scene_animation,
-        ai=asm_ready and has_custom_c and "ss_ai_type[" in source,
+        and not has_scene_animation
+        and not per_room,
+        ai=asm_ready and has_custom_c and "ss_ai_type[" in source and not per_room,
         player=asm_ready
         and has_custom_c
         and (topdown or platformer or (runner and not player2_enabled)),
@@ -216,6 +228,9 @@ class ProjectBuilder:
             return self._patch_if_needed(state, result)
 
         _, _, world_columns, world_rows, _, _ = world.world_nametable(state)
+        # The raw SCROLL_BUILD predicate, before the ASM-readiness gate that
+        # select_asm_features applies. HUD_NMI keys off this one.
+        is_scroll = world_columns > 32 or world_rows > 30
         has_scene_animation = any(
             scene._resolve_tagged_animation(state, role, style) is not None
             for role, style in (
@@ -262,6 +277,25 @@ class ProjectBuilder:
                 audio_songs_asm=audio.songs_asm,
                 audio_sfx_asm=audio.sfx_asm,
                 asm_flags=flags,
+                # Event sound effects (engine v74): trigger sfx on
+                # jump/pickup/hurt/win. Only honoured when the pupil supplied a
+                # real sfx pack — see AudioAssets.sfx_is_real.
+                bw_sfx_events=bool(body.get("audioSfxEvents")) and audio.sfx_is_real,
+                # Gate on the ACTUAL emission of BW_SMB_HUD_BG in the assembled C
+                # (target-engine gated, >= v58), not just the module config — the
+                # NMI crt0 imports _hud_present/_hud_ready, which only exist when
+                # `BW_SMB_HUD_BG && SCROLL_BUILD` both hold. features.scroll gives
+                # the SCROLL_BUILD half; a pre-v58 target that leaves BW_SMB_HUD_BG
+                # out would otherwise link the crt0 against undefined symbols.
+                # `is_scroll`, NOT features.scroll: HUD_NMI is independent of the
+                # ASM kill switch, because hud_present is C and calls
+                # scroll_apply_ppu/scroll_stream whether those resolve to the ASM
+                # or the C definitions. features.scroll is ASM-gated and would
+                # wrongly drop the NMI hook on a non-asm-ready custom main.
+                hud_nmi=(
+                    is_scroll
+                    and "#define BW_SMB_HUD_BG 1" in (parameters.custom_main_c or "")
+                ),
             )
         )
         return self._patch_if_needed(state, result)

@@ -125,6 +125,38 @@ def _hex_row(values: list[int]) -> str:
     return ", ".join(f"${value:02X}" for value in values)
 
 
+def scene_room_of(item: Any) -> int:
+    """The background index a scene sprite belongs to (per-room instances, v75).
+    Untagged instances default to room 0 — the historical single-scene behaviour."""
+    try:
+        return max(0, int(item.get("bg", 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def scene_is_perroom(scene_sprites: Any) -> bool:
+    """True when the placed scene sprites span more than one background — the
+    only case where per-room activation changes anything.  When every entity is
+    room 0 (or untagged) this is False, so existing single-scene projects (and
+    all goldens) build byte-identically.
+
+    v1 restriction: only when every entity fits in a single byte (x, y <= 255).
+    Per-room parks off-room actors at ss_y = 0xFF; that is reliably off-screen
+    only for 8-bit / single-screen-room layouts.  Multi-screen (wide) rooms are a
+    follow-up — they fall back to the shared-scene behaviour."""
+    sprites = scene_sprites or []
+    rooms = {scene_room_of(item) for item in sprites}
+    if len(rooms) <= 1:
+        return False
+    for item in sprites:
+        try:
+            if int(item.get("x", 0)) > 255 or int(item.get("y", 0)) > 255:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
 def build_scene_asminc(
     state: dict[str, Any],
     player_index: int,
@@ -727,6 +759,20 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
             arr("ss_anim_frame", anim_zero, mutable=True),
             arr("ss_anim_tick", anim_zero, mutable=True),
         ]
+
+        # Per-room scene instances (engine v75): when the placed entities span
+        # more than one background, tag each with its room and remember its home
+        # position, so the template can activate only the current room's entities
+        # on a door transition (see scene_set_active_bg in platformer.c).  Emitted
+        # only in the multi-room case, so single-scene projects stay byte-identical.
+        if scene_is_perroom(scene_sprites):
+            rooms = [scene_room_of(item) for item in scene_sprites]
+            lines += [
+                "#define BW_SCENE_PERROOM 1",
+                arr("ss_room", rooms),
+                arr("ss_home_x", xs, wide=wide_pos),
+                arr("ss_home_y", ys, wide=wide_pos),
+            ]
 
     # --- Per-background nametables (Phase B+ Round 3 + T2.1 fix) ----
     # For multi-background door transitions we emit each painted
