@@ -11,13 +11,61 @@ This file is the answer to "which port is which, and how do I start it".
 
 | Context | Port | What it serves | How to start it |
 | ------- | ---- | -------------- | --------------- |
-| **Dev / manual** | **8765** | The Studio at `/studio.html`, the seven legacy pages, and `/play` (builds a ROM with cc65). What you open in a browser to use the thing. | `python3 tools/playground_server.py` |
+| **Dev / manual** | **8765** | The Studio at `/studio.html`, the seven legacy pages, and `/play` (builds a ROM with cc65). What you open in a browser to use the thing. | `python3 tools/playground_server.py` — **in a container it must bind `0.0.0.0`, see below** |
 | **Studio E2E** | **18790** | The same server, booted and killed **automatically** by Playwright with an isolated accounts DB. You do not start this yourself. | `npx playwright test` (from the repo root) |
 | **Builder tests** | **18768–18894** | One throwaway server per suite, spawned and killed by that suite. Each `.mjs` picks its own port. | `node tools/builder-tests/run-all.mjs`, or one suite: `node tools/builder-tests/enemy-bump.mjs` |
 
 The runner (`run-all.mjs`) executes suites **one at a time** (`spawnSync` in a
 loop), so several suites sharing a port is deliberate and harmless — about a dozen
 pairs do. Only concurrent runs collide.
+
+## ⚠️ In a container, bind 0.0.0.0 — not the container's loopback
+
+**Symptom:** the dev server answers `curl` perfectly *inside* the container and is
+completely dead from the host — connection refused on the published port, with no
+error anywhere. Easy to misread as a broken tunnel, a firewall rule, or a server
+that never started.
+
+**Cause:** two different loopbacks. `.devcontainer/devcontainer.json` publishes
+`"appPort": ["127.0.0.1:8765:8765"]` — that `127.0.0.1` is the **host's**. Docker
+delivers the far end of a published port to the **container's own interface**
+(`172.17.0.2` on the default bridge), *not* to the container's loopback. So a
+server bound to `127.0.0.1` inside the container is not listening on the address
+the publish delivers to, and the publish gets refused.
+
+**Fix:** bind all container interfaces.
+
+```bash
+PLAYGROUND_HOST=0.0.0.0 python3 tools/playground_server.py
+```
+
+This is now the container default — `devcontainer.json` sets
+`containerEnv.PLAYGROUND_HOST = "0.0.0.0"`, so a bare
+`python3 tools/playground_server.py` binds correctly. **It applies from the next
+container create/rebuild**; in an already-running container that predates it, pass
+the variable on the command line as above.
+
+**This does not widen host exposure.** `appPort` still publishes to the host's
+`127.0.0.1` only, and `init-firewall.sh` leaves INPUT default-DROP apart from
+`DEV_PORTS`. `0.0.0.0` here means "all interfaces *in this container's network
+namespace*", and the only route into that namespace is the host-loopback publish.
+The server's own default stays `127.0.0.1` (`playground_server.py`:
+`HOST = os.environ.get("PLAYGROUND_HOST", "127.0.0.1")`) so a non-container
+deployment — the live host, which has a public IP — is unaffected.
+
+**Check it the right way.** Loopback alone proves nothing; test the interface the
+publish actually targets:
+
+```bash
+curl -fsS http://127.0.0.1:8765/health     # passes even when the publish is broken
+curl -fsS http://$(hostname -i):8765/health  # this is the one that matters
+```
+
+The startup banner tells you too: `listening on 0.0.0.0 (all interfaces):8765`
+versus `listening on 127.0.0.1:8765`.
+
+This is not specific to this project — any server in any container that defaults to
+loopback has the same failure, so it is worth recognising by its shape.
 
 ## ⚠️ 18790 is claimed twice
 
@@ -72,7 +120,7 @@ Read by `tools/playground_server.py`; the test harness sets several for you.
 | Var | Effect |
 | --- | ------ |
 | `PLAYGROUND_PORT` | Port to bind (default `8765`). |
-| `PLAYGROUND_HOST` | Interface to bind (default `127.0.0.1`). |
+| `PLAYGROUND_HOST` | Interface to bind (default `127.0.0.1`). **Set to `0.0.0.0` in a container** or the published port cannot reach it — see the container-bind section above. `devcontainer.json` sets this for you. |
 | `PLAYGROUND_ACCOUNTS_DB` | Path to the accounts DB. **Tests set this to a throwaway file** so they never touch `tools/accounts.db`. |
 | `PLAYGROUND_SKIP_DOTENV` | Skip `.env` loading, so a developer's local config cannot change a test result. |
 | `PLAYGROUND_NO_ASM` | Kill switch: build the pure-C engine instead of the hand-written 6502 paths. Useful for A/B-ing a behaviour across both. |
@@ -87,6 +135,13 @@ reuse/report) or by something unrelated (it exits with the message above).
 
 ```bash
 curl -fsS http://127.0.0.1:8765/health && echo OK
+```
+
+In a container, check the **container's interface** as well — loopback passes even
+when the published port is refused (see the container-bind section above):
+
+```bash
+curl -fsS "http://$(hostname -i):8765/health" && echo OK
 ```
 
 ## Not in the dev container
