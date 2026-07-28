@@ -203,6 +203,25 @@ CI should eventually expose separate `web-ui`, `native-unit`, `native-ui`,
 `rom-regression`, `cross-target-contract` and packaging jobs. Do not weaken one
 target's required checks merely because a change originated in the other team.
 
+## Running the playground server (esp. in a dev container)
+
+`tools/playground_server.py` serves the web editor and answers `/play` builds;
+default port **8765**, with a `/health` readiness probe. (The Playwright and
+builder suites each spawn their own throwaway instance, so you do not need one
+running for them.)
+
+**In a dev container, the server must bind `0.0.0.0`, not `127.0.0.1`.** Docker
+forwards a *published* port to the container's bridge IP (e.g. `172.17.0.2:8765`),
+so a default loopback bind is refused and nothing reaches the host — even though
+`curl 127.0.0.1:8765` *inside* the container answers fine (that split is the
+tell). Set `PLAYGROUND_HOST=0.0.0.0`. The `.devcontainer` does this durably (in
+`containerEnv`, and auto-starts the server from `postStartCommand`), so it
+survives restarts; if you launch it by hand, pass `PLAYGROUND_HOST=0.0.0.0`.
+This is safe on a public-IP host: the host publishes to its **own** loopback
+(`appPort`) and the firewall gates INPUT — the boundary is the publish +
+firewall, not the internal bind. Verify against the bridge IP, not loopback:
+`curl http://$(hostname -I | awk '{print $1}'):8765/health`.
+
 ## Release model
 
 The web and native applications may release independently. Each release should
