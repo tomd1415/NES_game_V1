@@ -37,6 +37,12 @@ Repository-wide contribution, ownership and cross-team review rules live in
   The older tiered plan
   [`plans/current/2026-04-26-fixes-and-features.md`](plans/current/2026-04-26-fixes-and-features.md)
   is kept for historical context.
+- **Running the tests, or a server won't start?** Read
+  [`guides/TEST-SERVERS.md`](guides/TEST-SERVERS.md) — which of the three test
+  servers listens on which port (dev `8765`, Studio E2E `18790`, builder-tests
+  `18768–18894`), how to start each, and how to pick a port for a new suite.
+  Note the documented 18790 clash: running the E2E and the builder tests *at the
+  same time* fails silently rather than loudly.
 - **Working on the UI/UX redesign?** (branch `redesign/ui-ux`)
   Start with the roadmap
   [`design/phased-plan.md`](design/phased-plan.md) and its companions

@@ -44,11 +44,17 @@ harmless to run, so it can stay in the sweep.)
 The four `render-*.mjs` suites are described under
 [The render harness](#the-render-harness-librender-harnessmjs) below.
 
-Each suite spawns its own throwaway Playground Server on a unique
-port (18768–18776 for the original suites, 18820–18823 for the
-render suites) and exits 0 on success, non-zero on first failed
-assertion.  The runner runs them one at a time, so ports never
-collide.
+Each suite spawns its own throwaway Playground Server on its own
+port and exits 0 on success, non-zero on first failed assertion.
+The runner runs them one at a time, so ports never collide within a
+run — a dozen or so pairs deliberately share one.
+
+**Ports are catalogued in [`docs/guides/TEST-SERVERS.md`](../../docs/guides/TEST-SERVERS.md)** —
+the range in use, how to pick one for a new suite (don't grep for
+`PORT =`; the suites spell it four different ways), and the fact
+that **18790 is shared with the Studio E2E server**, which makes
+running both suites concurrently fail *silently*.  The ranges this
+file used to quote had drifted and were the source of that overlap.
 
 ## The render harness (`lib/render-harness.mjs`)
 
@@ -152,8 +158,10 @@ asserts the two are behaviourally identical.
    because those stay C globals the ASM shares).
 
 `asm-ab` and `asm-benchmark` build the stock fixture directly with `make` (no
-server); the server-based suites use ports 18790–18795 (asm-play: 18835). Like
-every suite they're picked up automatically by `run-all.mjs`.
+server); the server-based suites use ports in the 18788–18795 band (asm-play:
+18835), which is where the **18790** overlap with the Studio E2E server comes
+from — see [`docs/guides/TEST-SERVERS.md`](../../docs/guides/TEST-SERVERS.md).
+Like every suite they're picked up automatically by `run-all.mjs`.
 
 ## The invariants `run-all.mjs` enforces
 

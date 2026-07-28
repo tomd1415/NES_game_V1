@@ -40,6 +40,10 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
   byte-identical (gate new engine behaviour behind an off-by-default flag).
 - **Studio E2E:** `npx playwright test` from repo root (config auto-boots the
   server). Specs in `tools/studio-tests/`.
+- **Ports:** dev server `8765`, Studio E2E `18790`, builder-tests
+  `18768–18894` (one at a time). Don't run the E2E and the builder tests
+  *concurrently* — they share 18790 and it fails silently. Full table:
+  [`docs/guides/TEST-SERVERS.md`](docs/guides/TEST-SERVERS.md).
 
 ## Where to start
 
