@@ -144,7 +144,7 @@ the headless jsnes suite won't catch.  It must be eyeballed in FCEUX/Mesen.
 
 ---
 
-## Sprint 5 — NMI frame model + dialogue vblank routing ⏸
+## Sprint 5 — NMI frame model + dialogue vblank routing — (a)+(b) ✅, (c) ⏸
 
 **Gap (review §N1/§N2).**  The playground engine uses a `waitvsync()`
 busy-wait and writes PPU from the main loop; `draw_text`/`clear_text_row`
@@ -162,6 +162,27 @@ a per-frame byte budget (≤~120 bytes after OAM DMA + any scroll burst).
 (c) Longer-term, move OAM DMA + a bounded VRAM-update queue into the crt0 NMI.
 **Verification:** visual — open a long dialogue while scrolling; the picture
 must not blank.  Deferred for the same reason as Sprint 4.
+
+**(a) done 2026-06-18 (Arc B).**  Dialogue writes went through the
+`vblank_writes` slot; `draw_text`/`clear_text_row` came off the dialogue path
+(they stay in the template as the stock `main.c` twins the byte-identity
+invariant compares against, so "retire" means unused, not deleted).
+
+**(b) done 2026-07-28 (engine v78, feedback #31).**  The banner is now prepared
+one 32-byte row per frame in `per_frame` (rendering on) and blitted in vblank as
+an unrolled `lda bw_dlg_buf+N / sta $2007` burst — ~260 cycles, so the
+non-scroll path never disables rendering at all.  Scroll builds already hold
+`PPU_MASK` at 0 for their own column burst, so there the win is that the window
+shrinks from about half a screen to a few scanlines.  Verification did **not**
+need eyeballing in the end: `render-dialogue-noflash.mjs` drives a real ROM in
+jsnes frame by frame and measures the framebuffer — v77 collapses a
+40-scanline band from 7680 lit pixels to 0 on the open frame, v78 holds 7680 —
+plus `round2-dialogue.mjs` B6i/B6j as structural guards.  Sprint 4's `-Os`
+concern does not apply here: this bounds vblank work rather than changing
+compiler timing.
+
+**(c) still deferred.**  Nothing in #31 needs it; it is a frame-model rework in
+its own right and should get its own design note before anyone starts.
 
 ---
 

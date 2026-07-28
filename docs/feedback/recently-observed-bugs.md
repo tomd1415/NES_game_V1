@@ -767,9 +767,25 @@ Root causes below were verified against the current code on 2026-06-17.
     (cam_y>>3)+row`; nametable flip at col 32 / row 30; restore from
     `bg_world_tiles[]`); `pauseOnOpen` keeps the camera still while open.
     Verified by address math (on-screen x 12 vs the old off-screen −156) +
-    `dialogue-scroll.mjs` (2×1 compile) + round2 A9b.  **Still deferred (minor):**
-    the brief forced-blank flash when the box opens (the vblank `PPU_MASK=0`
-    window) — cosmetic, part of the frame-model rework (codegen plan Sprint 5).
+    `dialogue-scroll.mjs` (2×1 compile) + round2 A9b.  **Flash resolved
+    2026-07-28 (engine v78) — item 31 is now closed.** The last slice was the
+    forced-blank window: the banner is 4 tile rows (8 when a vertical scroll
+    straddles two attribute rows), so writing it took 128–256 `$2007` pokes in
+    one vblank — past the ~2273-cycle budget — and the writer set `PPU_MASK = 0`
+    for the burst.  With rendering off the burst runs into the visible frame, so
+    the top of the screen painted flat backdrop for a frame.  v78 prepares ONE
+    32-byte row per frame in `per_frame` (rendering on, cycles to spare) and the
+    vblank slot blits it with an unrolled `lda bw_dlg_buf+N / sta $2007` burst
+    (~260 cycles), so rendering is never disabled; attributes go first on open
+    and last on close so no frame shows glyphs in the scenery palette or
+    scenery in the box palette.  Costs 5 frames to open instead of 1 (invisible:
+    a blank box cell is colour 0 = `universal_bg` in every palette).  Measured
+    end-to-end: on v77 the open frame drops a 40-scanline band from 7680 lit
+    pixels to **0**; on v78 it stays 7680.  Guarded by
+    `render-dialogue-noflash.mjs` plus round2 B6i/B6j (both mutation-tested).
+    This was codegen plan Sprint 5(b) ("cap to one row + a per-frame byte
+    budget"); Sprint 5(c), moving OAM DMA and a VRAM queue into the crt0 NMI,
+    remains a separate long-horizon idea and is **not** needed for this item.
     Plan §B-2; codegen plan `2026-06-18-codegen-rework-implementation.md`.
 
 32. **Deleting the 2nd sprite animation appears to delete the 1st.**
