@@ -55,11 +55,14 @@ def test_audio_normalization_stubs_only_the_missing_half_and_enforces_limit() ->
     assets = preparation.normalize_audio(
         {"audioSongsAsm": "song"}, songs_stub="silent-song", sfx_stub="silent-sfx"
     )
-    assert assets == preparation.AudioAssets("song", "silent-sfx")
+    # sfx_is_real stays False here: the sfx side is the auto-stub, whose single
+    # null entry would make famistudio_sfx_play read past the sound table, so
+    # event SFX (engine v74) must not engage.
+    assert assets == preparation.AudioAssets("song", "silent-sfx", False)
     assets = preparation.normalize_audio(
         {"audioSfxAsm": "sfx"}, songs_stub="silent-song", sfx_stub="silent-sfx"
     )
-    assert assets == preparation.AudioAssets("silent-song", "sfx")
+    assert assets == preparation.AudioAssets("silent-song", "sfx", True)
     try:
         preparation.normalize_audio(
             {"audioSongsAsm": "x" * (preparation.AUDIO_MAX_BYTES + 1)},

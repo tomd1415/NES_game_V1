@@ -284,14 +284,16 @@ class ProjectBuilder:
                 # Gate on the ACTUAL emission of BW_SMB_HUD_BG in the assembled C
                 # (target-engine gated, >= v58), not just the module config — the
                 # NMI crt0 imports _hud_present/_hud_ready, which only exist when
-                # `BW_SMB_HUD_BG && SCROLL_BUILD` both hold. features.scroll gives
-                # the SCROLL_BUILD half; a pre-v58 target that leaves BW_SMB_HUD_BG
-                # out would otherwise link the crt0 against undefined symbols.
-                # `is_scroll`, NOT features.scroll: HUD_NMI is independent of the
-                # ASM kill switch, because hud_present is C and calls
-                # scroll_apply_ppu/scroll_stream whether those resolve to the ASM
-                # or the C definitions. features.scroll is ASM-gated and would
-                # wrongly drop the NMI hook on a non-asm-ready custom main.
+                # `BW_SMB_HUD_BG && SCROLL_BUILD` both hold. A pre-v58 target that
+                # leaves BW_SMB_HUD_BG out would otherwise link the crt0 against
+                # undefined symbols.
+                #
+                # The SCROLL_BUILD half is `is_scroll`, NOT features.scroll:
+                # HUD_NMI is independent of the ASM kill switch, because
+                # hud_present is C and calls scroll_apply_ppu/scroll_stream
+                # whether those resolve to the ASM or the C definitions.
+                # features.scroll is ASM-gated and would wrongly drop the NMI hook
+                # on a non-asm-ready custom main.
                 hud_nmi=(
                     is_scroll
                     and "#define BW_SMB_HUD_BG 1" in (parameters.custom_main_c or "")
