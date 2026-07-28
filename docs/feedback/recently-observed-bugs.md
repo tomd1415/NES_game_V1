@@ -911,6 +911,30 @@ Root causes below were verified against the current code on 2026-06-17.
     in-engine stays a deferred enhancement.  Guarded in `run-all.mjs`.
     Plan §B-8.
 
+39. **The colour keys 0–3 are awkward on a keyboard whose number row
+    starts at 1.**  Reported verbatim: *"I'd like a feature to change the
+    palette keyboard shortcuts (i.e. the 0, 1, 2, 3). I use a keyboard
+    where the number row is Esc, 1, 2, 3 … with 0 and backtick (`) all
+    the way on the right side, which makes it very inconvenient."*  Both
+    keys that pick colour 0 sat across the board from the keys used to
+    paint with, so choosing transparent meant moving hands.
+    **FIXED 2026-07-28 (editor only — no engine change, no version bump).**
+    **`4` is now an additional alias for colour 0**, so the whole set —
+    1, 2, 3 and 4-for-0 — sits under one hand.  Nothing was remapped:
+    `0`→0, `1`→1, `2`→2, `3`→3 and `` ` ``→0 all behave exactly as
+    before, so no existing muscle memory or printed worksheet is
+    invalidated.  Applied to all four places the shortcut lives: the
+    Studio's **TILES** and **CHARS** modes — which had *no* digit
+    shortcut at all before, so they gain 0–4 outright — and the legacy
+    `index.html` and `sprites.html` painters.  Help text and both Studio
+    pen docks updated so it is discoverable.  Covered by
+    `tools/studio-tests/palette-keys.spec.js` across all four surfaces,
+    including that `Ctrl`/`Cmd`+digit stays with the browser.
+    *Not* done: making the shortcuts **user-configurable**, which is what
+    the report literally asked for.  A fixed alias solves the stated
+    problem without a settings surface to build, store, teach and keep
+    in sync across four editors; revisit if a different layout complains.
+
 ### Item 32 — animation delete (status: VERIFIED CORRECT in the Studio, 2026-07-13 — see item 32 + animation-delete.spec.js)
 
 - [ ] **Which control?** the per-frame ✕ in the animation's frame strip,

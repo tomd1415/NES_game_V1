@@ -2137,7 +2137,7 @@ details.collapsible > summary .sub-count {
           <button type="button" id="btn-clear-tile" title="Zero all 64 pixels on this tile. Shortcut: Del">Clear tile</button>
         </div>
         <div class="hints">
-          Click to paint. <kbd>0</kbd>/<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a colour.
+          Click to paint. <kbd>0</kbd>/<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> pick a colour (<kbd>4</kbd> also picks 0).
           <kbd>Shift</kbd>-click eyedrops.
           <kbd>D</kbd> duplicates into a free slot. <kbd>Del</kbd> clears.
         </div>
@@ -2320,7 +2320,7 @@ details.collapsible > summary .sub-count {
     <h2>Keyboard shortcuts</h2>
     <h3>Colour (when painting pixels)</h3>
     <div class="help-grid">
-      <kbd>0</kbd> or <kbd>`</kbd><span>Pick colour 0 (transparent)</span>
+      <kbd>0</kbd>, <kbd>4</kbd> or <kbd>`</kbd><span>Pick colour 0 (transparent) — <kbd>4</kbd> for keyboards where <kbd>0</kbd> is a stretch</span>
       <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd><span>Pick colour 1 / 2 / 3</span>
       <kbd>Shift</kbd>+click<span>Eyedropper — pick colour under the cursor</span>
     </div>
@@ -8775,13 +8775,15 @@ function init() {
       if (e.key === 'z') { e.preventDefault(); undo(); return; }
       if (e.key === 'y') { e.preventDefault(); redo(); return; }
     }
-    // Colour
+    // Colour: 0-3, plus `4` and backtick as aliases for colour 0 — on keyboards
+    // whose number row starts at 1 (Esc,1,2,3…) both 0 and ` are away on the far
+    // side, so 4 keeps 1/2/3/4 under one hand. 0 and ` are unchanged.
     if (e.key >= '0' && e.key <= '3') {
       currentColour = parseInt(e.key, 10);
       refreshColourButtons();
       return;
     }
-    if (e.key === '`') { currentColour = 0; refreshColourButtons(); return; }
+    if (e.key === '4' || e.key === '`') { currentColour = 0; refreshColourButtons(); return; }
     // Mode toggle
     if (e.key === 'm' || e.key === 'M') {
       setEditMode(editMode === 'paint' ? 'browse' : 'paint');

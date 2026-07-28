@@ -170,6 +170,8 @@
         title: 'Value ' + val, onclick: function () { pen = val; ctx.renderDock(); } }));
     })(v);
     penSec.appendChild(penRow);
+    penSec.appendChild(el('div', { class: 'dock-note',
+      text: 'Keys: 0 1 2 3 pick a colour. 4 (or `) also picks 0, for keyboards where 0 is a stretch.' }));
     dock.appendChild(penSec);
 
     // Ops.
@@ -288,6 +290,15 @@
     },
     onTvUp: function (cell, ctx) { if (strokeOpen) { strokeOpen = false; shapeStart = null; shapeSnap = null; ctx.markDirty(); ctx.renderDock(); ctx.refresh(); } },
     onKey: function (evt, ctx) {
+      // Pen colour: 0-3, with 4 and ` as aliases for 0 — same set the legacy
+      // pages bind. 4 exists because on keyboards whose number row starts at 1
+      // (Esc,1,2,3…) both 0 and ` are over on the far side of the board.
+      // Modifier-guarded: studio.js dispatches here even when Ctrl/Cmd is down,
+      // and Ctrl+1 belongs to the browser (switch tab), not to us.
+      if (!(evt.metaKey || evt.ctrlKey || evt.altKey)) {
+        if (evt.key >= '0' && evt.key <= '3') { pen = parseInt(evt.key, 10); ctx.renderDock(); return; }
+        if (evt.key === '4' || evt.key === '`') { pen = 0; ctx.renderDock(); return; }
+      }
       if (evt.key === '[') { selIdx = Math.max(0, selIdx - 1); ctx.renderLive(); ctx.renderDock(); }
       else if (evt.key === ']') { selIdx = Math.min(255, selIdx + 1); ctx.renderLive(); ctx.renderDock(); }
       else if (evt.key === 'ArrowLeft') { selIdx = Math.max(0, selIdx - 1); ctx.renderLive(); ctx.renderDock(); }

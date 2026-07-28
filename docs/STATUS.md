@@ -10,10 +10,11 @@ work cold, and the file to refresh *last* before putting work down.
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
   verified 2026-07-27)
-- **Studio E2E:** ✅ **136 passed** (2026-07-27, 3.1 min) — 129 from before this
-  week, plus 5 in `emulator-crash-banner.spec.js` (#37) and 2 in
-  `enemy-bump.spec.js` (#30). Confirms the suite survives engine v76/v77, the
-  emulator watchdog and the new Style-tab toggle.
+- **Studio E2E:** ✅ **141 passed** (2026-07-28, 2.9 min) — 129 from before this
+  week, plus 5 in `emulator-crash-banner.spec.js` (#37), 2 in
+  `enemy-bump.spec.js` (#30) and 5 in `palette-keys.spec.js` (#39, which also
+  covers the two legacy painter pages). Confirms the suite survives engine
+  v76/v77, the emulator watchdog and the new Style-tab toggle.
   - ✅ **Run the normal way** — `npx playwright test` from the repo root, no
     config override, against the image's **own baked Chromium** (build 1228,
     matching Playwright 1.61.1). The earlier caveats are retired: the container
@@ -44,7 +45,7 @@ Work is feedback-driven. The authoritative sources, in order:
 3. [`tools/engines/CHANGELOG.md`](../tools/engines/CHANGELOG.md) — per-version
    engine detail.
 
-**About 30 of the 38 are done**, leaving ~8 genuinely open. Treat that as a
+**About 31 of the 39 are done**, leaving ~8 genuinely open. Treat that as a
 rough tally, not a metric — the items are marked up in prose ("*Done*",
 "*FIXED 2026-07-10 (engine v63)*", …) with no machine-readable status, so the
 number is hand-maintained and drifts. **The grouping in "What is genuinely

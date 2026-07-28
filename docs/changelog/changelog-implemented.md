@@ -31,6 +31,42 @@ deferred.
 
 ---
 
+## `4` picks colour 0 everywhere — item #39 — 2026-07-28
+
+Editor-only; no engine change, no version bump, no ROM affected.
+
+A user on a keyboard whose number row starts at 1 (`Esc, 1, 2, 3 …`, with `0`
+and `` ` `` off on the far right) asked for the palette shortcuts to be
+changeable: both keys that pick colour 0 were across the board from the keys
+they paint with.
+
+- **`4` is now an additional alias for colour 0.** The set under one hand
+  becomes 1, 2, 3 and 4-for-0. **Nothing was remapped** — `0`→0, `1`→1, `2`→2,
+  `3`→3 and `` ` ``→0 all still do exactly what they did, so no muscle memory
+  and no printed worksheet is invalidated.
+- **All four places the shortcut lives.** The Studio's **TILES** and **CHARS**
+  modes had *no* digit shortcut at all — pen colour was click-only — so they
+  gain the whole 0–4 set; the legacy `index.html` and `sprites.html` painters
+  gain the `4` alias beside their existing keys. The Studio handlers are
+  modifier-guarded because `studio.js` dispatches `onKey` even with Ctrl/Cmd
+  held, and `Ctrl`+`1` belongs to the browser.
+- **Discoverability**, since a shortcut nobody knows about is not a fix: the
+  legacy help panels and paint hints now name `4`, and both Studio pen docks
+  carry a `dock-note` spelling out the keys.
+- Covered by [`tools/studio-tests/palette-keys.spec.js`](../../tools/studio-tests/palette-keys.spec.js)
+  across all four surfaces — each asserting the original keys still work, not
+  just that `4` does, since an alias that broke 1/2/3 would be worse than the
+  inconvenience it fixes. Mutation-checked: removing the alias from two of the
+  four sites fails exactly those two tests.
+
+**Deliberately not done:** user-*configurable* shortcuts, which is what the
+report literally asked for. A fixed alias solves the stated problem without a
+settings surface to build, persist, teach and keep in sync across four editors.
+Worth revisiting if a second layout complains — the request is recorded in full
+at item #39 in [`recently-observed-bugs.md`](../feedback/recently-observed-bugs.md).
+
+---
+
 ## Engine v76 + emulator watchdog — item #37 hardening — 2026-07-26
 
 Repro-independent hardening for **#37** ("the game keeps crashing" / "the
