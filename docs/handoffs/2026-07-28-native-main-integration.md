@@ -1,70 +1,109 @@
-# Handoff: integrate main into native branch + server bind fix — 2026-07-28
-**Goal:** land `main` (engine v75) into `chore/linux-native-bootstrap-v63` with all engine
-features working, verified by the golden-ROM builder suite. **Done looks like:** `node
-tools/builder-tests/run-all.mjs` green (bar env-only `audio.mjs`), engine re-snapshotted, and
-a decision made on the native Qt suite (can't run here). **Do NOT merge to main; do NOT
-rewrite history** (both standing user constraints, [decided]).
+# Handoff: integrate main into native branch + server bind fix — 2026-07-28 (updated 2026-07-29)
+
+**Status: the codegen port is DONE and the builder suite is fully green.** What
+remains is native-side verification, which cannot run in this container.
+
+**Standing user constraints, both still in force:** do NOT merge to main; do NOT
+rewrite history ([decided]).
 
 ## Environment
-- Container `nesnative`, `/workspace` bind-mounted from host `/home/proj_nesnative/NES_game_V1`
-  (`findmnt -no SOURCE /workspace` → `/dev/sda[/home/proj_nesnative/NES_game_V1]`).
+- Container `nesnative`, `/workspace` bind-mounted from host `/home/proj_nesnative/NES_game_V1`.
 - Toolchain present: `node` v20.20.2, `cc65/ca65/ld65` V2.18. **Absent:** pip, network,
-  PySide6, pytest, fastapi, `node_modules`.
-- Scratch (may not persist): `/tmp/claude-0/-workspace/4eac7425-.../scratchpad/` — has
-  `main-server-additions.diff`, `builder-*.log`. Regenerate the diff with the command below.
+  PySide6, pytest, fastapi, `node_modules`. (Re-confirmed 2026-07-29.)
 
 ## Established (fact ← evidence)
-- HEAD is a WIP merge, unpushed ← `git log -1 --format=%h%s` → `26a1917 Merge main… (WIP…)`;
-  `git rev-list --count origin/chore/linux-native-bootstrap-v63..HEAD` → `52`.
-- main is fully merged ← `git merge-base --is-ancestor main HEAD` → yes; `git rev-list --count HEAD..main` → `0`.
-- Merge is a real 2-parent commit ← parents `6fb70ac` (pre-merge tip) + `09df502` (main).
-- Only conflict was `tools/playground_server.py`, resolved to the branch's delegation layer
-  (`git checkout --ours`); it imports OK. Engine versions agree ← `ENGINE_VERSION`=75,
-  `engine-version.js`=75.
-- Post-merge builder suite is broadly RED from ONE root cause: missing physics `.define`s ←
-  `node tools/builder-tests/all-modules.mjs` → `player_asm.s: Symbol 'JUMP_BUDGET'/'JUMP_SPEED'/'PLAYER_GRAVITY' is undefined`.
-- Uncommitted: `CONTRIBUTING.md` (server-bind doc note) ← `git status --short` → ` M CONTRIBUTING.md`.
-- Server bind fix live + durable-on-rebuild ← `curl http://172.17.0.2:8765/health` → 200;
-  `.devcontainer/devcontainer.json` containerEnv has `"PLAYGROUND_HOST": "0.0.0.0"` (+comment).
+- **The v64–v75 codegen port is complete.** All 20 hunks of
+  `git diff $(git merge-base 6fb70ac 09df502)..09df502 -- tools/playground_server.py`
+  are accounted for in `tools/nes_studio_core/`. Commits `8cf5b31`, `ccbd53a`, `c7c5531`.
+- **`node tools/builder-tests/run-all.mjs` → `✅ All Builder regression checks pass`**
+  — including `audio.mjs`, which the previous version of this handoff wrongly
+  wrote off as environmental (see "Corrected" below).
+- Engine snapshot intact ← `node scripts/snapshot-engine.mjs --check` →
+  `✓ v75 snapshot matches HEAD (30 files)`. **No version bump was needed**: the
+  snapshot deliberately excludes the server codegen, and the port restored the
+  branch to emit what v75 already declared rather than changing engine behaviour.
+- Cross-target contract holds by construction ← `build_project_inc`,
+  `build_bg_world_h/c` and `build_scene_inc` in `tools/playground_server.py` are
+  all pure one-line delegations to `nes_studio_core`, so the
+  `playground_server.X(...) == core.X(...)` contract tests are tautological and
+  both targets receive the port identically.
+- Server bind fix live ← `curl http://127.0.0.1:8765/health` → 200;
+  `.devcontainer/devcontainer.json` containerEnv has `"PLAYGROUND_HOST": "0.0.0.0"`.
+  Documented in `CONTRIBUTING.md` (commit `0ce5c2a`).
 
-## Ruled out (approach ← the observation that killed it)
-- "Port is 6 self-contained helpers" ← features thread through the branch's REFACTORED core
-  contracts: `CBuildInputs` (build.py) needs new `bw_sfx_events`/`hud_nmi` fields; the
-  ASM-dispatch (`nes_asm_scene`/`nes_asm_ai`) needs `not _scene_is_perroom(...)` gating —
-  architecture surgery across 6 of 9 core modules, not additive.
-- "Verify hunk-by-hunk against the suite" ← physics/compression `.define`s are foundational,
-  so the whole suite stays red until several features are correct *together* (cascade).
-- Native Qt/pytest/E2E verification in THIS container ← no PySide6/pytest/node_modules/pip
-  (import fails). Only `python3 -m unittest` on Qt-free `core/` + `node` builder suite run here.
-- `audio.mjs` failure is NOT a branch regression ← it fails on a clean `main` worktree too
-  (109/110), same suite; audio codegen is byte-identical branch↔main. Environmental.
-- Server bound `127.0.0.1` ← host publish forwards to bridge IP 172.17.0.2:8765, refused;
-  fix is bind `0.0.0.0`. Running container's baked env lacks it (`/proc/1/environ` has
-  `DEV_PORTS` not `PLAYGROUND_HOST`) → only a REBUILD activates the containerEnv fix.
+## Corrected (the previous handoff got these wrong — do not re-inherit them)
+- **`audio.mjs` was NOT environmental. It was a real branch regression.** Moving
+  the audio stubs from `playground_server.py` into
+  `tools/nes_studio_core/build_assets.py` turned the line-continuation `"""\`
+  into `"""\\`, so `AUTO_SONGS_STUB_ASM` / `AUTO_SFX_STUB_ASM` / `ASM_MAKEFILE`
+  each began with a **literal backslash**; ca65 rejected it with
+  `Invalid input character: 0x5C`. It broke every asymmetric audio upload (a song
+  without an sfx pack, or vice versa). Fixed in `ccbd53a`.
+- **Why it looked environmental — the trap to avoid.** `tools/builder-tests/audio.mjs`
+  uses a hard-coded `PORT = 18815` and, when it fails, **leaks its spawned
+  `playground_server.py`**. Every later run then finds the port occupied, refuses
+  to start its own server, and dies with a confusing
+  `SocketError: other side closed` / `UND_ERR_SOCKET` that hides the real error.
+  A "clean `main` worktree" comparison hits the *same* squatter and fails
+  identically — which is exactly what made the previous session conclude
+  "environmental, fails on main too".
+  **Before trusting any `audio.mjs` result, free the port first.** The server
+  itself prints the giveaway (`Port 18815 is in use by something else`) but only
+  on stderr, which the suite swallows. This container has no `ss`/`lsof`/`netstat`,
+  so find the squatter through `/proc` — and kill ONLY that PID, because the
+  devcontainer's real server on 8765 must be left alone:
+
+  ```sh
+  python3 - <<'EOF'
+  import glob, os, signal
+  port = 18815
+  inode = next((f[9] for f in (l.split() for l in open('/proc/net/tcp'))
+                if len(f) > 9 and f[3] == '0A'
+                and f[1].endswith(':' + format(port, '04X'))), None)
+  for p in (glob.glob('/proc/[0-9]*/fd/*') if inode else []):
+      try:
+          if os.readlink(p) == f'socket:[{inode}]':
+              os.kill(int(p.split('/')[2]), signal.SIGTERM)
+              print('killed', p.split('/')[2])
+      except OSError:
+          pass
+  EOF
+  ```
+
+- **The leak has a one-line root cause, and 32 suites share it** ← in
+  `tools/builder-tests/*.mjs`, `fail()` calls `process.exit(1)`, which bypasses
+  the `try/finally { srv.kill('SIGTERM') }` that would have reaped the server.
+  So *every* failing suite that spawns a server leaks it. The fix is to register
+  `process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })` right after
+  each `spawn(...)`. **Not done here** — a 32-file harness change was out of scope
+  for the port, and is the user's call.
 
 ## Open questions
-- Continue the codegen port here, hand to the branch author, or reset? — user's call; I flagged
-  it materially larger and STOPPED (see Provenance). No port code written yet.
-- Does committing the WIP merge belong on this branch, or reset first? — `git reset --hard 6fb70ac`
-  restores the exact pre-merge tip (still on origin) and discards the merge + uncommitted files.
+- **Native Qt/pytest verification is unrun and unrunnable here** (no PySide6,
+  pytest, pip or network). `cd native && QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest`
+  (404 tests) needs running somewhere with the venv. The one native file the port
+  touched is `native/tests/contract/test_build_preparation.py`; its two changed
+  assertions were verified by hand against the real `normalize_audio` (both pass,
+  and the old form provably fails), but the other 402 tests are unverified.
+- Whether to push the branch — 56 commits ahead of
+  `origin/chore/linux-native-bootstrap-v63`, still unpushed. User's call.
 
 ## Next actions (in order)
-1. **Get the user's decision on the merge/port** (it's [proposed], below) before writing port code.
-2. If continuing the port: regenerate the reference diff —
-   `git diff $(git merge-base 6fb70ac 09df502)..09df502 -- tools/playground_server.py` — then do
-   the **physics+compression bundle first** (`_player_physics`→`tools/nes_studio_core/project.py`
-   emitting `JUMP_BUDGET/JUMP_SPEED/PLAYER_GRAVITY`; `_dedup_columns/_bg_compression/_guard_world_fits`
-   →`world.py`; `SCROLL_COMPRESSED` in project.inc/bg_world.h). Verify: `node tools/builder-tests/all-modules.mjs`.
-3. Server: to activate durability, recreate the container (devcontainer rebuild), then confirm
-   `curl http://172.17.0.2:8765/health` = 200. Decide whether to commit `CONTRIBUTING.md`.
+1. Run the native suite on a machine with the venv; expect only
+   `test_build_preparation.py` to be affected.
+2. Run the Studio E2E (`npx playwright test`) somewhere with `node_modules`.
+3. Decide on pushing the branch.
 
 ## Provenance
 [decided] = user chose it. [proposed] = suggested, not agreed. [assumed] = unverified.
-- [decided] Merge main + port features into `nes_studio_core`; no rewrite history; no merge to main; bind server `0.0.0.0` durably via containerEnv.
-- [proposed] "Continue the port here vs hand to the branch author vs reset" — I recommended continuing but STOPPED per the user's "stop if materially larger" tripwire; **user has not chosen**.
-- [assumed] Physics+compression first will clear the cascade green (logic traced, not yet run).
+- [decided] Merge main + port features into `nes_studio_core`; continue the port
+  in this session; no rewrite history; no merge to main; bind server `0.0.0.0`
+  durably via containerEnv; commit the `CONTRIBUTING.md` note.
+- [assumed] The native Qt suite is otherwise unaffected by the port — the port
+  touched only `tools/nes_studio_core/` plus that one contract test, and the
+  builder suite covers the ROM contract, but this is reasoning, not a test run.
 
-**To the receiving session:** investigate and execute yourself. The merge/port is paused on a
-user decision (Open questions #1) — surface that, don't build port code on the [proposed]
-recommendation until confirmed. Spot-check an *Established* line (e.g. the `all-modules` error)
-before relying on it.
+**To the receiving session:** investigate and execute yourself. Spot-check an
+*Established* line before relying on it — the previous iteration of this document
+contained a confidently-worded claim (`audio.mjs` is environmental) that was
+wrong, and the check that would have caught it was simply freeing port 18815.

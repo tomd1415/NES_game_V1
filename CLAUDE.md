@@ -81,8 +81,12 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
 
 ## Where to start
 
-- **Active thread (2026-07-28):** integrating `main` (engine v75) into the native
-  branch + server bind fix — see [`docs/handoffs/2026-07-28-native-main-integration.md`](docs/handoffs/2026-07-28-native-main-integration.md). Remove this line when resolved.
+- **Active thread (2026-07-29):** `main` (engine v75) is merged into the native
+  branch and the v64–v75 codegen port into `nes_studio_core` is **done** — builder
+  suite fully green. Outstanding: the native Qt suite and Studio E2E have not been
+  run (no PySide6/pytest/node_modules in the `nesnative` container). See
+  [`docs/handoffs/2026-07-28-native-main-integration.md`](docs/handoffs/2026-07-28-native-main-integration.md).
+  Remove this line when those have run clean.
 - Docs index: [`docs/README.md`](docs/README.md).
 - Studio redesign status: `docs/plans/current/2026-07-05-studio-redesign.md`.
 - Native Linux app: `docs/plans/current/2026-07-14-native-build-plan.md`.
