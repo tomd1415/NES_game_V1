@@ -4,17 +4,22 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-07-27
+- **Last updated:** 2026-07-28
 - **Branch:** `main`
-- **Engine version:** **v77** (enemies can no longer stand inside each other)
+- **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  verified 2026-07-27)
-- **Studio E2E:** ✅ **141 passed** (2026-07-28, 2.9 min) — 129 from before this
+  verified 2026-07-28 at v78)
+- **Studio E2E:** ✅ **141 passed** (2026-07-28, 3.0 min) — 129 from before this
   week, plus 5 in `emulator-crash-banner.spec.js` (#37), 2 in
   `enemy-bump.spec.js` (#30) and 5 in `palette-keys.spec.js` (#39, which also
   covers the two legacy painter pages). Confirms the suite survives engine
-  v76/v77, the emulator watchdog and the new Style-tab toggle.
+  v76/v77/v78, the emulator watchdog and the new Style-tab toggle.
+- **Playtest ROMs:** regenerated 2026-07-28 and **byte-identical** to the
+  v76-era build (`node scripts/make-playtest-roms.mjs`, hashes compared before
+  and after, at v77 *and* again at v78). v77's enemy-bump is off by default and
+  v78 only changes dialogue-enabled builds, so the ROMs waiting on the attended
+  playtests are unaffected and do not need re-judging against a newer engine.
   - ✅ **Run the normal way** — `npx playwright test` from the repo root, no
     config override, against the image's **own baked Chromium** (build 1228,
     matching Playwright 1.61.1). The earlier caveats are retired: the container
@@ -45,7 +50,8 @@ Work is feedback-driven. The authoritative sources, in order:
 3. [`tools/engines/CHANGELOG.md`](../tools/engines/CHANGELOG.md) — per-version
    engine detail.
 
-**About 31 of the 39 are done**, leaving ~8 genuinely open. Treat that as a
+**About 33 of the 39 are done**, leaving ~6 genuinely open (2026-07-28: #31
+closed by engine v78, and #24 found already complete on audit). Treat that as a
 rough tally, not a metric — the items are marked up in prose ("*Done*",
 "*FIXED 2026-07-10 (engine v63)*", …) with no machine-readable status, so the
 number is hand-maintained and drifts. **The grouping in "What is genuinely
@@ -56,6 +62,7 @@ what each one is waiting on.
 
 | Version | Closed |
 | ------- | ------ |
+| v78 | #31 — the dialogue box's forced-blank flash, the last slice of that item |
 | v77 | #30 — enemy-vs-enemy AABB separation, the last slice of that item |
 | v76 | #37 — two silent OAM-corruption bugs on the Player 1 draw (see below) |
 | v75 | #14 — per-room scene instances (place enemies/players per background) |
@@ -120,8 +127,26 @@ no audio device.
 - **#8** — default tempo and tempo-change triggers. Per-song tempo is out of
   scope (baked into the FamiStudio export); in-game tempo changes are feasible
   but were queued behind #7/#27.
-- **#24** — accounts UI, `/auth/*` and `/me/projects` shipped, but the gallery
-  remove-gating half is not evidenced as done.
+
+~~**#24** — the gallery remove-gating half is not evidenced as done.~~
+**Resolved 2026-07-28 — it *is* done; this entry was stale.** Audited end to
+end and every half of the item is shipped and covered:
+
+- *Server* — `/gallery/remove` denies by default
+  (`playground_server.py` `_gallery_remove_response`): a valid teacher/admin
+  secret may remove anything, otherwise the caller must be signed in (401
+  `not_logged_in`) **and** own the entry (403 `not_owner`). Ownership is the
+  `owner` id stamped into `metadata.json` at publish.
+- *List* — `/gallery/list` exposes a per-entry `owned` boolean and deliberately
+  does **not** leak the raw numeric owner id.
+- *UI* — `gallery.html` renders the 🗑 Remove button only for `entry.owned` or
+  teacher mode, and translates 401/403 into plain-language messages. The Studio
+  has no separate gallery view; its Gallery button opens this page.
+- *Tests* — `tools/builder-tests/gallery-auth.mjs` covers anonymous→401,
+  wrong-pupil→403 `not_owner`, owner→200, a pupil against an anonymous
+  entry→403, teacher→200, and a wrong secret rejected. The cross-computer half
+  (`/auth/*`, `/me/projects`) is covered by `accounts.mjs`,
+  `account-projects.mjs` and `account-ui.mjs`. All green in the 2026-07-28 run.
 
 ### Shipped features with a known remaining slice
 
@@ -132,7 +157,6 @@ no audio device.
 | #13 | Chaser variants / homing |
 | #14 | Multi-screen rooms still fall back to the shared scene (v75 is v1) |
 | #26 | Per-feature top-down parity sweeps |
-| #31 | Brief forced-blank flash when the dialogue box opens |
 | #38 | Rendering a differently-sized jump pose in-engine |
 | #5 | Shipped (hand-written 6502 engine, v11→v54) but never formally marked done |
 
@@ -147,9 +171,10 @@ speculatively.
 
 - ~~**Is `main` actually deployed?**~~ **Resolved 2026-07-26** — confirmed by the
   maintainer: the separate host runs current `main` with the server restarted,
-  so #10's wide-scroll work is live. **Still needs redoing for v76** — the live
-  host was confirmed current at v75, so it is one engine version behind. Needs
-  `main` deployed plus the Python server restarted. Host-side, not a session job.
+  so #10's wide-scroll work is live. **Still needs redoing — now for v78.** The
+  live host was confirmed current at v75, so it is three engine versions behind
+  (v76 OAM fixes, v77 enemy bump, v78 dialogue flash). Needs `main` deployed
+  plus the Python server restarted. Host-side, not a session job.
 - ~~**Should `.devcontainer/` be committed?**~~ **Resolved 2026-07-21** — it is
   tracked (`d87ebcd`). Remaining wrinkle: it expects `$HOME/claude-skills` and
   `/usr/local/share/claude-guidance` **on the host**, so a fresh clone elsewhere

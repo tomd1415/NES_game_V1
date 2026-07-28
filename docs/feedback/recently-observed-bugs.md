@@ -250,6 +250,20 @@ was a massive improvement.
     keep their own fixed fall feel.
 23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
 24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
+    *Done (audited 2026-07-28).* Both halves ship. **Cross-computer saves:**
+    `/auth/signup|login|logout|reset` plus `/me/projects` (GET/POST/PUT/DELETE),
+    covered by `accounts.mjs`, `account-projects.mjs`, `account-ui.mjs`.
+    **Gallery gating:** publishing stamps the signed-in account's id into the
+    entry's `metadata.json`, and `/gallery/remove` denies by default — a valid
+    teacher/admin secret removes anything (that is the moderation path for
+    anonymous posts), otherwise the caller must be signed in (401
+    `not_logged_in`) *and* be the owner (403 `not_owner`). So an account-less
+    pupil can post but not remove, which is exactly the "unless there is a way to
+    be sure it was that user" condition. `/gallery/list` returns a per-entry
+    `owned` boolean and never the raw owner id; `gallery.html` shows 🗑 Remove
+    only for owned entries or in teacher mode, and the server is the real gate.
+    Verified by `gallery-auth.mjs` (anon→401, wrong pupil→403, owner→200,
+    pupil-vs-anonymous-entry→403, teacher→200, wrong secret rejected).
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
     *Done (verified 2026-07-14).* The gallery thumbnail is no longer frame 0. The
     publish flow runs the ROM headless for a **fixed 60-frame (~1 s) warm-up**
