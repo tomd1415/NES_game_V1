@@ -276,12 +276,43 @@
     window.PlayPipeline.play(state, playOpts).then(function (res) {
       setSaveState('saved');
       refreshQuestsAndAttention();
-      if (!res || res.ok === false || !res.rom_b64) { setTvState(true); }
+      if (!res || res.ok === false || !res.rom_b64) {
+        setTvState(true);
+        if (res && res.ok === false && res.log) { showBuildError(res); }
+      }
     }).catch(function () {
       setTvState(true);
     }).finally(function () {
       btn.disabled = false;
     });
+  }
+
+  // A build failed (usually the level is too big for the cartridge).  The
+  // server sends a human-readable explanation in res.log; show it plainly
+  // rather than letting it vanish into the tiny status line.
+  function showBuildError(res) {
+    var log = String(res.log || 'The build failed.');
+    // The friendly server message comes before a "technical details" divider;
+    // lead with that, and offer the raw log underneath for the curious.
+    var split = log.split('----- technical details -----');
+    var friendly = split[0].trim() || log;
+    var technical = split.length > 1 ? split[1].trim() : '';
+    var bd = document.createElement('div');
+    bd.className = 'modal-backdrop open';
+    bd.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
+      '<h2>😕 That game won’t fit yet</h2>' +
+      '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;max-height:45vh;overflow:auto">' +
+        escapeHtml(friendly) + '</div>' +
+      (technical ? '<details style="margin-top:10px;font-size:11px;color:var(--muted)">' +
+        '<summary style="cursor:pointer">Show technical details</summary>' +
+        '<pre style="white-space:pre-wrap;overflow:auto;max-height:30vh">' +
+        escapeHtml(technical) + '</pre></details>' : '') +
+      '<div class="modal-actions"><button class="btn primary" id="build-err-close" type="button">OK</button></div>' +
+      '</div>';
+    document.body.appendChild(bd);
+    function close() { if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+    bd.querySelector('#build-err-close').addEventListener('click', close);
   }
 
   // ---- Mode rail + dock --------------------------------------------------
@@ -1442,6 +1473,51 @@
     }).then(function () { updateStorageIndicator(); });
   }
 
+  // Local "Games" dropdown — lists every project saved on THIS computer and
+  // switches to one on click.  Pure localStorage, so it works with or without an
+  // account: a signed-out pupil (or one who can't sign up) can still reopen any
+  // of their saved games.  The storage manager points here ("to switch projects,
+  // use the projects menu") and #projects-menu was previously left empty — this
+  // fills it.  Re-run whenever the project set changes (new / delete / switch).
+  function renderProjectsMenu() {
+    var host = $('projects-menu');
+    if (!host || !window.StudioUI || !window.StudioUI.el || !Storage) return;
+    var el = window.StudioUI.el;
+    var projs = (Storage.listProjects() || []).slice().sort(function (a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+    var activeId = Storage.getActiveProjectId();
+    var items = [];
+    projs.forEach(function (p) {
+      var isCur = p.id === activeId;
+      items.push(el('button', {
+        type: 'button',
+        title: isCur ? 'The game you are editing now'
+                     : 'Open "' + (p.name || 'untitled') + '" (saved on this computer)',
+        text: (isCur ? '▶ ' : '') + (p.name || 'untitled') + (isCur ? '  (current)' : ''),
+        onclick: function () {
+          var dd = $('projects-dd'); if (dd) dd.open = false;
+          if (isCur) return;
+          try { Storage.saveCurrent(state); } catch (e) {}   // persist edits before the switch
+          Storage.setActiveProjectId(p.id);
+          window.location.reload();
+        },
+      }));
+    });
+    if (!items.length) items.push(el('span', { class: 'dock-note', style: 'padding:6px 8px', text: 'No saved games yet.' }));
+    items.push(el('hr', { class: 'tb-inline-divider' }));
+    items.push(el('button', {
+      type: 'button', text: '🎮 New game',
+      title: 'Start a fresh starter game (keeps your other games)',
+      onclick: function () { var dd = $('projects-dd'); if (dd) dd.open = false; onNewGame(); },
+    }));
+    host.replaceChildren(el('details', { class: 'account-menu', id: 'projects-dd' }, [
+      el('summary', { title: 'Your saved games on this computer' }, ['📁 Games (' + projs.length + ') ▾']),
+      el('div', { class: 'menu-body' }, items),
+    ]));
+  }
+  window.renderProjectsMenu = renderProjectsMenu;
+
   function boot() {
     Storage = window.createTileEditorStorage({ migrateState: migrateState, validateState: validateState });
     window.Storage = Storage; // shared account-menu.js reads this
@@ -1561,6 +1637,9 @@
     if (window.AccountMenu && typeof window.AccountMenu.refresh === 'function') {
       try { window.AccountMenu.refresh(); } catch (e) {}
     }
+    // Fill the (previously empty) #projects-menu with the local Games dropdown so
+    // saved games can be reopened without an account.
+    try { renderProjectsMenu(); } catch (e) {}
 
     // TV pointer interaction — delegated to the active mode module.
     // A mode implements onTvDown/onTvMove/onTvUp(cell, ctx, evt).

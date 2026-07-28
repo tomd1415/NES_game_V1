@@ -130,7 +130,8 @@ test('World can be resized beyond one screen and painted per-screen', async ({ p
   expect(dims).toEqual({ dx: 2, dy: 2, cols: 64, rows: 60 });
 
   // Navigate to screen (2,1) and stamp a tile → lands at world col >= 32.
-  await page.locator('.dock-section', { hasText: 'World size' }).locator('.btn', { hasText: '▶' }).click();
+  // (Use the view-nav arrow, not the "add a screen" grow arrow, which shares ▶.)
+  await page.locator('button[title^="Show the screen to the right"]').click();
   await page.locator('.stage-toolbar .tool[data-tool="stamp"]').click();
   await page.locator('.tile-grid .tile-cell').nth(1).click();
   const box = await page.locator('#tv-canvas').boundingBox();

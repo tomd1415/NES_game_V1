@@ -9,6 +9,351 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v75 — 2026-07-15 — Per-room scene instances: different enemies/pickups per room (#14, opt-in)
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; off unless entities span >1 room)
+Scene instances (enemies, pickups, NPCs) used to be a single flat set shared by
+every room — in a multi-background door game, an enemy placed anywhere showed up in
+*every* room at that screen position (feedback #14). Now each instance carries a
+**`bg`** (which room it belongs to), and the engine activates only the current
+room's entities.
+
+- **Editor (`studio-world.js`):** placing an entity tags it with the selected
+  background; the WORLD overlay, hit-testing, entity list and the grow-a-screen
+  coordinate shift all operate per-room, so entities no longer bleed between rooms.
+- **Client (`play-pipeline.js`):** `deriveSceneSprites` carries each instance's `bg`
+  through to the build (untagged/legacy instances default to room 0).
+- **Server (`playground_server.py`):** when the placed entities span more than one
+  room, `scene.inc` emits `#define BW_SCENE_PERROOM 1` plus `ss_room[]` /
+  `ss_home_x[]` / `ss_home_y[]`. Such projects are also driven through the C scene
+  draw + AI loops (`NES_ASM_SCENE`/`NES_ASM_AI` forced off) so a parked actor is
+  dropped before OAM and the C AI's own `ss_y<0xEF` guard keeps it parked.
+- **Engine (`platformer.c`):** `scene_set_active_bg(n)` restores room `n`'s entities
+  to their authored home position and parks every other room's actor at `ss_y=0xFF`
+  (the existing "defeated" sentinel the draw/collision/C-AI loops already ignore).
+  It runs at boot and inside `load_background_n` on every door transition, so a room
+  only ever shows — and only ever collides with — the entities placed in it.
+  Re-entering a room respawns its entities at home (classic NES room behaviour).
+
+Every detector/hook is `#ifdef BW_SCENE_PERROOM`, emitted only for multi-room
+projects, so single-scene projects — and all goldens — build byte-identically.
+**v1 restriction:** only when all entities fit an 8-bit layout (x, y ≤ 255, i.e.
+single-screen rooms); wider multi-screen rooms fall back to the shared-scene
+behaviour (a follow-up). Verified end-to-end in jsnes by
+`tools/builder-tests/per-room.mjs` (boot shows only room 0's entity; a control with
+both entities in room 0 shows both; walking through a door swaps the active room).
+
+## v74 — 2026-07-14 — Event sound effects: play SFX on jump / pickup / hurt / win (#7/#27, opt-in)
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; off by default)
+Loaded sound effects were previously **silent** — the engine called
+`famistudio_sfx_init()` but never `famistudio_sfx_play()`, so an uploaded/starter
+SFX pack occupied ROM yet no game event ever made a sound (feedback #7 "default
+sound fx" and #27 "unclear where SFX link to events").
+
+v74 wires SFX to game events via **edge-detectors in the main loop**, so they fire
+identically in the C and the shipped hand-written-6502 build — the ASM player
+updates `jumping`, the C loop just observes the 0→1 edge, dodging the item-22/v67
+"C hook silently doesn't run under ASM" trap. Detected events and their starter-pack
+slots (declaration order jump/hit/pickup/land/blip/error):
+
+- **jump** — `jumping` 0→1 → slot 0, sfx channel 0.
+- **pickup** — `bw_pickup_count` increased → slot 2, channel 1 (needs the Pickups
+  module; gated on a new `BW_HAS_PICKUPS` define the module emits).
+- **hurt** — `player_hp` dropped → slot 1, channel 1 (needs the Damage module / HP).
+- **win** — `bw_won` 0→1 → slot 4, channel 1 (needs the Win-condition module).
+
+Each detector is a couple of byte compares that only act on the state edge, so the
+frame-budget cost is negligible. The prev-state trackers are `static` locals at the
+top of `main()` (after the module `#define`s), and the slot indices are
+`#ifndef`-guarded so a future per-event picker can override them with a `-D`.
+
+**Gating (byte-identical when off):** the whole feature is `#ifdef BW_SFX_EVENTS`,
+which `steps/Step_Playground/Makefile` turns into `-DBW_SFX_EVENTS=1` only when the
+server passes `BW_SFX_EVENTS=1`. The server sets it **only** when a project has a
+**real** SFX pack (not the silent auto-stub) *and* the new `audioSfxEvents` request
+flag is true — driven by the SOUND dock's "Play sounds on game events" toggle
+(`studio-sound.js` → `play-pipeline.js`). Every project without event sounds — and
+every golden ROM — is byte-identical. Guarded by `tools/builder-tests/sfx-events.mjs`
+(events-ON compiles all four detector branches; events change the ROM vs OFF; the
+flag without an sfx pack is a no-op). **The actual sound is signed off in an attended
+FCEUX playtest** (jsnes APU inspection is too fragile to assert on).
+
+## v73 — 2026-07-14 — Invincibility-frames floor (#35): version the clamp change that shipped in fea021e
+
+### Changed / migration (goldens `1730448e` + `_rom-equiv` UNCHANGED)
+The Damage module's **Invincibility after hit** now clamps to a **floor of 10
+frames** in codegen (`A.clampInt(c.invincibilityFrames, 10, 120, 30)`), and the
+Builder field's `min` rises from 0 to 10.  With `iframes = 0` the player was
+re-hit on *every* overlapping frame, so a single touch drained all HP in a few
+frames ("enemy contact kills instantly"); the floor keeps damage responsive
+without that footgun.
+
+This alters ROM output **only** for a project that explicitly set
+`invincibilityFrames` in **[0, 9]** (now emitted as 10).  Every other project —
+including all goldens, whose Damage default is 30 — builds byte-identical, so the
+golden hashes are unchanged.
+
+**Bookkeeping note:** the code change itself landed in commit `fea021e`
+("fix(#35): floor Invincibility frames at 10") on top of the v72 snapshot but
+without a version bump, so HEAD's `builder-modules.js` had drifted from its v72
+snapshot (caught by `snapshot-engine.mjs --check`).  This entry + the v73 snapshot
+re-establish the snapshot-matches-HEAD invariant; **v72 is left untouched** so a
+game authored under it still rebuilds with its original iframes behaviour.
+
+## v72 — 2026-07-13 — New enemy path: shooter/turret (fires projectiles), pupil request #13
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; opt-in per enemy)
+A new per-instance enemy AI on the WORLD page's **AI** dropdown: the **shooter** —
+a stationary turret that holds its placed position and, on a per-turret timer,
+fires a projectile horizontally toward the player.  Shown once the project targets
+v72; degrades to a plain **walker** on older targets so a design authored with it
+still builds byte-identical.
+
+The shots live in a small **shared pool** (`BW_SHOOTER_MAX` = 4) — each carries the
+firing enemy's own tile/attr (so no new art is needed), travels at
+`BW_SHOOTER_SPEED`, and expires on a `BW_SHOOTER_TTL` lifetime, a solid tile, or on
+hitting the player.  A shot that reaches the player **hurts** it exactly like enemy
+contact (honours the invincibility window) — this needs HP, which means the
+**Damage** module + Max HP > 0; without them the shot is a harmless projectile that
+still despawns on contact.
+
+Mechanically it mirrors the v10/v11/v71 recipe: an **un-gated C block with
+`ss_ai_type = 0`** (the `ai_update` ASM loop skips it, so the same C drives it in
+both the C and ASM builds — no hand-written 6502), emitted only when a shooter
+exists, so every existing project stays byte-identical.  Draws via a new
+`//@ insert: scene_draw_extra` template slot (stripped when unused → byte-identical).
+Guarded by `tools/builder-tests/shooter-enemy.mjs` (the ROM fires a drawn shot, it
+travels toward the player, it hurts on contact, and it degrades pre-v72).
+
+## v71 — 2026-07-13 — New enemy path: hopper (walks + bounces), pupil request #13
+
+### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; opt-in per enemy)
+A new per-instance enemy AI, selectable on the WORLD page's **AI** dropdown for
+any Enemy sprite (shown once the project targets v71; degrades to a plain
+**walker** on older targets so a design authored with it still builds
+byte-identical).  The **hopper** walks and turns at walls like a walker and, on
+top of that, bounces up and down on a fixed 64-step rhythm (a ground pause then a
+symmetric rise/fall peaking ~30px up) — a grounded "pogo" enemy that hops along
+the floor.  Per-instance **speed** (1–4) scales both the walk and the hop pace.
+
+Like the flyer it writes `ss_y` absolutely off its placed start height each frame
+(overriding the scene-gravity loop) and is guarded on `ss_y < 0xEF` so a
+stomped/defeated hopper stays parked off-screen.  The horizontal wall probe uses
+the ground height, not the mid-hop Y, so it senses walls the same airborne or not.
+
+Implemented as an **un-gated C block with `ss_ai_type = 0`**, so the `ai_update`
+ASM loop skips it and the *same* C code drives the hopper in both the pure-C and
+the shipped-ASM builds — identical motion with no hand-written 6502 twin (the
+`goomba`/`koopa` actors already use this ungated-C pattern).  Only emitted for
+enemies whose AI is `hopper`, so every existing project stays byte-identical.
+Guarded by `tools/builder-tests/hopper-enemy.mjs` (the ROM actually bounces the
+sprite, degrades pre-v71, and is byte-identical when unused).
+
+## v70 — 2026-07-13 — SMB status bar: NMI-driven push with a browser-safe double buffer (real fix for "header flickers after the first screen")
+
+### Changed — migration (goldens `1730448e` + `_rom-equiv` UNCHANGED; affects BW_SMB_HUD_BG scroll builds only)
+v69's vblank-cost trim did **not** actually stop the flicker on a real SMB level.
+Re-diagnosed with `sceneSprites` present (the browser derives them; the earlier
+"0 flicker" runs were enemy-less and misleading): the flicker is **frame drops**.
+The status bar is a sprite-0 split whose whole PPU push (OAM DMA, digit repaint,
+column stream, strip-scroll setup, then the sprite-0 poll) must finish before the
+strip's scanlines (0-31) draw.  Run from the main loop after `waitvsync`, on any
+frame whose game logic overran vblank — **scrolling AND running enemy AI** — it
+lands late, `PPU_MASK` is still 0 while the top scanlines draw, and the strip
+shows the sky backdrop for that frame.  FCEUX lag-frame data on the user's
+2-screen level: a single on-screen enemy while scrolling drops ~50% of frames and
+tears the header on ~30% of scrolling frames.
+
+**Fix — move the push into the NMI (`src/hud_crt0.s`), double-buffered.**  The NMI
+fires at a fixed hardware time and preempts the game logic, so the strip always
+renders on time; a frame heavy enough to overrun just drops toward 30fps instead
+of tearing.  The earlier (reverted) cut of this idea DMAd `oam_buf` unconditionally
+from the NMI, so on a lag frame it copied a half-built OAM → garbage sprites in
+jsnes (the browser preview).  This version gates the OAM DMA + column stream on a
+**`hud_frame_ready`** flag the main loop sets only after a whole frame packet is
+built, and renders from a latched **`hud_cam_live`** scroll; on a lag frame the
+NMI re-presents the last complete frame from the PPU's own OAM (a clean 30fps
+hold), never a mid-build DMA.  Validated in **both** FCEUX (no sky-backdrop
+frames) and jsnes (sprites intact) under enemy load while scrolling.
+
+**Byte-identical off the feature.**  `hud_present()` / the marker seed / the
+`hud_ready`/`hud_frame_ready`/`hud_cam_live` state / the main-loop packet flags
+are all `#if BW_SMB_HUD_BG && SCROLL_BUILD` gated; the Makefile crt0-swap is
+`HUD_NMI`-gated; the server sets `HUD_NMI=1` only for scrolling bg-HUD builds.
+`builder-assembler.js`'s `appendToSlot` now fills EVERY `//@ insert:` occurrence
+so both the NMI-push and render-last paths get module vblank writes (mutually
+`#if`-exclusive per build).  Goldens (`1730448e`) unchanged.
+
+## v69 — 2026-07-12 — SMB status bar: cut vblank cost so the split stops flickering (browser-safe)
+
+### Changed — migration (goldens `1730448e` + `_rom-equiv` UNCHANGED; affects BW_SMB_HUD_BG scroll builds only)
+"The score/timer header goes flickery after the first screen."  The fixed status
+bar is a sprite-0 split done in the main loop after `waitvsync`; on a busy,
+scrolling SMB frame the game logic overruns vblank, the split lands late, and the
+strip briefly shows the sky backdrop.  (An earlier attempt moved the push into the
+NMI; that IS correct on hardware/FCEUX but **jsnes**, the browser editor's
+emulator, does not model NMI/OAM-DMA/sprite-0 timing and rendered garbage OAM, so
+it was reverted.  This version stays render-last = browser-safe.)
+
+Instead of moving the push, this shaves the two hot per-frame costs that were
+tipping the frame over vblank, so the split keeps its timing:
+
+- **OAM "hide unused slots" high-water mark.**  The clear parked ~50 OAM Y-bytes
+  EVERY frame (~7 scanlines of a 262-line frame).  `bw_oam_hwm` tracks last
+  frame's slot count so the clear only touches slots that shrank away — a steady
+  sprite count costs ~0 writes.
+- **Precomputed digit addresses.**  `bw_hud_bg_paint` did a software `*32`
+  multiply per digit (~9 scanlines/repaint on the no-multiply 6502); a
+  digit-change frame that also crossed a scroll boundary was the worst case.
+  `bw_hud_bg_init` now bakes the 11 nametable addresses once (`bw_hud_addr_hi/lo`)
+  and the repaint is a tight addr→PPU walk.
+
+FCEUX-measured on a 4-screen SMB level: a realistic enemy density went **8→0**
+flicker frames over 760; a pathological 30-on-screen-enemy stress case went
+**~100→13**.  jsnes-verified: sprites render correctly (5 active, not the NMI
+attempt's garbage 64).  Very heavy scenes can still occasionally slip — that is
+frame-budget bound (fewer on-screen actors, or a faster scene, is the remedy).
+
+**Byte-identical off the feature** — every change is `BW_SMB_HUD_BG`/`SCROLL_BUILD`
+gated; goldens `1730448e` unchanged.
+
+## v68 — 2026-07-11 — Runner (Geo Dash) player gravity: fix ASM/C divergence + make it tunable
+
+### Changed (follow-up to v67 — goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+v67 wired `PLAYER_GRAVITY` into the basic platformer's ASM fall (`_plat_update`)
+but not the runner's (`run_update`, `fall_amt = lda #2`).  The single-player
+runner *shares the platformer C vertical block*, whose fall v67 changed to
+`BW_PLAYER_GRAVITY` — so at non-default Gravity the runner's C fell at
+`gravityPx + 1` while its ASM stayed at 2 (a divergence the default-config
+asm-ab/asm-corpus suite didn't catch).  `run_update` now reads `PLAYER_GRAVITY`
+too, so the runner's ASM fall == its C fall again, and **Gravity now tunes the
+runner (Geo Dash) player's fall** as well as the platformer's.
+
+**Byte-identical at the default** (Gravity 1 → `PLAYER_GRAVITY` 2 → `lda #2` == the
+historic immediate) — goldens + all A/B equivalence checks unchanged.  Guarded by
+`physics-globals.mjs`, which now scans OAM for the runner's falling player and
+asserts the per-frame fall rate matches C and rises with Gravity (g1=2/frame,
+g4=5/frame, ASM==C).  (SMB keeps its own fixed fall feel, `fall_amt=3`.)
+
+## v67 — 2026-07-11 — Platformer physics sliders work on the shipped ASM engine (jump height/speed + player gravity)
+
+### Changed (feedback #22/#6 — the physics knobs finally take effect on the default engine; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+The Globals/Players physics sliders (Jump height / Jump speed / Gravity) were
+honoured only by the **C-fallback** engine — the hand-written 6502 player that
+ships by default (v43) hardcoded the jump budget (`lda #20`), rise (`sbc #2`) and
+fall (`fall_amt=2`), so a pupil moving the sliders on the real engine saw no
+change.  Now the ASM player reads them as immediates from `project.inc`, the same
+discipline as `SMB_*`/`RUNNER_*`/`RACER_*`:
+- **`JUMP_BUDGET`** (= Jump height) — `pl_jump` + `run_jump`.  Both the platformer
+  and runner C already set `jmp_up = jumpHeight`, so this *fixes a pre-existing
+  runner divergence* (ASM was stuck at 20 while the C used jumpHeight).
+- **`JUMP_SPEED`** (= Jump speed) — the shared `pl_vmove` rise.  Emitted as
+  `jumpSpeedPx` for game types **platformer + runner** (their C rise honours it);
+  **smb** keeps the historic 2 (its variable-height jump is tuned by the Speed
+  preset) and topdown/racer have no jump — so those stay byte-identical.
+- **`PLAYER_GRAVITY`** (= Gravity) — the `_plat_update` fall.  Gravity now moves
+  the **player**, not just enemies: `PLAYER_GRAVITY = gravityPx + 1` (default
+  1 → 2, matching the historic `py += 2`; 0 → floaty, 4 → heavy).  The C fall
+  gained `#define BW_PLAYER_GRAVITY` (default 2) driven by the same value.
+- Server: `_player_physics(state)` mirrors the JS Players/Globals clamps so the
+  ASM immediates == the C values (ASM ≡ C).  Committed `project.inc` carries the
+  20/2/2 defaults for direct-make builds.
+
+**Byte-identical at the defaults** (20/2/2 == the historic `lda #20`/`sbc #2`/
+`fall_amt=2`) — goldens + every asm-ab/asm-corpus/asm-player equivalence check
+unchanged.  Proven by `builder-tests/physics-globals.mjs` (now drives the DEFAULT
+ASM engine): Jump speed 2→6 lifts 28→84px, Jump height 8→24 lifts 24→72px, and
+Gravity 1→4 makes the player fall 16→40px in the same window.  (Runner/SMB player
+*gravity* stays their fixed feel — a possible follow-up.)
+
+## v66 — 2026-07-11 — Level compression: apply to any multi-screen level (fit 5-8 screen detailed levels)
+
+### Changed (feedback #10 follow-up — server codegen; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+A pupil's ~5-8 screen *detailed* level overflowed NROM on `/play`
+(`ld65: Segment 'RODATA' overflows memory area 'ROM0' by 5950 bytes`) because
+the v64/v65 column-compression only engaged **above 8 screens** (>256 cols) —
+below that a raw ~1KB/screen array was always emitted, even when the level
+repeated columns heavily and would have packed down easily.
+
+- **Server (`playground_server.py`, not snapshotted — codegen only):**
+  `_bg_compression` now compresses **any 1-tall world wider than one screen**
+  (`cols > 32`) when the dedup both fits a 1-byte index (<256 unique columns)
+  **and** is actually smaller than the raw array (`uniq*rows + cols <
+  cols*rows`). A 1-screen world stays raw (byte-identical to the baseline);
+  tall worlds stay raw (tall scroll is capped at 2 screens).
+- `_guard_world_fits` now only rejects a **>8-screen** world that can't compress
+  (a raw >8-screen array always overflows); a ≤8-screen world is never
+  pre-rejected — it may fit raw, and if it doesn't the linker overflow is turned
+  into a friendly "your game is too big + how to slim it" message.
+- The compression **format and both decoders (`scroll.c`, `scroll_asm.s`) are
+  unchanged from v64/v65** — this only widens *when* they engage, so no
+  snapshotted engine source changed (the version bump records the codegen
+  contract change; server codegen is versioned via git per the E-V2 note in
+  `snapshot-engine.mjs`).
+- Behaviourally identical + lossless: a level that already fit still fits (its
+  ROM is the same or smaller); the decode is byte-identical (verified C≡ASM).
+
+**Proven:** `builder-tests/scroll-narrow-compressed.mjs` (a 6-screen level now
+routes through the compressed decoder and C≡ASM nametables match — a NEW <256-col
+regime for the ASM path), alongside the existing `scroll-wide-compressed.mjs`
+(12-screen) and `scroll-wide-too-varied.mjs` (graceful reject). Stock/template
+goldens are direct-`make` (`SCROLL_COMPRESSED 0`) and `_rom-equiv` is a 1×1
+fixture, so all byte-identical hashes are unchanged.
+
+## v65 — 2026-07-10 — Level compression Phase 2: ASM decoder (dormant, byte-identical)
+
+### Added (feedback #10 — the shipped ASM engine now decodes the dedup format; dormant → byte-identical)
+Phase 2 of go-beyond-8-screens (see v64). The hand-written 6502 scroll engine
+(`scroll_asm.s`, shipped when `NES_ASM_SCROLL`) now decodes the column-dedup
+format under `.if SCROLL_COMPRESSED`:
+- **Streamer** (`scroll_stream_prepare`): 16-bit column bound, then
+  `uid = bg_col_index[col]`, `ptr = bg_col_data + uid*BG_WORLD_ROWS` (via a
+  shared `dedup_col_ptr` helper — `uid*30 = uid*32 - uid*2`), and a contiguous
+  30-byte column copy (simpler than the raw strided read).
+- **`load_world_bg`** (boot): fills each boot screen's 32 columns column-major
+  with a +32 PPU stride, straight from the dedup data.
+- The nametable-select (`col & 0x20` / `col & 0x1F`) is unchanged — those
+  low-byte bits alternate NT0/NT1 every 32 columns regardless of the high byte,
+  so it walks correctly past column 255.
+
+**Correctness proven:** a 12-screen world built with the ASM engine renders
+byte-identical *nametables* to the C reference (FCEUX `ppu.readbyte` dump) and
+renders correctly across the far screens; the raw `.else` path is byte-identical
+(direct-ASM hash `12de06be` unchanged, stock matches golden `1730448e`). Still
+dormant (nothing exceeds 8 screens yet → `SCROLL_COMPRESSED` is 0 everywhere).
+
+**Still to come:** editor grow-a-screen arrows (Phase 3) + a wide-world C-vs-ASM
+regression test (Phase 4).
+
+## v64 — 2026-07-10 — Level compression Phase 1: column-dedup format + C decode (dormant, byte-identical)
+
+### Added (feedback #10 groundwork — dormant → goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)
+Groundwork for scrolling levels **beyond 8 screens**. The raw `bg_world_tiles`
+array is ~1KB/screen and NROM's 32KB PRG caps a real project at ~8 screens (9+
+overflows). This phase adds a **column-deduplication** format so wide levels fit:
+the server emits `bg_col_index[COLS]` (a 1-byte unique-column id per world
+column) + `bg_col_data[UNIQ × ROWS]` (the unique columns) instead of the flat
+array; the scroll core reads `bg_col_data[bg_col_index[col] × BG_WORLD_ROWS + rr]`.
+
+- Server: `_dedup_columns` + `_bg_compression` (`playground_server.py`); emits the
+  dedup arrays + `SCROLL_COMPRESSED`/`BG_COL_UNIQ` in `bg_world.h` and
+  `SCROLL_COMPRESSED` in `project.inc`. Gated to **wide (>8 screens = >256 cols)
+  1-tall worlds** whose dedup fits a 1-byte index (<256 unique columns);
+  everything else stays on the raw path.
+- C engine: `scroll.c` decodes the dedup format under `#if SCROLL_COMPRESSED` at
+  the streamer + `load_world_bg` column reads; the raw `#else` is unchanged.
+- **Dormant + byte-identical:** compression only triggers past 8 screens, and no
+  project reaches that yet (the WORLD editor still caps at 2×2), so `SCROLL_COMPRESSED`
+  is 0 everywhere and all builds are byte-identical. Committed baseline
+  `project.inc` defines `SCROLL_COMPRESSED 0` for direct-make builds.
+- **Proven:** a 12-screen world builds + fits ROM with the C engine (a raw 12-wide
+  level overflows) and renders correctly on FCEUX across the far screens.
+
+**Still to come:** the ASM decoder in `scroll_asm.s` (the shipped engine — Phase 2)
+and the editor grow-a-screen arrows (Phase 3) that actually let a pupil exceed 8
+screens.
+
 ## v63 — 2026-07-10 — Fix multi-bg door transitions showing the wrong room (#2/#3)
 
 ### Fixed (multi-bg only → non-multi-bg builds byte-identical; goldens `1730448e` + `_rom-equiv` `0aed6e95` UNCHANGED)

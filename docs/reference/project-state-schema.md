@@ -6,10 +6,11 @@ validated, saved (localStorage + accounts DB + gallery), edited by both the
 **Studio** and the seven legacy pages, compiled to a ROM by the assembler +
 server, and round-tripped through import/export.
 
-**Status:** code-verified 2026-07-05 against `tools/tile_editor_web/*` and
-`tools/playground_server.py`. Line numbers drift — treat citations as "start
-here", not gospel. If you change the shape, update this file **and** grep the
-citations below.
+**Status:** code-verified 2026-07-05 (engine-version numbers refreshed
+2026-07-14 to the current `ENGINE_VERSION` = **72**) against
+`tools/tile_editor_web/*` and `tools/playground_server.py`. Line numbers drift —
+treat citations as "start here", not gospel. If you change the shape, update this
+file **and** grep the citations below.
 
 > **Golden rule:** storage `JSON.stringify`s the state object *verbatim* — no
 > field filtering on save (`storage.js:292`). Every top-level field (including
@@ -24,14 +25,14 @@ citations below.
 | Counter | Value today | Meaning | Bumped when |
 |---|---|---|---|
 | `state.version` | **1** (frozen) | **State-schema** version | Effectively never — migrations are additive so old projects stay loadable (`index.html:1730`). A mismatch is *rejected* by `validateState` (`index.html:2019`). |
-| `state.engineVersion` | **9** (advisory) | Which C/ROM **engine** the design was authored for — provenance only | Stamped on new Studio projects from `NES_ENGINE_VERSION` (`studio-starter.js:349`); updated by the Studio "Update this game" advisor (`studio.js:1082`). |
+| `state.engineVersion` | **72** (advisory — tracks `NES_ENGINE_VERSION`) | Which C/ROM **engine** the design was authored for — provenance only | Stamped on new Studio projects from `NES_ENGINE_VERSION` (`studio-starter.js:349`); updated by the Studio "Update this game" advisor (`studio.js:1082`). |
 | `state.builder.version` | **1** | The **module-tree** shape inside `state.builder` | Re-seeded if `!== 1` (`studio.js:123`, `builder-modules.js:2501`). |
 
 **The codegen gate is NOT `state.engineVersion`.** The active engine for a build
 is the page global **`window.NES_TARGET_ENGINE`**, resolved at page load
 (`engine-version.js:23-25`):
 
-- **Studio** loads `engine-version.js` (`studio.html:491`) → `NES_TARGET_ENGINE = NES_ENGINE_VERSION = 9` → targets the **latest** engine.
+- **Studio** loads `engine-version.js` (`studio.html:491`) → `NES_TARGET_ENGINE = NES_ENGINE_VERSION = 72` → targets the **latest** engine.
 - The **seven old pages do NOT load `engine-version.js`** → `NES_TARGET_ENGINE`
   is undefined → codegen falls back to **v1** via `(window.NES_TARGET_ENGINE) || 1`
   (`builder-modules.js:146, 530, 1181, …`). This is why the legacy pages are

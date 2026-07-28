@@ -70,7 +70,19 @@
   let _templatePromise = null;
   async function loadTemplate() {
     if (_templatePromise) return _templatePromise;
-    _templatePromise = fetch('builder-templates/platformer.c',
+    // Cache-bust the template by the engine version.  The C template
+    // (platformer.c) is the actual engine; it's fetched separately from
+    // engine-version.js, so a stale HTTP/proxy cache (or an aggressive browser
+    // ignoring `no-store`) could serve a pre-fix template while the version
+    // reads current — exactly the "header still flickers after the engine was
+    // updated" trap.  Stamping the URL with NES_ENGINE_VERSION makes a bumped
+    // engine a NEW url, so it can never resolve to a cached older template.
+    // The server ignores the query and serves the file; falls back cleanly when
+    // the version global is absent (the original editor pages don't load
+    // engine-version.js — there the plain no-store fetch still applies).
+    var ev = (typeof window !== 'undefined' &&
+              (window.NES_ENGINE_VERSION || window.NES_TARGET_ENGINE)) || '';
+    _templatePromise = fetch('builder-templates/platformer.c' + (ev ? '?v=' + ev : ''),
       { cache: 'no-store' })
       .then(r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -197,6 +209,10 @@
           spriteIdx: inst.spriteIdx | 0,
           x: inst.x | 0,
           y: inst.y | 0,
+          // Engine v75 — which room (background) this entity belongs to; the
+          // server activates only the current room's entities on a door
+          // transition. Untagged/legacy instances default to room 0.
+          bg: inst.bg | 0,
         });
       }
       return out;
@@ -322,6 +338,10 @@
           '.export _audio_sfx_data:=' + sfxSym + '\n' +
           '.export audio_sfx_data:=' + sfxSym + '\n';
         payload.audioSfxAsm = audio.sfx.asm + sfxAlias;
+        // Engine v74 — trigger these sfx on game events (jump/pickup/hurt/win).
+        // Only sent alongside a real sfx pack, so the server never wires events
+        // to the silent auto-stub.
+        payload.audioSfxEvents = !!audio.sfxEvents;
       }
     }
 

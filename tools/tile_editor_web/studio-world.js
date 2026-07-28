@@ -39,6 +39,14 @@
     return node.config.instances;
   }
   function nextInstId(list) { var m = 0; list.forEach(function (i) { if ((i.id | 0) > m) m = i.id | 0; }); return m + 1; }
+  // Engine v75 — which room (background index) an instance belongs to; legacy
+  // instances with no `bg` default to room 0.
+  function instBg(inst) { return inst.bg | 0; }
+  // The instances placed in the currently-selected background — the WORLD stage
+  // only shows/edits one room at a time so entities don't bleed between rooms.
+  function sceneInstancesForBg(ctx, bgIdx) {
+    return sceneInstances(ctx).filter(function (i) { return instBg(i) === bgIdx; });
+  }
   function spriteSize(state, idx) {
     var sp = (state.sprites || [])[idx];
     return { w: (sp && sp.width ? sp.width : 2) * 8, h: (sp && sp.height ? sp.height : 2) * 8 };
@@ -50,7 +58,7 @@
   }
   function instanceAt(ctx, px, py) {
     var state = ctx.getState();
-    var list = sceneInstances(ctx);
+    var list = sceneInstancesForBg(ctx, state.selectedBgIdx | 0);
     for (var i = list.length - 1; i >= 0; i--) {
       var sz = spriteSize(state, list[i].spriteIdx);
       if (px >= list[i].x && px < list[i].x + sz.w && py >= list[i].y && py < list[i].y + sz.h) return list[i];
@@ -276,6 +284,86 @@
     ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
   }
 
+  // ---- Grow the world one screen at a time (feedback #10) ----------------
+  // Wide 1-tall levels compress (engine v64/v65), so they can go well past the
+  // 2-screen raw cap — up to MAX_SCREENS_X.  Vertical scroll is engine-capped at
+  // 2 screens, and the >8-screen compression is 1-tall only, so tall growth is
+  // limited to 2 and only allowed for narrow (<=2 wide) worlds.
+  var MAX_SCREENS_X = 12, MAX_SCREENS_Y = 2;
+  function bgDim(bg, ax) { return Math.max(1, (bg && bg.dimensions && bg.dimensions['screens_' + ax] | 0) || 1); }
+  function canGrow(bg, dir) {
+    if (!bg || isMetatileBg(bg)) return false;
+    var sx = bgDim(bg, 'x'), sy = bgDim(bg, 'y');
+    if (dir === 'left' || dir === 'right') return sx < (sy === 1 ? MAX_SCREENS_X : 2);
+    return sy < MAX_SCREENS_Y && sx <= 2;
+  }
+
+  // Prepend (grow left/up) pushes existing content over by one screen, so any
+  // stored WORLD coordinates on this bg must move with it.  Scene instances now
+  // carry a `bg` (engine v75 per-room), so shift exactly this room's entities;
+  // doors also carry a bg index, so shift just this bg's doors.
+  function shiftWorldCoords(ctx, bgIdx, dxTiles, dyTiles) {
+    var s = ctx.getState();
+    var dpx = dxTiles * 8, dpy = dyTiles * 8;
+    // Scene instances carry a `bg` (per-room), so shift exactly this room's.
+    sceneInstancesForBg(ctx, bgIdx).forEach(function (i) { i.x = (i.x | 0) + dpx; i.y = (i.y | 0) + dpy; });
+    // Blocks + the player start are still a single (not-yet-per-room) set, so
+    // only shift them for unambiguous single-background games.
+    var single = (s.backgrounds || []).length === 1;
+    var m = s.builder && s.builder.modules;
+    if (!m) return;
+    if (m.doors && m.doors.config && Array.isArray(m.doors.config.doorList)) {
+      m.doors.config.doorList.forEach(function (d) {
+        if ((d.bg | 0) === bgIdx) { d.tx = (d.tx | 0) + dxTiles; d.ty = (d.ty | 0) + dyTiles; d.spawnX = (d.spawnX | 0) + dpx; d.spawnY = (d.spawnY | 0) + dpy; }
+      });
+    }
+    if (single) {
+      if (m.blocks && m.blocks.config && Array.isArray(m.blocks.config.blockList))
+        m.blocks.config.blockList.forEach(function (b) { b.x = (b.x | 0) + dxTiles; b.y = (b.y | 0) + dyTiles; });
+      if (m.players && m.players.submodules && m.players.submodules.player1) {
+        var pc = m.players.submodules.player1.config;
+        pc.startX = (pc.startX | 0) + dpx; pc.startY = (pc.startY | 0) + dpy;
+      }
+    }
+  }
+
+  function growBackground(ctx, dir) {
+    var bg = activeBg(ctx);
+    if (isMetatileBg(bg)) { alert('This background uses 16×16 blocks — revert to 8×8 first to resize.'); return; }
+    if (!canGrow(bg, dir)) return;
+    ctx.pushUndo();
+    ensureBehaviour(bg);
+    var bgIdx = ctx.getState().selectedBgIdx | 0;
+    var oldCols = worldCols(bg), oldRows = worldRows(bg);
+    var sx = bgDim(bg, 'x'), sy = bgDim(bg, 'y');
+    var vs = ctx.viewScreen ? ctx.viewScreen() : { x: 0, y: 0 };
+    var nt = bg.nametable, bh = bg.behaviour;
+    function ntRow(n) { var a = []; for (var i = 0; i < n; i++) a.push({ tile: 0, palette: 0 }); return a; }
+    function bhRow(n) { var a = []; for (var i = 0; i < n; i++) a.push(0); return a; }
+    if (dir === 'right') {
+      for (var r = 0; r < oldRows; r++) { nt[r] = nt[r].concat(ntRow(SCREEN_W)); bh[r] = bh[r].concat(bhRow(SCREEN_W)); }
+      bg.dimensions.screens_x = sx + 1;
+      ctx.setViewScreen(sx, vs.y);
+    } else if (dir === 'left') {
+      for (var r2 = 0; r2 < oldRows; r2++) { nt[r2] = ntRow(SCREEN_W).concat(nt[r2]); bh[r2] = bhRow(SCREEN_W).concat(bh[r2]); }
+      bg.dimensions.screens_x = sx + 1;
+      shiftWorldCoords(ctx, bgIdx, SCREEN_W, 0);
+      ctx.setViewScreen(0, vs.y);
+    } else if (dir === 'down') {
+      for (var r3 = 0; r3 < SCREEN_H; r3++) { nt.push(ntRow(oldCols)); bh.push(bhRow(oldCols)); }
+      bg.dimensions.screens_y = sy + 1;
+      ctx.setViewScreen(vs.x, sy);
+    } else if (dir === 'up') {
+      var addNt = [], addBh = [];
+      for (var r4 = 0; r4 < SCREEN_H; r4++) { addNt.push(ntRow(oldCols)); addBh.push(bhRow(oldCols)); }
+      bg.nametable = addNt.concat(nt); bg.behaviour = addBh.concat(bh);
+      bg.dimensions.screens_y = sy + 1;
+      shiftWorldCoords(ctx, bgIdx, 0, SCREEN_H);
+      ctx.setViewScreen(vs.x, 0);
+    }
+    ctx.markDirty(); ctx.renderLive(); ctx.renderDock();
+  }
+
   // ---- Painting (cx,cy are screen-local; +view offset → world) -----------
   function paintCell(ctx, cx, cy) {
     var s = ctx.getState();
@@ -440,6 +528,9 @@
     var inst = { id: nextInstId(list), spriteIdx: idx,
       x: Math.max(0, Math.min(maxX, Math.round(w.x - sz.w / 2))),
       y: Math.max(0, Math.min(maxY, Math.round(w.y - sz.h / 2))),
+      // Engine v75 — the entity belongs to the room (background) it's placed on,
+      // so multi-room games can have different enemies/pickups per room.
+      bg: state.selectedBgIdx | 0,
       ai: 'static', speed: 1 };
     list.push(inst);
     selInst = inst.id;
@@ -463,7 +554,8 @@
   function drawInstances(g) {
     if (!_octx) return;
     var state = _octx.getState();
-    var list = sceneInstances(_octx);
+    // Only the current room's entities (engine v75 per-room instances).
+    var list = sceneInstancesForBg(_octx, state.selectedBgIdx | 0);
     // The overlay canvas is one screen; instances hold WORLD coords (bug #14),
     // so shift by the current view offset and skip any that fall off this screen.
     var o = off(_octx);
@@ -779,11 +871,27 @@
         }));
       });
       sizeSec.appendChild(sizeRow);
+      // Grow one screen at a time in any direction (feedback #10). Wide 1-tall
+      // levels can go up to MAX_SCREENS_X screens (they compress); the arrow is
+      // enabled only where growth is allowed.
+      var growRow = el('div', { class: 'row', style: 'margin-top:4px' });
+      growRow.appendChild(el('span', { class: 'dock-note', style: 'margin:0 6px 0 0', text: '➕ Add a screen:' }));
+      [['◀', 'left'], ['▶', 'right'], ['▲', 'up'], ['▼', 'down']].forEach(function (g) {
+        growRow.appendChild(el('button', {
+          class: 'btn', text: g[0], disabled: canGrow(bg, g[1]) ? null : 'disabled',
+          title: 'Add a screen to the ' + g[1] + ' (grows the level)',
+          onclick: function () { growBackground(ctx, g[1]); },
+        }));
+      });
+      sizeSec.appendChild(growRow);
+      sizeSec.appendChild(el('div', { class: 'dock-note', text: 'Add screens to build a longer scrolling level (up to ' + MAX_SCREENS_X + ' wide). ◀/▲ push your level over; ▶/▼ extend it.' }));
       if (scr.x > 1 || scr.y > 1) {
         sizeSec.appendChild(el('div', { class: 'dock-note', text: 'Editing screen ' + (vs.x + 1) + ',' + (vs.y + 1) + ' of ' + scr.x + '×' + scr.y + '. Use the arrows to move around your world.' }));
         var nav = el('div', { class: 'row', style: 'margin-top:4px' });
         function navBtn(label, dx, dy, disabled) {
+          var dir = dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down';
           return el('button', { class: 'btn', text: label, disabled: disabled ? 'disabled' : null,
+            title: 'Show the screen to the ' + dir + ' (moves the view, not the level)',
             onclick: function () { ctx.setViewScreen(vs.x + dx, vs.y + dy); ctx.renderLive(); ctx.renderDock(); } });
         }
         nav.appendChild(navBtn('◀', -1, 0, vs.x <= 0));
@@ -878,7 +986,14 @@
     entSec.appendChild(el('div', { class: 'field' }, [el('span', { text: 'Character to place' }), placeSel]));
     entSec.appendChild(el('div', { class: 'dock-note', text: 'Pick the 🧍 Place tool, then click the screen to drop a character. Click one to select and drag it.' }));
 
-    var list = sceneInstances(ctx);
+    // Only this room's entities (engine v75 per-room). Delete still splices from
+    // the full list so ids stay unique across rooms.
+    if ((s.backgrounds || []).length > 1) {
+      entSec.appendChild(el('div', { class: 'dock-note',
+        text: 'Entities belong to this room. Switch background above to place different enemies in another room.' }));
+    }
+    var full = sceneInstances(ctx);
+    var list = sceneInstancesForBg(ctx, s.selectedBgIdx | 0);
     list.forEach(function (inst) {
       var sp = chars[inst.spriteIdx];
       var row = el('div', { class: 'entity-row ent-row' + (inst.id === selInst ? ' sel' : '') }, [
@@ -886,7 +1001,7 @@
         el('button', { class: 'icon-btn', title: 'Delete', text: '🗑', onclick: function (e) {
           e.stopPropagation();
           ctx.pushUndo();
-          var i = list.indexOf(inst); if (i >= 0) list.splice(i, 1);
+          var i = full.indexOf(inst); if (i >= 0) full.splice(i, 1);
           if (selInst === inst.id) selInst = null;
           ctx.markDirty(); ctx.renderDock(); ctx.renderLive();
         } }),
@@ -928,6 +1043,15 @@
       if (stEng >= 10 || selected.ai === 'flyer' || selected.ai === 'patrol') {
         aiOpts.push(['flyer', 'flyer (floats up/down toward the player)']);
         aiOpts.push(['patrol', 'patrol (paces a set distance, turns itself)']);
+      }
+      // v71 — a hopper: walks + turns at walls like a walker, and bounces up and
+      // down on a set rhythm so it hops along the floor.
+      if (stEng >= 71 || selected.ai === 'hopper') {
+        aiOpts.push(['hopper', 'hopper (walks + bounces up and down)']);
+      }
+      // v72 — a shooter: a stationary turret that fires a shot at the player.
+      if (stEng >= 72 || selected.ai === 'shooter') {
+        aiOpts.push(['shooter', 'shooter (turret — fires shots at the player)']);
       }
       aiOpts.forEach(function (a) { aiSel.appendChild(el('option', { value: a[0], text: a[1] })); });
       aiSel.value = selected.ai || 'static';

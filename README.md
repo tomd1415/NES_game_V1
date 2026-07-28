@@ -213,8 +213,9 @@ To move a text-format file into the visual editor, run
 **Import…** and pick the resulting `assets/pupil/my_project.json`.
 
 Full editor instructions: **[`docs/guides/TILE_EDITOR_GUIDE.md`](docs/guides/TILE_EDITOR_GUIDE.md)**.
-All 64 NES colours: **`assets/pupil/palette_reference.png`** — generate it with
-`python3 tools/generate_palette_reference.py`.
+All 64 NES colours: run `python3 tools/generate_palette_reference.py` to generate
+the reference sheet at **`assets/pupil/palette_reference.png`** (it's produced on
+demand, not checked in).
 
 ---
 
@@ -234,9 +235,12 @@ short version:
   [AUDIO_GUIDE](docs/guides/AUDIO_GUIDE.md),
   [TILE_EDITOR_GUIDE](docs/guides/TILE_EDITOR_GUIDE.md)) plus
   teacher / debugging / Aseprite workflow docs.
-- **[`docs/plans/current/`](docs/plans/current/)** — what we're
-  working on now.  The active plan is
-  [2026-04-26-fixes-and-features.md](docs/plans/current/2026-04-26-fixes-and-features.md).
+- **[`docs/plans/current/`](docs/plans/current/)** — plans by date.  Active work
+  is feedback-driven: the running list is
+  [`docs/feedback/recently-observed-bugs.md`](docs/feedback/recently-observed-bugs.md)
+  and the Studio tracker is
+  [2026-07-05-studio-redesign.md](docs/plans/current/2026-07-05-studio-redesign.md)
+  (the April `2026-04-26-fixes-and-features.md` plan is kept for history).
 - **[`docs/plans/archive/`](docs/plans/archive/)** — superseded
   plans, named chronologically (`YYYY-MM-DD-name.md`) so you can
   walk the history of how the project evolved.

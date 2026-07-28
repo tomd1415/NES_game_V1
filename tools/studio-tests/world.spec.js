@@ -71,6 +71,32 @@ test('erase clears a painted cell and undo restores it', async ({ page }) => {
   })).toBe(2);
 });
 
+test('Fill floods a connected same-tile region and respects its boundary (#1)', async ({ page }) => {
+  // Lay a 2-cell horizontal patch of tile 2 with an isolated diagonal neighbour.
+  await page.locator('.stage-toolbar .tool[data-tool="stamp"]').click();
+  await page.locator('.tile-grid .tile-cell').nth(2).click();
+  await clickCell(page, 5, 5);
+  await clickCell(page, 6, 5);
+  // Sanity: cells (5,5) and (6,5) are tile 2; the cell to the right (7,5) is
+  // still empty sky (tile 0). nametable is indexed [cy][cx].
+  expect(await page.evaluate(() => {
+    const nt = window.Studio.getState().backgrounds[0].nametable;
+    return [nt[5][5].tile, nt[5][6].tile, nt[5][7].tile];
+  })).toEqual([2, 2, 0]);
+
+  // Switch to Fill, pick tile 1, click one cell of the patch.
+  await page.locator('.stage-toolbar .more-tools-btn').click();
+  await page.locator('.stage-toolbar .tool[data-tool="fill"]').click();
+  await page.locator('.tile-grid .tile-cell').nth(1).click();
+  await clickCell(page, 5, 5);
+
+  // The whole connected tile-2 region became tile 1; the tile-0 sky below is untouched.
+  expect(await page.evaluate(() => {
+    const nt = window.Studio.getState().backgrounds[0].nametable;
+    return { a: nt[5][5].tile, b: nt[5][6].tile, sky: nt[6][5].tile };
+  })).toEqual({ a: 1, b: 1, sky: 0 });
+});
+
 test('Colour tool paints a whole 2×2 attribute quadrant', async ({ page }) => {
   await page.locator('.stage-toolbar .more-tools-btn').click();
   await page.locator('.stage-toolbar .tool[data-tool="palette"]').click();

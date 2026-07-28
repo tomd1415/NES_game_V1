@@ -136,7 +136,7 @@
   function modal(opts) {
     return new Promise(function (resolve) {
       var bd = el('div', { class: 'modal-backdrop open' });
-      var box = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' });
+      var box = el('div', { class: 'modal' + (opts.wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true' });
       if (opts.title) box.appendChild(el('h2', { text: opts.title }));
       if (opts.sub) box.appendChild(el('div', { class: 'modal-sub', text: opts.sub }));
       (opts.bodyNodes || []).forEach(function (n) { if (n) box.appendChild(n); });

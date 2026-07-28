@@ -1,6 +1,13 @@
 # Recent bugs and feature requests
 
 1. Have a fill option for the background tile
+   *Done (Studio).* The WORLD stage toolbar has a **🪣 Fill** tool (under
+   "More tools") that flood-fills the connected region of same-tile cells from
+   where you click — for background tiles (tile + palette), and it also works
+   with the Colour, Type (behaviour) and Erase tools. Implemented in
+   `studio-world.js` (`floodFill`/`floodGeneric`); now guarded by
+   `tools/studio-tests/world.spec.js` ("Fill floods a connected same-tile region
+   and respects its boundary").
 2. The 'door' or any movement to a new background when there are more than screen in the background
 appears to get confused and show the wrong background for one of the screens.
    *FIXED 2026-07-10 (engine v63).* Was reproduced on FCEUX: a door from a
@@ -35,8 +42,31 @@ wrong background.
 5. Convert more parts of the C code for game creation into assembly as last time this was done there
 was a massive improvement.
 6. Add more to the builder, including more fine tuning and the ability to be more specific to individual sprites and areas on the game. Have the ability to change the speed of the jump.
+   *Jump-speed done + verified 2026-07-11.* The 🎮 Style tab exposes **Jump speed**
+   (globals `jumpSpeedPx`, drives `BW_APPLY_JUMP_RISE`), **Jump height**, **Walk
+   speed** and **Gravity**. New `builder-tests/physics-globals.mjs` proves it
+   behaviourally: js=2 lifts the player 32px, js=6 lifts 84px (jsnes OAM), plus
+   codegen + clamp + byte-identical-when-off. (Broader per-sprite/area fine-tuning
+   remains open.)
 7. Include default sound fx in the audio section.
+   *Implemented 2026-07-14 (engine v74) — pending an attended FCEUX playtest.*
+   A **starter SFX pack** ships (`/starter/audio` → `sfx` with named slots;
+   the SOUND dock's "♪ Add starter pack" loads it), and as of v74 those slots are
+   actually **triggered** on game events (see item 27 for the mechanism). Turn on
+   the SOUND dock's **"Play sounds on game events"** toggle and the starter slots
+   fire on jump / pickup / hurt / win. Build/codegen is guarded by
+   `builder-tests/sfx-events.mjs`; the *sound itself* needs a quick FCEUX playtest
+   to confirm before we call it fully done.
 8. Allow the user to set the default tempo for the audio and the ability to trigger tempo changes.
+   *Assessed 2026-07-14.* Tempo is baked into each **FamiStudio** export (the
+   `.s` song data carries its own tempo envelope — see the `@tempo_env_*` bytes
+   in `audio.mjs`'s song stub), so a per-song "default tempo" slider in the
+   editor can't change it without re-encoding the FamiStudio data (out of scope —
+   pupils set tempo in FamiStudio when composing). *In-game tempo changes* (speed
+   the music up/down on an event, e.g. a "hurry!" near the time limit) are
+   feasible: the FamiStudio engine exposes a tempo/`SetTempo`-style hook we could
+   drive from the same C-main-loop edge-detector described in item 27. Lower
+   priority than item 7/27; parked as a follow-up once event-SFX ships.
 9. Fix scrolling errors in vertical and 2 by 2 backgrounds.
    *Confirmed fixed 2026-07-10 (engine v62).* A 2×2 world now scrolls seamlessly
    across all four nametables in both axes — FCEUX + jsnes verified: the two
@@ -48,23 +78,90 @@ was a massive improvement.
    iNES 4-screen bit). See also items 2/3 for the *door-transition* room-load,
    which is a separate concern from the scroll core.
 10. Enable scrolling platform games to go beyond 2 screens (research how far we can make these go)
+    *Done 2026-07-11 (engine v64/v65 + editor).* WORLD now has **➕ Add a screen**
+    arrows (◀▶▲▼) that grow the level one screen at a time in any direction
+    (▶/▼ extend, ◀/▲ push the level over and shift the art/entities). **How far:**
+    the engine already scrolled up to **8 screens** wide (256 cols) with no
+    change; a raw ~1KB/screen tile array then overflows NROM's 32KB PRG. So wide
+    1-tall levels are **column-deduplicated** (repeated sky/floor/blocks collapse
+    to a unique-column table + a 1-byte index), decoded by both the C and ASM
+    engines, letting levels reach **~12 screens** (the editor cap; further is
+    ROM-limited by the level's unique-column count). **Vertical** scroll stays
+    capped at **2 screens** (a hard engine limit — a follow-up if wanted). Guarded
+    by `builder-tests/scroll-wide-compressed.mjs` (C≡ASM nametables past screen 8)
+    + `studio-tests/world-grow.spec.js`. Truly full-SMB-*game* scale (many long
+    levels) would need a bigger mapper — a separate effort. Engine changelog v64
+    (format+C) / v65 (ASM).
+    *Follow-up fix 2026-07-11:* a wide level too **varied** to compress (>8
+    screens with ≥256 distinct columns, more than a 1-byte index can hold) used
+    to crash `/play` with a Python `ValueError` → HTTP **500** and no game. The
+    server now (a) counts unique columns without overflowing and (b) rejects the
+    un-fittable case up front with a clear, kid-readable message ("too big / too
+    many different-looking columns — make it shorter or reuse repeated
+    sections"). Guarded by `builder-tests/scroll-wide-too-varied.mjs`. Server-only
+    (`playground_server.py`); no ROM-output change, goldens byte-identical.
+    *Follow-up fix 2026-07-11 (engine v66):* a pupil reported a **5-8 screen
+    detailed** level failing to build (`ld65: RODATA overflows ROM0 by 5950
+    bytes`) — compression only engaged **above 8 screens**, so a shorter but
+    detailed level got no help and overflowed on the raw path. v66 widens
+    compression to **any 1-tall multi-screen level** (`cols>32`) that packs down
+    (dedup fits a 1-byte index AND is smaller than raw); 1-screen stays raw
+    (byte-identical). Also made the dialogue box-restore read compression-aware
+    (`builder-modules.js`) and turned the raw `ld65` overflow into a
+    kid-readable "your game is too big + how to slim it" message shown in a
+    Studio modal (`studio.js`). Guarded by `scroll-narrow-compressed.mjs`
+    (6-screen C≡ASM). Goldens `1730448e` + `_rom-equiv` `0aed6e95` unchanged.
+    **NB the live site runs on a separate host — it needs `main` deployed + the
+    Python server restarted to pick this up.**
 11. Add the ability to make a 'Geometry Dash' style game. This has been requested by many of the younger pupils and making this as easy as possible would be very helpful.
-    *Largely covered:* the **runner** style is an auto-scroller with tap-to-jump
-    and an instant restart when the player touches a spike tile — the Geometry
-    Dash core loop. It has a starter + tutorial. A dedicated "Geometry Dash"
-    preset name / obstacle-pack could still make it more discoverable for the
-    younger pupils (nice-to-have, not a missing capability).
+    *Done — the discoverability follow-up shipped too (verified 2026-07-14).* Beyond
+    the **runner** engine (auto-scroll + tap-to-jump + instant restart on touching
+    a spike — the Geometry Dash core loop), there is now a **dedicated 🟦 "Geo Dash"
+    starter** in the New-project picker (`studio-starter.js` `createGeoDash`, listed
+    in `StudioStarter.list()`), described as a Geometry-Dash-style course, so the
+    younger pupils can pick it by name. It builds to a valid ROM in
+    `builder-tests/style-starters.mjs` (which asserts the picker offers `geodash`
+    and compiles it) and its tunable gravity is behaviourally covered by
+    `physics-globals.mjs`. Further obstacle-pack art is a nice-to-have, not a gap.
 12. Add an option for a top down racing game (like the classic Micro Machines game).
+    *Done (verified 2026-07-14).* A full **🏎️ Racer** game style ships: a top-down
+    car with steer / accelerate / **brake**, rotation, a scrolling track, lap
+    counting with checkpoints, collision, a lap/time HUD, and 2-player — selectable
+    as the "Top-down racer" starter (`studio-starter.js` `createRacer`) and as the
+    Builder game-type `racer` (`builder-modules.js`, `builder-validators.js` guards
+    that a racer has a >1-screen track and that lap racing has finish+checkpoint
+    markers). Comprehensively tested: `racer.mjs`, `racer-2p`, `racer-brake`,
+    `racer-checkpoints`, `racer-collision`, `racer-hud`, `racer-laps`,
+    `racer-rotation`, `racer-validators`, plus the build smoke in
+    `style-starters.mjs`.
 13. More options for enemy paths.
+    *Extended 2026-07-06 (v10: flyer + patrol), 2026-07-11 (v11: goomba/koopa
+    stomp), and 2026-07-13 (**v71: hopper** — walks + turns at walls AND bounces
+    on a set rhythm; **v72: shooter** — a stationary turret that fires a projectile
+    toward the player, reusing the firing enemy's own tile as the shot; the shot
+    hurts on contact when the Damage module + Max HP are on).* The WORLD **AI**
+    dropdown now offers static / walker / chaser / goomba / koopa / item / flyer /
+    patrol / hopper / shooter per enemy, each gated to its engine and degrading to
+    a walker on older targets. Guarded by `flyer-patrol.mjs` + `hopper-enemy.mjs`
+    + `shooter-enemy.mjs`. Further paths (chaser variants, homing, etc.) remain
+    open but the pupil ask for "more enemy paths" is well covered now.
 14. Currently the user can only place enemies and players on the first screen of the first background they should be able to do that for all screens in all backgrounds.
     *Partially resolved 2026-07-06:* the World-dock **place/move tool now works
     across every screen** of a scrolling background — entity coordinates are
     world-space (screen-local click + view offset), clamped to the whole
     `worldCols×worldRows`, and the overlay culls entities off the shown screen
     (the engine already supported world-pixel scene sprites — `scene-multiscreen.mjs`).
-    Still open: scene instances are **not yet per-background** (one shared scene
-    list across all `backgrounds[]`), so "different enemies per room" needs a
-    per-bg scene model + codegen change — tracked as a follow-up.
+    *Completed 2026-07-15 (engine v75) — different enemies per room.* Scene
+    instances are now **per-background**: each carries a `bg`, the WORLD editor
+    shows/edits one room's entities at a time, and the engine activates only the
+    current room's entities (parking the rest off-screen), swapping them on every
+    door transition — so a room only ever shows and collides with the enemies /
+    pickups placed in it, and re-entering a room respawns them. Gated
+    `#ifdef BW_SCENE_PERROOM` (multi-room projects only → single-scene byte-identical);
+    verified end-to-end in jsnes by `builder-tests/per-room.mjs` (boot filter,
+    control, and a walk-through-a-door room swap). v1 covers single-screen-room
+    (8-bit) layouts; wider multi-screen rooms fall back to the shared scene — a
+    follow-up.
 15. There is currently no way for a player to kill an enemy, we should add some options like jumping on top of enemy or shooting etc.
     *Status 2026-07-06:* the **SMB style already has both** — stomp (goomba/koopa
     `ai`, engine v4) and fireballs (shooting). What's missing is a **stomp for
@@ -87,6 +184,18 @@ was a massive improvement.
     defaults but want an attended playtest to fine-tune.** Shooting (the other
     suggestion) already exists in the SMB style (fireballs).
 16. The pallets on the background and for the sprites sometimes do not match what they should be and the ones that are selected are not always represented.
+    *Verified correct 2026-07-13 — not reproducible in the Studio.* Audited all
+    three steps of the reproduction card: **(B) mapping** — the render pipeline
+    maps the *selected* slot to the right pixel value (pixel 0 = backdrop /
+    transparent; pixel N = `slots[N-1]`) for both bg and sprite palettes, with no
+    off-by-one; **(A) persistence** — the picked colours survive save + reload;
+    **(C) ROM** — already guarded by `builder-tests/palette-render.mjs`. New
+    `tools/studio-tests/palette-fidelity.spec.js` locks A + B. The report predates
+    the Studio redesign (it was filed against the legacy Sprites/Backgrounds
+    pages); the Studio's PALS editor + shared `NesRender` pipeline are consistent
+    end-to-end. The one case where a *selected* palette legitimately isn't shown
+    is the NES **2×2-attribute limit** (a whole 16-px block shares one palette) —
+    which the WORLD editor already flags with a red conflict overlay.
 17. Make it clearer to the user that the sprite animation is being used and allow for enemies and pickups etc. to have animations.
     *Resolved 2026-07-06:* the engine + server already baked role-tagged scene
     animations (`ANIM_ENEMY_WALK/IDLE`, `ANIM_PICKUP_IDLE` — see
@@ -110,17 +219,97 @@ was a massive improvement.
     "top view + pixel grid" asked for. This was a gap on the **legacy** Sprites
     page only, which is now secondary to the Studio.
 20. On the behaviour editor the Sprite reactions box needs to be wider so I think it should be below the background window and therefore have a bit more width to help make it easier to use.
+    *Resolved 2026-07-13.* The RULES page's Sprite-reactions card now has an
+    **⤢ Expand** button that opens a **wide matrix** modal — rows = characters,
+    columns = tile-types (with colour swatches), each cell a verb dropdown — so the
+    whole map is visible and editable at once, far wider than the narrow dock.
+    Edits write straight to `behaviour_reactions`. `StudioUI.modal` gained a
+    `wide` option (`.modal.wide`, 960px). Guarded by
+    `studio-tests/reactions-expand.spec.js`.
 21. The triggers and doors on different places should be able to have different effects.
     *Satisfied (2026-07-06 audit):* the **per-door** module gives every door
     (keyed by background + tile x/y) its own `spawnX`/`spawnY` and `targetBgIdx`,
     so each door can send the player to a different spot and/or a different room.
     Covered by `perdoor.mjs` (two doors, different destinations).
 22. There should be the ability to change variables that affect the whole game, like gravity and similar in the builder section.
+    *Done + verified 2026-07-11 (Globals module, T1.6).* The 🎮 Style tab exposes
+    game-wide physics knobs — **Gravity** (`gravityPx`, enemy fall via
+    `BW_APPLY_GRAVITY` at `platformer.c:1789`), **Jump speed**, **Jump height**,
+    **Walk speed**, walk-**Bob** — emitted as `#define BW_*` overrides that are
+    byte-identical to the baseline when untouched. Now behaviourally guarded by
+    `builder-tests/physics-globals.mjs` (jump-speed measurably changes jump height;
+    codegen + clamping asserted).
+    *Fixed properly 2026-07-11 (engine v67):* the sliders had only worked in the
+    C-fallback — the shipped **ASM** player hardcoded jump budget/rise/fall, so
+    pupils saw no effect. The ASM player now reads `JUMP_BUDGET` / `JUMP_SPEED` /
+    `PLAYER_GRAVITY` from project.inc; **Gravity now moves the player too** (not
+    just enemies: `PLAYER_GRAVITY = gravityPx + 1`), and Jump height/speed take
+    effect on the real engine. Byte-identical at defaults (goldens + asm-ab/corpus
+    unchanged); `physics-globals.mjs` now drives the DEFAULT ASM engine (js 2→6:
+    28→84px, jh 8→24: 24→72px, gravity 1→4: player falls 16→40px). Runner + SMB
+    keep their own fixed fall feel.
 23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
 24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
+    *Done (verified 2026-07-14).* The gallery thumbnail is no longer frame 0. The
+    publish flow runs the ROM headless for a **fixed 60-frame (~1 s) warm-up**
+    before grabbing the PNG (`studio.js` `captureRomPreview(rom, 60)` →
+    `NesEmulator.capturePreview`, `emulator.js:372` "runs headless for a fixed
+    warm-up and grabs the frame as a PNG"), so the scene, HUD and sprites have
+    rendered by the time the snapshot is taken.
 26. The top down code has not been tested as much as the platform based code so that will need updating with everything that was discovered in the platform builder code writing and then testing. All should be documented. Again the NES is a very old system so there are probably many solutions to these problems already you should carry out a detailed search for sources of information to aid in writing this application and a suitable way of recording the information needed.
+    *Largely addressed (2026-07-14 audit).* Top-down now has behavioural + build
+    coverage: `builder-tests/topdown.mjs`, `topdown-movement.mjs`,
+    `topdown-enemies.mjs` (chaser + v10 patrol), `topdown-new-project.mjs`, plus
+    the top-down `racer` suite (see item 12) and the `style-starters.mjs` build
+    smoke. The "detailed search for NES sources" half is covered by item 4
+    (`docs/reference/nes-resources.md`). Remaining open: parity sweeps for newer
+    platformer features that don't yet have a top-down equivalent are tracked
+    per-feature (e.g. per-background scene instances, item 14).
 27. It is not clear where the sound effects are linked to events or how to do that currently.
+    *Implemented 2026-07-14 (engine v74) — pending an attended FCEUX playtest.*
+    Shipped as designed below: the SOUND dock's **"Play sounds on game events"**
+    toggle wires the loaded SFX pack to jump / pickup / hurt / win via
+    edge-detectors in the C main loop (fires in both the C and shipped-ASM
+    builds). Gated `#ifdef BW_SFX_EVENTS` → byte-identical when off; the server
+    only enables it with a real sfx pack. Guarded by
+    `builder-tests/sfx-events.mjs` (all four detector branches compile; events
+    change the ROM; the flag without an sfx pack is a no-op). The remaining
+    sign-off is the audio playtest. Deferred to a follow-up: an SMB coin-block
+    sound (`bw_coins`), a runner/GD restart "error" sound, and a per-event slot
+    picker. Original diagnosis + design retained below.
+
+    *Root cause found 2026-07-14 — SFX are loaded but never fired.* The engine
+    initialises the FamiStudio SFX engine (`famistudio_sfx_init(audio_sfx_data)`,
+    `platformer.c:1127`) and declares `famistudio_sfx_play(index, channel)`, but
+    **there is not a single call to `famistudio_sfx_play(...)` anywhere** in the
+    engine or the server-generated code. So an uploaded/starter SFX pack links,
+    builds, and occupies ROM, yet no game event ever plays a sound — which is
+    exactly why "where SFX link to events" is unclear: they don't, yet.
+    **Design for the fix (a gated engine feature → v74, keep goldens
+    byte-identical when off):**
+    - Trigger all SFX from **edge-detectors in the C main loop**, not from the
+      per-system update code. The main loop runs every frame in *both* the C and
+      the shipped **ASM** build, so watching shared game state avoids the
+      item 22 / v67 trap where a C hook silently doesn't run because the ASM
+      player replaced that path. Concretely: `bw_coins` increased → coin SFX;
+      `player_hp` decreased → hurt SFX; `jumping` went 0→1 → jump SFX (the ASM
+      player sets `jumping`, the C loop just observes the edge); win flag set →
+      win SFX; enemy parked at `y=0xFF` this frame → defeat SFX.
+    - Map the **named starter-pack slots** (item 7) to those events by name, with
+      a sensible default order, and gate the whole block behind a
+      `#ifdef BW_SFX_EVENTS` that the server only defines when an SFX pack is
+      present *and* the feature is on — so every existing project (and all
+      goldens) stays byte-identical.
+    - Surface an **"event sounds" toggle** (and, later, a per-event slot picker)
+      in the SOUND dock so it's visibly clear which sound plays on which event —
+      directly answering this item.
+    - Testing: `audio.mjs`-style codegen/build asserts (emitted C contains the
+      `famistudio_sfx_play(...)` edge-detectors when on; byte-identical when off;
+      ROM builds + differs). **The actual audio must be signed off in an attended
+      FCEUX playtest** (jsnes APU inspection alone is too fragile to claim it),
+      per the engine-change "validate in jsnes AND FCEUX" rule — so this wants a
+      human in the loop before it's marked done.
 28. NPC dialogue is misbehaving in pupil projects.  Re-reported
     2026-04-27 — symptoms not yet captured in detail; please add to
     the diagnosis-notes section below when next observed (does the
@@ -215,7 +404,7 @@ diagnosis trail in place for future debuggers (just add a
 "Resolved YYYY-MM-DD: <commit ref>" line at the bottom of the
 relevant sub-entry).
 
-### Item 16 — palette mismatch (status: NOT YET REPRODUCED, 2026-04-26)
+### Item 16 — palette mismatch (status: VERIFIED CORRECT in the Studio, 2026-07-13 — see item 16 above + palette-fidelity.spec.js)
 
 The reported symptom is "the palettes on the background and for
 the sprites sometimes do not match what they should be and the
@@ -571,6 +760,13 @@ Root causes below were verified against the current code on 2026-06-17.
     Plan §B-2; codegen plan `2026-06-18-codegen-rework-implementation.md`.
 
 32. **Deleting the 2nd sprite animation appears to delete the 1st.**
+    *Verified correct 2026-07-13 — not reproducible in the Studio.* The CHARS
+    animation list deletes the clicked animation by its own object (`indexOf(an)`
+    in `studio-chars.js`), and each animation owns its `frames` array (frame
+    add/remove is `push`/`pop` on that array only), so removing the 2nd cannot
+    touch the 1st. Guarded by `studio-tests/animation-delete.spec.js`. The report
+    predates the Studio (legacy Sprites page). If a pupil still sees it, capture
+    the exact control used (per-frame vs whole-animation) in the notes below.
     (Feedback F1c, reporter K.)  The delete handlers in `sprites.html`
     (`removeAnimFrame`, line ~4039; `btn-anim-del`, line ~4145) splice
     the *selected* item and read index-correct.  The suspicious line is
@@ -618,8 +814,12 @@ Root causes below were verified against the current code on 2026-06-17.
     blocks repeat hits — so one touch = one hit.  The report predates
     this i-frame handling.  Only still reproduces if a pupil sets
     *Invincibility frames* to **0** (schema `min: 0`), where every
-    overlapping frame re-hits.  Status: **VERIFY**, then optionally
-    raise the schema minimum to ~10.  Plan §B-6.
+    overlapping frame re-hits.
+    *Resolved 2026-07-13:* the *Invincibility frames* value is now **floored at
+    10** (schema `min` + the `builder-modules.js` clamp), so a pupil can no longer
+    set it to 0 and have every overlapping frame re-hit — one touch can't drain all
+    HP in a few frames. A high per-hit damage still allows a deliberate near-instant
+    kill. Guarded by `builder-tests/chunk-a-hp-hud.mjs` A3 (0→10, 45→45).  Plan §B-6.
 
 36. **Arrow keys drive both the page and the emulator (focus theft).**
     (Feedback F12 + F25, reporters D and M.)  Both page-level keydown
@@ -629,9 +829,18 @@ Root causes below were verified against the current code on 2026-06-17.
     shared `emulator.js` owns its own window listeners.  The latest
     commit (`26fbb82` "running game from the sprite page") fixed a
     *different* bug (ROM byte-format); keyboard capture was resolved
-    earlier.  Status: **VERIFY** closed on both pages; confirm no page
-    that opens a *private* emulator uses a different dialog id than the
-    guard checks.  Plan §B-9.
+    earlier.
+    *Fixed properly 2026-07-13.* The legacy-page bails only stopped each
+    page's *own* keydown logic — they never stopped the **browser's native
+    arrow-key scroll**, and the Studio (`studio.html`, the primary UI) had no
+    such bail at all, so playing there scrolled the page under the TV.  The
+    shared `emulator.js` now calls `e.preventDefault()` on any key it maps to a
+    pad button, so arrow keys (and Enter/Space) no longer do their browser
+    default while the emulator is open — for **every** page that uses it. It
+    skips the preventDefault while a text field is focused, so a pupil can still
+    rename a project with the emulator open.  Guarded by `studio-tests/play.spec.js`
+    (an ArrowDown is `defaultPrevented` while playing; a key in a focused input
+    is not).
 
 37. **"My game keeps crashing" / "emulator froze for no reason."**
     (Feedback F2, F11, F13; reporters D and A.)  Generic, no repro.
@@ -663,7 +872,7 @@ Root causes below were verified against the current code on 2026-06-17.
     in-engine stays a deferred enhancement.  Guarded in `run-all.mjs`.
     Plan §B-8.
 
-### Item 32 — animation delete: reproduction questions
+### Item 32 — animation delete (status: VERIFIED CORRECT in the Studio, 2026-07-13 — see item 32 + animation-delete.spec.js)
 
 - [ ] **Which control?** the per-frame ✕ in the animation's frame strip,
       or the 🗑 *Delete* button on the whole animation?: _____

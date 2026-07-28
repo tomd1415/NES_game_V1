@@ -26,10 +26,14 @@ Repository-wide contribution, ownership and cross-team review rules live in
   [README](../README.md), then
   [`guides/PUPIL_GUIDE.md`](guides/PUPIL_GUIDE.md) for the editor
   walkthrough.
-- **Picking up active work?**
+- **Picking up active work?** Work is now feedback-driven — the running list of
+  open items (with fixes recorded inline as they land) is
+  [`feedback/recently-observed-bugs.md`](feedback/recently-observed-bugs.md), and
+  the Studio "what's done / what's left" tracker is
+  [`plans/current/2026-07-05-studio-redesign.md`](plans/current/2026-07-05-studio-redesign.md).
+  The older tiered plan
   [`plans/current/2026-04-26-fixes-and-features.md`](plans/current/2026-04-26-fixes-and-features.md)
-  is the live plan; it lists open items in tiered order and links
-  back to the bugs/feedback that motivated each one.
+  is kept for historical context.
 - **Working on the UI/UX redesign?** (branch `redesign/ui-ux`)
   Start with the roadmap
   [`design/phased-plan.md`](design/phased-plan.md) and its companions
