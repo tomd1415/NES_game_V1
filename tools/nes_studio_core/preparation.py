@@ -183,6 +183,11 @@ class ProjectBuilder:
         parameters = parse_request(body)
         state = parameters.state
         graphics.expand_metatiles(state)
+        # Fail fast with a readable message on worlds that provably can't fit the
+        # cartridge (a wide level too varied to column-compress), rather than
+        # crashing deep in codegen or overflowing the linker. Must follow
+        # expand_metatiles so it measures the world the codegen will actually emit.
+        world.guard_world_fits(state)
         graphics._inject_racer_rotation(state, parameters.player_index)
         chr_bytes = graphics.build_chr(state)
         nam_bytes = graphics.build_nam(state)
