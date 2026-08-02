@@ -917,6 +917,8 @@
       pal.forEach(function (c) { strip.appendChild(swatchEl(global.NesRender.nesRgb(c))); });
       palSec.appendChild(strip);
     })(p);
+    palSec.appendChild(el('div', { class: 'dock-note',
+      text: 'Keys: 0 1 2 3 pick a palette. 4 (or `) also picks 0, for keyboards where 0 is a stretch.' }));
     palSec.appendChild(el('div', { class: 'dock-note', text: 'Backdrop colour is shared by every palette. Colour is chosen per 2×2 block on the NES — use the 🎨 Colour tool.' }));
     var clashes = countAttrConflicts(bg);
     if (clashes > 0) {
@@ -1212,6 +1214,32 @@
     onRenderOverlay: onRenderOverlay,
     onEnter: function () { hover = null; selecting = false; },
     onToolChange: function (id, ctx) { ctx.renderDock(); ctx.renderLive(); },
+    // Paint palette by keyboard: 0-3, with 4 and ` as aliases for 0 (#39).
+    //
+    // WORLD's picker is FOUR BG SUB-PALETTES, not the painters' five pen
+    // colours, so there is no colour-0/transparent here and the set stops at 3.
+    // 4 and ` are still bound to palette 0 for the same reason they are in the
+    // painters: on a keyboard whose number row starts at 1 (Esc,1,2,3…) both 0
+    // and ` sit across the board from the keys you paint with, and WORLD would
+    // otherwise be the one surface where that reach is still required.
+    //
+    // Does exactly what clicking the matching BG strip does — sets paintPalette
+    // and redraws the dock. The active TOOL is deliberately left alone: 🎨 Colour
+    // recolours a 2x2 block with paintPalette, but 🖌 Stamp also stamps with it,
+    // so a digit is a "which colour am I painting in" change either way.
+    //
+    // Modifier-guarded: studio.js dispatches onKey even with Ctrl/Cmd held, and
+    // Ctrl+1 belongs to the browser (switch tab), not to us.
+    //
+    // NOT bound: the selected metatile block's own BG 0-3 buttons in the block
+    // editor. Those mutate saved project data through pushUndo, and a stray
+    // keypress silently recolouring a block is a different and worse thing than
+    // changing which colour the next stroke uses.
+    onKey: function (evt, ctx) {
+      if (evt.metaKey || evt.ctrlKey || evt.altKey) return;
+      if (evt.key >= '0' && evt.key <= '3') { paintPalette = parseInt(evt.key, 10); ctx.renderDock(); }
+      else if (evt.key === '4' || evt.key === '`') { paintPalette = 0; ctx.renderDock(); }
+    },
     onTvDown: function (cell, ctx) {
       var tool = ctx.getActiveTool();
       if (tool === 'place') { placeDown(ctx, cell); return; }

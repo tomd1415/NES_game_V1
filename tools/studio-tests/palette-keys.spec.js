@@ -18,6 +18,8 @@ const bootStudio = async (page) => {
 };
 const penOf = (page, mode) =>
   page.evaluate((m) => window.StudioModes[m]._get().pen, mode);
+const paintPaletteOf = (page) =>
+  page.evaluate(() => window.StudioModes.world._get().paintPalette);
 
 test('Studio TILES: 0-3 pick the pen, 4 and ` pick 0', async ({ page }) => {
   await bootStudio(page);
@@ -53,6 +55,78 @@ test('Studio CHARS: 0-3 pick the pen, 4 and ` pick 0', async ({ page }) => {
   await page.keyboard.press('1');
   await page.keyboard.press('`');
   expect(await penOf(page, 'chars'), 'backtick still picks 0').toBe(0);
+});
+
+// WORLD's picker is four BG SUB-PALETTES, not five pen colours, so the set stops
+// at 3 — there is no colour-0/transparent to alias. 4 and ` still map to palette 0
+// so this surface does not become the one place the awkward reach is still needed.
+//
+// Split across several small tests on purpose: this suite runs unattended on a
+// shared box with a 30s per-test timeout and no retries, and each keypress or
+// evaluate is a round-trip that stretches under host load. One long test that
+// walks every case is the difference between a reliable suite and a flaky one.
+const enterWorld = async (page) => {
+  await bootStudio(page);
+  await page.locator('.mode-btn[data-mode="world"]').click();
+};
+
+test('Studio WORLD: 0-3 pick the paint palette', async ({ page }) => {
+  await enterWorld(page);
+  for (const k of ['1', '2', '3', '0']) {
+    await page.keyboard.press(k);
+    expect(await paintPaletteOf(page), `key ${k}`).toBe(Number(k));
+  }
+});
+
+test('Studio WORLD: 4 and ` also pick palette 0', async ({ page }) => {
+  await enterWorld(page);
+  await page.keyboard.press('3');
+  await page.keyboard.press('4');
+  expect(await paintPaletteOf(page), 'key 4 should pick palette 0').toBe(0);
+  await page.keyboard.press('2');
+  await page.keyboard.press('`');
+  expect(await paintPaletteOf(page), 'backtick still picks 0').toBe(0);
+});
+
+test('Studio WORLD: a digit past the last palette is ignored', async ({ page }) => {
+  await enterWorld(page);
+  // There are only four BG palettes: 5 must do nothing, not clamp to 3 and not
+  // select a palette that does not exist.
+  await page.keyboard.press('2');
+  await page.keyboard.press('5');
+  expect(await paintPaletteOf(page), 'key 5 is not a palette').toBe(2);
+});
+
+test('Studio WORLD: the highlighted BG strip follows the key', async ({ page }) => {
+  await enterWorld(page);
+  // The selection a pupil actually sees, not just the variable.
+  await page.keyboard.press('1');
+  const selLabel = await page.evaluate(() => {
+    const s = document.querySelector('.pal-strip.sel .label');
+    return s ? s.textContent : null;
+  });
+  expect(selLabel).toBe('BG 1');
+});
+
+// Picking a palette must not silently change the project. WORLD's block editor has
+// its own BG 0-3 buttons that DO edit saved data through pushUndo; the keyboard is
+// deliberately not wired to those.
+test('Studio WORLD: a palette key changes no project data', async ({ page }) => {
+  await enterWorld(page);
+  const snapshot = () => page.evaluate(() => JSON.stringify(window.Studio.getState().backgrounds));
+  const before = await snapshot();
+  for (const k of ['0', '1', '2', '3', '4', '`']) await page.keyboard.press(k);
+  expect(await snapshot(), 'palette keys must not touch the nametable').toBe(before);
+});
+
+// WORLD guards modifiers separately — each mode's onKey has to ignore them itself.
+test('Studio WORLD: Ctrl/Cmd+digit is left to the browser', async ({ page }) => {
+  await enterWorld(page);
+  await page.keyboard.press('2');
+  expect(await paintPaletteOf(page)).toBe(2);
+  await page.keyboard.press('Control+1');
+  await page.keyboard.press('Control+4');
+  expect(await paintPaletteOf(page), 'modified digits must not change the palette').toBe(2);
 });
 
 test('Studio: Ctrl/Cmd+digit is left to the browser, not stolen as a colour', async ({ page }) => {

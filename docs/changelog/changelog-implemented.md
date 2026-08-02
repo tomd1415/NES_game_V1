@@ -31,6 +31,42 @@ deferred.
 
 ---
 
+## WORLD gets the palette keys too — item #39 follow-on — 2026-07-30
+
+Editor-only; no engine change, no version bump, no ROM affected.
+
+The 2026-07-28 pass deliberately skipped WORLD: it had never had a key binding
+at all, so it was left for a decision rather than changed on the way past. This
+is that decision, taken.
+
+- **WORLD's paint-palette picker now answers `0` `1` `2` `3`.** It previously
+  had no `onKey` handler whatsoever — the four BG strips were click-only.
+- **The set stops at 3, not 4.** WORLD picks one of four **BG sub-palettes**,
+  not one of five pen colours, so there is no colour-0/transparent to alias.
+  `4` and `` ` `` are still bound to palette 0 anyway, for the same ergonomic
+  reason the painters have them: otherwise WORLD would have been the one
+  surface where the reporter's reach across the board was still required.
+- **A digit past the end does nothing.** `5`+ is ignored rather than clamped to
+  3 or allowed to select a palette that does not exist.
+- **Paint palette only — the block editor stays click-only.** WORLD's metatile
+  block editor has its own BG 0–3 buttons, but those mutate saved project data
+  through `pushUndo`. A stray keypress silently recolouring a block is a
+  different and worse thing than changing which colour the next stroke uses, so
+  the keyboard is not wired to them. There is a test asserting the palette keys
+  change no project data at all.
+- **Modifier-guarded**, like the other surfaces: `studio.js` dispatches `onKey`
+  even with Ctrl/Cmd held, and `Ctrl+1` belongs to the browser.
+- **Discoverability:** the Paint-colour dock section names the keys, matching
+  the note the TILES and CHARS pen docks already carry.
+
+Six new cases in `tools/studio-tests/palette-keys.spec.js`, each
+mutation-checked — dropping the alias, widening the accepted range, removing the
+modifier guard and removing the handler entirely each fail exactly the tests
+that describe them. The new cases are deliberately **small and separate** rather
+than one walkthrough: the suite runs unattended with a 30s per-test timeout and
+no retries, and a first draft that packed every case into two tests was
+tripping that timeout whenever the shared host was busy.
+
 ## `4` picks colour 0 everywhere — item #39 — 2026-07-28
 
 Editor-only; no engine change, no version bump, no ROM affected.

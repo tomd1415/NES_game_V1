@@ -964,6 +964,18 @@ Root causes below were verified against the current code on 2026-06-17.
     the report literally asked for.  A fixed alias solves the stated
     problem without a settings surface to build, store, teach and keep
     in sync across four editors; revisit if a different layout complains.
+    **Extended 2026-07-30 to WORLD (editor only, no version bump).**  WORLD's
+    background-palette picker was deliberately left alone at the time because it
+    had never had a key binding; it now has one.  Its picker is four **BG
+    sub-palettes**, not five pen colours, so the set is `0`–`3` with no
+    transparent to alias — but `4` and `` ` `` still map to palette 0, because
+    otherwise WORLD would have become the single surface where the reporter's
+    awkward reach was still required.  A digit past the last palette (`5`+) is
+    ignored rather than clamped.  The keys set the *paint* palette only: WORLD's
+    metatile block editor has its own BG 0–3 buttons that mutate saved data
+    through `pushUndo`, and a stray keypress silently recolouring a block would
+    be a worse bug than the one being fixed, so those stay click-only.  Six new
+    cases in `palette-keys.spec.js`, each mutation-checked.
 
 ### Item 32 — animation delete (status: VERIFIED CORRECT in the Studio, 2026-07-13 — see item 32 + animation-delete.spec.js)
 
