@@ -27,6 +27,37 @@ archived and every v1 game keeps working.
 - **Engine = ** `tools/tile_editor_web/builder-templates/*.c` +
   `builder-assembler.js` + the ROM-emitting parts of `playground_server.py`
   + `steps/Step_Playground/` (the cc65 project) + `cfg/` + `src/`.
+
+> **⚠ Update 2026-08-06 — the snapshot does not cover all of that.** The
+> definition above includes the server's ROM-emitting codegen. The snapshot does
+> not: `scripts/snapshot-engine.mjs`'s `INCLUDE_DIRS`/`INCLUDE_FILES` list no
+> Python at all, and its inline NOTE explains why — `playground_server.py` was
+> "a single large file mixing server + codegen, so it is not file-copied here yet".
+>
+> **That reason has largely expired.** The codegen has since been extracted into
+> `tools/nes_studio_core/` (`playground_server.py:48-52` imports it; the former
+> `build_project_inc` / `build_bg_world_h` / `build_bg_world_c` / `build_scene_inc`
+> are now one-line delegations to it). `build_behaviour_c` is still inline, so the
+> extraction is partial, not finished.
+>
+> The consequence is worth being blunt about: **a change to `tools/nes_studio_core/`
+> alters ROM output and yet cannot make `snapshot-engine.mjs --check` go red, and so
+> cannot fail the `engine snapshot matches live sources` gate in
+> `tools/builder-tests/run-all.mjs`.** The v64–v75 port (commits `8cf5b31`,
+> `ccbd53a`, `c7c5531`) landed entirely inside that blind spot. The builder suite
+> was green throughout, and correctly so — it exercises the codegen *behaviourally*
+> (`tools/builder-tests/lib/render-harness.mjs` spawns the real server, which
+> imports the core), which is different from freezing it.
+>
+> Closing the gap means adding `tools/nes_studio_core/` to `INCLUDE_DIRS`, which
+> changes what a snapshot *is* and therefore needs a version bump and a decision
+> about the existing `v1`–`v75` snapshots, which were all taken without it. Not a
+> tidy-up. **Left as an owner decision.**
+>
+> Note also that `--check` reads **committed (HEAD)** bytes, deliberately, so that
+> it is deterministic while `steps/Step_Playground/src/` is being rewritten by a
+> build. The flip side is that an engine edit that has not been committed yet is
+> invisible to the gate.
 - **`ENGINE_VERSION`** — a single integer, bumped whenever a change alters
   ROM output or the project↔ROM contract. Source of truth: a constant the
   server and the JS both read (proposed `tools/engines/ENGINE_VERSION`).

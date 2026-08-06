@@ -115,6 +115,61 @@ so they show up as ordinary **failures** indistinguishable from real ones.
 
 ---
 
+## 2026-08-06 — Watching the engine gate fail on purpose (and what it does not watch)
+
+A check nobody has seen fail is decoration. `scripts/snapshot-engine.mjs --check`
+— invoked by `tools/builder-tests/run-all.mjs` as *engine snapshot matches live
+sources* — had never been watched go red here, so it was broken deliberately three
+ways and restored. Every probe was working-tree only and reverted with
+`git checkout --`; the tree was verified clean afterwards.
+
+| Probe | Predicted | Observed |
+| --- | --- | --- |
+| Baseline | green | `✓ v75 snapshot matches HEAD (30 files).` exit 0 |
+| **A.** Append a line to `tools/tile_editor_web/engine-version.js` (uncommitted) | **still green** | still green, exit 0 |
+| **B.** `ENGINE_VERSION` → 76 with no `v76/` snapshot | red | `No snapshot for v76 …` exit 1 |
+| **C.** Corrupt one `sha1` in `tools/engines/v75/manifest.json` | red, naming the file | `DRIFT (vs HEAD): steps/Step_Playground/Makefile` exit 1 |
+
+**The gate works.** B and C both go red, C names the offending file, and both
+return to green on restore.
+
+**Probe A is the one to remember.** It is green *by design* — `--check` compares
+committed (HEAD) bytes precisely so it stays deterministic while a `/play` is
+rewriting `steps/Step_Playground/src/` underneath it. The cost of that choice is
+that **an engine edit you have not committed yet is invisible to the gate**. Run it
+after committing, not before, or it will cheerfully bless work it never looked at.
+
+### The blind spot worth knowing about
+
+The v75 snapshot covers **30 files and not one line of Python**:
+
+```
+steps/Step_Playground/{Makefile,assets,cfg,src}
+tools/tile_editor_web/{builder-assembler.js,builder-modules.js,
+                       builder-templates,engine-version.js}
+```
+
+Neither `tools/playground_server.py` nor `tools/nes_studio_core/` is in it — yet
+`nes_studio_core` now emits most of the ROM, since the codegen was extracted out of
+the server. So **a change to the Python codegen alters ROM output and cannot make
+this gate go red.** The v64–v75 port landed entirely inside that gap.
+
+That is not the same as "untested": the builder suites drive the real server
+(`tools/builder-tests/lib/render-harness.mjs` spawns it), so the codegen is
+exercised *behaviourally* — 110 suites, all green. It is simply not *frozen*, so
+nothing detects that its output changed. Written up with the decision it implies in
+[`../design/engine-versioning.md`](../design/engine-versioning.md).
+
+### Small thing found on the way
+
+`run-all.mjs`'s header says "Exits 0 if every step passes, 1 on the first failure."
+It does not stop on the first failure — it accumulates `anyFail` and exits 1 at the
+end. A reader who believes the comment will assume everything after a `FAIL` line
+was skipped, when in fact those results are real. One-line comment fix, not done
+here (this pass was documentation-only and that is a source file).
+
+---
+
 ## 2026-08-06 — The engine moved twelve versions; the native baseline did not
 
 `native/tests/contract/test_baseline_manifest.py` asserts the manifest's
