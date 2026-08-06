@@ -93,7 +93,10 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
   byte-identical ROMs" as **unproven** until those are fixed. Studio E2E still
   unrun (no Chromium). See
   [`docs/handoffs/2026-07-28-native-main-integration.md`](docs/handoffs/2026-07-28-native-main-integration.md)
-  and [`docs/guides/LESSONS_LEARNT.md`](docs/guides/LESSONS_LEARNT.md).
+  and [`docs/guides/LESSONS_LEARNT.md`](docs/guides/LESSONS_LEARNT.md). The
+  ordered route from here to a defensible merge, with acceptance checks and the
+  two owner decisions marked, is
+  [`docs/plans/current/2026-08-06-close-out-native-branch.md`](docs/plans/current/2026-08-06-close-out-native-branch.md).
   Remove this line when both suites have run clean.
 - Docs index: [`docs/README.md`](docs/README.md).
 - Studio redesign status: `docs/plans/current/2026-07-05-studio-redesign.md`.
