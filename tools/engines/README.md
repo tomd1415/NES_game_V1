@@ -10,7 +10,7 @@ were authored for.
 - **`CHANGELOG.md`** — one entry per version (newest first): Added / Changed
   (migration) / Breaking.
 - **`v<N>/`** — an immutable snapshot of engine v`N`'s sources plus a
-  `manifest.json` (`{version, created, files:[{path, sha1}]}`). Created by
+  `manifest.json` (`{version, files:[{path, sha1}]}`). Created by
   `node scripts/snapshot-engine.mjs`.
 
 ## Workflow to release a new engine version
@@ -18,14 +18,37 @@ were authored for.
 1. Make the engine change (templates / assembler / cc65 project).
 2. Bump `ENGINE_VERSION` **and** `engine-version.js` (same integer).
 3. Add a `CHANGELOG.md` entry describing Added / Changed / Breaking.
-4. `node scripts/snapshot-engine.mjs` to freeze the new `v<N>/`.
-5. `node scripts/snapshot-engine.mjs --check` verifies the snapshot matches
-   the live sources (run in CI / before shipping).
+4. **Commit.** See the warning below — this step is not optional.
+5. `node scripts/snapshot-engine.mjs` to freeze the new `v<N>/`.
+6. `node scripts/snapshot-engine.mjs --check` verifies the snapshot matches
+   the **committed** sources (run in CI / before shipping).
+
+> ### ⚠ Both commands read committed (HEAD) bytes, not your working tree
+>
+> This is deliberate — it keeps `--check` deterministic while a `/play` is
+> rewriting `steps/Step_Playground/src/` underneath it — but it has teeth:
+>
+> * **Snapshotting before committing freezes the OLD code.** A file you have
+>   *modified* is written into `v<N>/` at its committed bytes, with no warning.
+>   (A brand-new, never-committed file at least prints `(skip, not committed)`.)
+>   You get a `v<N>/` that claims to be the new engine and contains the previous
+>   one — and `--check` then compares HEAD against that same HEAD-derived
+>   manifest and cheerfully agrees. Snapshots are **immutable**, so the only way
+>   out is to bump again to `v<N+1>`.
+> * **An uncommitted engine edit cannot make `--check` go red.** Run it after
+>   committing, not before, or it blesses work it never looked at. (Verified by
+>   deliberately breaking it three ways on 2026-08-06 — see
+>   [`docs/guides/LESSONS_LEARNT.md`](../../docs/guides/LESSONS_LEARNT.md).)
+>
+> Note also what the snapshot does **not** cover: it is JavaScript and cc65
+> sources only, no Python, so `tools/nes_studio_core/` — which now emits most of
+> the ROM — is outside it. See
+> [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md).
 
 This scheme began at **v1** (baseline) with the first engine feature — per-door
 destinations — shipping as **v2**, always snapshotting v1 first so every v1 game
 keeps a working fallback. The engine is now well past that; see
-[`CHANGELOG.md`](CHANGELOG.md) for the current version (v72 at the time of writing)
-and every step in between.
+[`CHANGELOG.md`](CHANGELOG.md) for the current version (**v75** as of 2026-08-06;
+read `ENGINE_VERSION` rather than trusting this line) and every step in between.
 
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md).
