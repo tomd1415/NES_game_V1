@@ -135,6 +135,15 @@ call on the existing v1–v75 snapshots, so: **owner decision.**
 * `friendly_build_error(None)` returns `None`, not `""`, although the body guards
   the match with `log or ""`. The only caller passes `str(exc)`, so it is an
   inconsistency rather than a live bug.
+* Same class as F5, benign today: `.gitignore` lines 4–6 (`level.nam`, `game.chr`,
+  `scene.inc`) name files that are **already tracked** under
+  `steps/Step_Playground/src/`. Tracking wins, so those specific files are fine and
+  their build-mutations stay visible in `git status` — which is how the working
+  tree was confirmed clean after a full suite run. But the patterns are bare
+  filenames with no path anchor, so they would silently swallow a *new*
+  `scene.inc` or `game.chr` anywhere else in the repo, exactly as `*.nes` did to
+  the fixtures. Anchoring them (`/steps/Step_Playground/src/scene.inc`) costs
+  nothing.
 
 ## Reviewed and found nothing — do not redo these
 
