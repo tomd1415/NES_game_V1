@@ -160,7 +160,33 @@ npx playwright test
 **Done when:** it runs at all — this suite has never executed here. Record the
 result whatever it is.
 
-## Step 8 — ~~[decision]~~ **DECIDED 2026-08-06 03:00 — FIX: add it**
+## Step 8 — ✅ **DONE 2026-08-06 — shipped as engine v76**
+
+`e1de8c9` (the bump) + `052ffbc` (the snapshot), in that order, because
+`snapshot-engine.mjs` reads **committed** bytes and snapshotting first would have
+frozen the old code into an immutable directory.
+
+- `tools/nes_studio_core/` added to `INCLUDE_DIRS`: the snapshot went from **30
+  files with no Python** to **41 files including 10 Python modules**.
+- `EXCLUDE_RE` also skips `__pycache__/` and `*.pyc`.
+- **Proved the gate now catches what it could not before:** committing a one-line
+  change to `nes_studio_core/collision.py` makes `--check` print
+  `DRIFT (vs HEAD): tools/nes_studio_core/collision.py` and exit 1. Probe commit
+  discarded, `--check` green again. (It had to be a *commit* — `--check` reads
+  HEAD, so an uncommitted edit is invisible to it.)
+- The "record clearly" half landed in three places: the v76 CHANGELOG entry,
+  `tools/engines/README.md`, and `docs/design/engine-versioning.md`, each stating
+  that **v1–v75 were taken without Python coverage and are not comparable with
+  v76+**, and that the gap cannot be repaired because snapshot directories are
+  immutable.
+
+Still outside the snapshot, and named in the script's own NOTE so it cannot be
+forgotten: `playground_server.py`. Its five ROM-emitting entry points are
+one-line delegations into `nes_studio_core` today; inlining any of them back
+would narrow the gate silently.
+
+<details>
+<summary>Original step 8 text, for reference</summary>
 
 > **Owner's answer:** add `tools/nes_studio_core/` to the snapshot, and **record
 > clearly that v1–v75 were taken without it, so nobody reads them as comparable.**
@@ -196,6 +222,8 @@ prerequisite for the *next* engine change being safe.
 
 **Done when:** decided either way and written down. "Not now, because X" is a
 complete answer; silence is not.
+
+</details>
 
 ## Step 9 — Merge
 

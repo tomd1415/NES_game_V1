@@ -206,6 +206,91 @@ because the test that would have gone red was never run.
 
 ---
 
+## 2026-08-06 — I diagnosed the ROM drift confidently, and I was wrong
+
+Regenerating the "v63" starter fixtures changed three of seven ROMs, and **all
+seven** project / play-request / generated-source hashes. I concluded the starter
+definitions had drifted, wrote it up as F13, and reported it as the blocker.
+
+Then I decompressed the artefacts and diffed them. The seven input projects were
+**byte-identical apart from a wall-clock `metadata.created`/`modified`
+timestamp**. The starters had never moved. What had moved was the generated C:
+`targetEngine: 63` stamps a version but builds with the templates at `HEAD`, so
+the "v63 fixtures" were a v63-*era* capture that had been drifting with the
+engine for twelve versions.
+
+* **The tell I ignored:** "all seven changed" is a suspiciously uniform signal.
+  Real drift in seven hand-written starter definitions would not hit every one of
+  them; a timestamp would. A uniform diff across unrelated inputs points at
+  something injected by the machinery, not at the inputs.
+* **What made the difference:** four commands. `gunzip | python3 -m json.tool |
+  diff`. I had the artefacts the whole time and reasoned about the hashes instead
+  of reading the bytes. **A hash tells you two things differ; only the diff tells
+  you what.**
+* **Why it still ended well:** the finding was written down and the work stopped
+  rather than being committed. Correcting a recorded wrong diagnosis costs one
+  commit. An uncorrected one becomes the thing the next person builds on.
+
+## 2026-08-06 — A wall-clock timestamp in a fixture is not cosmetic
+
+That same timestamp did real damage. It made the fixtures non-reproducible, so
+regenerating always looked like a change; it made three of the four hash columns
+useless as a drift signal; and it silently decoupled the test corpus from the
+copy of the starters the app actually ships, which are required to be
+byte-identical. Re-baselining the corpus broke that sibling test, and the break
+had nothing to do with anything I had intended to change.
+
+It was also **inert**: `StarterCatalog.create()` overwrites both fields with the
+real clock on every project it makes, so no pupil ever saw the value. A field
+that changes every run, affects nothing at runtime, and is compared for equality
+by a test is pure downside.
+
+* **Freeze non-determinism at the point it enters**, not downstream. Frozen to an
+  obviously-synthetic epoch, so nobody reads it as a capture date.
+* **Two copies that a test requires to be identical need one writer.** The
+  packaged copy was hand-maintained; that is why it drifted. The generator now
+  writes both, and running it twice produces a byte-identical tree.
+
+## 2026-08-06 — `git check-ignore` is index-aware, and my probe was a no-op
+
+Guarding "no fixture a test depends on may be git-ignored", I tried to prove the
+guard could fail by appending an ignore rule over the committed ROMs. The test
+stayed green, and for a moment that looked like a broken guard.
+
+It is not: `git check-ignore` never reports a **tracked** file, and that is the
+behaviour you want here — a tracked file is in a fresh clone whatever
+`.gitignore` says. The probe was testing a scenario that is not a failure. The
+real failure is an *untracked* file swallowed by a pattern, and dropping a
+`probe.bak` under the fixtures turns it red immediately.
+
+* **A probe that does not go red has two explanations**, and "the check is
+  broken" is only one of them. The other is that you probed something that was
+  never a failure. Work out which before either trusting or rewriting the check.
+* Recorded in the test itself, because the next person will reach for the same
+  invalid probe.
+
+## 2026-08-06 — Widening a gate splits history into two eras; say so loudly
+
+Adding `tools/nes_studio_core/` to the engine snapshot took it from 30 files with
+**no Python at all** to 41 including the codegen that emits most of the ROM. The
+change itself is small. The consequence for the record is not: **v1–v75 were all
+taken without it**, so two matching snapshots anywhere in that range say nothing
+about whether the codegen changed between them.
+
+That cannot be repaired — snapshot directories are immutable by design, and
+back-filling them would mean inventing provenance for files nobody captured.
+
+* **When a check gets wider, every earlier pass silently means less than a reader
+  will assume.** Write the discontinuity down where the comparison happens, not
+  only in the changelog: it went in the CHANGELOG, `tools/engines/README.md` and
+  `docs/design/engine-versioning.md`, each with the two-era table.
+* **Prove the widened gate fires.** `--check` reads committed bytes, so proving
+  it needed an actual throwaway commit to a codegen file — then `DRIFT (vs HEAD):
+  tools/nes_studio_core/collision.py`, exit 1, and reset. An unproven widening is
+  just a longer file list.
+
+---
+
 ## Older entries
 
 Traps specific to the native app — assert pixels not document fields, destroy
