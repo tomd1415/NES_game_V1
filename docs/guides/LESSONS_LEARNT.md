@@ -289,6 +289,30 @@ back-filling them would mean inventing provenance for files nobody captured.
   tools/nes_studio_core/collision.py`, exit 1, and reset. An unproven widening is
   just a longer file list.
 
+## 2026-08-06 — I corrupted my own verification run, and the failure looked real
+
+Twenty minutes into a 110-suite builder run, I probed whether the snapshot gate
+notices a deleted engine file by moving `steps/Step_Playground/cfg/nes.cfg`
+aside for about two seconds. The probe worked. It also landed inside the window
+where `round3-multi-bg.mjs` was linking a ROM, and the suite came back
+`❌ One or more checks failed` with `ld65: Error: Cannot find config file
+'cfg/nes.cfg'`.
+
+Nothing was wrong with the engine. The run had to be thrown away and repeated
+from scratch — the full cost of the shortcut, paid in full.
+
+* **A long-running suite makes the whole working tree a shared resource.** I had
+  reasoned explicitly, earlier the same session, that I must not edit engine
+  files while the suite ran. Then I moved one, because a *probe* felt like a
+  read-only activity. It is not: `mv` is `mv`.
+* **The tell that saved it:** exactly one suite failed, at the link step, on the
+  one file I had touched, with suites either side of it green. A real regression
+  from a snapshot-scope change would not be that narrow or that well-timed. Had I
+  not known about the probe, this would have read as a genuine v76 regression and
+  cost far more than a re-run.
+* **Do destructive probes on a quiet tree**, or in a scratch copy. If a probe must
+  happen while something is running, it is not urgent enough to be worth it.
+
 ---
 
 ## Older entries
