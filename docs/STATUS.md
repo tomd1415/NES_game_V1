@@ -4,17 +4,23 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-07-28
+- **Last updated:** 2026-08-06 (unattended maintenance session — docs audit,
+  port-clash fix, gate mutation-testing; no engine change)
 - **Branch:** `main`
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
   verified 2026-07-28 at v78)
-- **Studio E2E:** ✅ **141 passed** (2026-07-28, 3.0 min) — 129 from before this
-  week, plus 5 in `emulator-crash-banner.spec.js` (#37), 2 in
-  `enemy-bump.spec.js` (#30) and 5 in `palette-keys.spec.js` (#39, which also
-  covers the two legacy painter pages). Confirms the suite survives engine
-  v76/v77/v78, the emulator watchdog and the new Style-tab toggle.
+- **Studio E2E:** ✅ **147 passed** (2026-07-30) — 129 from before that week,
+  plus 5 in `emulator-crash-banner.spec.js` (#37), 2 in `enemy-bump.spec.js`
+  (#30) and **11** in `palette-keys.spec.js` (#39, which also covers the two
+  legacy painter pages; 5 originally, plus 6 for the WORLD background-palette
+  keys added 2026-07-30). Confirms the suite survives engine v76/v77/v78, the
+  emulator watchdog and the new Style-tab toggle.
+  - ⚠️ **Under host load the committed 30s per-test limit is not enough** and the
+    run shows false red. Two tests unrelated to any recent change are the tell:
+    `project-file` NAM round-trip (59.1s) and `budget` CHR (41.6s). Re-run with
+    `--timeout=120000` to distinguish an environment problem from a real one.
 - **Playtest ROMs:** regenerated 2026-07-28 and **byte-identical** to the
   v76-era build (`node scripts/make-playtest-roms.mjs`, hashes compared before
   and after, at v77 *and* again at v78). v77's enemy-bump is off by default and
@@ -35,12 +41,43 @@ work cold, and the file to refresh *last* before putting work down.
     `npm install -g`; the Dockerfile now repairs it at build time and fails the
     build if it stays broken, so an agent-less image can't ship silently.
 
+## 2026-08-06 unattended session — what changed
+
+No engine change, so **still v78**. Docs were committed and pushed; the
+test-infrastructure change is committed **locally only** and wants a review.
+
+- **Docs audited against the code.** ~60 concrete claims in `README.md` and
+  `CLAUDE.md` (paths, ports, commands, flags, mode levels, key bindings) were
+  checked individually. All but two held. Fixed: `level.nam` was listed under
+  `src/` (it lives in `assets/backgrounds/`), and — the bigger one — **CLAUDE.md
+  said a `/play` leaves engine sources modified in `git status`. It no longer
+  does**: `_build_rom()` builds in a `TemporaryDirectory`. That advice would have
+  taught people to ignore a real modification. Evidence: a full 115-suite run left
+  `git status steps/Step_Playground/` empty.
+- **The documented 18790 double-claim is fixed.** `asm-corpus`, `asm-realproj`
+  and `asm-player` moved to 18895–18897, and `run-all.mjs` gained a check that
+  reads the E2E port out of `playwright.config.js` and fails if any suite names
+  it. The clash had survived for weeks behind a doc note; a doc note is not a
+  check. Builder-test range is now **18768–18897**.
+- **Gates were mutation-tested** — five deliberate breakages, four caught, one
+  limitation found and written up in `tools/builder-tests/README.md`: a green
+  snapshot check does **not** mean the working tree is clean, because `--check`
+  reads from HEAD.
+- **New docs:** [`LESSONS-LEARNT.md`](LESSONS-LEARNT.md) (what has cost time here,
+  by mistake-shape, including the false theories) and a step-by-step plan for
+  #14's remaining slice at
+  [`plans/current/2026-08-06-item-14-multiscreen-rooms.md`](plans/current/2026-08-06-item-14-multiscreen-rooms.md).
+- **Dead code found, not removed** (needs a non-doc change): seven unreferenced
+  path constants in `playground_server.py` — `CHR_PATH`, `NAM_PATH`, `SCENE_INC`,
+  `PAL_INC`, `COLLISION_H_PATH`, `BEHAVIOUR_C_PATH`, `BG_WORLD_H_PATH`,
+  `BG_WORLD_C_PATH`. `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them are live.
+
 ## How work is tracked
 
 Work is feedback-driven. The authoritative sources, in order:
 
 1. [`feedback/recently-observed-bugs.md`](feedback/recently-observed-bugs.md) —
-   the **numbered list #1–#38**. This is the backlog. (Note: the older
+   the **numbered list #1–#39**. This is the backlog. (Note: the older
    [`feedback/PUPIL_FEEDBACK.md`](feedback/PUPIL_FEEDBACK.md) is an unnumbered,
    largely superseded themed log — don't mistake it for the numbered list.)
 2. [`changelog/changelog-implemented.md`](changelog/changelog-implemented.md) —

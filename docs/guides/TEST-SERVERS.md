@@ -13,7 +13,7 @@ This file is the answer to "which port is which, and how do I start it".
 | ------- | ---- | -------------- | --------------- |
 | **Dev / manual** | **8765** | The Studio at `/studio.html`, the seven legacy pages, and `/play` (builds a ROM with cc65). What you open in a browser to use the thing. | `python3 tools/playground_server.py` — **in a container it must bind `0.0.0.0`, see below** |
 | **Studio E2E** | **18790** | The same server, booted and killed **automatically** by Playwright with an isolated accounts DB. You do not start this yourself. | `npx playwright test` (from the repo root) |
-| **Builder tests** | **18768–18894** | One throwaway server per suite, spawned and killed by that suite. Each `.mjs` picks its own port. | `node tools/builder-tests/run-all.mjs`, or one suite: `node tools/builder-tests/enemy-bump.mjs` |
+| **Builder tests** | **18768–18897** | One throwaway server per suite, spawned and killed by that suite. Each `.mjs` picks its own port. | `node tools/builder-tests/run-all.mjs`, or one suite: `node tools/builder-tests/enemy-bump.mjs` |
 
 The runner (`run-all.mjs`) executes suites **one at a time** (`spawnSync` in a
 loop), so several suites sharing a port is deliberate and harmless — about a dozen
@@ -67,15 +67,20 @@ versus `listening on 127.0.0.1:8765`.
 This is not specific to this project — any server in any container that defaults to
 loopback has the same failure, so it is worth recognising by its shape.
 
-## ⚠️ 18790 is claimed twice
+## ⚠️ Why a port clash here fails silently (fixed 2026-08-06, now guarded)
 
-Playwright's `webServer` binds **18790** (`playwright.config.js`), and so do three
-builder-test suites — `asm-corpus.mjs`, `asm-realproj.mjs` (`PORT_C`) and
-`asm-player.mjs` (`PORT_D`).
+**Historical:** Playwright's `webServer` binds **18790** (`playwright.config.js`),
+and so did three builder-test suites — `asm-corpus.mjs` and `asm-realproj.mjs`
+(`PORT_C`) and `asm-player.mjs` (`PORT_D`). They have been moved to **18895**,
+**18896** and **18897** respectively, and `run-all.mjs` now carries a check —
+*"no builder-test suite claims the Studio E2E port"* — that reads the port out of
+`playwright.config.js` and fails if any suite names it. Documentation alone did
+not stop this drifting for weeks; the check is what makes the two lists agree.
 
-Each command is internally sequential, so this never bites a single run. It bites
-when you run **both suites at once**, and it does so **silently** — which is why it
-is worth knowing about.
+The mechanism below is unchanged and still applies to **any** future clash, which
+is why it is kept. Each command is internally sequential, so a clash never bites a
+single run. It bites when you run **both suites at once**, and it does so
+**silently**.
 
 A playground server that finds the port already held by *another playground server*
 does not fail. It prints `already running -- nothing to do` and exits 0. The suite's
@@ -95,12 +100,9 @@ suites:
 STUDIO_TEST_PORT=18990 npx playwright test
 ```
 
-(`tools/builder-tests/README.md` describes the asm suites as using "18790–18795",
-which is where this overlap came from.)
-
 ## Adding a suite: picking a port
 
-Take the next free port **above 18894** (the current highest) and stay under 19000.
+Take the next free port **above 18897** (the current highest) and stay under 19000.
 Do not trust a grep for `PORT =` — the suites spell it several ways
 (`PORT`, `PORT_C`/`PORT_A`/`PORT_D`, an inline `startServer(18882)` in
 `physics-globals.mjs`, and `PORT + 1` in `enemy-bump.mjs`). This catches all of them:

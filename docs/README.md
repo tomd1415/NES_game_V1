@@ -17,6 +17,7 @@ of how we got here.
 | [`plans/archive/`](plans/archive/) | Superseded plans, named `YYYY-MM-DD-<slug>.md` so they sort chronologically. Old code/comment cross-references that point here are still meaningful — please don't delete or rename them. |
 | [`feedback/`](feedback/) | Pupil and teacher bug reports / feature requests, plus broader feedback summaries. The [running bugs list](feedback/recently-observed-bugs.md) feeds the next plan. |
 | [`changelog/`](changelog/) | What shipped, when. The [changelog-implemented](changelog/changelog-implemented.md) is a single growing file with one section per shipped change, newest at the top. |
+| [`LESSONS-LEARNT.md`](LESSONS-LEARNT.md) | *(file, not a folder)* What has actually cost time here, grouped by the *shape* of the mistake — silent checks, lists that must agree, environment differences you cannot see from inside. Includes the false theories held on the way. Worth skimming before an audit or a debugging session. |
 
 Repository-wide contribution, ownership and cross-team review rules live in
 [`CONTRIBUTING.md`](../CONTRIBUTING.md).
@@ -40,9 +41,10 @@ Repository-wide contribution, ownership and cross-team review rules live in
 - **Running the tests, or a server won't start?** Read
   [`guides/TEST-SERVERS.md`](guides/TEST-SERVERS.md) — which of the three test
   servers listens on which port (dev `8765`, Studio E2E `18790`, builder-tests
-  `18768–18894`), how to start each, and how to pick a port for a new suite.
-  Note the documented 18790 clash: running the E2E and the builder tests *at the
-  same time* fails silently rather than loudly.
+  `18768–18897`), how to start each, and how to pick a port for a new suite.
+  The old 18790 double-claim is fixed (2026-08-06) and `run-all.mjs` now guards
+  against it, but still run the two suites sequentially — the box is small and a
+  loaded host makes the E2E fail on tests unrelated to your change.
 - **Working on the UI/UX redesign?** (branch `redesign/ui-ux`)
   Start with the roadmap
   [`design/phased-plan.md`](design/phased-plan.md) and its companions

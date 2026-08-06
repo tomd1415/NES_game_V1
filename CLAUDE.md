@@ -27,10 +27,25 @@ with the engine it was authored for (rollback/fallback). Full design:
 [`docs/design/engine-versioning.md`](docs/design/engine-versioning.md);
 workflow: [`tools/engines/README.md`](tools/engines/README.md).
 
-> Engine-source files under `steps/Step_Playground/src/` (behaviour.c,
-> bg_world.*, scene.inc, main.c, level.nam, …) are **regenerated per build**
-> by the server — they show as `M` in `git status` after any `/play`. Don't
-> commit those build-mutations; the snapshot reads from HEAD to stay stable.
+> **A `/play` no longer dirties the working tree** (re-verified 2026-08-06).
+> Engine sources under `steps/Step_Playground/` *are* generated per build, but
+> `_build_rom()` writes them into a `tempfile.TemporaryDirectory` — both the C
+> and the ASM paths — so `git status` stays clean. The only artifact left behind
+> is `steps/Step_Playground/_play_latest.nes`, which `.gitignore` covers via
+> `*.nes`. Evidence: a full `run-all.mjs` (115 suites, all doing real cc65
+> builds) left `git status steps/Step_Playground/` completely empty.
+>
+> This paragraph used to say those files show as `M` after any `/play` and
+> should not be committed. That was true of an earlier in-place build and is now
+> wrong — worth knowing, because "expect modified engine sources and ignore
+> them" is advice that would mask a real edit. If you *do* see them modified,
+> something is wrong; don't wave it through.
+>
+> (Leftover from the old scheme: `playground_server.py` still defines
+> `CHR_PATH`, `NAM_PATH`, `SCENE_INC`, `PAL_INC`, `COLLISION_H_PATH`,
+> `BEHAVIOUR_C_PATH`, `BG_WORLD_H_PATH` and `BG_WORLD_C_PATH`, none of which are
+> referenced anywhere. `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` next to them *are* live
+> — they serve the pupil-facing starter files — so don't sweep the whole block.)
 
 ## Tests (keep green)
 
@@ -41,8 +56,11 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
 - **Studio E2E:** `npx playwright test` from repo root (config auto-boots the
   server). Specs in `tools/studio-tests/`.
 - **Ports:** dev server `8765`, Studio E2E `18790`, builder-tests
-  `18768–18894` (one at a time). Don't run the E2E and the builder tests
-  *concurrently* — they share 18790 and it fails silently. Full table:
+  `18768–18897` (one at a time). The old 18790 double-claim was fixed on
+  2026-08-06 and `run-all.mjs` now fails if any suite names the E2E port — but
+  still run the two suites **sequentially**: this box has four cores and carries
+  ten containers, and a loaded host makes the E2E time out on tests unrelated to
+  your change. Full table:
   [`docs/guides/TEST-SERVERS.md`](docs/guides/TEST-SERVERS.md).
 
 ## Where to start
