@@ -1,6 +1,11 @@
 # Build artifacts
 build/
 *.nes
+# ...except the committed contract baselines. Without this negation the seven
+# starter ROMs were silently untracked, so the byte-identical-ROM assertion in
+# native/tests/contract/test_phase0_starter_fixtures.py had never once executed
+# (F5). Keep the negation ahead of any later *.nes rule.
+!native/tests/fixtures/**/*.nes
 level.nam
 game.chr
 scene.inc
