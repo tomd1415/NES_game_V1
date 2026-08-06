@@ -56,9 +56,26 @@ This is step 3 and not step 6 because until it is done, every later run mixes
 "absent dependency" and "real bug" into the same word, and each of the steps below
 is read through that fog.
 
-## Step 4 — **[decision]** What is a trustworthy native ROM baseline?
+## Step 4 — ~~[decision]~~ **DECIDED 2026-08-06 03:00 — FIX, with provenance**
 
-The blocker. `test_phase0_starter_fixtures.py` compares against seven `game.nes`
+> **Owner's answer, recorded verbatim in substance:** make the assertion actually
+> execute. Un-ignore the path and commit baselines, **but do not pretend they are
+> independent** — generate them at a *specific named commit*, record that
+> provenance in the test **and** in a doc, and state plainly that the gate catches
+> **drift from that point** rather than proving correctness. "That is worth having
+> and honest; a baseline silently generated from the code under test is not." Same
+> treatment for `baseline-v63.json`.
+>
+> So the option table below is settled: **option 1, with the provenance and the
+> honesty requirement made explicit in the artefacts themselves.** Not started —
+> the decision arrived at the 03:00 stop. The next session does it.
+>
+> Concretely, the acceptance for this step is now: every committed baseline names
+> the commit it was generated at; `test_phase0_starter_fixtures.py` and the
+> renamed baseline manifest both carry that commit; and a reader of either can tell
+> in one line that a pass means "unchanged since <sha>", not "correct".
+
+The blocker as it stood before that answer: `test_phase0_starter_fixtures.py` compares against seven `game.nes`
 files that were never committed (`.gitignore:3` is `*.nes`; **no `.nes` is tracked
 anywhere**), so the byte-identical-ROM assertion has never executed (F5). And
 `baseline-v63.json` is pinned twelve engine versions back (F6).
@@ -102,7 +119,30 @@ npx playwright test
 **Done when:** it runs at all — this suite has never executed here. Record the
 result whatever it is.
 
-## Step 8 — **[decision]** Does `tools/nes_studio_core/` join the engine snapshot?
+## Step 8 — ~~[decision]~~ **DECIDED 2026-08-06 03:00 — FIX: add it**
+
+> **Owner's answer:** add `tools/nes_studio_core/` to the snapshot, and **record
+> clearly that v1–v75 were taken without it, so nobody reads them as comparable.**
+> (The instruction arrived partly garbled — "add tools/nes_studio_core/ to
+> snapshot[, r]ecord clearly that v1-v75 were taken without it so nobody reads
+> them as comparable" — but the intent is unambiguous and consistent with the
+> answer to step 4: make the gate real, and be explicit about what it does and does
+> not cover.)
+>
+> Not started — it arrived at the 03:00 stop, and this one cannot be done safely in
+> a hurry: adding to `INCLUDE_DIRS` changes what a snapshot *is*, so it needs an
+> `ENGINE_VERSION` bump, a `CHANGELOG.md` entry, a fresh `v76/` snapshot **taken
+> after committing** (see `tools/engines/README.md` — snapshotting uncommitted work
+> freezes the old code into an immutable directory), and a full builder run to
+> verify. Rushing it produces exactly the wrong-and-self-consistent artefact this
+> pass exists to have found.
+>
+> The "record clearly" half must land in `tools/engines/README.md` and
+> `docs/design/engine-versioning.md`, next to the existing note, and ideally as a
+> `covers_python: false` marker in the v1–v75 manifests' documentation rather than
+> in prose alone.
+
+The problem this answers:
 
 F7: the v75 snapshot is 30 files and no Python, so a change to the codegen that
 emits most of the ROM cannot make the snapshot gate go red. Adding it changes what
