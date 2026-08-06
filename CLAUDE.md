@@ -34,8 +34,9 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
 ## The native Linux app (`native/`)
 
 A **third front-end**: a PySide6/Qt desktop sibling of the web Studio, sharing the
-project/engine/ROM contracts (`native/tests/contract/` proves both targets emit
-byte-identical ROMs **and** report identical validator output). It plays games
+project/engine/ROM contracts (`native/tests/contract/` is *intended* to prove both
+targets emit byte-identical ROMs **and** report identical validator output — as of
+2026-08-06 the ROM half does not actually execute; see the Active thread below). It plays games
 in-app via an **embedded NES core** (`native/nes_core/`, a PyO3 binding around
 tetanes-core). Eight modes, each in `native/src/nes_studio/ui/modes/<mode>.py`
 behind the protocol in `modes/base.py`; the shell owns no editor.
@@ -81,12 +82,19 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
 
 ## Where to start
 
-- **Active thread (2026-07-29):** `main` (engine v75) is merged into the native
+- **Active thread (2026-08-06):** `main` (engine v75) is merged into the native
   branch and the v64–v75 codegen port into `nes_studio_core` is **done** — builder
-  suite fully green. Outstanding: the native Qt suite and Studio E2E have not been
-  run (no PySide6/pytest/node_modules in the `nesnative` container). See
-  [`docs/handoffs/2026-07-28-native-main-integration.md`](docs/handoffs/2026-07-28-native-main-integration.md).
-  Remove this line when those have run clean.
+  suite green. The native suite has now been **partially** run in the `nesnative`
+  container (`pytest` was there all along; only PySide6 and a browser binary are
+  missing): 189 pass, 149 skip, and **two real failures** — the native baseline
+  manifest is still pinned to engine v63, and the seven `game.nes` starter-fixture
+  baselines were never committed because `.gitignore:3` is `*.nes`, so the
+  cross-target ROM assertion has never executed. Treat "both targets emit
+  byte-identical ROMs" as **unproven** until those are fixed. Studio E2E still
+  unrun (no Chromium). See
+  [`docs/handoffs/2026-07-28-native-main-integration.md`](docs/handoffs/2026-07-28-native-main-integration.md)
+  and [`docs/guides/LESSONS_LEARNT.md`](docs/guides/LESSONS_LEARNT.md).
+  Remove this line when both suites have run clean.
 - Docs index: [`docs/README.md`](docs/README.md).
 - Studio redesign status: `docs/plans/current/2026-07-05-studio-redesign.md`.
 - Native Linux app: `docs/plans/current/2026-07-14-native-build-plan.md`.

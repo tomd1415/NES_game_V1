@@ -26,6 +26,11 @@ Repository-wide contribution, ownership and cross-team review rules live in
   [README](../README.md), then
   [`guides/PUPIL_GUIDE.md`](guides/PUPIL_GUIDE.md) for the editor
   walkthrough.
+- **About to trust a claim in one of these docs?** Read
+  [`guides/LESSONS_LEARNT.md`](guides/LESSONS_LEARNT.md) first. It records the
+  things this project has already believed and been wrong about — a tool reported
+  absent that was installed all along, a contract test whose assertion had never
+  executed — and the one check that would have settled each one.
 - **Picking up active work?** Work is now feedback-driven — the running list of
   open items (with fixes recorded inline as they land) is
   [`feedback/recently-observed-bugs.md`](feedback/recently-observed-bugs.md), and

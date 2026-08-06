@@ -8,8 +8,16 @@ rewrite history ([decided]).
 
 ## Environment
 - Container `nesnative`, `/workspace` bind-mounted from host `/home/proj_nesnative/NES_game_V1`.
-- Toolchain present: `node` v20.20.2, `cc65/ca65/ld65` V2.18. **Absent:** pip, network,
-  PySide6, pytest, fastapi, `node_modules`. (Re-confirmed 2026-07-29.)
+- Toolchain present: `node` v20.20.2, `cc65/ca65/ld65` V2.18, **`pytest` 9.1.1**
+  (pipx, `/root/.local/bin/pytest`), **`node_modules`** with `@playwright/test`
+  1.61.1. **Absent:** pip, network, PySide6, fastapi, and the Playwright browser
+  binary (`~/.cache/ms-playwright` is empty, so `npx playwright test` cannot run).
+- **Correction (2026-08-06):** the 2026-07-29 version of this line listed pytest
+  and `node_modules` as absent and marked it "re-confirmed". Both were wrong.
+  `python3 -m pytest` fails here by design — pipx exposes only the console script —
+  and that failure was read as "not installed". Nine days of native verification
+  were skipped on the strength of it. Use `command -v <tool>`, not `python3 -m`.
+  Written up in [`docs/guides/LESSONS_LEARNT.md`](../guides/LESSONS_LEARNT.md).
 
 ## Established (fact ← evidence)
 - **The v64–v75 codegen port is complete.** All 20 hunks of
@@ -78,30 +86,57 @@ rewrite history ([decided]).
   each `spawn(...)`. **Not done here** — a 32-file harness change was out of scope
   for the port, and is the user's call.
 
+## Ran 2026-08-06 (overnight, no decisions available)
+
+`cd native && pytest -q --continue-on-collection-errors` — no venv, no PySide6, the
+pipx pytest that was here the whole time. **`11 failed, 189 passed, 149 skipped,
+12 errors` in 5.78 s.** Reading that summary:
+
+- 149 skips + 12 collection errors + 3 of the 11 failures = "PySide6 is not
+  installed". Correct behaviour badly reported; see `native/README.md` § Tests.
+- `test_build_preparation.py` — **the one file the port touched — passes.**
+- **Two genuine failures, neither caused by the port, both older than it:**
+  1. `test_baseline_manifest.py` → `63 != 75`. `tests/contract/baseline-v63.json`
+     was frozen at engine v63; the engine is v75.
+  2. `test_phase0_starter_fixtures.py` → `FileNotFoundError` on all 7 fixtures.
+     The `game.nes` baselines were never committed — `.gitignore:3` is `*.nes` and
+     **no `.nes` file is tracked anywhere in this repo**. So the cross-target
+     ROM-equality assertion has never once executed. The `.gz` artefacts *are*
+     committed, which is why the fixture directories look complete.
+
+**This retires the [assumed] line below in the worst way.** "Cross-target contract
+holds by construction" was reasoning, and the test that would have checked it was
+inert. The builder suite's green light covers the web/engine side and the shared
+Python codegen (`tools/builder-tests/lib/render-harness.mjs` spawns the real
+`tools/playground_server.py`, which imports `nes_studio_core`) — it does **not**
+cover the native ROM baseline.
+
 ## Open questions
-- **Native Qt/pytest verification is unrun and unrunnable here** (no PySide6,
-  pytest, pip or network). `cd native && QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest`
-  (404 tests) needs running somewhere with the venv. The one native file the port
-  touched is `native/tests/contract/test_build_preparation.py`; its two changed
-  assertions were verified by hand against the real `normalize_audio` (both pass,
-  and the old form provably fails), but the other 402 tests are unverified.
-- Whether to push the branch — 56 commits ahead of
-  `origin/chore/linux-native-bootstrap-v63`, still unpushed. User's call.
+- **A re-baseline needs an owner decision, not an edit.** Both failures are fixed
+  by writing new baselines, and a baseline you generate from the code under test is
+  green by construction and worthless. Somebody has to say what a *trustworthy*
+  v75 native baseline is. Raised in `.mc-ask-critic.md`.
+- Studio E2E is still unrun: `node_modules` is present but the Chromium binary is
+  not (`~/.cache/ms-playwright` empty, and the CDN is outside the egress allowlist).
+  The pending container rebuild bakes it in.
 
 ## Next actions (in order)
-1. Run the native suite on a machine with the venv; expect only
-   `test_build_preparation.py` to be affected.
-2. Run the Studio E2E (`npx playwright test`) somewhere with `node_modules`.
-3. Decide on pushing the branch.
+1. Decide the re-baseline question above; then fix both failures together.
+2. Un-ignore the fixture ROMs (`!native/tests/fixtures/**/*.nes`) as part of that —
+   and add a test that asserts the fixture files *exist*, so the next time they go
+   missing it fails as "baseline missing" rather than mid-assertion.
+3. Rebuild the container (host-side) and run the Studio E2E.
 
 ## Provenance
 [decided] = user chose it. [proposed] = suggested, not agreed. [assumed] = unverified.
 - [decided] Merge main + port features into `nes_studio_core`; continue the port
   in this session; no rewrite history; no merge to main; bind server `0.0.0.0`
   durably via containerEnv; commit the `CONTRIBUTING.md` note.
-- [assumed] The native Qt suite is otherwise unaffected by the port — the port
-  touched only `tools/nes_studio_core/` plus that one contract test, and the
-  builder suite covers the ROM contract, but this is reasoning, not a test run.
+- [assumed → part-tested 2026-08-06] The native Qt suite is otherwise unaffected by
+  the port. The non-Qt half now confirms it: the only touched file passes and the
+  two failures predate the port. The Qt half (149 skips) is still unverified. The
+  clause "the builder suite covers the ROM contract" was **wrong for the native
+  target** and should not be re-inherited.
 
 **To the receiving session:** investigate and execute yourself. Spot-check an
 *Established* line before relying on it — the previous iteration of this document

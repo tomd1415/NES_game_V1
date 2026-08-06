@@ -214,9 +214,13 @@ running for them.)
 forwards a *published* port to the container's bridge IP (e.g. `172.17.0.2:8765`),
 so a default loopback bind is refused and nothing reaches the host — even though
 `curl 127.0.0.1:8765` *inside* the container answers fine (that split is the
-tell). Set `PLAYGROUND_HOST=0.0.0.0`. The `.devcontainer` does this durably (in
-`containerEnv`, and auto-starts the server from `postStartCommand`), so it
-survives restarts; if you launch it by hand, pass `PLAYGROUND_HOST=0.0.0.0`.
+tell). Set `PLAYGROUND_HOST=0.0.0.0`. In the maintainer's dev container this is
+durable — `containerEnv` sets it, and the container's `postStartCommand` runs a
+`/workspace/start.sh` that exports it and launches the server — so it survives
+restarts. **Neither of those files is in version control** (`.gitignore:8` ignores
+`.devcontainer/`, and `start.sh` is host-side), so a fresh clone gets neither the
+variable nor the auto-start: if you launch the server by hand, pass
+`PLAYGROUND_HOST=0.0.0.0` yourself.
 This is safe on a public-IP host: the host publishes to its **own** loopback
 (`appPort`) and the firewall gates INPUT — the boundary is the publish +
 firewall, not the internal bind. Verify against the bridge IP, not loopback:

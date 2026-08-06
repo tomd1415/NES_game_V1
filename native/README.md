@@ -2,8 +2,14 @@
 
 The genuine native Linux sibling of the web Studio. PySide6/Qt Widgets, sharing
 the project, engine and ROM contracts with the browser product — `tests/contract/`
-proves the two targets emit **byte-identical ROMs**, and now also that they report
-**identical validation problems**.
+is where the two targets are held to **byte-identical ROMs** and **identical
+validation problems**.
+
+> ⚠ **As of 2026-08-06 the ROM half of that is not actually running.** The seven
+> `game.nes` baselines it compares against were never committed (`.gitignore:3` is
+> `*.nes`), and the native baseline manifest is still pinned to engine v63 while
+> the engine is at v75. Both are listed under "Known failures" below. Do not quote
+> the byte-identical claim as established until they are fixed.
 
 Build order and current state:
 [`docs/plans/current/2026-07-14-native-build-plan.md`](../docs/plans/current/2026-07-14-native-build-plan.md).
@@ -89,7 +95,7 @@ mode meant editing four places in one file.
 ```
 nes_studio/
   ui/
-    main_window.py     The shell: app bar, rail, stage, dock host. ~740 lines.
+    main_window.py     The shell: app bar, rail, stage, dock host. ~800 lines.
     modes/             One module per mode, behind the protocol in base.py.
       base.py          Mode + ModeContext + Level
       world.py chars.py tiles.py pals.py style.py rules.py sound.py code.py
@@ -122,12 +128,19 @@ cd native
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
+python -m pip install -e ../tools          # nes-studio-build-core — see below
 python -m pip install -e '.[dev]' --find-links nes_core/dist
 nes-studio
 ```
 
-`--find-links nes_core/dist` is required: the embedded NES core is a **vendored
-wheel**, not a PyPI package. It is self-contained (`manylinux`, abi3), so the
+**The `../tools` line is not optional.** `nes-studio-build-core` (the shared build
+core in the repo's `tools/` directory, which `tools/playground_server.py` also
+imports) is a hard dependency in `pyproject.toml` and is **not on PyPI**, and
+`--find-links nes_core/dist` does not supply it. Install it first or the second
+command cannot resolve its dependency graph.
+
+`--find-links nes_core/dist` is required for the same class of reason: the
+embedded NES core is a **vendored wheel**, not a PyPI package. It is self-contained (`manylinux`, abi3), so the
 target machine needs **no Rust, no compiler and no apt packages** — which is the
 point for locked-down school images.
 
@@ -140,9 +153,16 @@ machine.
 
 ```bash
 cd native/nes_core
-../.venv/bin/maturin build --release --out dist
+pip install maturin                        # NOT in .venv — see below
+maturin build --release --out dist
 ../.venv/bin/pip install --force-reinstall dist/*.whl
 ```
+
+`maturin` is a **build-system** requirement of `nes_core/pyproject.toml`, which
+means PEP 517 fetches it into a throwaway isolated environment at build time. It
+is *not* a dependency of the native app, so `.venv/bin/maturin` does not exist
+after the setup above — install it wherever you like (a pipx install is tidy) and
+run it from there.
 
 See [`nes_core/README.md`](nes_core/README.md) — it documents two traps that will
 bite you (a panicking audio API, and an alpha byte that renders every frame
@@ -155,7 +175,42 @@ cd native
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
-**404 tests, ~5 minutes.**
+**404 tests, ~5 minutes** (last measured with the full venv; unverified since).
+
+### Running it without PySide6
+
+Most of the suite works on a headless box with nothing but `python3`, `node`,
+`cc65` and a `pytest` on `$PATH` — useful in a dev container where PySide6 is not
+installed:
+
+```bash
+cd native
+pytest -q --continue-on-collection-errors
+```
+
+Expect roughly `189 passed, 149 skipped` in about six seconds, plus noise you have
+to learn to read:
+
+* **149 skips** are correct — `tests/ui/support.py` guards `StudioTest` with
+  `@unittest.skipUnless(PYSIDE_AVAILABLE, …)`.
+* **12 collection errors** are *not* real: those modules import PySide6 at module
+  scope, so they error instead of skipping. Likewise
+  `tests/contract/test_palette_parity.py` (×2) and `tests/unit/test_icons.py` (×1)
+  import it inside the test body and therefore report as ordinary **failures**.
+  Three of the eleven "failures" you will see are this.
+
+### Known failures (2026-08-06, both real)
+
+1. `tests/contract/test_baseline_manifest.py::test_manifest_tracks_the_live_engine_baseline`
+   — `63 != 75`. `tests/contract/baseline-v63.json` was frozen at engine v63 and
+   the engine is now v75. Needs a re-baseline, which is a product decision (what
+   the v75 native baseline *should* be), not a number to edit.
+2. `tests/contract/test_phase0_starter_fixtures.py::test_artifact_hashes_and_input_immutability_match`
+   — `FileNotFoundError` on all seven fixtures. `game.nes` is matched by
+   `.gitignore:3` (`*.nes`) and no `.nes` file is tracked anywhere in the repo, so
+   the ROM baselines never landed. The other three artefacts per fixture (`.gz`)
+   are committed, which is why the directory looks complete. Fixing it needs a
+   `!` un-ignore for the fixture path *and* a trustworthy set of baseline ROMs.
 
 | Directory | Holds |
 | --- | --- |
