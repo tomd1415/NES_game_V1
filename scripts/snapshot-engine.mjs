@@ -97,13 +97,35 @@ function main() {
     const man = JSON.parse(readFileSync(manPath, 'utf8'));
     const bySha = Object.fromEntries(man.files.map((f) => [f.path, f.sha1]));
     let drift = 0;
+    let compared = 0;
+
+    // Direction 1: everything on disk must match the snapshot.
+    const onDisk = new Set(files);
     for (const rel of files) {
       const buf = headBytes(rel);
       if (buf === null) continue; // uncommitted new file — ignore until committed
+      compared++;
       if (bySha[rel] !== sha1(buf)) { console.error('DRIFT (vs HEAD): ' + rel); drift++; }
     }
-    if (drift) { console.error(`\n${drift} committed engine file(s) differ from the v${v} snapshot. Bump ENGINE_VERSION + snapshot again.`); process.exit(1); }
-    console.log(`✓ v${v} snapshot matches HEAD (${man.files.length} files).`);
+
+    // Direction 2: everything the snapshot lists must still be there.
+    //
+    // Without this the gate could not see a DELETION at all: the loop above
+    // walks the filesystem, so a file that no longer exists is simply never
+    // visited, and --check stayed green while an engine source vanished.
+    // Verified by moving steps/Step_Playground/cfg/nes.cfg aside — the gate
+    // reported "✓ ... (41 files)" with 40 files present.
+    for (const { path: rel } of man.files) {
+      if (onDisk.has(rel)) continue;
+      console.error('MISSING (in snapshot, not on disk): ' + rel);
+      drift++;
+    }
+
+    if (drift) { console.error(`\n${drift} engine file(s) differ from or are missing against the v${v} snapshot. Bump ENGINE_VERSION + snapshot again.`); process.exit(1); }
+    // Report what was actually compared, not the manifest's length. The old
+    // message printed man.files.length regardless, so it read as a stronger
+    // check than it was.
+    console.log(`✓ v${v} snapshot matches HEAD (${compared} of ${man.files.length} files compared, 0 missing).`);
     return;
   }
 
