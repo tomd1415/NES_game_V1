@@ -5,63 +5,63 @@
     "basics": {
       "generated_source_sha256": "7204ec32228029a83b3f2963515a182ba6f1ac7d1fcc74c805d7ab22ad566f83",
       "input_project_unchanged": true,
-      "play_request_json_sha256": "0e64fb81664f2feba07861cfeed2f57ce936d2e501cf7c06faf249e9707c5b87",
-      "project_json_sha256": "fbd2c6ba754c7b1fe11fd4ce898971db2042c45f51a2ce3e56b32ba8571d6c30",
+      "play_request_json_sha256": "17a3cede5719e9940135c16782dac13e870e0cccc68cbbc1c16dbfd9d1090937",
+      "project_json_sha256": "87a010900bc3166b7c312befd1c115ec66b569ebba1342d7e83cf7ff7aa7b56c",
       "rom_sha256": "4d11fa59045c4fc6dd9f6edf0d65bfbb4f868e1a401138067e317d3cba5e829b",
       "rom_size": 49168
     },
     "geodash": {
       "generated_source_sha256": "e6fcb3bb4408ada7355c6f0fd4074a12db3525353261c7123b3e9ba419ae0e27",
       "input_project_unchanged": true,
-      "play_request_json_sha256": "bd89aa4008e2246e16038aa534bd51937d68de8393fe3f6bc6f3f76d90d31730",
-      "project_json_sha256": "f734104b8e3ff038d69324c55b4b9c901b2e9c1b633efa6288ac02b27971ab70",
+      "play_request_json_sha256": "4ffe3791e8feb0337d643a25dc3be98e9279cc98da482a7188d2ebb4829a32a2",
+      "project_json_sha256": "0e2dbc869b064e844cfa607107ecf764ddc1c28487438f25fcb63b7cf62ad042",
       "rom_sha256": "414f2a8090bb7054878babd4a4c0cad2bf879395c728b274be063b42d543f497",
       "rom_size": 49168
     },
     "racer": {
       "generated_source_sha256": "769828068411e7999341781dcfd6bf3d93fe4d3e7d54d30d43ec1eb3e81ec4ea",
       "input_project_unchanged": true,
-      "play_request_json_sha256": "91e84ab6294dc32eaa41523d19dd5b4acc8e7d8b98e2cb8a224396004b6bc99a",
-      "project_json_sha256": "500293045cfbc664c517693db373515a9d32b0d4b8bb79531b845f2af3d5de8a",
+      "play_request_json_sha256": "580cb1465e91019ab8512961b982c782d4b54dbbba995db0cdb76320b3c34e67",
+      "project_json_sha256": "377aa22e1053b7015ea6c561a69d278a0bf3e60e7c5fa8663e538760f8c768c5",
       "rom_sha256": "a4e1c538a7f11a38fdb50da83abdc22634873015f4fcc742bc7e959c7d5fb816",
       "rom_size": 49168
     },
     "runner": {
       "generated_source_sha256": "193126cdd5ab55bc9fff90bc701792e1b25b03db771981cc8d54c85cba22cf6f",
       "input_project_unchanged": true,
-      "play_request_json_sha256": "432e9c9e11e9a221c8c86619200a9af5cdfc48018dc9ef0c7e9612a01846a790",
-      "project_json_sha256": "c1b37aced4aec0142d1e0a33475c8f80259e8be423525a41a97da419ea9282c6",
+      "play_request_json_sha256": "4adef334eb1fa647bcb495f7126da675a2f2412edd408b96d3e26e5c3923c40b",
+      "project_json_sha256": "586400a265bbc2703a5c55b9f927cfb6f35bea84779e7cca42d5a9fb591c685e",
       "rom_sha256": "890944e9093daaef57b6ebc06242381427710ddbc23efc8eded5d7e24f905a2b",
       "rom_size": 49168
     },
     "scratch": {
       "generated_source_sha256": "047958b84c1636d0556c268f0e5e8eb5985cf5bf29a2129cf52c08111ff15325",
       "input_project_unchanged": true,
-      "play_request_json_sha256": "c5d860111cdd4cededd1cb49b28bfb89ce8557cbcd889a04bc8bb949fccdffb6",
-      "project_json_sha256": "25c01a7194d1bba5474be047abf54a56a8fa3d4ff0b5f5ec58fd0dfa8304b3b9",
+      "play_request_json_sha256": "ff5693ff29aa3c1112c8b42b52155fc50a32c78436fcc25389c2077c6eacf242",
+      "project_json_sha256": "41daab50e31fceb3ebaafb7b27a85ce8df676a3394f29603dd8f56fc395cda89",
       "rom_sha256": "15478717180594537ad14319026f1d62e49b1cb6dd5d7d66f60d9727c3fe5d5d",
       "rom_size": 49168
     },
     "smb": {
       "generated_source_sha256": "a222b3a6773d9d672532362f56c34f17862f8021ae37b5f5c6a47224fc014f83",
       "input_project_unchanged": true,
-      "play_request_json_sha256": "3878251653ee73fc272adc6dbea6f6a7bf0a8eb1b3303aba8e15d86b791f552b",
-      "project_json_sha256": "4f063d7f65df0bfe6ec602df7c81f67b227313b86982a7a6970677fb1827828d",
+      "play_request_json_sha256": "7a2039b5e3c71a9d3c1b4fb3bd7b2be43d254c5bb6b31f45c4f945e248f5e4ee",
+      "project_json_sha256": "3adce900a5e6380c24212d08b41a890d1218b735585cec56f7a089799a659cea",
       "rom_sha256": "30fae8aed339192f718dd0d680783033ff014ead0325583e7e874cba87122a3a",
       "rom_size": 49168
     },
     "topdown": {
       "generated_source_sha256": "a6aff922871730bbaa457e20b222e21dbacf5ce270d11ab46f37456d3d3e3faa",
       "input_project_unchanged": true,
-      "play_request_json_sha256": "66d7e72868857644ba3585c04caab2e7594e4adf0a1bb27a19a5bfaa69f07574",
-      "project_json_sha256": "04d226cd4e44444a4166a56c2f3b70faaf899abc13e56e231b6ac39c5d87eaa9",
+      "play_request_json_sha256": "01278a5ce1f02625029cd0288afd67fe1bdcb99cb3aa00baa3c1d663997e4ec1",
+      "project_json_sha256": "7bcbe7f1b554241c9b09a57e595861820ce04944fdff0f5161fc18a9b7f02858",
       "rom_sha256": "3bf0d377e28897c57f248bc1f8467a3d2a869f7ea36b6e70b419b93b776ddcf8",
       "rom_size": 49168
     }
   },
   "generator": "native/tests/contract/generate_phase0_starters.mjs",
   "schema_version": 2,
-  "source_commit": "3e8ee3eff8b75fcb61fca2936504362873d36994",
+  "source_commit": "aa12a75e8f1a1453397868494988e7a8a8564c9c",
   "source_tree_dirty": false,
   "what_a_pass_means": "These artefacts were generated by the code under test at source_commit. A passing test means UNCHANGED SINCE that commit. It does not mean correct."
 }
