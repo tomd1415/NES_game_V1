@@ -610,6 +610,22 @@ if __name__ == "__main__":
 
 # F13 — Regenerating the v63 fixtures at HEAD does **not** reproduce three of the seven ROMs
 
+> ## ⚠ Superseded in part, 2026-08-06 — the diagnosis below is WRONG
+>
+> The three differing ROMs are real and reproduce exactly. **The explanation is
+> not.** This finding blamed the starter definitions (`studio-starter.js` /
+> `default-state.js`); decompressing and diffing the artefacts afterwards showed
+> the input projects are byte-identical apart from a wall-clock
+> `metadata.created` / `modified` timestamp. The starters never moved.
+>
+> What actually changed is the **generated C**: `targetEngine: 63` stamps a
+> version but builds with the templates at current `HEAD`, so the "v63 fixtures"
+> were a v63-*era* capture that has been drifting with the engine ever since.
+>
+> Read [`2026-08-06-starter-fixture-rebaseline.md`](2026-08-06-starter-fixture-rebaseline.md)
+> instead. It carries the corrected account, the full pre-existing hashes, and the
+> one question still open (why *those three*).
+
 Found while starting the owner-approved re-baseline (step 4 of the close-out
 plan), then **reverted rather than committed**. This changes what that step means,
 so it must be settled before the baselines land.
@@ -627,11 +643,13 @@ artefacts exactly. Run at commit `57578ab` it does not:
 | `geodash` | `4a4415746ac5…` | `414f2a8090bb…` **DIFFERENT** |
 
 And **all seven** differ in `project_json_sha256`, `play_request_json_sha256` and
-`generated_source_sha256`. So the *input projects themselves* have moved, not just
-the ROMs — which points at `studio-starter.js` / `default-state.js` (the starter
-definitions) rather than at the engine. **Those files are not covered by
-`ENGINE_VERSION` or by the snapshot**, so nothing recorded that they changed, and
-`targetEngine: 63` cannot pin them.
+`generated_source_sha256`.
+
+~~So the *input projects themselves* have moved, not just the ROMs — which points
+at `studio-starter.js` / `default-state.js` (the starter definitions) rather than
+at the engine.~~ **Wrong — see the box above.** The project and play-request churn
+was a timestamp; the source churn was v74/v75 template growth that is mostly
+`#ifdef`-gated and compiles out. The engine, not the starters.
 
 ## Why this was reverted rather than committed
 
