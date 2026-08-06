@@ -15,6 +15,7 @@ Companion documents: [`../guides/LESSONS_LEARNT.md`](../guides/LESSONS_LEARNT.md
 | `node tools/builder-tests/run-all.mjs` | ✅ green — 110 suites, "All Builder regression checks pass" |
 | `node scripts/snapshot-engine.mjs --check` | ✅ `v75 snapshot matches HEAD (30 files)` |
 | `cd native && pytest -q --continue-on-collection-errors` | 189 passed, 149 skipped, **11 failed, 12 errors** — of which **2 failures are real** (F5, F6 below) |
+| `native/tests/contract/test_validator_parity.py` | ✅ 2 passed, 31 subtests, 1.07 s — the **validator** half of the cross-target contract is real and green |
 | `npx playwright test` | not run — Chromium binary absent |
 | Working tree | clean; `start.sh` untracked, as it was at the start |
 | Branch | `chore/linux-native-bootstrap-v63`, pushed, **not** merged to `main` |

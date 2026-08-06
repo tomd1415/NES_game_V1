@@ -10,6 +10,11 @@ validation problems**.
 > `*.nes`), and the native baseline manifest is still pinned to engine v63 while
 > the engine is at v75. Both are listed under "Known failures" below. Do not quote
 > the byte-identical claim as established until they are fixed.
+>
+> The **validator** half is fine, and was re-run to confirm it:
+> `tests/contract/test_validator_parity.py` → *2 passed, 31 subtests passed* in
+> 1.07 s, running the real `builder-validators.js` in node and diffing it against
+> the Python. That one is doing its job.
 
 Build order and current state:
 [`docs/plans/current/2026-07-14-native-build-plan.md`](../docs/plans/current/2026-07-14-native-build-plan.md).
