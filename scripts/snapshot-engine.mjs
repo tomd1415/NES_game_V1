@@ -34,6 +34,11 @@ const INCLUDE_DIRS = [
   'steps/Step_Playground/src',
   'steps/Step_Playground/cfg',
   'steps/Step_Playground/assets',
+  // v76 — the server's ROM codegen, extracted into a package and now covered.
+  // Until v76 the snapshot was 30 files with no Python in it at all, so a
+  // change to the code that emits most of the ROM could not make this gate go
+  // red (F7). See the note below for what is still outside.
+  'tools/nes_studio_core',
 ];
 const INCLUDE_FILES = [
   'tools/tile_editor_web/builder-assembler.js',
@@ -41,12 +46,19 @@ const INCLUDE_FILES = [
   'tools/tile_editor_web/engine-version.js',
   'steps/Step_Playground/Makefile',
 ];
-// NOTE: the build server (tools/playground_server.py) also performs ROM
-// codegen (behaviour.c, CHR, palettes, scene.inc, …). It is a single large
-// file mixing server + codegen, so it is not file-copied here yet; it is
-// still versioned via git. Extracting its codegen into a snapshottable
-// module is tracked as an E-V2 follow-up (see docs/design/engine-versioning.md).
-const EXCLUDE_RE = /(^|\/)(build|dist|node_modules)(\/|$)|\.nes$|\.o$/;
+// NOTE (updated v76): the E-V2 follow-up is now done for the codegen itself.
+// The ROM-emitting entry points in tools/playground_server.py —
+// build_behaviour_c, build_scene_inc, build_project_inc, build_bg_world_h and
+// build_bg_world_c — are each a one-line delegation into tools/nes_studio_core,
+// which IS snapshotted as of v76.
+//
+// What is still outside the snapshot: playground_server.py itself. It remains a
+// large file mixing HTTP serving with the request handling that assembles those
+// codegen calls, and it is still versioned only by git. If those delegations are
+// ever inlined back, this gate silently narrows again — that is the failure mode
+// to watch for, and it is why the delegation is spelled out here by name.
+const EXCLUDE_RE =
+  /(^|\/)(build|dist|node_modules|__pycache__)(\/|$)|\.nes$|\.o$|\.pyc$/;
 
 function walk(dir, acc) {
   if (!existsSync(dir)) return acc;

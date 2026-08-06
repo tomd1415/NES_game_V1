@@ -40,15 +40,25 @@ were authored for.
 >   deliberately breaking it three ways on 2026-08-06 — see
 >   [`docs/guides/LESSONS_LEARNT.md`](../../docs/guides/LESSONS_LEARNT.md).)
 >
-> Note also what the snapshot does **not** cover: it is JavaScript and cc65
-> sources only, no Python, so `tools/nes_studio_core/` — which now emits most of
-> the ROM — is outside it. See
-> [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md).
+> **⚠ What a snapshot covers changed at v76 — two eras, not comparable.**
+>
+> | Snapshots | Cover |
+> | --- | --- |
+> | **v1 – v75** | JS + cc65 sources only. **30 files, no Python.** |
+> | **v76 onward** | the above **plus `tools/nes_studio_core/`**, the server's ROM codegen. |
+>
+> Up to v75 the codegen that emits most of the ROM was **outside** the snapshot,
+> so two matching snapshots in that range say nothing about whether it changed.
+> Treat v1–v75 as records of the templates and cc65 project, not as full records
+> of what produced a ROM. The gap cannot be repaired — those directories are
+> immutable. See
+> [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
+> and the v76 entry in [`CHANGELOG.md`](CHANGELOG.md).
 
 This scheme began at **v1** (baseline) with the first engine feature — per-door
 destinations — shipping as **v2**, always snapshotting v1 first so every v1 game
 keeps a working fallback. The engine is now well past that; see
-[`CHANGELOG.md`](CHANGELOG.md) for the current version (**v75** as of 2026-08-06;
+[`CHANGELOG.md`](CHANGELOG.md) for the current version (**v76** as of 2026-08-06;
 read `ENGINE_VERSION` rather than trusting this line) and every step in between.
 
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md).

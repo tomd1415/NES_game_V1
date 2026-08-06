@@ -9,6 +9,44 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v76 — 2026-08-06 — The snapshot now covers the server's ROM codegen
+
+### Changed — snapshot scope only. **No ROM output changes.**
+
+This is a bookkeeping bump, not an engine change: no template, no assembler and
+no cc65 setting was touched, and the goldens (`1730448e`, `_rom-equiv`) are
+unchanged. It exists because **what a snapshot means** has changed, and that is
+not something you may do inside an existing version number — `tools/engines/v75/`
+is immutable and was taken without any of this.
+
+- `scripts/snapshot-engine.mjs` adds `tools/nes_studio_core/` to `INCLUDE_DIRS`
+  (11 files). Until now the snapshot was **30 files containing no Python at
+  all**, so a change to the code that emits most of the ROM — behaviour maps,
+  scene data, world/collision tables — could not make the snapshot gate go red
+  (finding F7). It can now.
+- `EXCLUDE_RE` also skips `__pycache__/` and `*.pyc`, so compiled caches cannot
+  drift into a snapshot.
+
+### ⚠ v1–v75 are not comparable with v76 and later
+
+Every snapshot up to and including **v75 was taken without Python coverage**.
+They are complete records of the *templates and cc65 project* at their version
+and remain valid for that, but they are **not** full records of what produced a
+ROM. Do not read "v74 and v75 both match" as evidence that the codegen was
+unchanged between them — the codegen was never in the comparison.
+
+This is a gap in the historical record that cannot be repaired: those snapshot
+directories are immutable by design, and back-filling them would mean inventing
+provenance for files nobody snapshotted at the time.
+
+### Still outside the snapshot
+
+`tools/playground_server.py`. Its five ROM-emitting entry points
+(`build_behaviour_c`, `build_scene_inc`, `build_project_inc`, `build_bg_world_h`,
+`build_bg_world_c`) are each a one-line delegation into `nes_studio_core`, so the
+logic is covered — but if a future change inlines any of them back into the
+server, this gate narrows again without saying so.
+
 ## v75 — 2026-07-15 — Per-room scene instances: different enemies/pickups per room (#14, opt-in)
 
 ### Added (goldens `1730448e` + `_rom-equiv` UNCHANGED; off unless entities span >1 room)

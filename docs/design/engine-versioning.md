@@ -28,31 +28,36 @@ archived and every v1 game keeps working.
   `builder-assembler.js` + the ROM-emitting parts of `playground_server.py`
   + `steps/Step_Playground/` (the cc65 project) + `cfg/` + `src/`.
 
-> **⚠ Update 2026-08-06 — the snapshot does not cover all of that.** The
-> definition above includes the server's ROM-emitting codegen. The snapshot does
-> not: `scripts/snapshot-engine.mjs`'s `INCLUDE_DIRS`/`INCLUDE_FILES` list no
-> Python at all, and its inline NOTE explains why — `playground_server.py` was
-> "a single large file mixing server + codegen, so it is not file-copied here yet".
+> **✅ Resolved in v76 — 2026-08-06. Read this before comparing any two snapshots.**
 >
-> **That reason has largely expired.** The codegen has since been extracted into
-> `tools/nes_studio_core/` (`playground_server.py:48-52` imports it; the former
-> `build_project_inc` / `build_bg_world_h` / `build_bg_world_c` / `build_scene_inc`
-> are now one-line delegations to it). `build_behaviour_c` is still inline, so the
-> extraction is partial, not finished.
+> **Snapshots split into two eras, and they are not comparable:**
 >
-> The consequence is worth being blunt about: **a change to `tools/nes_studio_core/`
-> alters ROM output and yet cannot make `snapshot-engine.mjs --check` go red, and so
-> cannot fail the `engine snapshot matches live sources` gate in
-> `tools/builder-tests/run-all.mjs`.** The v64–v75 port (commits `8cf5b31`,
-> `ccbd53a`, `c7c5531`) landed entirely inside that blind spot. The builder suite
-> was green throughout, and correctly so — it exercises the codegen *behaviourally*
+> | Snapshots | Cover | |
+> | --- | --- | --- |
+> | **v1 – v75** | templates + assembler + cc65 project. **30 files, no Python.** | ⚠ the codegen was never in the comparison |
+> | **v76 onward** | the above **plus `tools/nes_studio_core/`** (11 files) | the codegen is frozen too |
+>
+> So "v74 and v75 both match" is **not** evidence that the ROM-emitting codegen was
+> unchanged between them. It could not have been: no Python was snapshotted. This
+> gap in the historical record cannot be repaired — snapshot directories are
+> immutable by design, and back-filling them would mean inventing provenance for
+> files nobody captured at the time.
+>
+> **What was wrong before v76.** `INCLUDE_DIRS`/`INCLUDE_FILES` listed no Python at
+> all, so **a change to `tools/nes_studio_core/` altered ROM output and yet could
+> not make `snapshot-engine.mjs --check` go red**, and so could not fail the
+> `engine snapshot matches live sources` gate in `tools/builder-tests/run-all.mjs`
+> (finding F7). The v64–v75 port (commits `8cf5b31`, `ccbd53a`, `c7c5531`) landed
+> entirely inside that blind spot. The builder suite was green throughout, and
+> correctly so — it exercises the codegen *behaviourally*
 > (`tools/builder-tests/lib/render-harness.mjs` spawns the real server, which
-> imports the core), which is different from freezing it.
+> imports the core), which is a different thing from freezing it.
 >
-> Closing the gap means adding `tools/nes_studio_core/` to `INCLUDE_DIRS`, which
-> changes what a snapshot *is* and therefore needs a version bump and a decision
-> about the existing `v1`–`v75` snapshots, which were all taken without it. Not a
-> tidy-up. **Left as an owner decision.**
+> **What is still outside**, as of v76: `tools/playground_server.py` itself. Its
+> five ROM-emitting entry points (`build_behaviour_c`, `build_scene_inc`,
+> `build_project_inc`, `build_bg_world_h`, `build_bg_world_c`) are each a one-line
+> delegation into `nes_studio_core`, so the logic is covered — but inlining any of
+> them back would silently narrow the gate again.
 >
 > Note also that `--check` reads **committed (HEAD)** bytes, deliberately, so that
 > it is deterministic while `steps/Step_Playground/src/` is being rewritten by a
