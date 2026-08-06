@@ -10,7 +10,8 @@ work cold, and the file to refresh *last* before putting work down.
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  verified 2026-07-28 at v78)
+  **114 suites, exit 0, re-verified 2026-08-06 at v78** — twice, before and
+  after that session's port change)
 - **Studio E2E:** ✅ **147 passed** (2026-07-30) — 129 from before that week,
   plus 5 in `emulator-crash-banner.spec.js` (#37), 2 in `enemy-bump.spec.js`
   (#30) and **11** in `palette-keys.spec.js` (#39, which also covers the two
@@ -43,8 +44,8 @@ work cold, and the file to refresh *last* before putting work down.
 
 ## 2026-08-06 unattended session — what changed
 
-No engine change, so **still v78**. Docs were committed and pushed; the
-test-infrastructure change is committed **locally only** and wants a review.
+No engine change, so **still v78**. All commits are LOCAL — nothing was pushed; the
+docs and the test-infrastructure change are entangled, so they land together.
 
 - **Docs audited against the code.** ~60 concrete claims in `README.md` and
   `CLAUDE.md` (paths, ports, commands, flags, mode levels, key bindings) were
@@ -52,7 +53,7 @@ test-infrastructure change is committed **locally only** and wants a review.
   `src/` (it lives in `assets/backgrounds/`), and — the bigger one — **CLAUDE.md
   said a `/play` leaves engine sources modified in `git status`. It no longer
   does**: `_build_rom()` builds in a `TemporaryDirectory`. That advice would have
-  taught people to ignore a real modification. Evidence: a full 115-suite run left
+  taught people to ignore a real modification. Evidence: a full 114-suite run left
   `git status steps/Step_Playground/` empty.
 - **The documented 18790 double-claim is fixed.** `asm-corpus`, `asm-realproj`
   and `asm-player` moved to 18895–18897, and `run-all.mjs` gained a check that
@@ -67,7 +68,7 @@ test-infrastructure change is committed **locally only** and wants a review.
   by mistake-shape, including the false theories) and a step-by-step plan for
   #14's remaining slice at
   [`plans/current/2026-08-06-item-14-multiscreen-rooms.md`](plans/current/2026-08-06-item-14-multiscreen-rooms.md).
-- **Dead code found, not removed** (needs a non-doc change): seven unreferenced
+- **Dead code found, not removed** (needs a non-doc change): eight unreferenced
   path constants in `playground_server.py` — `CHR_PATH`, `NAM_PATH`, `SCENE_INC`,
   `PAL_INC`, `COLLISION_H_PATH`, `BEHAVIOUR_C_PATH`, `BG_WORLD_H_PATH`,
   `BG_WORLD_C_PATH`. `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them are live.
