@@ -145,6 +145,26 @@ call on the existing v1–v75 snapshots, so: **owner decision.**
   the fixtures. Anchoring them (`/steps/Step_Playground/src/scene.inc`) costs
   nothing.
 
+### F9 — The engine release workflow told you to snapshot before committing
+
+`tools/engines/README.md` — fixed in `181c877`. Both `snapshot-engine.mjs` modes
+read **committed** bytes. Snapshotting a *modified* file freezes its old content
+with **no warning** (only a never-committed file prints `(skip, not committed)`),
+and `--check` then compares HEAD against a HEAD-derived manifest and agrees. Since
+snapshots are immutable, the only escape is another version bump. The workflow now
+has an explicit **commit** step.
+
+### F10 — The nes_core wheel is not vendored (**needs a decision**)
+
+`native/nes_core/README.md` — fixed in `9a24b76`. It claimed "the built wheel is
+vendored in `dist/` so the app can be installed without a Rust toolchain".
+`dist/` does not exist and `.gitignore:46` ignores it, so no `.whl` is in version
+control and `--find-links nes_core/dist` cannot be satisfied on a fresh clone. The
+self-contained-wheel promise is true of the wheel and false of the repository.
+Committing a binary, publishing it, or documenting the Rust requirement is an
+owner call. This is the claim that cost the most: it is why the pending container
+rebuild carries a Rust toolchain nobody asked for.
+
 ## Reviewed and found nothing — do not redo these
 
 Fresh-eyes review of `8cf5b31`, `ccbd53a`, `c7c5531`. Each of these was a

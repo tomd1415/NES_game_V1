@@ -160,6 +160,22 @@ exercised *behaviourally* — 110 suites, all green. It is simply not *frozen*, 
 nothing detects that its output changed. Written up with the decision it implies in
 [`../design/engine-versioning.md`](../design/engine-versioning.md).
 
+### The same HEAD semantics have a nastier edge on the *write* side
+
+`snapshot-engine.mjs` reads HEAD when it **creates** a snapshot too. So the
+release workflow that `tools/engines/README.md` prescribed — change the engine,
+bump the version, write the changelog, snapshot — froze the *previous* engine into
+the new `v<N>/` if you had not committed yet. A modified file is written at its
+committed bytes with **no warning**; only a brand-new file prints
+`(skip, not committed)`. And because `--check` then compares HEAD against a
+manifest also derived from HEAD, the two agree perfectly. Snapshots are immutable,
+so the only way out is to bump again.
+
+Nobody has hit this, as far as the changelog shows. It is here because it is a
+*write* path that fails silently and self-consistently, which is the hardest kind
+to notice: the wrong artefact passes its own check. The README now has an explicit
+commit step.
+
 ### Small thing found on the way
 
 `run-all.mjs`'s header says "Exits 0 if every step passes, 1 on the first failure."
