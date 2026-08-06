@@ -93,6 +93,41 @@ test the ASM one instead, and still pass.
 (The hard error — `Port N is in use by something else (not a playground server)` —
 only appears when something that is *not* a playground server holds the port.)
 
+### The harness weakness behind it, and the fix (not yet applied)
+
+`startServer` in `tools/builder-tests/lib/render-harness.mjs` ends with:
+
+```js
+const srv = spawn('python3', [...], { env: { ...  } });
+await sleep(1500);          // give it time to bind
+return { srv, log };
+```
+
+Two independent problems, both of which fail quietly:
+
+1. **It never checks its own process survived.** If the server took the
+   "already running" shortcut it has *exited 0*, and the suite proceeds against
+   a stranger's server. `log.text` even contains the giveaway banner — nobody
+   reads it.
+2. **A fixed 1.5s sleep is not a readiness check.** On a loaded box (this one has
+   hit load 30 on 4 cores) the server may not have bound yet, and the suite fails
+   somewhere confusingly downstream instead of at the cause.
+
+Both are fixed by the same change — poll `/health` until it answers *or* the child
+exits, then assert the child is still running:
+
+```js
+await waitForHealth(port, srv);            // replaces the blind sleep
+if (srv.exitCode !== null) {
+  throw new Error(`server exited ${srv.exitCode} instead of binding ${port}:\n${log.text}`);
+}
+```
+
+This turns the entire class into a loud failure at the point of cause, and would
+make the run-all port guard a belt-and-braces check rather than the only defence.
+Left undone deliberately in the 2026-08-06 unattended session (it is a code change,
+not a doc one) — but it is the more complete fix of the two.
+
 If you want them in parallel, move the E2E out of the way rather than editing the
 suites:
 
