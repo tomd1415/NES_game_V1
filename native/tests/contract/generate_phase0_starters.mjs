@@ -51,6 +51,26 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+// The starters carry a wall-clock metadata.created/modified, so every run used
+// to produce different project/play-request/source hashes for identical input.
+// That cost us: it made the fixtures non-reproducible, it made three of the four
+// hash columns useless as a change signal, and it silently decoupled this corpus
+// from the packaged copy under src/nes_studio/resources/starters.
+//
+// Freezing it is inert. StarterCatalog.create() overwrites created/modified with
+// the real clock on every project it makes (see tests/unit/test_starters.py), so
+// no pupil ever sees this value. An obviously-synthetic epoch is used rather than
+// a plausible date, so nobody reads it as when the fixture was captured.
+const FROZEN_CLOCK = '1970-01-01T00:00:00.000Z';
+
+function freezeMetadataClock(state) {
+  const metadata = state?.metadata;
+  if (!metadata) return;
+  for (const key of ['created', 'modified']) {
+    if (key in metadata) metadata[key] = FROZEN_CLOCK;
+  }
+}
+
 function playerStart(state) {
   const config = state.builder?.modules?.players?.submodules?.player1?.config;
   return { x: config?.startX | 0, y: config?.startY | 0 };
@@ -116,6 +136,7 @@ let failed = false;
 try {
   for (const [id, make] of styles) {
     const state = make();
+    freezeMetadataClock(state);
     const before = jsonBytes(state);
     const mainC = Buffer.from(window.BuilderAssembler.assemble(state, template));
     const request = {
@@ -160,3 +181,23 @@ try {
 if (failed) process.exit(1);
 fs.writeFileSync(path.join(OUT, 'manifest.json'), jsonBytes(manifest));
 console.log(`wrote ${styles.length} fixtures to ${path.relative(H.ROOT, OUT)}`);
+
+// The app ships its own copy of the starter projects, and
+// tests/unit/test_starters.py requires it to be byte-identical to this corpus.
+// It used to be kept in step by hand, which is why re-baselining the corpus
+// broke that test. Write both from the one source so they cannot drift again.
+// Only project.json.gz ships — the ROM and generated C are test-only.
+const PACKAGED = path.join(H.ROOT, 'native', 'src', 'nes_studio', 'resources', 'starters');
+const packagedManifest = { schema_version: 1, generator: manifest.generator, fixtures: {} };
+for (const [id] of styles) {
+  const directory = path.join(PACKAGED, id);
+  fs.mkdirSync(directory, { recursive: true });
+  fs.copyFileSync(
+    path.join(OUT, id, 'project.json.gz'),
+    path.join(directory, 'project.json.gz'),
+  );
+  packagedManifest.fixtures[id] = { ...manifest.fixtures[id] };
+}
+packagedManifest.engine_version = manifest.engine_version_requested;
+fs.writeFileSync(path.join(PACKAGED, 'manifest.json'), jsonBytes(packagedManifest));
+console.log(`synced ${styles.length} packaged starters to ${path.relative(H.ROOT, PACKAGED)}`);
