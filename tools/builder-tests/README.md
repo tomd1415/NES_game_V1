@@ -51,10 +51,12 @@ run — a dozen or so pairs deliberately share one.
 
 **Ports are catalogued in [`docs/guides/TEST-SERVERS.md`](../../docs/guides/TEST-SERVERS.md)** —
 the range in use, how to pick one for a new suite (don't grep for
-`PORT =`; the suites spell it four different ways), and the fact
-that **18790 is shared with the Studio E2E server**, which makes
-running both suites concurrently fail *silently*.  The ranges this
-file used to quote had drifted and were the source of that overlap.
+`PORT =`; the suites spell it four different ways).  **18790 used to
+be shared with the Studio E2E server**, which made running both suites
+concurrently fail *silently*; the three suites involved were moved to
+18895–18897 on 2026-08-06 and `run-all.mjs` now fails if any suite
+names the E2E port.  The ranges this file used to quote had drifted
+and were the source of that overlap.
 
 ## The render harness (`lib/render-harness.mjs`)
 
@@ -158,9 +160,10 @@ asserts the two are behaviourally identical.
    because those stay C globals the ASM shares).
 
 `asm-ab` and `asm-benchmark` build the stock fixture directly with `make` (no
-server); the server-based suites use ports in the 18788–18795 band (asm-play:
-18835), which is where the **18790** overlap with the Studio E2E server comes
-from — see [`docs/guides/TEST-SERVERS.md`](../../docs/guides/TEST-SERVERS.md).
+server); the server-based suites use ports in the 18788–18791 band plus
+18895–18897 (asm-play: 18835).  The 18895+ numbers are where the old **18790**
+overlap with the Studio E2E server was moved to — see
+[`docs/guides/TEST-SERVERS.md`](../../docs/guides/TEST-SERVERS.md).
 Like every suite they're picked up automatically by `run-all.mjs`.
 
 ## The invariants `run-all.mjs` enforces
@@ -176,9 +179,41 @@ Like every suite they're picked up automatically by `run-all.mjs`.
    resulting ROM must have the same sha1sum.  Guards the
    "Builder additions are strictly gated behind `#if`" rule
    that protects every existing pupil project.
-3. **Every suite passes.**
+3. **Engine version constants agree** — `tools/engines/ENGINE_VERSION` and
+   `tools/tile_editor_web/engine-version.js` must hold the same integer.
+4. **Engine snapshot matches HEAD** — `scripts/snapshot-engine.mjs --check`.
+5. **No suite claims the Studio E2E port** — added 2026-08-06; reads the port
+   out of `playwright.config.js` and fails if any `.mjs` here names it.
+6. **Every suite passes.**
 
 Anything less and the Builder release should not ship.
+
+## These gates have been watched failing (2026-08-06)
+
+A check nobody has seen fail is decoration. Each of the above was deliberately
+broken, confirmed red, and restored. Recorded so the next person does not have to
+repeat it — and so the one **limitation** found is not rediscovered the hard way.
+
+| Mutation | Gate | Result |
+| -------- | ---- | ------ |
+| Put `asm-corpus.mjs` back on 18790 | E2E-port guard | ✅ FAIL, naming the file and suggesting a free port |
+| `ENGINE_VERSION` 78 → 79 | version constants agree | ✅ FAIL — `ENGINE_VERSION (79) != engine-version.js (78)` |
+| (same mutation) | snapshot matches HEAD | ✅ FAIL — `No snapshot for v79` |
+| Corrupt a recorded sha1 in `v78/manifest.json` | snapshot matches HEAD | ✅ FAIL — `DRIFT (vs HEAD): …/builder-modules.js` |
+| Append a line to the *snapshot copy* of `builder-modules.js` | snapshot matches HEAD | ⚠️ **PASSED — did not detect it** |
+
+**The limitation, stated plainly.** `--check` compares the **committed (HEAD)**
+bytes of each live source against the sha1s recorded in `manifest.json`. It
+therefore cannot see (a) edits to the snapshot *copies* under `tools/engines/vN/`,
+or (b) any uncommitted working-tree change at all. This is deliberate — reading
+from HEAD is what makes the check deterministic — but it means **a green snapshot
+check does not mean your working tree is clean**. Commit first, then trust it.
+
+(The docstring in `scripts/snapshot-engine.mjs` justifies reading from HEAD by
+saying the build "rewrites several tracked engine sources in place". That reason
+has expired: `_build_rom()` now builds in a `TemporaryDirectory` and a `/play`
+leaves the tree clean. The HEAD-reading behaviour is still right for determinism;
+only the stated rationale is stale.)
 
 ## Adding a new test
 

@@ -97,6 +97,48 @@ check('engine snapshot matches live sources', () => {
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || '').trim());
 }) || (anyFail = true);
 
+// Port hygiene: the Studio E2E server and the builder suites draw from the same
+// range, and a collision between them fails SILENTLY. playground_server.py, on
+// finding a *working* playground server already on its port, prints
+// "already running -- nothing to do" and returns 0 — it never binds, and it
+// discards the env the caller set (PLAYGROUND_ACCOUNTS_DB, PLAYGROUND_PORT…).
+// The suite then runs green against a server it did not configure. Nothing goes
+// red, so this drifted for a long time with only a doc note to catch it — which
+// is the point: if two lists must agree, something has to fail when they don't.
+// Reading the port out of playwright.config.js rather than hardcoding it keeps
+// this honest if the E2E port ever moves.
+//
+// KNOWN LIMIT, stated rather than papered over: this scans for the port as a
+// *literal*. `enemy-bump.mjs` derives its second port as `PORT + 1`, so a suite
+// whose base literal happened to be one below the E2E port would slip past.
+// That is not the case today (18853 -> 18854) and the arithmetic form is rare,
+// but a green result here means "no suite names the port", not "no suite can
+// bind it". See docs/guides/TEST-SERVERS.md for the full port map.
+check('no builder-test suite claims the Studio E2E port', () => {
+  const cfg = fs.readFileSync(path.join(ROOT, 'playwright.config.js'), 'utf8');
+  const pm = cfg.match(/STUDIO_TEST_PORT\s*\|\|\s*(\d+)/);
+  if (!pm) throw new Error('playwright.config.js: could not read the default STUDIO_TEST_PORT');
+  const e2ePort = pm[1];
+  const hit = new RegExp('(?<![\\d.])' + e2ePort + '(?![\\d.])');
+  const offenders = [];
+  for (const f of fs.readdirSync(__dirname).sort()) {
+    if (!f.endsWith('.mjs') || f === 'run-all.mjs') continue;
+    // Strip comments first: a suite may legitimately *mention* the port in a
+    // note about this very clash, and a guard that trips on prose is decoration.
+    const src = fs.readFileSync(path.join(__dirname, f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/\/\/[^\n]*/g, ' ');
+    if (hit.test(src)) offenders.push(f);
+  }
+  if (offenders.length) {
+    throw new Error(
+      `port ${e2ePort} belongs to the Studio E2E server (playwright.config.js) ` +
+      `but is also claimed by: ${offenders.join(', ')}\n` +
+      '  Give each suite a free port above 18894, staying under 19000.\n' +
+      '  See docs/guides/TEST-SERVERS.md.');
+  }
+}) || (anyFail = true);
+
 // Playwright browser builds are keyed to the Playwright VERSION, and the dev
 // container bakes Chromium in at image-build time (cdn.playwright.dev is a
 // rotating CDN, so runtime allowlisting is unreliable — see the Dockerfile).

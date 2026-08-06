@@ -19,7 +19,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const jsnes = require(path.join(H.ROOT, 'tools', 'tile_editor_web', 'jsnes.min.js'));
 
-const PORT_C = 18790, PORT_A = 18791;
+// 18790 belongs to the Studio E2E server (playwright.config.js); sharing it made
+// a concurrent run silently reuse that server and lose this suite's env. Moved
+// above the 18894 high-water mark. Guarded by run-all's E2E-port check.
+const PORT_C = 18896, PORT_A = 18791;
 let failed = false;
 const ok = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };
