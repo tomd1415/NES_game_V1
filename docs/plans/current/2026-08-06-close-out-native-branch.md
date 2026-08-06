@@ -92,7 +92,42 @@ construction and worth nothing. Options, none of which I can pick:
 **Done when:** the choice is recorded in the handoff with its reasoning — not just
 implemented.
 
-## Step 5 — Fix F5/F6 per that decision, with the guards that stop a recurrence
+## Step 5 — ✅ **DONE 2026-08-06** — F5/F6 fixed, with the guards
+
+Landed as five commits, deliberately ordered so the evidence outlived the thing
+that replaced it:
+
+1. `f5b52d7` — the old v63 hashes recorded **before** the destructive regenerate,
+   and F13's diagnosis corrected (it blamed the starters; the starters were
+   innocent — see below).
+2. `3e8ee3e` — `.gitignore` negation, plus provenance fields in the generator and
+   a test that asserts they are present and that the tree was clean.
+3. `b7cd3ad` — the fixtures themselves, regenerated at a named clean commit.
+4. `a9fd193` — the two guards from Appendix 2, both probed red.
+5. `aa12a75` + `65d98ee` — froze the fixture clock and made one generator write
+   both the corpus and the packaged copy.
+
+**What this actually taught us,** beyond the two findings:
+
+- **F13 was wrong.** The seven input projects had not drifted at all; they were
+  byte-identical apart from a wall-clock `metadata.created`/`modified`. The three
+  changed ROMs are engine drift between v63 and v75, not starter drift.
+- **`targetEngine: 63` does not select the archived v63 engine.** It stamps a
+  version and builds with the templates at `HEAD`. The "v63 fixtures" were a
+  v63-*era* capture that had been drifting silently ever since, which is why the
+  manifest now records `engine_version_requested` and
+  `engine_version_at_source_commit` separately.
+- **Re-baselining broke a sibling test** (`test_starters.py`): the app ships its
+  own copy of the starters that must be byte-identical to the corpus, and it was
+  hand-maintained. Fixed at the root — frozen clock, one writer.
+
+Still open and **not** for me to answer: whether the smb / runner / geodash ROM
+change between v63 and v75 was intended. Recorded in
+[`../../handoffs/2026-08-06-starter-fixture-rebaseline.md`](../../handoffs/2026-08-06-starter-fixture-rebaseline.md)
+with what it is not (not audio, not any single scalar setting).
+
+<details>
+<summary>Original step 5 text, for reference</summary>
 
 1. Un-ignore the fixture path (`!native/tests/fixtures/**/*.nes`, or anchor the
    `*.nes` rule) and commit the baselines the decision calls for.
@@ -103,6 +138,12 @@ implemented.
 **Done when:** `pytest tests/contract/` is green **and** deleting one `game.nes`
 makes it fail with *"missing fixture artefacts"* rather than a `FileNotFoundError`
 inside an unrelated assertion. Check the failure mode, not just the pass.
+
+</details>
+
+*Acceptance met:* removing `runner/game.nes` fails as
+`missing fixture artefacts: runner/game.nes`; flipping one byte of
+`smb/game.nes` fails on the `rom_sha256` comparison. Both restored after.
 
 ## Step 6 — Fix F1, and add the test that found it
 

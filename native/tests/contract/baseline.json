@@ -1,0 +1,66 @@
+{
+  "schema_version": 2,
+  "what_a_pass_means": "This manifest records what was verified, when, and by which command. A passing test_baseline_manifest means the RECORD is well-formed and tracks the live engine version. It does not re-run any of the evidence below, and it does not mean the product is correct.",
+  "renamed_from": "baseline-v63.json",
+  "rename_reason": "The old name asserted that the contents described engine v63. They no longer did: the file sat at engine_version 63 while the live engine reached 75, so test_manifest_tracks_the_live_engine_baseline failed for twelve versions (F6). A baseline that has to be renamed every engine bump will not be, so it is now version-neutral and carries the version as data.",
+  "engine_version": 75,
+  "repository_commit": "65d98ee06266687aaca693309ac534dd5cf623e0",
+  "captured_on": "2026-08-06",
+  "scope": "studio_plus_legacy_union",
+  "toolchain": {
+    "note": "Measured in the nesnative dev container on 2026-08-06. These differ from the 2026-07-10 capture, which ran on a different host (python 3.13.5, node 20.19.2, npm 9.2.0) -- recorded so a future mismatch is read as 'different machine', not 'regression'.",
+    "python": "3.11.2",
+    "node": "20.20.2",
+    "npm": "10.8.2",
+    "cc65": "2.19-1",
+    "fceux": "2.6.5"
+  },
+  "automated_results": {
+    "builder_regression": {
+      "status": "pass",
+      "command": "node tools/builder-tests/run-all.mjs",
+      "verified_on": "2026-08-06",
+      "notes": "110 suites. Re-run at this commit rather than inherited from the 2026-07-10 capture."
+    },
+    "engine_snapshot": {
+      "status": "pass",
+      "command": "node scripts/snapshot-engine.mjs --check",
+      "verified_on": "2026-08-06",
+      "notes": "Confirms the v75 snapshot matches HEAD across 30 files. Those 30 files contain no Python, so this gate cannot see a change to the codegen in tools/nes_studio_core (F7)."
+    },
+    "native_unittest": {
+      "status": "partial",
+      "command": "cd native && QT_QPA_PLATFORM=offscreen pytest -q --continue-on-collection-errors",
+      "verified_on": "2026-08-06",
+      "notes": "PySide6 is absent in this container, so the Qt UI layer is untested here, not passing. Do not read the pass count as coverage.",
+      "known_gaps": [
+        "12 modules import PySide6 at module scope and report as collection ERRORS instead of skips; 3 more import it inside the test body and report as plain FAILURES (F3). Both are absent-dependency, not defects.",
+        "The Qt UI suite has never been run anywhere. Step 1-2 of the close-out plan covers it."
+      ]
+    }
+  },
+  "golden_rom_sha1": {
+    "note": "Not a stale copy. These same three values are asserted live by tools/builder-tests/run-all.mjs (GOLDEN_STOCK, GOLDEN_TEMPLATE) and tools/builder-tests/_rom-equiv.mjs (EXPECT), which run in the builder suite recorded above. They therefore still hold at engine v75.",
+    "stock": "1730448eca6d4857d3468407b33e41de7806bf99",
+    "no_modules_template": "1730448eca6d4857d3468407b33e41de7806bf99",
+    "everything_on": "0aed6e95684bc3bbd665353759f2a003dad45bf6"
+  },
+  "manual_fceux_v63": {
+    "applies_to_engine_version": 63,
+    "re_attested_at_current_engine": false,
+    "carried_forward_note": "Preserved verbatim from the 2026-07-10 capture. It is evidence about v63 and has NOT been repeated at v75. Twelve engine versions have landed since; three of the seven starter ROMs are known to have changed in that range (see docs/handoffs/2026-08-06-starter-fixture-rebaseline.md). Treat this as history, not as current attended coverage.",
+    "status": "accepted_product_owner_attestation",
+    "required_cases": 9,
+    "attested_on": "2026-07-10",
+    "attestation": "The product owner reports that the C and ASM files passed all relevant attended tests checked at the time.",
+    "limitations": "The earlier manual run did not leave a case-by-case command, input-sequence, screenshot, or observation manifest. Current automated v63 coverage therefore remains the reproducible evidence; the attestation closes the attended gate without fabricating missing observations.",
+    "automated_v63_support": [
+      "asm-corpus.mjs: 14 project shapes rendered equivalently at rest",
+      "asm-player.mjs: platformer, top-down, SMB, runner, racer, and two-player matched-state checks",
+      "asm-realproj.mjs: scrolling composite with moving player and four enemy AI types",
+      "asm-ab.mjs: matched game-logic progress",
+      "asm-vscroll.mjs: vertical and diagonal scrolling",
+      "asm-play.mjs: raw ASM compile and link path"
+    ]
+  }
+}
