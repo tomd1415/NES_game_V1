@@ -60,8 +60,25 @@ maturin build --release --out dist
 pip install dist/nes_core-*.whl
 ```
 
-The built wheel is vendored in `dist/` so the app can be installed without a Rust
-toolchain.
+> **⚠ The wheel is NOT vendored, despite what this said until 2026-08-06.**
+> `dist/` does not exist in a checkout and `.gitignore:46` ignores `dist/`, so
+> **no `.whl` is in version control**. `native/README.md`'s install line
+> (`--find-links nes_core/dist`) therefore cannot succeed on a fresh clone until
+> somebody runs the build above — which means **the machine that installs the
+> native app currently does need Rust**, contrary to the "no Rust, no compiler"
+> promise at the top of this file.
+>
+> That promise is true of the *wheel* (it really is self-contained `manylinux`
+> abi3) and false of the *repository*, which ships no wheel to install. Closing
+> the gap means either committing the built wheel, publishing it somewhere the
+> install can fetch, or saying plainly in `native/README.md` that a source
+> checkout needs a Rust toolchain. **Owner decision** — committing a binary is not
+> a call to make quietly.
+
+Note also that nothing *enforces* the Rust ≥ 1.85 above: `Cargo.toml` has no
+`rust-version` key, so an older toolchain fails deep inside a `tetanes-core`
+compile rather than at the front door. Adding `rust-version = "1.85"` would turn
+that into one clear line.
 
 ## Licences
 
