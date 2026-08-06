@@ -385,3 +385,223 @@ class FixturesAreTrackedTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 ```
+
+---
+
+# Second sweep — silent failures and drift (02:00–02:40)
+
+Catalogue items 10 and 11: things that no longer match reality, and shapes in our
+own code that fail without saying so. Two findings, one clean result, and two more
+ready-to-apply checks — both run, both confirmed to catch the thing they claim to.
+
+## F11 — Twenty-three builder suites share a port with another suite
+
+`tools/builder-tests/run-all.mjs`'s own header says each suite "spawns its own
+playground server on a **unique port**". Nothing enforced it, and 11 ports are
+shared, one of them three ways:
+
+```
+18781  all-modules.mjs, perdoor.mjs          18862  account-projects.mjs, gallery-auth.mjs
+18783  dialogue-scroll.mjs, smb-jump.mjs     18863  csrf-origin.mjs, racer.mjs
+18792  shared-play.mjs, smb-render.mjs       18867  smb-stomp.mjs, topdown-enemies.mjs
+18844  flyer-patrol.mjs, racer-hud.mjs       18869  pickup-collect.mjs, scroll-2x2.mjs, stomp-basic.mjs
+18847  hopper-enemy.mjs, scene-multiscreen.mjs   18871  sfx-events.mjs, style-starters.mjs
+18861  accounts.mjs, palette-render.mjs
+```
+
+Sequential execution normally hides this. **What un-hides it is the leak we
+already know about**: `fail()` calls `process.exit(1)`, which bypasses the
+`try/finally { srv.kill('SIGTERM') }` — 32 suites do this. A leaked server squats
+the port, and the next suite sharing it dies with an opaque `UND_ERR_SOCKET` that
+resembles nothing about the original failure.
+
+That is not hypothetical. It is the exact mechanism behind the false theory that
+cost a session — "`audio.mjs` is environmental, it fails on a clean `main` too" —
+generalised from one suite to twenty-three. The leak makes one failure look like
+an unrelated failure somewhere else; the shared ports decide *where*.
+
+Two independent fixes, either sufficient, both cheap: give each suite its own
+port, or register `process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })`
+after each `spawn`. Doing both is better — unique ports stop the propagation, the
+exit hook stops the leak. Checker in Appendix 3; it exits 1 today and names every
+pair.
+
+## F12 — Three helper names are defined twice in `tools/nes_studio_core/`
+
+Nothing checks the copies agree.
+
+| Name | Modules | Verdict |
+| --- | --- | --- |
+| `_smbhud_bg_enabled` | `graphics.py:346`, `project.py:14` | **Identical today.** One seeds the 0-9 glyphs into the background pattern table, the other emits the matching `#define`. Diverge them and the ROM seeds art nothing enables, or enables art that was never seeded. |
+| `cell_tile` | `graphics.py:429`, `scene.py:62` | **Identical today**, and public in both — `scene.py` could simply import it. |
+| `_hex_table` | `collision.py:129`, `world.py:206` | **Different on purpose** — different signatures, and different empty-data output (`[1] = { 0 }` vs a `{ 0 }` body in a sized array). Same name, different semantics, which is the worse trap: a reader who has met one will assume the other. |
+
+The first two are a regression risk with no detector, so Appendix 4 pins them to
+each other rather than to a hardcoded expectation — it keeps working when the
+shared behaviour legitimately changes, and fails only on divergence. It passes
+today, and it was confirmed to go red: dropping the background-mode condition from
+`project.py`'s copy fails two subtests with a message naming the consequence.
+(Injected, observed, reverted; tree verified clean.)
+
+The third is left alone deliberately — renaming a private helper is a real change
+and both are correct where they are.
+
+## Swept and found clean
+
+* **No `TODO`/`FIXME`/`HACK` anywhere** in `tools/nes_studio_core/`, `scripts/*.mjs`
+  or `tools/engines/README.md`. No stale markers to retire.
+* **`docs/design/engine-versioning.md`'s remaining TODO is real, not stale.** The
+  build-time *selection* of a frozen engine is genuinely unimplemented: nothing
+  reads `tools/engines/v<N>/` at build time. `target_engine` is resolved
+  (`playground_server.py:1412-1435`) and used to gate feature emission by version,
+  which is a different mechanism and is honestly described as such.
+* **The `except Exception: return False` handlers** in `graphics.py` (×2) and
+  `project.py` all fail *closed* — a malformed project disables the feature rather
+  than emitting half of it. Defensible. Worth knowing they would also swallow a
+  genuinely corrupt `state` silently, but the direction is the safe one.
+* **Port and mode counts agree** where two lists have to: eight `MODE_CLASSES`
+  against the documented `1`–`8` keys; `DEV_PORTS: "8765"` against
+  `PLAYGROUND_PORT`'s default; the Playwright test port 18790 and the builder
+  range 18768–18894 against `start.sh`'s comment.
+
+## Appendix 3 — port-uniqueness checker
+
+Save as `tools/builder-tests/ports-unique.mjs` and call it from `run-all.mjs`
+alongside the other invariant checks. Exits 1 today.
+
+```javascript
+#!/usr/bin/env node
+// Every builder suite must own a unique port.
+//
+// run-all.mjs's own header says each suite "spawns its own playground server on a
+// unique port". Nothing enforced that, and 23 suites share one with another.
+//
+// Sequential runs normally mask it. What un-masks it is the known leak: fail()
+// calls process.exit(1), which bypasses the try/finally that would reap the
+// spawned server (32 suites). A leaked server then squats the port, and the NEXT
+// suite that happens to share it dies with an opaque UND_ERR_SOCKET that looks
+// nothing like the original failure.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const DIR = path.dirname(fileURLToPath(import.meta.url));
+const RE = /\bPORT\s*=\s*(\d{4,5})\b/;
+
+const byPort = new Map();
+for (const file of fs.readdirSync(DIR).filter((f) => f.endsWith('.mjs')).sort()) {
+  const m = RE.exec(fs.readFileSync(path.join(DIR, file), 'utf8'));
+  if (!m) continue;
+  const port = Number(m[1]);
+  if (!byPort.has(port)) byPort.set(port, []);
+  byPort.get(port).push(file);
+}
+
+const clashes = [...byPort.entries()].filter(([, files]) => files.length > 1).sort();
+if (clashes.length === 0) {
+  console.log(`OK — ${byPort.size} suites, all on distinct ports.`);
+  process.exit(0);
+}
+
+console.error(`${clashes.length} port(s) shared by more than one suite:`);
+for (const [port, files] of clashes) console.error(`  ${port}  ${files.join(', ')}`);
+console.error(
+  '\nA suite that fails leaks its server (fail() -> process.exit(1) skips the\n' +
+  'try/finally reap), and its port-mate then dies with an unrelated socket error.\n' +
+  'Give each suite its own port, or reap on exit:\n' +
+  "  process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })"
+);
+process.exit(1);
+```
+
+## Appendix 4 — duplicated-helper agreement test
+
+Save as `native/tests/unit/test_core_helper_agreement.py`. Passes today; goes red
+on divergence.
+
+```python
+"""Helpers that exist twice in `tools/nes_studio_core/` must agree.
+
+Nothing checks that the copies stay in step, so the first person to change one
+and not the other gets a ROM that is wrong in a way no test notices:
+
+* `_smbhud_bg_enabled` — graphics.py (seeds the 0-9 glyphs into the BACKGROUND
+  pattern table) and project.py (emits the matching `#define`). If they disagree,
+  one side seeds art the other never enables, or vice versa.
+* `cell_tile` — graphics.py and scene.py. Public in both.
+
+These pin the copies to EACH OTHER rather than to a hardcoded expectation, so
+they keep working when the shared behaviour legitimately changes and fail only on
+divergence — which is the thing that has no other detector.
+"""
+
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools"))
+
+from nes_studio_core import graphics, project, scene  # noqa: E402
+
+
+def _state(game_type="smb", enabled=True, background=True, **hud_extra):
+    hud = {"enabled": enabled, "config": {"background": background, **hud_extra}}
+    return {"builder": {"modules": {"game": {"config": {"type": game_type}}, "smbhud": hud}}}
+
+
+SMBHUD_CASES = [
+    ("on, background mode", _state()),
+    ("on, sprite mode", _state(background=False)),
+    ("module off", _state(enabled=False)),
+    ("wrong game type", _state(game_type="topdown")),
+    ("no builder key", {}),
+    ("builder is not a dict", {"builder": []}),
+    ("modules missing", {"builder": {}}),
+    ("hud config is None", {"builder": {"modules": {"game": {"config": {"type": "smb"}},
+                                                    "smbhud": {"enabled": True, "config": None}}}}),
+]
+
+CELL_CASES = [
+    ("empty cell", {"empty": True, "tile": 7}),
+    ("plain tile", {"tile": 7}),
+    ("missing tile", {}),
+    ("out of range", {"tile": 300}),
+    ("negative", {"tile": -1}),
+    ("string digits", {"tile": "12"}),
+]
+
+
+class CoreHelperAgreementTests(unittest.TestCase):
+    def test_smbhud_bg_enabled_agrees_across_modules(self) -> None:
+        for label, state in SMBHUD_CASES:
+            with self.subTest(case=label):
+                self.assertEqual(
+                    graphics._smbhud_bg_enabled(state),
+                    project._smbhud_bg_enabled(state),
+                    "graphics.py and project.py disagree about the SMB HUD "
+                    "background mode; one seeds the glyphs, the other emits the "
+                    "#define, so a ROM built now is inconsistent",
+                )
+
+    def test_cell_tile_agrees_across_modules(self) -> None:
+        for label, cell in CELL_CASES:
+            with self.subTest(case=label):
+                self.assertEqual(graphics.cell_tile(cell), scene.cell_tile(cell))
+
+    def test_the_duplicates_still_exist_where_this_test_expects(self) -> None:
+        """If someone de-duplicates them properly this test should be deleted,
+        not silently pass against one object aliased twice."""
+        for module, name in (
+            (graphics, "_smbhud_bg_enabled"),
+            (project, "_smbhud_bg_enabled"),
+            (graphics, "cell_tile"),
+            (scene, "cell_tile"),
+        ):
+            self.assertTrue(hasattr(module, name), f"{module.__name__}.{name} is gone")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
