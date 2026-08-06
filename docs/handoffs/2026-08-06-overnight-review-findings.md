@@ -605,3 +605,59 @@ class CoreHelperAgreementTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 ```
+
+---
+
+# F13 — Regenerating the v63 fixtures at HEAD does **not** reproduce three of the seven ROMs
+
+Found while starting the owner-approved re-baseline (step 4 of the close-out
+plan), then **reverted rather than committed**. This changes what that step means,
+so it must be settled before the baselines land.
+
+`native/tests/contract/generate_phase0_starters.mjs` pins `NES_TARGET_ENGINE = 63`
+and sends `targetEngine: 63`, so running it today *should* reproduce the v63
+artefacts exactly. Run at commit `57578ab` it does not:
+
+| Fixture | v63 `rom_sha256` (recorded) | Regenerated at `57578ab` |
+| --- | --- | --- |
+| `basics` | `4d11fa59045c…` | `4d11fa59045c…` **same** |
+| `topdown`, `racer`, `scratch` | unchanged | unchanged |
+| `smb` | `4427934de87a…` | `30fae8aed339…` **DIFFERENT** |
+| `runner` | `8bfefb002b4e…` | `890944e9093d…` **DIFFERENT** |
+| `geodash` | `4a4415746ac5…` | `414f2a8090bb…` **DIFFERENT** |
+
+And **all seven** differ in `project_json_sha256`, `play_request_json_sha256` and
+`generated_source_sha256`. So the *input projects themselves* have moved, not just
+the ROMs — which points at `studio-starter.js` / `default-state.js` (the starter
+definitions) rather than at the engine. **Those files are not covered by
+`ENGINE_VERSION` or by the snapshot**, so nothing recorded that they changed, and
+`targetEngine: 63` cannot pin them.
+
+## Why this was reverted rather than committed
+
+The owner's decision authorised generating baselines at a named commit and
+recording that provenance. That is still the right shape. But it was authorised on
+the understanding that a re-baseline pins *current* behaviour; what it would
+actually do here is **overwrite the only surviving record that three starters used
+to build different ROMs**, in the same commit that makes the test pass. The
+evidence and its erasure would arrive together.
+
+The generator is destructive by design (`fs.rmSync(OUT, …)`), so it rewrites the
+`.gz` artefacts and the manifest along with the ROMs. There is no way to "just add
+the ROMs".
+
+## What has to be decided first
+
+1. **Is the starter drift expected?** Three starters producing different ROMs from
+   a v63-pinned request is either (a) an intended change to the starter templates
+   since v63, in which case the re-baseline is correct and the old hashes should be
+   preserved in the doc as history, or (b) a regression nobody noticed, in which
+   case baselining now freezes the bug.
+2. **Should the starter definitions be version-gated or snapshotted?**
+   `targetEngine` pins the *engine* and not the *starter content*, so a fixture
+   claiming to be "engine v63" is only half-pinned today. That is arguably a bigger
+   hole than the one this pass set out to close.
+
+Both are recorded in `.mc-outbox.md`. The mechanical part of step 4 — un-ignoring
+`native/tests/fixtures/**/*.nes` — is safe and unblocked; it is the *content* of
+the baseline that is not.
