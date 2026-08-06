@@ -169,6 +169,10 @@ their scepticism elsewhere.
 3. **Nothing tracked-and-expected is git-ignored.** Run `git check-ignore` over the
    fixture tree and fail on any hit. This catches the whole class F5 belongs to,
    not just today's instance, and would have caught F5 the day it happened.
+   Prototyped and confirmed — second appendix. **The non-obvious part:** globbing
+   the filesystem for what to check passes *vacuously* once the file is already
+   gone, which is exactly the state F5 left the repo in. The check has to run
+   against the paths the manifest says *should* exist, not the ones on disk.
 4. **Skip-guard consistency.** Parse each module under `native/tests/` and fail if
    it imports PySide6 at module scope without the guard. Fixes F3 permanently
    rather than one file at a time.
@@ -252,6 +256,100 @@ class FriendlyBuildErrorTests(unittest.TestCase):
         out = friendly_build_error(REAL)
         for action in ("shorter", "reuse repeated sections", "fewer different"):
             self.assertIn(action, out)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+## Appendix 2 — ready-to-apply test for F5 (and the class it belongs to)
+
+Save as `native/tests/unit/test_fixtures_are_tracked.py`. Both tests fail today,
+each with a message that names the problem instead of describing a symptom:
+
+```
+AssertionError: these fixture files are git-ignored and will be absent in a
+fresh clone:
+  native/tests/fixtures/phase0/starters/basics/game.nes
+  … (7 in total)
+
+AssertionError: missing fixture artefacts:
+  basics/game.nes
+  … (7 in total)
+```
+
+Run in-repo and then removed; nothing was left behind.
+
+```python
+"""Nothing a test depends on may be git-ignored, and nothing the manifest
+promises may be absent.
+
+This is the generalisation of the bug where the seven `game.nes` starter
+baselines were silently swallowed by `.gitignore:3` (`*.nes`). A per-file
+existence check catches that one instance; this catches the class, including the
+next fixture someone adds with an extension that collides with a build-output
+pattern. `git add` says nothing when it declines an ignored path, so the file
+goes missing at the moment it is created and looks fine forever after.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[3]
+FIXTURES = REPO / "native" / "tests" / "fixtures"
+STARTERS = FIXTURES / "phase0" / "starters"
+STARTER_ARTEFACTS = ("project.json.gz", "play-request.json.gz", "main.c.gz", "game.nes")
+
+
+def _expected_fixture_paths() -> list[Path]:
+    manifest = json.loads((STARTERS / "manifest.json").read_text(encoding="utf-8"))
+    return [
+        STARTERS / name / filename
+        for name in manifest["fixtures"]
+        for filename in STARTER_ARTEFACTS
+    ]
+
+
+class FixturesAreTrackedTests(unittest.TestCase):
+    def test_no_fixture_file_is_git_ignored(self) -> None:
+        # EXPECTED paths, not just the ones on disk. Globbing the filesystem
+        # passes vacuously once the file is already missing, which is precisely
+        # the state this test exists to detect.
+        paths = sorted(
+            {*_expected_fixture_paths(), *(p for p in FIXTURES.rglob("*") if p.is_file())}
+        )
+        self.assertTrue(paths, f"no fixtures found under {FIXTURES}")
+        # check-ignore echoes the ignored paths; exit 1 means none matched.
+        result = subprocess.run(
+            ["git", "-C", str(REPO), "check-ignore", "--stdin"],
+            # Repo-relative: check-ignore cannot match a path outside the repo.
+            input="\n".join(str(p.relative_to(REPO)) for p in paths),
+            capture_output=True,
+            text=True,
+        )
+        ignored = [line for line in result.stdout.splitlines() if line.strip()]
+        self.assertEqual(
+            ignored,
+            [],
+            "these fixture files are git-ignored and will be absent in a fresh "
+            "clone:\n  " + "\n  ".join(ignored),
+        )
+
+    def test_every_fixture_referenced_by_the_manifest_exists(self) -> None:
+        """Fail as 'baseline missing', not as a FileNotFoundError buried inside
+        the assertion it was meant to support."""
+        missing = [
+            f"{path.parent.name}/{path.name}"
+            for path in _expected_fixture_paths()
+            if not path.is_file()
+        ]
+        self.assertEqual(
+            missing, [], "missing fixture artefacts:\n  " + "\n  ".join(missing)
+        )
 
 
 if __name__ == "__main__":
