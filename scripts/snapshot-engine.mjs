@@ -108,17 +108,31 @@ function main() {
       if (bySha[rel] !== sha1(buf)) { console.error('DRIFT (vs HEAD): ' + rel); drift++; }
     }
 
-    // Direction 2: everything the snapshot lists must still be there.
+    // Direction 2: everything the snapshot lists must still be there — in BOTH
+    // senses, because a file can go missing in two independent ways and each one
+    // hides from the other check.
     //
-    // Without this the gate could not see a DELETION at all: the loop above
-    // walks the filesystem, so a file that no longer exists is simply never
-    // visited, and --check stayed green while an engine source vanished.
-    // Verified by moving steps/Step_Playground/cfg/nes.cfg aside — the gate
-    // reported "✓ ... (41 files)" with 40 files present.
+    //   * gone from disk, still in HEAD — e.g. moved aside mid-work. Direction 1
+    //     walks the filesystem, so it simply never visits the file.
+    //   * still on disk, gone from HEAD — e.g. `git rm --cached` then commit. Now
+    //     direction 1 DOES visit it, but headBytes() returns null and the loop
+    //     skips it as "an uncommitted new file".
+    //
+    // The second was live until 2026-08-07 and is the nastier of the two: an
+    // engine source leaves version control, so it is absent from any fresh clone,
+    // and the gate said "✓ ... (40 of 41 files compared)" and exited 0. The count
+    // told you; nothing failed.
     for (const { path: rel } of man.files) {
-      if (onDisk.has(rel)) continue;
-      console.error('MISSING (in snapshot, not on disk): ' + rel);
-      drift++;
+      const missingFromDisk = !onDisk.has(rel);
+      const missingFromHead = headBytes(rel) === null;
+      if (!missingFromDisk && !missingFromHead) continue;
+      const where = missingFromDisk && missingFromHead
+        ? 'not on disk and not in HEAD'
+        : missingFromDisk
+          ? 'not on disk'
+          : 'not in HEAD — it is still on disk but no longer tracked';
+      console.error(`MISSING (in the v${v} snapshot, ${where}): ` + rel);
+      drift++; // once per file, however many ways it has gone missing
     }
 
     if (drift) { console.error(`\n${drift} engine file(s) differ from or are missing against the v${v} snapshot. Bump ENGINE_VERSION + snapshot again.`); process.exit(1); }
