@@ -201,6 +201,16 @@ repeat it — and so the one **limitation** found is not rediscovered the hard w
 | (same mutation) | snapshot matches HEAD | ✅ FAIL — `No snapshot for v79` |
 | Corrupt a recorded sha1 in `v78/manifest.json` | snapshot matches HEAD | ✅ FAIL — `DRIFT (vs HEAD): …/builder-modules.js` |
 | Append a line to the *snapshot copy* of `builder-modules.js` | snapshot matches HEAD | ⚠️ **PASSED — did not detect it** |
+| Call `startServer(8765)` while the dev server holds it | harness `startServer` pre-flight (added 2026-08-07) | ✅ FAIL in ~90 ms, explaining that a playground server would *not* have failed here |
+| Call `startServer` on a free port | (positive control for the above) | ✅ ready in ~340 ms, child alive, banner confirmed |
+
+The `startServer` pair is listed because **the first version of that guard was
+wrong and the positive control is what caught it.** It polled `/health` after
+spawning and allowed the child 150 ms to have died; against the dev server on 8765
+it reported success, because Python had not finished starting up, let alone
+surrendered the port. It now pre-checks the port *before* spawning and waits for
+the child's own `listening on` banner rather than for the port to answer — a
+stranger's server answers just as well.
 
 **The limitation, stated plainly.** `--check` compares the **committed (HEAD)**
 bytes of each live source against the sha1s recorded in `manifest.json`. It

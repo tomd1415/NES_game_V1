@@ -51,7 +51,58 @@ export function readTemplate() {
 }
 
 // --- Server lifecycle ------------------------------------------------------
+// How long to wait for a freshly spawned server to answer /health. Generous on
+// purpose: this box has four cores and carries ten containers, and has been seen
+// at load 30. A real failure is detected by the child exiting, not by this
+// timeout, so a large value costs nothing in the failing case.
+const READY_TIMEOUT_MS = Number(process.env.PLAYGROUND_HARNESS_TIMEOUT_MS || 30000);
+
+async function healthOk(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`,
+      { signal: AbortSignal.timeout(1000) });
+    return res.ok;
+  } catch { return false; }
+}
+
+// Boot a playground server and DO NOT RETURN until we have proved that *this*
+// child owns the port.
+//
+// The old version spawned, slept a blind 1500 ms, and returned. That failed
+// quietly two ways, and the first one is nasty:
+//
+//   1. playground_server.py, on finding a *working* playground server already on
+//      its port, prints "already running -- nothing to do" and returns 0. The
+//      child is gone, but the port answers /health, so the suite ran happily
+//      against a server it did not configure — with none of the env it asked for
+//      (PLAYGROUND_NO_ASM, the isolated accounts DB, …). A suite testing the pure
+//      C engine would have silently tested the ASM one and still passed.
+//   2. 1500 ms is not a readiness check. Under load the server may not have bound
+//      yet, and the suite then fails somewhere downstream of the real cause.
+//
+// So: poll /health, and treat "the port answers" as necessary but NOT sufficient
+// — a stranger's server answers it just as well. The sufficient condition is that
+// our own child is still alive afterwards. Two independent signals are checked
+// (the child's exit status, and the giveaway banner in its own output) because
+// this is exactly the failure that hid for weeks.
 export async function startServer(port, extraEnv = {}) {
+  // Pre-flight. If anything already answers on this port we cannot own it, and
+  // every later signal becomes ambiguous — a stranger's /health is indistinguish-
+  // able from our own. Checking first is what makes the rest of this reliable.
+  // (Learned the hard way: an earlier attempt at this hardening polled /health
+  // after spawning and "passed" instantly against the dev server on 8765,
+  // because Python had not finished starting up, let alone surrendered.)
+  if (await healthOk(port)) {
+    throw new Error(
+      `startServer(${port}): something is already serving /health on this port, so ` +
+      'this suite cannot own it.\n' +
+      '  A playground server would NOT fail here — it prints "already running -- ' +
+      'nothing to do", exits 0, and the suite silently runs against a server it did ' +
+      'not configure, losing every env override it asked for.\n' +
+      '  Either a stale server survived a previous run, or two suites share a port.\n' +
+      '  Port map + how to pick a free one: docs/guides/TEST-SERVERS.md');
+  }
+
   // Point the accounts store (T4.2) at a throwaway temp DB so render/build
   // suites never create or touch the real tools/accounts.db.
   const acctDb = path.join(os.tmpdir(), `pg-harness-accounts-${port}.db`);
@@ -62,7 +113,35 @@ export async function startServer(port, extraEnv = {}) {
   const log = { text: '' };
   srv.stdout.on('data', d => { log.text += d.toString(); });
   srv.stderr.on('data', d => { log.text += d.toString(); });
-  await sleep(1500);                 // give it time to bind
+
+  const gone = () => srv.exitCode !== null || srv.signalCode !== null;
+  const surrendered = () => /already running/.test(log.text);
+  // The child's OWN banner. This is the positive proof that *this* process bound
+  // the port — not that the port answers, which a stranger satisfies too.
+  const bound = () => /listening on/.test(log.text);
+
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  let ready = false;
+  while (Date.now() < deadline) {
+    if (gone() || surrendered()) break;
+    if (bound() && await healthOk(port)) { ready = true; break; }
+    await sleep(100);
+  }
+
+  if (!ready) {
+    try { srv.kill('SIGKILL'); } catch { /* already dead */ }
+    const why = surrendered()
+      ? `port ${port} was taken by another playground server between the pre-flight ` +
+        'check and the spawn, so this child exited without binding.'
+      : gone()
+        ? `server exited ${srv.exitCode ?? srv.signalCode} instead of binding port ${port}.`
+        : `server never announced "listening on" for port ${port} within ` +
+          `${READY_TIMEOUT_MS} ms (raise PLAYGROUND_HARNESS_TIMEOUT_MS if the box is loaded).`;
+    throw new Error(
+      `startServer(${port}): ${why}\n` +
+      '  Port map + how to pick a free one: docs/guides/TEST-SERVERS.md\n' +
+      `--- server output ---\n${log.text.trim() || '(no output)'}`);
+  }
   return { srv, log };
 }
 export async function stopServer(srv) {

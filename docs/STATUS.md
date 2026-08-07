@@ -4,14 +4,15 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-08-06 (unattended maintenance session — docs audit,
-  port-clash fix, gate mutation-testing; no engine change)
+- **Last updated:** 2026-08-07 (unattended maintenance — docs audit, port-clash
+  fix, gate mutation-testing, `startServer` hardening; no engine change)
 - **Branch:** `main`
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  **114 suites, exit 0, re-verified 2026-08-06 at v78** — twice, before and
-  after that session's port change)
+  **114 suites, exit 0, re-verified 2026-08-07 at v78** — three times across the
+  maintenance work: before and after the port change, and again after the
+  `startServer` hardening)
 - **Studio E2E:** ✅ **147 passed** (2026-07-30) — 129 from before that week,
   plus 5 in `emulator-crash-banner.spec.js` (#37), 2 in `enemy-bump.spec.js`
   (#30) and **11** in `palette-keys.spec.js` (#39, which also covers the two
@@ -42,10 +43,10 @@ work cold, and the file to refresh *last* before putting work down.
     `npm install -g`; the Dockerfile now repairs it at build time and fails the
     build if it stays broken, so an agent-less image can't ship silently.
 
-## 2026-08-06 unattended session — what changed
+## 2026-08-06/07 unattended maintenance — what changed
 
-No engine change, so **still v78**. All commits are LOCAL — nothing was pushed; the
-docs and the test-infrastructure change are entangled, so they land together.
+No engine change, so **still v78**. The 2026-08-06 commits are on `origin/main`
+(`780cf5c`); the `startServer` hardening below landed after them.
 
 - **Docs audited against the code.** ~60 concrete claims in `README.md` and
   `CLAUDE.md` (paths, ports, commands, flags, mode levels, key bindings) were
@@ -64,6 +65,17 @@ docs and the test-infrastructure change are entangled, so they land together.
   limitation found and written up in `tools/builder-tests/README.md`: a green
   snapshot check does **not** mean the working tree is clean, because `--check`
   reads from HEAD.
+- **`startServer` hardened (2026-08-07)** — the root cause behind the port clash,
+  not just the symptom. It used to spawn, sleep a blind 1500 ms and return, so a
+  server that surrendered the port (exit 0, "already running") went unnoticed and
+  the suite tested a server it had not configured. It now pre-checks the port
+  before spawning, waits for the child's own `listening on` banner rather than for
+  the port to answer, and confirms the child is alive. The happy path is ~4×
+  faster per call as a side effect (≈340 ms vs 1500 ms; ~90 s over a full run —
+  *not* the larger wall-clock swing between runs, which was host load). The first
+  version of this fix was wrong and its own positive control caught it: it polled
+  `/health` after spawning and "passed" against an occupied port because Python
+  had not finished starting up. See `tools/builder-tests/README.md`.
 - **New docs:** [`LESSONS-LEARNT.md`](LESSONS-LEARNT.md) (what has cost time here,
   by mistake-shape, including the false theories) and a step-by-step plan for
   #14's remaining slice at

@@ -93,40 +93,47 @@ test the ASM one instead, and still pass.
 (The hard error — `Port N is in use by something else (not a playground server)` —
 only appears when something that is *not* a playground server holds the port.)
 
-### The harness weakness behind it, and the fix (not yet applied)
+### The harness weakness behind it — fixed 2026-08-07
 
-`startServer` in `tools/builder-tests/lib/render-harness.mjs` ends with:
+`startServer` in `tools/builder-tests/lib/render-harness.mjs` used to spawn the
+server, `await sleep(1500)`, and return. That failed quietly two ways:
 
-```js
-const srv = spawn('python3', [...], { env: { ...  } });
-await sleep(1500);          // give it time to bind
-return { srv, log };
-```
-
-Two independent problems, both of which fail quietly:
-
-1. **It never checks its own process survived.** If the server took the
-   "already running" shortcut it has *exited 0*, and the suite proceeds against
-   a stranger's server. `log.text` even contains the giveaway banner — nobody
-   reads it.
-2. **A fixed 1.5s sleep is not a readiness check.** On a loaded box (this one has
-   hit load 30 on 4 cores) the server may not have bound yet, and the suite fails
+1. **It never checked its own process survived.** If the server took the
+   "already running" shortcut it had *exited 0*, and the suite proceeded against
+   a stranger's server. `log.text` even contained the giveaway banner — nobody
+   read it.
+2. **A fixed 1.5 s sleep is not a readiness check.** On a loaded box (this one has
+   hit load 30 on 4 cores) the server may not have bound yet, and the suite failed
    somewhere confusingly downstream instead of at the cause.
 
-Both are fixed by the same change — poll `/health` until it answers *or* the child
-exits, then assert the child is still running:
+It now does three things instead, and the ordering matters more than it looks:
 
-```js
-await waitForHealth(port, srv);            // replaces the blind sleep
-if (srv.exitCode !== null) {
-  throw new Error(`server exited ${srv.exitCode} instead of binding ${port}:\n${log.text}`);
-}
-```
+- **A pre-flight `/health` probe before spawning.** If anything already answers,
+  it throws immediately. This is what makes the rest reliable — once a stranger is
+  on the port, every later signal is ambiguous.
+- **Waits for the child's own `listening on` banner**, not merely for the port to
+  answer. A stranger's server satisfies "the port answers" just as well; only the
+  banner proves *this* child bound.
+- **Then confirms `/health`** and that the child is still alive.
 
-This turns the entire class into a loud failure at the point of cause, and would
-make the run-all port guard a belt-and-braces check rather than the only defence.
-Left undone deliberately in the 2026-08-06 unattended session (it is a code change,
-not a doc one) — but it is the more complete fix of the two.
+> **The first attempt at this fix was wrong, and it is worth knowing why.** It
+> polled `/health` after spawning and gave the child a 150 ms grace period to have
+> died. Tested against the dev server on 8765 it reported success in under a
+> second — because Python had not finished *starting up*, let alone reached its
+> port check. A guard whose positive control you do not run is a guard you have
+> not written. Both directions are now checked: occupied port throws in ~90 ms,
+> free port is ready in ~340 ms.
+
+Side benefit, stated carefully: the happy path is about 4× faster per call
+(≈340 ms measured, versus the blind 1500 ms). There are 74 `startServer` call
+sites, so a full run saves on the order of **90 seconds** — real, but modest.
+Do **not** read more into the wall-clock numbers than that: the run before this
+change took ~18 minutes at host load 30, and the run after took ~8 minutes at host
+load 2.8. Almost all of that difference is the box, not this fix.
+
+`PLAYGROUND_HARNESS_TIMEOUT_MS` (default 30000) raises the readiness timeout if
+the box is heavily loaded. A genuine failure is detected by the child exiting, not
+by that timeout, so the large default costs nothing when things go wrong.
 
 If you want them in parallel, move the E2E out of the way rather than editing the
 suites:
