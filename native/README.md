@@ -193,16 +193,22 @@ cd native
 pytest -q --continue-on-collection-errors
 ```
 
-Expect roughly `189 passed, 149 skipped` in about six seconds, plus noise you have
-to learn to read:
+Without PySide6 installed, expect `204 passed, 161 skipped` in about six seconds,
+and **no errors and no failures**. There is no longer any noise to learn to read:
+if you see a red line, it is a real one.
 
-* **149 skips** are correct — `tests/ui/support.py` guards `StudioTest` with
-  `@unittest.skipUnless(PYSIDE_AVAILABLE, …)`.
-* **12 collection errors** are *not* real: those modules import PySide6 at module
-  scope, so they error instead of skipping. Likewise
-  `tests/contract/test_palette_parity.py` (×2) and `tests/unit/test_icons.py` (×1)
-  import it inside the test body and therefore report as ordinary **failures**.
-  Three of the eleven "failures" you will see are this.
+* **161 skips** are correct and mean one thing: this box has no Qt. `StudioTest`
+  is guarded by `@unittest.skipUnless(PYSIDE_AVAILABLE, …)` in
+  `tests/ui/support.py`, and the fifteen Qt-dependent modules by
+  `pytest.importorskip("PySide6")`.
+* `tests/unit/test_pyside_import_guards.py` keeps it that way. It imports every
+  test module in a subprocess with PySide6 forced missing, so a new module that
+  forgets the guard fails **on the day it is added** rather than becoming another
+  line of noise. It works the same on a machine that *has* Qt — which a plain
+  "no collection errors" check would not.
+* Until 2026-08-06 this section described 12 collection errors and 3 failures
+  that were all just "PySide6 is absent" (F3). They are gone: guarded, or — where
+  the test never needed Qt in the first place — made to actually run.
 
 ### Known failures — both **fixed 2026-08-06**
 

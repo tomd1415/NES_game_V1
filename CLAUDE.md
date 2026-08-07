@@ -100,12 +100,16 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
     **v1–v75 were taken without Python and are not comparable** — see the two-era
     table in `tools/engines/README.md`.
 
+  **The native suite now runs clean here** — 204 passed, 161 skipped, **0 errors
+  and 0 failures** (F3 fixed 2026-08-07). A red line means a real one. The 161
+  skips mean one thing only: this box has no Qt, so the **UI layer is untested,
+  not passing**, until the container is rebuilt.
+
   **Still open:** three starter ROMs (`smb`, `runner`, `geodash`) changed between
   v63 and v75 — recorded in
   [`docs/handoffs/2026-08-06-starter-fixture-rebaseline.md`](docs/handoffs/2026-08-06-starter-fixture-rebaseline.md);
-  whether that was intended is an owner question. The Qt UI layer is **untested,
-  not passing** (PySide6 absent here; 12 collection errors + 3 failures are all
-  absent-dependency, finding F3). Studio E2E still unrun (no Chromium). See
+  whether that was intended is an owner question. Studio E2E still unrun (no
+  Chromium). See
   [`docs/handoffs/2026-07-28-native-main-integration.md`](docs/handoffs/2026-07-28-native-main-integration.md)
   and [`docs/guides/LESSONS_LEARNT.md`](docs/guides/LESSONS_LEARNT.md). The
   ordered route from here to a defensible merge, with acceptance checks and the

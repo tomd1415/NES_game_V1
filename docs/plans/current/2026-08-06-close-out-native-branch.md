@@ -42,19 +42,36 @@ to find out what the 149 currently-skipped UI tests actually do.
 Expected going in: the two real failures (F5, F6) plus whatever the UI layer
 surfaces. `native/README.md` § Tests describes how to read the summary.
 
-## Step 3 — Fix F3, the half-applied skip guard *(no decision needed)*
+## Step 3 — ✅ **DONE 2026-08-07** — F3, the half-applied skip guard
 
-Twelve modules import PySide6 at module scope and error instead of skipping;
-three more import it inside the test body and report as plain failures.
+`96701cd` (the fix) + `dc6d7fe` (the guard that stops it returning).
 
-**Done when:** `cd native && pytest -q --continue-on-collection-errors` on a box
-*without* PySide6 reports **0 errors** and every PySide6-dependent test as a
-*skip*, and suggested test 4 (module-scope import guard) is in place and fails
-against a deliberately-unguarded module.
+**Acceptance met.** On this box, which has no PySide6:
+`pytest -q --continue-on-collection-errors` → **204 passed, 161 skipped, 0 errors,
+0 failures** (from 198 passed, 149 skipped, 12 errors, 3 failures). Suggested
+test 4 is in place, and deleting the guard from `test_portability.py` fails it as
+`['tests/unit/test_portability.py'] != []` with the remedy in the message.
 
-This is step 3 and not step 6 because until it is done, every later run mixes
+Three things worth knowing beyond "guards were added":
+
+- **Seven of the twelve had no `PySide6` in them at all.** They import
+  `nes_studio.*`, which pulls Qt in transitively. Grepping for the string finds
+  five. The drafted AST version of suggested test 4 would have missed the other
+  seven, so the guard test imports each module in a subprocess with PySide6
+  forced missing instead — which also means it works on a machine that *has* Qt,
+  where a "no collection errors" check would pass while proving nothing.
+- **Two of the three failures never needed Qt**, so they now *run* rather than
+  skip. `palette.py` imported `QColor` at module scope for a single function,
+  which made the cross-target palette contract unimportable headlessly; the icon
+  test imported a Qt module to read a tuple of integers. Coverage regained rather
+  than relabelled.
+- **`conftest.py` only had `tests/ui` on the path**, so `import nes_studio`
+  depended on some other module having run first: a single file behaved
+  differently from the whole suite. Fixed while in there.
+
+This was step 3 and not step 6 because until it was done, every later run mixed
 "absent dependency" and "real bug" into the same word, and each of the steps below
-is read through that fog.
+was read through that fog.
 
 ## Step 4 — ~~[decision]~~ **DECIDED 2026-08-06 03:00 — FIX, with provenance**
 
