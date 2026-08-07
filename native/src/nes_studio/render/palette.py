@@ -12,7 +12,23 @@ colours the NES cannot produce.
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from PySide6.QtGui import QColor
+
+# Qt is imported lazily, inside nes_qcolor(), and deliberately.
+#
+# The 64-entry table below and nes_rgb()/is_light() are pure data and pure
+# Python; only nes_qcolor() needs Qt. Importing QColor at module scope made the
+# whole module -- and therefore tests/contract/test_palette_parity.py, which
+# only reads the table -- unimportable wherever PySide6 is absent. That turned
+# the most valuable kind of test we have (a cross-target contract) into two red
+# lines about a missing GUI toolkit on every headless box.
+#
+# `from __future__ import annotations` makes the return annotation a string, so
+# the deferred import costs nothing at type-check time either. Every caller of
+# nes_qcolor() is a UI module that has already imported Qt.
 
 #: The 64 colours an NES can output. Index with a 6-bit value (0x00-0x3F).
 NES_PALETTE_RGB: tuple[tuple[int, int, int], ...] = (
@@ -45,6 +61,8 @@ def nes_rgb(index: int) -> tuple[int, int, int]:
 
 def nes_qcolor(index: int) -> QColor:
     """Return the `QColor` for a NES colour index (masked to 6 bits)."""
+
+    from PySide6.QtGui import QColor
 
     red, green, blue = nes_rgb(index)
     return QColor(red, green, blue)

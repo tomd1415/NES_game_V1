@@ -3,6 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest  # noqa: E402
+
+# PySide6 is optional in the test environment and absent from the headless
+# container. Without this the module raises at import time, pytest reports a
+# collection ERROR, and an absent dependency reads like a defect (F3). The
+# import below is transitive for some of these modules -- nes_studio.* pulls
+# PySide6 in -- so the guard belongs here, ahead of the first such import.
+pytest.importorskip("PySide6")  # noqa: E402
+
 from nes_studio.core.project_document import ProjectDocument
 from nes_studio.persistence.portability import export_project, import_project
 from nes_studio.persistence.projects import ProjectRepository

@@ -7,6 +7,7 @@ asset fails loudly, rather than degrading to the blank square we had before.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 import re
@@ -20,6 +21,39 @@ sys.path.insert(0, str(NATIVE_ROOT / "src"))
 PYSIDE_AVAILABLE = importlib.util.find_spec("PySide6") is not None
 PACKAGING = NATIVE_ROOT / "packaging"
 ICONS = NATIVE_ROOT / "src" / "nes_studio" / "resources" / "icons"
+ICONS_SOURCE = NATIVE_ROOT / "src" / "nes_studio" / "ui" / "icons.py"
+GENERATOR_SOURCE = NATIVE_ROOT / "scripts" / "generate_icons.py"
+
+
+def _literal_assignment(path: Path, name: str) -> tuple[int, ...]:
+    """Read a module-level literal without importing the module."""
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        targets = (
+            [node.target] if isinstance(node, ast.AnnAssign) else getattr(node, "targets", [])
+        )
+        for target in targets:
+            if isinstance(target, ast.Name) and target.id == name:
+                return tuple(ast.literal_eval(node.value))
+    raise AssertionError(f"{name} is not assigned at module scope in {path}")
+
+
+def _generator_sizes(path: Path) -> tuple[int, ...]:
+    """The sizes generate_icons.py actually writes for the app icon."""
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "write"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "nes-studio"
+        ):
+            return tuple(ast.literal_eval(node.args[2]))
+    raise AssertionError(f"no write(\"nes-studio\", ...) call found in {path}")
 
 
 @unittest.skipUnless(PYSIDE_AVAILABLE, "PySide6 is not installed")
@@ -137,20 +171,48 @@ class DesktopEntryTests(unittest.TestCase):
         self.assertIn(f"{APP_ID}.desktop", text)
 
     def test_the_installer_covers_every_generated_icon_size(self) -> None:
-        """The installer hardcodes its size list. If the generator's list changes
-        and the installer's does not, a size silently stops being installed."""
+        """Three files hardcode the icon size list; all three must agree.
 
-        from nes_studio.ui.icons import APP_ICON_SIZES
+        `icons.py` (what the app loads), `scripts/generate_icons.py` (what is
+        actually written to disk) and `install-desktop-entry.sh` (what gets
+        installed). If the generator's list changes and the installer's does not,
+        a size silently stops being installed.
+
+        The sizes are read out of the source with `ast` rather than imported:
+        `nes_studio.ui.icons` pulls in Qt for QIcon/QPixmap, and this check needs
+        no Qt at all. Importing it made a packaging test fail on every headless
+        box for a reason that had nothing to do with packaging (F3). Reading the
+        declaration is the same trick `test_palette_parity.py` uses on the web's
+        palette table.
+        """
+
+        app_sizes = _literal_assignment(ICONS_SOURCE, "APP_ICON_SIZES")
+        generated = _generator_sizes(GENERATOR_SOURCE)
 
         script = (PACKAGING / "install-desktop-entry.sh").read_text(encoding="utf-8")
-        installed = set()
-        for match in re.finditer(r"for size in ([\d ]+); do", script):
-            installed.update(int(size) for size in match.group(1).split())
+        loops = [
+            {int(size) for size in match.group(1).split()}
+            for match in re.finditer(r"for size in ([\d ]+); do", script)
+        ]
+        self.assertTrue(loops, "no 'for size in ...' loop found in the installer")
 
+        # Each loop separately, not their union. The script has two -- install and
+        # uninstall -- and both must cover every size: one short in install means a
+        # size is never placed, one short in uninstall means it is left behind. A
+        # union check passes while either is missing a size, which is a check that
+        # cannot fail for the case it looks like it is covering.
+        for index, loop in enumerate(loops):
+            with self.subTest(installer_loop=index):
+                self.assertEqual(
+                    loop,
+                    set(app_sizes),
+                    "an installer loop and icons.py disagree about which sizes exist",
+                )
         self.assertEqual(
-            installed,
-            set(APP_ICON_SIZES),
-            "the installer and the icon generator disagree about which sizes exist",
+            set(generated),
+            set(app_sizes),
+            "the generator writes a different set of sizes than icons.py declares, "
+            "so the app asks for an icon nobody produced (or vice versa)",
         )
 
 

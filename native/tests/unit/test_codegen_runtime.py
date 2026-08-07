@@ -8,6 +8,15 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 NATIVE_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(NATIVE_ROOT / "src"))
 
+import pytest  # noqa: E402
+
+# PySide6 is optional in the test environment and absent from the headless
+# container. Without this the module raises at import time, pytest reports a
+# collection ERROR, and an absent dependency reads like a defect (F3). The
+# import below is transitive for some of these modules -- nes_studio.* pulls
+# PySide6 in -- so the guard belongs here, ahead of the first such import.
+pytest.importorskip("PySide6")  # noqa: E402
+
 from nes_studio.codegen.runtime import (  # noqa: E402
     CodegenCancelled,
     CodegenError,
