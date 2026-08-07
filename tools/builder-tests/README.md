@@ -171,7 +171,12 @@ Like every suite they're picked up automatically by `run-all.mjs`.
 1. **JS / Python syntax** — every module + every inline
    `<script>` block in builder.html / sprites.html / index.html /
    behaviour.html / code.html + playground_server.py must parse
-   cleanly.
+   cleanly. The module list is **enumerated from disk at runtime**
+   (`*.js` minus vendored `*.min.js`), not hand-written: it used to be a
+   list of 14 filenames with a silent `existsSync → continue`, and on
+   2026-08-07 that meant 18 of the 32 shipped modules were unchecked —
+   including *every* Studio mode module. Adding a file now covers it
+   automatically; renaming one cannot silently drop it.
 2. **Byte-identical baseline** —
    `steps/Step_Playground/src/main.c` compiles to a baseline
    ROM hash.  After swapping in the Builder's
@@ -203,6 +208,7 @@ repeat it — and so the one **limitation** found is not rediscovered the hard w
 | Append a line to the *snapshot copy* of `builder-modules.js` | snapshot matches HEAD | ⚠️ **PASSED — did not detect it** |
 | Call `startServer(8765)` while the dev server holds it | harness `startServer` pre-flight (added 2026-08-07) | ✅ FAIL in ~90 ms, explaining that a playground server would *not* have failed here |
 | Call `startServer` on a free port | (positive control for the above) | ✅ ready in ~340 ms, child alive, banner confirmed |
+| Break the syntax of `studio-world.js` | JS syntax check (runtime-enumerated, 2026-08-07) | ✅ FAIL — and it would **not** have been caught by the old hand-written list |
 
 The `startServer` pair is listed because **the first version of that guard was
 wrong and the positive control is what caught it.** It polled `/health` after

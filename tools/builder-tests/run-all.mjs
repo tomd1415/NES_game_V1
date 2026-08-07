@@ -63,21 +63,35 @@ function check(label, fn) {
 
 let anyFail = false;
 
-// Standalone JS files — use `node --check`.
-const standalone = [
-  'storage.js', 'feedback.js', 'sprite-render.js',
-  'builder-assembler.js', 'builder-modules.js', 'builder-validators.js',
-  'play-pipeline.js', 'emulator.js', 'help.js',
-  'tour.js',
-  // Studio redesign (Phase 0) shell modules.
-  'studio.js', 'studio-starter.js',
-  'engine-version.js', 'studio-promo.js',
-];
-for (const f of standalone) {
-  const full = path.join(WEB, f);
-  if (!fs.existsSync(full)) continue;  // tour.js etc. may be optional
+// Standalone JS files — use `node --check`. Enumerated from disk at RUNTIME,
+// deliberately, rather than hand-listed.
+//
+// This used to be a list of 14 filenames followed by
+// `if (!fs.existsSync(full)) continue;` — two silent-coverage bugs in four lines.
+// A module added to the editor was simply never checked, and a module renamed
+// dropped off the list without anything going red. Measured on 2026-08-07: 18 of
+// the 32 shipped modules were unchecked, including *every* Studio mode module
+// (studio-world.js, studio-tiles.js, studio-chars.js, studio-ui.js …) — which is
+// exactly where the feature work happens.
+//
+// Enumerating the directory means the check covers whatever is actually there.
+// Vendored bundles are the only exclusion and they are identifiable by name
+// (`*.min.js` — jsnes and CodeMirror), so there is no second list to keep in step
+// with the first. All 32 pass today, so widening this cost nothing to adopt.
+const shipped = fs.readdirSync(WEB)
+  .filter(f => f.endsWith('.js') && !f.endsWith('.min.js'))
+  .sort();
+// An empty enumeration must not read as "all clear" — that is the same
+// silent-success shape this block was written to remove.
+if (shipped.length === 0) {
+  check('shipped JS modules found', () => {
+    throw new Error(`no non-vendored .js files under ${WEB} — wrong path, or the glob broke`);
+  });
+  anyFail = true;
+}
+for (const f of shipped) {
   const ok = check('syntax ' + f, () => {
-    const r = spawnSync('node', ['--check', full], { encoding: 'utf8' });
+    const r = spawnSync('node', ['--check', path.join(WEB, f)], { encoding: 'utf8' });
     if (r.status !== 0) throw new Error(r.stderr.trim() || r.stdout.trim());
   });
   if (!ok) anyFail = true;
