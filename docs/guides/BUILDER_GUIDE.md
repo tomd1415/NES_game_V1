@@ -244,6 +244,34 @@ How the pupil's game ends.  Two types:
 Either way the screen tints red-grey, the players freeze, and the
 HUD (if on) stays visible.
 
+### Modules this section does not cover yet
+
+**This reference documents 10 of the 18 modules that exist.** The eight below are
+real, shipped and tickable, but have never been written up here — mostly the
+SMB-style set added after this section was last extended. They are listed with
+the label the editor itself shows, so the gap is visible rather than reading as
+"these do not exist":
+
+| Module | Label in the editor |
+| ------ | ------------------- |
+| `blocks` | Blocks (? / brick / coin) |
+| `flagpole` | Flagpole finish |
+| `globals` | Globals |
+| `pipes` | Pipes (enter with Down) |
+| `powerups` | Power-ups & fireballs |
+| `smbhud` | HUD (coins / time / score / lives) |
+| `smbrender` | Sprite flicker (busy screens) |
+| `spawn` | Spawn effect (on trigger tile) |
+
+**The source of truth is `tools/tile_editor_web/builder-modules.js`** — search it
+for `modules['<name>']`. Checked 2026-08-08; if that count has moved, this table
+has gone stale, which is exactly the failure this note exists to make visible.
+
+> Found by comparing the two lists rather than by reading. The first attempt used
+> a regex that matched nothing and so reported all ten *documented* modules as
+> missing from the code — a search that finds nothing is indistinguishable from
+> one that never ran. The empty second list was the tell.
+
 ---
 
 ## 3. Controller mapping

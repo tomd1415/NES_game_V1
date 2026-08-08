@@ -160,9 +160,11 @@ cluster, with `O` = A and `U` = B.
 
 ### 📚 Going further
 
-- **[`docs/guides/BUILDER_GUIDE.md`](docs/guides/BUILDER_GUIDE.md)** — the full
-  module reference (players, enemies, pickups, damage, HUD, doors, dialogue…)
-  and the font-tile convention Dialogue needs.
+- **[`docs/guides/BUILDER_GUIDE.md`](docs/guides/BUILDER_GUIDE.md)** — the module
+  reference (players, enemies, pickups, damage, HUD, doors, dialogue…) and the
+  font-tile convention Dialogue needs. It covers 10 of the 18 modules in depth;
+  the remaining eight — mostly the SMB-style set — are listed by name at the end
+  of its §2 so you can see they exist.
 - **[`docs/guides/TILE_EDITOR_GUIDE.md`](docs/guides/TILE_EDITOR_GUIDE.md)** —
   detailed editor instructions.
 - All 64 NES colours: run `python3 tools/generate_palette_reference.py` to
