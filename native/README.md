@@ -199,8 +199,12 @@ if you see a red line, it is a real one.
 
 * **161 skips** are correct and mean one thing: this box has no Qt. `StudioTest`
   is guarded by `@unittest.skipUnless(PYSIDE_AVAILABLE, …)` in
-  `tests/ui/support.py`, and the fifteen Qt-dependent modules by
-  `pytest.importorskip("PySide6")`.
+  `tests/ui/support.py`, and **twelve** Qt-dependent test modules by
+  `pytest.importorskip("PySide6")` (`grep -rl importorskip tests/` lists
+  thirteen — one of those is the guard test below, which only names the call in
+  an assertion message). Not fifteen: fifteen was the number of *red lines* F3
+  removed, and three of those were tests that never needed Qt at all, so they
+  were made to run rather than guarded.
 * `tests/unit/test_pyside_import_guards.py` keeps it that way. It imports every
   test module in a subprocess with PySide6 forced missing, so a new module that
   forgets the guard fails **on the day it is added** rather than becoming another
