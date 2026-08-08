@@ -679,3 +679,72 @@ the ROMs".
 Both are recorded in `.mc-outbox.md`. The mechanical part of step 4 — un-ignoring
 `native/tests/fixtures/**/*.nes` — is safe and unblocked; it is the *content* of
 the baseline that is not.
+
+---
+
+# F14 — The guard that keeps the codegen snapshotted can be fooled by a comment
+
+*Found 2026-08-08 by deliberately breaking it, per "make a gate fail on purpose".
+It is a defect in a check **I** added two days ago, in the same commit that closed
+F7 — which is the point: the fix for F7 was itself unproven.*
+
+`native/tests/contract/test_codegen_stays_snapshottable.py` exists so that
+removing `tools/nes_studio_core` from the engine snapshot's `INCLUDE_DIRS` cannot
+happen quietly. Its second test does this:
+
+```python
+include_dirs = script.split("const INCLUDE_DIRS", 1)[1].split("]", 1)[0]
+self.assertIn("tools/nes_studio_core", include_dirs, ...)
+```
+
+That is a substring match over **raw source text, comments included**. The
+`INCLUDE_DIRS` array already carries a four-line explanatory comment inside the
+brackets, so the region being searched is not only code.
+
+**Probed, not reasoned about.** I deleted the entry and left a comment in its
+place naming the path — the shape of a real edit, since anyone removing it would
+say why:
+
+```js
+-  'tools/nes_studio_core',
++  // removed for now: tools/nes_studio_core was slowing the walk
+```
+
+Result: `2 passed`. The guard was green with the thing it guards deleted.
+
+## What saves it today, and why that is not enough
+
+`node scripts/snapshot-engine.mjs --check` **does** catch this edit — it reported
+all 11 files as `MISSING (in the v76 snapshot, not on disk)` and exited 1. So the
+tree is not currently exposed.
+
+But that only works because v76's manifest already lists those files. The failure
+this test was written for is the *next* version bump: remove the directory, bump
+`ENGINE_VERSION`, re-snapshot, and the new manifest simply never contains the
+Python. Nothing is missing, nothing drifts, and F7 is silently reopened — with the
+test that exists to prevent exactly that still green. The snapshot gate covers the
+present; this test was supposed to cover the future, and does not.
+
+## Fix
+
+Parse the array's string literals instead of its text, so a comment cannot satisfy
+it:
+
+```python
+literals = re.findall(r"'([^']+)'", include_dirs)
+self.assertIn("tools/nes_studio_core", literals, ...)
+```
+
+Not applied: this is a code change, and the rule for unattended work is that only
+documentation is committed without asking. The one-line edit and the probe that
+proves it are both above. Verification after fixing must be the probe re-run — the
+edit above must turn the test **red**, not merely leave it green.
+
+## The general shape
+
+Third time in this register: a check that matches text where it means to check
+structure (F5's ignore probe, the icon check's unioned loops, now this). The two
+that were parsed with `ast` — the delegation half of *this same file*, and the icon
+size lists — are the ones that hold. The lesson is not "be careful with regexes",
+it is **the guard on the include-list should have been written the same way as the
+guard sitting six lines above it in the same file.**
