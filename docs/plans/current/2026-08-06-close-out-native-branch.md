@@ -37,10 +37,14 @@ cd native && QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 
 **Done when:** it completes and every failure is on the list below, with nothing
 unexplained. Do **not** treat a green run as the goal — the point of this step is
-to find out what the 149 currently-skipped UI tests actually do.
+to find out what the **161** currently-skipped UI tests actually do.
 
-Expected going in: the two real failures (F5, F6) plus whatever the UI layer
-surfaces. `native/README.md` § Tests describes how to read the summary.
+Expected going in, *updated 2026-08-07*: F5 and F6 are both fixed (step 5), and F3
+is fixed (step 3), so on a box without Qt this is **204 passed, 161 skipped, 0
+errors, 0 failures**. Everything red after the rebuild is therefore either a real
+UI defect or a problem with the container — there is no longer a class of red line
+that means "Qt is absent". That is the whole value of having run steps 3 and 5
+first. `native/README.md` § Tests describes how to read the summary.
 
 ## Step 3 — ✅ **DONE 2026-08-07** — F3, the half-applied skip guard
 
@@ -256,6 +260,15 @@ Standing constraint until then: **do not merge to `main`.**
 - It does not schedule the `bg_compression` memoisation or the
   `_inject_racer_rotation` visibility tidy (F8). They are correct today and
   competing for attention with things that are not.
-- It does not touch the 32-suite `fail()`/`process.exit(1)` server leak. It is
-  real, it is documented in the 2026-07-28 handoff, and it is a 32-file harness
-  change that deserves its own session rather than a corner of this one.
+- ~~It does not touch the 32-suite `fail()`/`process.exit(1)` server leak — a
+  32-file harness change that deserves its own session.~~ **Re-measured
+  2026-08-08: the leak is three suites, not thirty-two** (`audio.mjs`,
+  `four-screen.mjs`, `gallery.mjs` — the rest set a `failed` flag and exit *after*
+  the `finally` reap, which is correct). The deferral was justified by a number
+  that was never measured, so it is no longer justified: this is a three-file
+  change, or one `process.on('exit', …)` reap. It is still out of scope *here*
+  because it is harness code and this plan is about the native branch — but it
+  should be scheduled, not filed under "too big". See F11's correction.
+- It does not fix the port sharing, which is separate: all three leaking suites
+  use unique ports, so the two problems do not compound the way F11 originally
+  claimed.

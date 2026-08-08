@@ -396,6 +396,12 @@ ready-to-apply checks — both run, both confirmed to catch the thing they claim
 
 ## F11 — Twenty-three builder suites share a port with another suite
 
+> **⚠ Corrected 2026-08-08 — the port count stands, the leak count and the causal
+> link do not.** Re-measured from the source rather than carried forward. Three
+> suites can leak, not thirty-two, and none of the three shares a port with
+> anything, so the leak cannot be what un-hides the sharing. Details at the end of
+> this finding; the paragraph below is struck where it is wrong.
+
 `tools/builder-tests/run-all.mjs`'s own header says each suite "spawns its own
 playground server on a **unique port**". Nothing enforced it, and 11 ports are
 shared, one of them three ways:
@@ -409,22 +415,59 @@ shared, one of them three ways:
 18861  accounts.mjs, palette-render.mjs
 ```
 
-Sequential execution normally hides this. **What un-hides it is the leak we
-already know about**: `fail()` calls `process.exit(1)`, which bypasses the
+Sequential execution normally hides this. ~~What un-hides it is the leak we
+already know about: `fail()` calls `process.exit(1)`, which bypasses the
 `try/finally { srv.kill('SIGTERM') }` — 32 suites do this. A leaked server squats
-the port, and the next suite sharing it dies with an opaque `UND_ERR_SOCKET` that
-resembles nothing about the original failure.
+the port, and the next suite sharing it dies with an opaque `UND_ERR_SOCKET`.~~
+~~That is the exact mechanism behind the false theory that cost a session,
+generalised from one suite to twenty-three.~~
 
-That is not hypothetical. It is the exact mechanism behind the false theory that
-cost a session — "`audio.mjs` is environmental, it fails on a clean `main` too" —
-generalised from one suite to twenty-three. The leak makes one failure look like
-an unrelated failure somewhere else; the shared ports decide *where*.
+**Struck 2026-08-08.** A leaked server does produce an opaque `UND_ERR_SOCKET` in
+the next suite on that port — that part is sound, and I hit it myself this week.
+What is wrong is *who can leak*, and therefore whether the two problems are
+connected at all. See below.
 
 Two independent fixes, either sufficient, both cheap: give each suite its own
 port, or register `process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })`
 after each `spawn`. Doing both is better — unique ports stop the propagation, the
 exit hook stops the leak. Checker in Appendix 3; it exits 1 today and names every
 pair.
+
+### What the re-measurement actually shows (2026-08-08)
+
+Counted from source, not carried forward:
+
+| Claim | Measured |
+| --- | --- |
+| 11 ports shared, 23 suites | **confirmed** — 72 suites declare a `PORT`, 11 values are shared |
+| "32 suites" bypass the reap | **3** — `audio.mjs`, `four-screen.mjs`, `gallery.mjs` |
+| the leak un-hides the port sharing | **no** — all three use unique ports (18815, 18809, 18801) |
+
+Where 32 came from: **33** suites have a `finally` block that kills the server. That
+is the count of suites with the reap, not of suites that bypass it. The overwhelming
+majority set a `failed` flag and call `process.exit(1)` *after* the `finally` has
+run, which is correct by construction — `account-projects.mjs` is typical: `try` at
+60, `finally { srv.kill(...) }` at 143, `process.exit(1)` at 149. Only a
+`process.exit` **inside** the try leaks, and that means a `fail()`-style helper
+called from within the guarded region. Three suites do that.
+
+`preview-capture.mjs` looks like a fourth and is not: it defines an exiting `fail()`
+but never calls it inside its try.
+
+Two consequences worth carrying forward:
+
+* **The remediation is small.** The reason this was deferred — "a 32-file harness
+  change that deserves its own session" — was based on the wrong number. Three files,
+  or one `process.on('exit', …)` reap applied where servers are spawned.
+* **The two problems are independent.** Fixing the leak does not reduce the port-
+  sharing risk and vice versa. The port sharing is still real and still worth fixing,
+  because *any* abnormal termination leaks a server — I killed a run with SIGTERM
+  this week and left a `playground_server.py` with `ppid=1` squatting a port, which
+  is the same symptom by a different route. But it is not the `fail()` path.
+
+One trap for anyone re-counting: `gallery.mjs`'s `fail()` calls `process.exit(2)`,
+not `1`. A checker that greps for `process.exit(1)` silently undercounts by one —
+which is how a wrong number survives being "verified".
 
 ## F12 — Three helper names are defined twice in `tools/nes_studio_core/`
 
