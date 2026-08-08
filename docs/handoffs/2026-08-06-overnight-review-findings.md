@@ -748,3 +748,29 @@ that were parsed with `ast` — the delegation half of *this same file*, and the
 size lists — are the ones that hold. The lesson is not "be careful with regexes",
 it is **the guard on the include-list should have been written the same way as the
 guard sitting six lines above it in the same file.**
+
+## Addendum — which of these guards has now been watched fail (2026-08-08)
+
+F14 came out of asking that question, so here is the answer in full rather than the
+one interesting case. Probed today, by breaking the guarded thing and confirming the
+named test goes red:
+
+| Guard | Break applied | Result |
+| --- | --- | --- |
+| `test_codegen_stays_snapshottable` — include-list | entry deleted, comment left naming the path | **stayed green — F14** |
+| `test_codegen_stays_snapshottable` — delegation (`ast`) | a statement inlined into `build_scene_inc` | red, names the function and its statement count |
+| `test_pyside_import_guards` | `importorskip` removed from `test_storage_manager.py` | red, names that module as UNGUARDED |
+| `test_baseline_manifest` | `known_gaps` removed while status stays `"partial"` | red: "a partial result must enumerate its gaps" |
+| `test_icons` — three-way size agreement | `256` dropped from the **uninstall** loop only | red, `installer_loop=0` — the case the old union check could not catch |
+
+Probed earlier in the same session: the starter ROM-hash assertion (one-byte flip),
+the fixtures-are-tracked guard (twice — the first probe was invalid), and both
+directions of `snapshot-engine.mjs --check`.
+
+**Still never watched fail**, and worth saying rather than leaving implied: the
+individual assertions *inside* those files that were not the one I broke —
+`test_manifest_states_its_provenance`, the ">30 modules were found" sanity check in
+the PySide6 probe, the `other-import-error` classification, and most of
+`test_baseline_manifest`'s remaining assertions. Hand-probing one assertion per file
+is not the same as probing the file, and doing it by hand is how F14 got written in
+the first place. That is the argument for automating this rather than repeating it.

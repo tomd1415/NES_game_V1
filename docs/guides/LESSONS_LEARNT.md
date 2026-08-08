@@ -315,6 +315,34 @@ from scratch — the full cost of the shortcut, paid in full.
 
 ---
 
+## 2026-08-08 — Restoring a probe mutation is a step that can silently not happen
+
+Breaking a gate on purpose means editing a tracked file and putting it back. I did
+that five times today and **three of the five restores failed**, every one of them
+`git checkout -- <path>` run from `native/` with a repo-root path:
+
+    error: pathspec 'tools/playground_server.py' did not match any file(s) known to git
+
+That line is loud, but it arrives at the end of a test run that has just printed a
+satisfying red failure — the thing I was looking for. Attention is on the assertion,
+not on the last line of the shell. One of the three was an edit to
+`packaging/install-desktop-entry.sh` that removed a size from the *uninstall* loop:
+left in the tree it would have shipped an installer that orphans the 256px icon,
+introduced by the very exercise meant to prove the check against that catches it.
+
+What actually fixes it is not "remember the cwd". It is that **the restore needs its
+own assertion**, the same way the break does:
+
+    git checkout -- <path> && git status --porcelain | grep -v '^??'
+
+Print the status and look at it. An empty tracked-changes list is the evidence the
+probe is over; a passing test afterwards is not, because the mutated file may simply
+not be one that test reads.
+
+Related: the same session's `git reset --hard HEAD~1` discarded an uncommitted fix
+twice, for the same underlying reason — a destructive step taken while thinking about
+something else. Commit first, then probe, then restore.
+
 ## Older entries
 
 Traps specific to the native app — assert pixels not document fields, destroy
