@@ -774,3 +774,72 @@ the PySide6 probe, the `other-import-error` classification, and most of
 `test_baseline_manifest`'s remaining assertions. Hand-probing one assertion per file
 is not the same as probing the file, and doing it by hand is how F14 got written in
 the first place. That is the argument for automating this rather than repeating it.
+
+---
+
+# F15 — `MODE_CLASSES` is a hand-maintained registry with no test at all
+
+*Found 2026-08-08, sweeping the native core for "two lists that must agree and
+nothing checking they do".*
+
+`native/src/nes_studio/ui/modes/__init__.py` lists the eight mode classes by hand.
+`main_window.py` builds the rail from that tuple and nothing else (lines 206 and
+295). So a mode module that exists on disk but is not in the tuple **is simply not
+in the app** — no import error, no empty tab, no warning. It agrees today: eight
+files, eight entries, and `ast` confirms every `Mode` subclass on disk is
+registered.
+
+What makes it worth writing down is that **no test references `MODE_CLASSES`**
+(`grep -rn MODE_CLASSES native/tests/` → nothing). `MODE_NAMES` is derived from it,
+so a forgotten mode is equally invisible to `test_every_mode_has_a_rail_icon`, which
+iterates the derived list — it checks that every *registered* mode has an icon, not
+that every mode written is registered.
+
+The tell was already in the project's own instructions:
+
+> **Adding a native mode** = a new class in `ui/modes/`, added to `MODE_CLASSES`.
+
+A documented manual step with no gate is the exact shape `LESSONS_LEARNT` keeps
+recording. It has not bitten yet because the modes were all added in one push.
+
+**Test to add** (not applied — code, and the standing rule for unattended work is
+documentation only). It needs no Qt, so it runs on this box:
+
+```python
+# parse, don't import: ui/modes/* pulls in Qt
+registered = {e.id for e in ast_tuple(MODES / "__init__.py", "MODE_CLASSES")}
+on_disk = {cls for f in MODES.glob("*.py") if f.stem not in ("__init__", "base")
+           for cls in mode_subclasses(f)}
+assert on_disk - registered == set(), (
+    "these modes exist but are not in MODE_CLASSES, so they do not appear in the app")
+```
+
+Verify by adding a throwaway `ui/modes/probe.py` defining a `Mode` subclass and
+confirming the test names it — then delete it.
+
+## Two things reviewed in the same sweep that were *fine*
+
+Recording these because "found nothing" is a result, and because the next person
+should not re-derive them:
+
+* **`VALIDATORS` in `core/validators.py`** — 33 registered, 35 candidate functions.
+  The two unregistered ones are not forgotten: `validate` is the entry point that
+  consumes the tuple, and `scanline_problem` is appended *after* the loop on purpose,
+  with a comment, because the web appends it last and the parity contract is on
+  order as well as content.
+* **`test_the_cases_exercise_every_check`** enumerates problem ids by regex over the
+  Python source, which is the same text-instead-of-structure shape as F14. Here it
+  holds: all 35 `Problem(` constructions use a literal `id="..."`, so the
+  enumeration is complete. It would go blind to an id built with an f-string or a
+  variable — worth a comment saying so if one is ever added, rather than a change now.
+
+## One shape left standing deliberately
+
+`validate()` wraps every check in `except Exception: continue`, so a validator that
+throws is skipped **and nothing is logged**. The docstring argues for it and the
+argument is sound — a broken check must not stop a child building their game. The
+parity contract catches it for the corpus states (Python emits nothing, the web
+emits a problem, the assertion fails), so this is not invisible in CI. What is
+uncovered is a validator that throws only on real project states: the pupil quietly
+loses a warning and nobody hears about it. A one-line `log.warning` in the handler
+would close that without changing the behaviour. Left as a note, not a finding.
