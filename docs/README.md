@@ -124,6 +124,21 @@ A snapshot for anyone landing here cold.  Each row shows where the
 file *moved to* in the reorg; if you're chasing a code comment that
 references the old name, this is your lookup table.
 
+> **If you run a link checker over `docs/`, expect ~55 broken relative links.
+> They are deliberate and this table is their resolution.**  Entries in
+> [`changelog/changelog-implemented.md`](changelog/changelog-implemented.md) and
+> in `plans/archive/` dated before 2026-04-26 were written when these files sat
+> at the repo root, and they are **not** rewritten on purpose — they describe the
+> world as it was when that change shipped.  The policy and its reasoning are
+> stated at the top of the changelog itself.
+>
+> Verified 2026-08-08: every one of the 19 distinct broken targets appears in the
+> tables below, so the workaround actually covers every case rather than merely
+> claiming to.  Two traps if you check this yourself — the changelog's own note
+> contains a literal `[X.md](X.md)` as an *example*, which a naive scanner counts
+> as a 20th broken link; and finding these is not a reason to fix them.  Confirm
+> against this table before "repairing" anything.
+
 ### Guides (now in `docs/guides/`)
 
 | Old path | New path |
