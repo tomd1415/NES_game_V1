@@ -144,9 +144,30 @@ export async function startServer(port, extraEnv = {}) {
   }
   return { srv, log };
 }
+// Wait for the child to ACTUALLY exit, rather than sleeping and hoping.
+//
+// This is the mirror image of the startServer bug and it was found reviewing that
+// fix: `kill('SIGTERM'); await sleep(300)` assumes 300 ms is enough, exactly as
+// startServer used to assume 1500 ms was enough to bind. It matters more now that
+// startServer is strict — `render-p1-oam-cursor.mjs` and `physics-globals.mjs`
+// both stop a server and start another on the SAME port, so a child that outlives
+// the sleep no longer causes a silently-wrong result (the old failure: the next
+// server surrenders, and the suite tests the one that should have died) but a hard
+// error. Converting a silent wrong answer into a loud one is the right trade; not
+// having to make it at all is better.
+//
+// Usually faster than the old fixed sleep too — the server dies in well under
+// 300 ms — and the polling loop uses short sleeps so no long timer is left
+// pending to hold the event loop open at teardown.
 export async function stopServer(srv) {
+  const dead = () => srv.exitCode !== null || srv.signalCode !== null;
+  if (dead()) return;
   srv.kill('SIGTERM');
-  await sleep(300);
+  for (let i = 0; i < 30 && !dead(); i++) await sleep(100);      // up to 3s
+  if (!dead()) {
+    srv.kill('SIGKILL');                                          // it ignored SIGTERM
+    for (let i = 0; i < 10 && !dead(); i++) await sleep(100);     // up to 1s more
+  }
 }
 
 // POST /play. Returns the raw server JSON plus `romBytes` (a Buffer) when ok.

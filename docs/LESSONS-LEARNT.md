@@ -108,6 +108,61 @@ server it did not configure.
   maintained by hand and by documentation. Documentation is not a check. If two
   lists must agree, something must fail when they don't.
 
+### A hand-written list of what to check loses coverage silently
+
+`run-all.mjs` syntax-checked a hand-written array of 14 filenames, followed by
+`if (!fs.existsSync(full)) continue;`. Two silent-coverage bugs in four lines: a
+module added to the editor was never checked, and a module renamed dropped off
+without anything going red.
+
+- **Measured 2026-08-07:** 18 of the 32 shipped modules were unchecked — including
+  *every* Studio mode module. The WORLD palette-keys change of 2026-07-30 edited a
+  file this gate was not looking at.
+- **Fix:** enumerate the directory at runtime. Vendored bundles are identifiable
+  by name (`*.min.js`), so there is no second list to keep in step with the first —
+  which is the whole point, since a hand-maintained list is what failed.
+- **Still open at the time of writing:** the same file hand-lists five of the eight
+  HTML pages for its inline-`<script>` check. `audio.html` and `gallery.html` are
+  not covered.
+- **The general rule:** if a check takes a list of what to check, ask where the
+  list comes from. Derived is safe; hand-written decays and is trusted while it
+  does.
+
+### The first version of a guard is not a guard until you watch it fail
+
+Hardening `startServer` so it could not silently accept a server it did not start,
+the first implementation polled `/health` after spawning and gave the child 150 ms
+to have died. Run against the dev server on 8765 it **reported success**.
+
+- **Why:** the foreign server answers `/health` instantly, while our own child is
+  still in Python startup — nowhere near its port check. The grace period proved
+  nothing at all.
+- **Had I only tested the happy path**, it would have shipped looking correct and
+  catching nothing — a guard whose failure mode is "always passes".
+- **The working version** pre-checks the port *before* spawning, then waits for the
+  child's own `listening on` banner rather than for the port to answer, because a
+  stranger satisfies the latter just as well.
+- **Lesson:** write the negative test first, and make it fail before you believe
+  the positive one. Both directions are now checked — occupied port throws in
+  ~90 ms, free port ready in ~340 ms.
+
+### …and then check the mirror image of the bug you just fixed
+
+Reviewing that fix with fresh eyes turned up `stopServer` doing exactly the same
+thing in reverse: `kill('SIGTERM'); await sleep(300)` — assuming 300 ms is enough
+to die, precisely as `startServer` had assumed 1500 ms was enough to bind.
+
+- **It mattered more after the fix, not less.** Two suites
+  (`render-p1-oam-cursor.mjs`, `physics-globals.mjs`) stop a server and start
+  another on the *same* port. A child outliving the sleep used to produce a
+  silently wrong result; against the now-strict `startServer` it becomes a hard
+  error instead.
+- **Fixed** by polling until the child is actually dead, with a `SIGKILL`
+  fallback. Faster too: ~100 ms instead of a flat 300 ms.
+- **Lesson:** a fix for "we assumed a duration instead of waiting for the event"
+  should be followed by a search for the same assumption elsewhere in the same
+  file. It is rarely written only once.
+
 ### Engine version lives in two files
 
 `tools/engines/ENGINE_VERSION` and `tools/tile_editor_web/engine-version.js`.
