@@ -200,6 +200,20 @@
         + 'the rest of this session. Further failures are not repeated.', err);
     } catch (_) { /* console itself is gone; nothing useful left to do */ }
   }
+  // Sibling of the above for the other way a mode can be absent: no module at
+  // all, rather than a hook that threw. Shares the said-once map so a mode that
+  // fails to load does not log on every dock re-render.
+  function reportMissingModule(mode) {
+    var key = (mode || '?') + '.module';
+    if (modeHookFailed[key]) return;
+    modeHookFailed[key] = true;
+    try {
+      console.error('[studio] no module registered for mode "' + mode + '" — '
+        + 'studio-' + mode + '.js did not load, or loaded without registering. '
+        + 'The dock is showing the "arrives later in the redesign" placeholder, '
+        + 'which is NOT the real reason. Said once per mode.');
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
 
   function renderLive() {
     renderRulers();
@@ -479,6 +493,12 @@
       return;
     }
 
+    // Every mode in MODES has shipped a module since Phase 0, so reaching here
+    // now means one FAILED TO LOAD — a renamed file, a syntax error, a missing
+    // <script> in studio.html. The copy below stays calm and vague on purpose
+    // (a pupil can do nothing about it), which is exactly why the real reason
+    // has to be said somewhere a grown-up will look.
+    reportMissingModule(currentMode);
     var ph = document.createElement('div');
     ph.className = 'placeholder';
     ph.textContent = 'This mode arrives later in the redesign. The shell, the shared ' +
@@ -488,8 +508,9 @@
   }
 
   // The stage toolbar shows a mode's tools (design §4.2: "two tools by
-  // default, more behind a disclosure"). A mode without a module keeps the
-  // Phase-0 scaffold toolbar.
+  // default, more behind a disclosure"). A mode without a module falls back to
+  // the Phase-0 scaffold toolbar — which, now that all eight modes have shipped,
+  // means that module failed to load rather than that it is unbuilt.
   function renderStageToolbar(mod) {
     var bar = $('stage-toolbar');
     // Preserve the trailing mode-name label; rebuild the tool buttons.
