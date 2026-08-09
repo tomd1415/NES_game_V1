@@ -469,6 +469,32 @@ One trap for anyone re-counting: `gallery.mjs`'s `fail()` calls `process.exit(2)
 not `1`. A checker that greps for `process.exit(1)` silently undercounts by one —
 which is how a wrong number survives being "verified".
 
+### `ppid=1` is not a leak signal in this container
+
+The obvious acceptance check for the reap — *"kill a suite mid-run, then confirm no
+`playground_server.py` survives with `ppid=1`"* — **can never pass here**, and I had
+written exactly that before checking:
+
+```
+    PID    PPID     ELAPSED CMD
+     60       1  3-11:11:40 python3 tools/playground_server.py
+```
+
+That is the container's own dev server, started by `/workspace/start.sh` from
+`container-init.sh` at boot. Orphaned-to-init is its normal state, not evidence of
+anything. It listens on **8765**; the builder suites use 18768–18894 and start and
+stop their own, so the two never meet — `start.sh` says so in its header comment.
+
+So the check has to name the port range, not the parent:
+
+```bash
+pgrep -af playground_server.py | grep -E '187[0-9]{2}|188[0-9]{2}' && echo LEAKED
+```
+
+Worth stating because it is the mirror of this register's usual complaint. A check
+that cannot fail is decoration; a check that cannot *pass* is worse, because the
+first time it goes red on a real leak nobody will believe it.
+
 ## F12 — Three helper names are defined twice in `tools/nes_studio_core/`
 
 Nothing checks the copies agree.
