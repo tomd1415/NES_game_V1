@@ -389,9 +389,11 @@ Two wrong numbers surfaced this week, from unrelated documents, both load-bearin
 * `native/README.md`: "the **fifteen** Qt-dependent modules by
   `pytest.importorskip`". Twelve are guarded. Fifteen was the count of red lines
   removed; three of those were tests that never needed Qt and were made to run.
-* F11: "**32 suites** bypass the `try/finally` reap". Three do. Thirty-three suites
-  *have* a reap — the number counted the population with the guard rather than the
-  population that defeats it.
+* F11: "**32 suites** bypass the `try/finally` reap". ~~Three do.~~ **Twenty-three do
+  — see the section added below on 2026-08-09, in which the re-measurement in this
+  very entry turned out to be the worse number of the two.** Thirty-three suites
+  *have* a reap, so the original 32 counted the population with the guard rather than
+  the population that defeats it — it was unmeasured, and it was also nearly right.
 
 Neither was a lie and neither was careless in the moment: each is a real count of a
 real set, attached to the wrong sentence. That is what makes the failure mode hard.
@@ -399,10 +401,14 @@ real set, attached to the wrong sentence. That is what makes the failure mode ha
 There is no hedge, no "approximately", nothing to make a reader pause — so the number
 gets quoted onward, and by the third document it is simply a fact.
 
-The 32 did real damage. The close-out plan deferred the fix as "a 32-file harness
-change that deserves its own session", and that deferral survived three passes. The
-work was three files. A number that is too big does not merely misinform, it
-**reprioritises**: it makes cheap work look expensive and it gets that work skipped.
+A number that is wrong does not merely misinform, it **reprioritises** — it makes work
+look cheaper or dearer than it is, and that changes what gets done. The close-out plan
+deferred this fix as "a 32-file harness change that deserves its own session", and that
+deferral survived three passes on a number nobody had measured.
+
+*(This paragraph originally continued "The work was three files." It is not. See the
+2026-08-09 section below — the correction reprioritised it in the other direction, on
+my authority, which is worse.)*
 
 What actually helps, in order of how much:
 
@@ -429,6 +435,58 @@ twice:
 Both recounts had to be done with `ast`/structural parsing, or by reading the
 control flow (`try` at 60, `finally` at 143, `exit` at 149 — that suite does *not*
 leak), before they meant anything.
+
+### 2026-08-09 — the correction was worse than the error it corrected
+
+The recount above is wrong. **23 suites bypass the reap, not three** — and the error
+is more instructive than the original, so this entry keeps both.
+
+The mechanism has two forms and I only searched for one:
+
+```js
+try { fail('x'); }              // exits via a helper defined outside the try — 3 suites
+try { process.exit(2); }        // exits literally inside the try  — 20 suites
+```
+
+Having found the helper form first, I wrote the conclusion in terms of it — *"only a
+`process.exit` inside the try leaks, **and that means a `fail()`-style helper**"* — and
+that second clause silently redefined the question. Everything downstream was then
+consistent with itself: I even examined `preview-capture.mjs`, asked whether its
+`fail()` was called inside the try, found it was not, and **cleared it as a false
+positive**. It has a literal `process.exit(2)` on line 61, inside the try, four lines
+from where I was looking.
+
+Why this is worse than the original 32:
+
+* The 32 was inherited and unmeasured, and it was **nearly right**. It happened to be
+  in the right order of magnitude for the wrong reason.
+* The 3 was *mine*, freshly "measured", and published with a table headed **"What the
+  re-measurement actually shows"** and a note that the deferral "was justified by a
+  number that was never measured, so it is no longer justified". I used the authority
+  of having measured to overturn a correct decision.
+* A correction carries more weight than an original claim, because it advertises that
+  someone checked. Mine reprioritised real work from "needs its own session" to
+  "three-file change" and I wrote it into the plan.
+
+**The rule this earns:** when a re-measurement *disagrees sharply* with the number it
+replaces, that is the moment for most suspicion, not least. A recount that lands near
+the old number is boring and probably fine. One that cuts it by 90% has either found a
+real mistake or made a new one, and the two feel identical from the inside — both
+produce the small satisfying click of a discrepancy resolved.
+
+The concrete test, which costs a minute: **name the ways the thing can happen before
+counting any of them, then confirm your search covers each.** Two arms here — literal
+exit, helper exit. Ask "what would this search miss?" and answer it in writing next to
+the number. And where the answer is cheap to get, **verify by hand**: reading `spawn`
+at 74, `try` at 77, `exit` at 84, `finally` at 88 in `smb-jump.mjs` takes ten seconds
+and is not fooled by a regex's blind spot.
+
+Confirm the mechanism too, rather than reasoning about it — this is three lines:
+
+```js
+function fail(m){ process.exit(1); }
+try { fail('x'); } finally { console.log('FINALLY RAN'); }   // never prints
+```
 
 ## Older entries
 

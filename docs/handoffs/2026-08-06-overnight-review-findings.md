@@ -396,11 +396,13 @@ ready-to-apply checks — both run, both confirmed to catch the thing they claim
 
 ## F11 — Twenty-three builder suites share a port with another suite
 
-> **⚠ Corrected 2026-08-08 — the port count stands, the leak count and the causal
-> link do not.** Re-measured from the source rather than carried forward. Three
-> suites can leak, not thirty-two, and none of the three shares a port with
-> anything, so the leak cannot be what un-hides the sharing. Details at the end of
-> this finding; the paragraph below is struck where it is wrong.
+> **⚠ Corrected twice. Read the 2026-08-09 section at the end of this finding, not
+> the 2026-08-08 one.** The port count (11 ports, 23 suites) has stood throughout.
+> The leak count has been wrong twice: the original **32** was never measured, and my
+> 2026-08-08 "correction" to **3** was measured with a search that could only find one
+> of the two ways it happens. Measured properly: **23 suites**, of which **4 also
+> share a port**. The 2026-08-08 section below is left in place and struck, because
+> what it got wrong is more instructive than what it got right.
 
 `tools/builder-tests/run-all.mjs`'s own header says each suite "spawns its own
 playground server on a **unique port**". Nothing enforced it, and 11 ports are
@@ -415,17 +417,18 @@ shared, one of them three ways:
 18861  accounts.mjs, palette-render.mjs
 ```
 
-Sequential execution normally hides this. ~~What un-hides it is the leak we
-already know about: `fail()` calls `process.exit(1)`, which bypasses the
-`try/finally { srv.kill('SIGTERM') }` — 32 suites do this. A leaked server squats
-the port, and the next suite sharing it dies with an opaque `UND_ERR_SOCKET`.~~
-~~That is the exact mechanism behind the false theory that cost a session,
-generalised from one suite to twenty-three.~~
+Sequential execution normally hides this. What un-hides it is the leak: an exit from
+inside the guarded region bypasses the `try/finally { srv.kill('SIGTERM') }`, the
+leaked server squats the port, and the next suite sharing it dies with an opaque
+`UND_ERR_SOCKET`. That is the exact mechanism behind the false theory that cost a
+session.
 
-**Struck 2026-08-08.** A leaked server does produce an opaque `UND_ERR_SOCKET` in
-the next suite on that port — that part is sound, and I hit it myself this week.
-What is wrong is *who can leak*, and therefore whether the two problems are
-connected at all. See below.
+**Un-struck 2026-08-09.** This paragraph was struck on 2026-08-08 on the grounds that
+only three suites could leak and none of them shared a port. Both halves of that were
+wrong: 23 can leak and 4 of them share a port. The original text overstated the
+mechanism only in saying "`fail()` calls `process.exit(1)`" — it is usually a literal
+`process.exit(n)`, not the helper — and in the count, which was never measured. Its
+substance stands.
 
 Two independent fixes, either sufficient, both cheap: give each suite its own
 port, or register `process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })`
@@ -433,41 +436,85 @@ after each `spawn`. Doing both is better — unique ports stop the propagation, 
 exit hook stops the leak. Checker in Appendix 3; it exits 1 today and names every
 pair.
 
-### What the re-measurement actually shows (2026-08-08)
+### ~~What the re-measurement actually shows (2026-08-08)~~ — WRONG, see below
 
-Counted from source, not carried forward:
+~~Counted from source, not carried forward:~~
 
-| Claim | Measured |
+| ~~Claim~~ | ~~Measured~~ |
 | --- | --- |
 | 11 ports shared, 23 suites | **confirmed** — 72 suites declare a `PORT`, 11 values are shared |
-| "32 suites" bypass the reap | **3** — `audio.mjs`, `four-screen.mjs`, `gallery.mjs` |
-| the leak un-hides the port sharing | **no** — all three use unique ports (18815, 18809, 18801) |
+| ~~"32 suites" bypass the reap~~ | ~~**3** — `audio.mjs`, `four-screen.mjs`, `gallery.mjs`~~ |
+| ~~the leak un-hides the port sharing~~ | ~~**no** — all three use unique ports~~ |
 
-Where 32 came from: **33** suites have a `finally` block that kills the server. That
+~~Where 32 came from: **33** suites have a `finally` block that kills the server. That
 is the count of suites with the reap, not of suites that bypass it. The overwhelming
 majority set a `failed` flag and call `process.exit(1)` *after* the `finally` has
 run, which is correct by construction — `account-projects.mjs` is typical: `try` at
 60, `finally { srv.kill(...) }` at 143, `process.exit(1)` at 149. Only a
 `process.exit` **inside** the try leaks, and that means a `fail()`-style helper
-called from within the guarded region. Three suites do that.
+called from within the guarded region. Three suites do that.~~
 
-`preview-capture.mjs` looks like a fourth and is not: it defines an exiting `fail()`
-but never calls it inside its try.
+~~`preview-capture.mjs` looks like a fourth and is not: it defines an exiting `fail()`
+but never calls it inside its try.~~
 
-Two consequences worth carrying forward:
+~~Two consequences worth carrying forward: the remediation is small (three files); the
+two problems are independent.~~
 
-* **The remediation is small.** The reason this was deferred — "a 32-file harness
-  change that deserves its own session" — was based on the wrong number. Three files,
-  or one `process.on('exit', …)` reap applied where servers are spawned.
-* **The two problems are independent.** Fixing the leak does not reduce the port-
-  sharing risk and vice versa. The port sharing is still real and still worth fixing,
-  because *any* abnormal termination leaks a server — I killed a run with SIGTERM
-  this week and left a `playground_server.py` with `ppid=1` squatting a port, which
-  is the same symptom by a different route. But it is not the `fail()` path.
+The first sentence of that paragraph is right and the rest is wrong. Only a
+`process.exit` inside the try leaks — but "inside the try" does **not** mean "a
+`fail()`-style helper". It also means a `process.exit(...)` written literally inside
+the try, which is the *more* common form here. I searched for the helper case, found
+three, and reported three as the answer.
+
+### What it actually is (2026-08-09, hand-verified)
+
+```
+suites declaring a PORT:            72
+ports shared by more than one:      11, covering 23 suites   (unchanged)
+suites that spawn AND reap:         33
+  ├─ bypass the reap:               23   ← the leak
+  └─ exit after the finally:        10   (the correct pattern)
+leakers that also share a port:      4, on 3 ports
+```
+
+| Claim | 2026-08-08 said | Measured 2026-08-09 |
+| --- | --- | --- |
+| suites that bypass the reap | 3 | **23** — 20 by a literal `process.exit` inside the try, 3 via a `fail()` helper |
+| the two problems compound | no | **yes, on 3 ports** — `18781` (`perdoor`), `18783` (`smb-jump`), `18792` (`shared-play` *and* `smb-render`, both leakers) |
+| remediation size | "three files" | **23 files**, or one `process.on('exit', …)` per spawn |
+
+`preview-capture.mjs`, which the struck section explicitly cleared as "looks like a
+fourth and is not", **is** a leaker: `spawn` at 51, `try` at 54, `process.exit(2)` at
+61, `finally { srv.kill(…) }` at 115. It was cleared by checking the one criterion I
+had in mind and not the one that applied to it.
+
+Verified by hand, not only by script — `smb-jump.mjs` (spawn 74, try 77, exit 84,
+finally 88), `preview-capture.mjs` as above, and the negative case
+`dialogue-scroll.mjs`, which sets `failed = true` inside the try, reaps at 102, and
+exits at 107 *after* the `finally`. The mechanism itself was confirmed empirically
+rather than assumed:
+
+```js
+function fail(m){ process.exit(1); }
+try { fail('x'); } finally { console.log('FINALLY RAN'); }   // does not print
+```
+
+Command that produces the 23 — brace-match each `try`, keep those whose `finally`
+reaps, then look for **both** a literal `process.exit(n)` and a call to any
+locally-defined function whose body exits. Missing either arm undercounts; missing
+the second arm is what produced "3", missing the first is what would have produced
+"20".
+
+**So the deferral was right and I dissolved it on a bad number.** "A 32-file harness
+change that deserves its own session" was closer to the truth than "three files".
+The original 32 was still not measured — it counted suites that *have* a reap — but
+being unmeasured is not the same as being wrong, and this time it was nearly right by
+accident.
 
 One trap for anyone re-counting: `gallery.mjs`'s `fail()` calls `process.exit(2)`,
-not `1`. A checker that greps for `process.exit(1)` silently undercounts by one —
-which is how a wrong number survives being "verified".
+not `1`, and so do many of the literal exits. A checker that greps for
+`process.exit(1)` undercounts badly — which is how a wrong number survives being
+"verified".
 
 ### `ppid=1` is not a leak signal in this container
 
@@ -517,6 +564,19 @@ and both are correct where they are.
 
 ## Swept and found clean
 
+* **All 110 builder suites can actually fail** (swept 2026-08-09, which is what
+  turned up the leak recount above). The harness's entire notion of a pass is
+  `r.status === 0`, so a suite that asserts nothing prints `OK` — but none does.
+  Checked mechanically: every suite contains at least one failure construct; **no**
+  suite declares a `failed` flag and then forgets to act on it (the F5 shape); and no
+  suite has materially more `ok(...)` calls than `bad(...)` calls, i.e. no unpaired
+  assertion that prints nothing and fails nothing when its condition goes false. The
+  33 suites using neither helper split into 19 `assert()`-based, 18 using the
+  inverted `if (bad) { error; exit(1) }` form — both fail-safe — and a handful of
+  mixtures. One candidate empty-collection loop (`asm-benchmark.mjs:100`) is
+  report-only and says so in a comment; `asm-benchmark`'s `if (C && A)` guard can only
+  be false via an exception that `bad()` already catches, and its confident closing
+  line prints after the `if (failed) process.exit(1)`, not before.
 * **No `TODO`/`FIXME`/`HACK` anywhere** in `tools/nes_studio_core/`, `scripts/*.mjs`
   or `tools/engines/README.md`. No stale markers to retire.
 * **`docs/design/engine-versioning.md`'s remaining TODO is real, not stale.** The

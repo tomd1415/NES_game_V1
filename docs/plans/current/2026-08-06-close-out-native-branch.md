@@ -290,15 +290,19 @@ Standing constraint until then: **do not merge to `main`.**
 - It does not schedule the `bg_compression` memoisation or the
   `_inject_racer_rotation` visibility tidy (F8). They are correct today and
   competing for attention with things that are not.
-- ~~It does not touch the 32-suite `fail()`/`process.exit(1)` server leak — a
-  32-file harness change that deserves its own session.~~ **Re-measured
-  2026-08-08: the leak is three suites, not thirty-two** (`audio.mjs`,
-  `four-screen.mjs`, `gallery.mjs` — the rest set a `failed` flag and exit *after*
-  the `finally` reap, which is correct). The deferral was justified by a number
-  that was never measured, so it is no longer justified: this is a three-file
-  change, or one `process.on('exit', …)` reap. It is still out of scope *here*
-  because it is harness code and this plan is about the native branch — but it
-  should be scheduled, not filed under "too big". See F11's correction.
-- It does not fix the port sharing, which is separate: all three leaking suites
-  use unique ports, so the two problems do not compound the way F11 originally
-  claimed.
+- It does not touch the server leak — **23 of the 33 suites that spawn a server can
+  bypass their own `finally { srv.kill(…) }` reap** (measured and hand-verified
+  2026-08-09). It stays deferred, and the original "deserves its own session" was
+  right.
+
+  > This bullet said "three suites, not thirty-two" between 2026-08-08 and
+  > 2026-08-09, and dissolved the deferral on that basis. That was my error: I
+  > searched only for exits routed through a `fail()` helper and reported the three I
+  > found as the total, when 20 more exit literally inside the try. The deferral is
+  > reinstated. See the twice-corrected F11.
+
+- It does not fix the port sharing (11 ports, 23 suites). The two problems **do**
+  compound, on three ports — `18781`, `18783` and `18792`, the last of which has two
+  leakers sharing it. Either fix helps; both is better. Note the fixes are not the
+  same size: unique ports is a 23-file edit, whereas the reap can be closed with one
+  `process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })` per `spawn`.
