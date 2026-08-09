@@ -58,6 +58,43 @@ summary — `❌ One or more checks failed.` — and discards the one block that
 - **What to do instead:** redirect the whole run to a file and read the file.
   `> /tmp/run.txt 2>&1`, then grep it. Costs nothing, keeps everything.
 
+### Silent-failure audit of the editor and server — 2026-08-09
+
+Recorded so the next person knows this ground was covered, what it found, and
+what was deliberately left. A sweep whose result nobody wrote down gets repeated.
+
+**Server (`playground_server.py`).** Scanned with Python's `ast` rather than grep,
+after three pattern-too-narrow misses in the same session. Exactly **one**
+except-handler in ~4,700 lines has a body of only `pass`, and it is deliberate and
+documented — tolerant gallery-metadata reads, so a half-written publish cannot
+break the listing. No bare `except:` anywhere. This is a disciplined file.
+
+**Editor JS.** ~26 empty `catch` blocks. Almost all are correct defensive wrappers
+around browser APIs that throw for environmental reasons — `localStorage` in
+private mode, `AudioContext`, `scrollIntoView`, `dialog.close()`. Three were worth
+reading properly rather than waving through, and only one was a real defect:
+
+- **`studio.js` `onRenderOverlay` (both sites) — fixed.** A mode whose overlay
+  threw stopped drawing for ever with nothing said, while the `renderTV` catch
+  three lines above had always logged. Now reported once per mode.
+- **`project-menu.js` `onAfterRecover` — NOT a bug, and I had implied otherwise.**
+  The `return` sits *inside* the `try` on purpose: if the callback throws, control
+  falls through to the default page-reload path. That is a deliberate fallback,
+  not a swallowed error.
+- **`account-menu.js` "Load a starter game" and `studio-starter.js` `turnOffWin`
+  — left alone, raised not fixed.** Both are genuine silent no-ops (a pupil could
+  click a button and get nothing), but the right fix is a product decision —
+  disable the button when the hook is absent, or log and continue? — so guessing
+  would be worse than recording it.
+
+**A related shape, from the same week.** `countAttrConflicts` read the nametable
+without the view-screen offset while the red-X overlay applied it, so the count
+and the marks described different screens. Fixed. Sweeping for siblings found one
+more: `renderBgInto` renders screen 0 only, behind a button labelled "⛶
+Full-screen preview". Weaker — nothing on screen contradicts it — and what it
+*should* show (current screen, or the whole level scaled) is a product call. Also
+raised rather than guessed.
+
 ### A green snapshot check does not mean your tree is clean
 
 `run-all.mjs`'s *"engine snapshot matches live sources"* was deliberately broken
