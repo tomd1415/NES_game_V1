@@ -48,6 +48,26 @@ test('it is reported exactly once, not once per render', async ({ page }) => {
   expect(hits.length, 'a per-frame log would flood the console — see #37').toBe(1);
 });
 
+// The console message claims the hook "is still called on every render and will
+// keep throwing". That is a checkable claim about behaviour, so check it — an
+// earlier wording said the overlay was "suppressed for the rest of this session",
+// which would have sent a reader looking for suppression logic that has never
+// existed. If someone later makes that true by actually disabling the hook, this
+// fails and the message gets corrected with it.
+test('the hook keeps being called after it throws — only the message is silenced', async ({ page }) => {
+  await armThrowingOverlay(page);
+  await page.evaluate(() => {
+    window.__overlayCalls = 0;
+    window.StudioModes.world.onRenderOverlay = function () {
+      window.__overlayCalls++;
+      throw new Error('deliberate overlay failure');
+    };
+  });
+  await page.evaluate(() => { for (let i = 0; i < 6; i++) window.Studio.renderLive(); });
+  expect(await page.evaluate(() => window.__overlayCalls),
+    'six renders must mean six calls — the fault is reported once, not fixed').toBe(6);
+});
+
 test('the editor keeps working after an overlay hook throws', async ({ page }) => {
   await armThrowingOverlay(page);
   await page.evaluate(() => { for (let i = 0; i < 5; i++) window.Studio.renderLive(); });

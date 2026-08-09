@@ -196,8 +196,9 @@
     if (modeHookFailed[key]) return;          // said once is said
     modeHookFailed[key] = true;
     try {
-      console.error('[studio] ' + key + ' threw — that overlay is suppressed for '
-        + 'the rest of this session. Further failures are not repeated.', err);
+      console.error('[studio] ' + key + ' threw — that overlay is missing from the '
+        + 'TV. The hook is still called on every render and will keep throwing; it '
+        + 'is this message that is said once, not the fault that is fixed.', err);
     } catch (_) { /* console itself is gone; nothing useful left to do */ }
   }
   // Sibling of the above for the other way a mode can be absent: no module at
