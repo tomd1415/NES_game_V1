@@ -412,10 +412,13 @@ my authority, which is worse.)*
 
 What actually helps, in order of how much:
 
-1. **Write the command next to the number.** `11 ports shared by 23 of 72 suites
-   (tools/builder-tests/ports-unique.mjs)` can be re-run by the next reader in
+1. **Write the command next to the number.** `21 ports shared by 42 of 110 suites
+   (node tools/builder-tests/ports-unique.mjs)` can be re-run by the next reader in
    seconds. `23 suites share a port` cannot be checked at all without redoing the
-   work from scratch, so nobody does.
+   work from scratch, so nobody does. *(This example originally read "11 ports shared
+   by 23 of 72 suites" — the wrong number, held up as the model of a checkable one.
+   Citing a command does not make the number right; it makes the number **findable**
+   when it is wrong, which is how this one was caught.)*
 2. **Re-measure before you rely on a number, especially your own.** Both of these
    were mine, written days earlier, and I quoted them back confidently.
 3. **Distrust round-ish numbers and numbers that justify a decision.** "32 files, so
@@ -487,6 +490,43 @@ Confirm the mechanism too, rather than reasoning about it — this is three line
 function fail(m){ process.exit(1); }
 try { fail('x'); } finally { console.log('FINALLY RAN'); }   // never prints
 ```
+
+### The same day, again — and the rule that actually ends it
+
+Straight after writing the paragraph above, I applied it to the *other* number in the
+same finding: "11 ports shared by 23 suites". I named the arms first, as instructed.
+The count went to 14/34. Then I checked for arms I had not named, and it went to
+**21/42**. Suites spell the port five ways:
+
+```js
+const PORT = 18783;                                   // what I originally matched
+const port = 18869;                                   // lowercase
+const PORT_C = 18788, PORT_A = 18789, PORT_D = 18790; // three in one declaration
+await H.startServer(18882, env);                      // inline, never bound
+const romC = await buildWith(18871, {...});           // inline, via a helper
+```
+
+Naming the arms was an improvement and it was **not enough**, because the arms were
+not enumerable by inspection — each pattern I added revealed the next. So the rule from
+the section above needs a second half:
+
+> **When successive attempts at a pattern keep finding more instances, stop counting
+> and change the structure so the thing cannot vary.**
+
+Here that is: let `run-all.mjs` assign each suite a port via `PLAYGROUND_PORT` instead
+of each suite choosing one. The guard then becomes *"no suite source may contain a port
+literal"* — one rule, no spellings to miss — rather than an ever-growing enumeration of
+how a port might be written. Three iterations of "now I have counted it properly" is
+the signal to stop counting.
+
+The clinching detail: **the checker I had proposed as the fix for this finding had the
+bug itself.** `/\bPORT\s*=\s*(\d{4,5})\b/` with `RE.exec` is case-sensitive, cannot see
+`PORT_C`, cannot see an inline argument, and takes only the first match per file — so a
+three-port suite counted as one. It would have reported 11 clashes and stayed silent
+about 10, while carrying the authority of being the remedy. Rewritten to match any
+`18xxx` literal, it exits 1 naming 21; pointed at an empty directory it exits **2**,
+because a scan that finds nothing must not be able to look like a scan that found
+nothing wrong.
 
 ## Older entries
 

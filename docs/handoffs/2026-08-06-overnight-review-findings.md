@@ -397,25 +397,35 @@ ready-to-apply checks — both run, both confirmed to catch the thing they claim
 ## F11 — Twenty-three builder suites share a port with another suite
 
 > **⚠ Corrected twice. Read the 2026-08-09 section at the end of this finding, not
-> the 2026-08-08 one.** The port count (11 ports, 23 suites) has stood throughout.
-> The leak count has been wrong twice: the original **32** was never measured, and my
+> the 2026-08-08 one.** Both counts in this finding have been wrong.
+> The **port** count went 11/23 → **21 ports across 42 suites**, and the leak count
+> has been wrong twice: the original **32** was never measured, and my
 > 2026-08-08 "correction" to **3** was measured with a search that could only find one
 > of the two ways it happens. Measured properly: **23 suites**, of which **4 also
 > share a port**. The 2026-08-08 section below is left in place and struck, because
 > what it got wrong is more instructive than what it got right.
 
 `tools/builder-tests/run-all.mjs`'s own header says each suite "spawns its own
-playground server on a **unique port**". Nothing enforced it, and 11 ports are
-shared, one of them three ways:
+playground server on a **unique port**". Nothing enforces it, and **21 ports are
+shared across 42 suites** (re-measured 2026-08-09; the figure below said 11 and 23
+until then — see "Counting the ports is the wrong approach"):
 
 ```
-18781  all-modules.mjs, perdoor.mjs          18862  account-projects.mjs, gallery-auth.mjs
-18783  dialogue-scroll.mjs, smb-jump.mjs     18863  csrf-origin.mjs, racer.mjs
-18792  shared-play.mjs, smb-render.mjs       18867  smb-stomp.mjs, topdown-enemies.mjs
-18844  flyer-patrol.mjs, racer-hud.mjs       18869  pickup-collect.mjs, scroll-2x2.mjs, stomp-basic.mjs
-18847  hopper-enemy.mjs, scene-multiscreen.mjs   18871  sfx-events.mjs, style-starters.mjs
-18861  accounts.mjs, palette-render.mjs
+18781  all-modules, perdoor*                 18847  hopper-enemy, scene-multiscreen
+18783  dialogue-scroll, smb-jump*            18861  accounts, palette-render
+18789  asm-player, smb-hud*                  18862  account-projects, gallery-auth
+18790  asm-corpus, asm-player, asm-realproj  18863  csrf-origin, racer
+18791  asm-corpus, asm-realproj, smb-level*  18867  scroll-wide-compressed, smb-stomp, topdown-enemies
+18792  asm-ai-corpus, asm-vscroll, shared-play*, smb-render*   18868  scroll-wide-compressed, win-reach-tile
+18793  asm-ai-corpus, asm-vscroll, topdown*  18869  pickup-collect, scroll-2x2, scroll-wide-too-varied, stomp-basic
+18794  asm-ai-bench, asm-enemy, asm-smb-bench   18871  scroll-narrow-compressed, sfx-events, style-starters
+18795  asm-ai-bench, asm-enemy, asm-smb-bench   18872  build-concurrency, scroll-narrow-compressed
+18796  asm-ai-wide, asm-scene, hud-nmi-flicker  18797  asm-ai-wide, asm-scene
+18844  flyer-patrol, racer-hud
 ```
+
+`*` = also bypasses its own reap, so it can leave a server squatting that port.
+**Seven** suites do both, on **six** ports.
 
 Sequential execution normally hides this. What un-hides it is the leak: an exit from
 inside the guarded region bypasses the `try/finally { srv.kill('SIGTERM') }`, the
@@ -442,7 +452,7 @@ pair.
 
 | ~~Claim~~ | ~~Measured~~ |
 | --- | --- |
-| 11 ports shared, 23 suites | **confirmed** — 72 suites declare a `PORT`, 11 values are shared |
+| ~~11 ports shared, 23 suites~~ | ~~**confirmed** — 72 suites declare a `PORT`~~ — **also wrong: 21 ports, 42 suites.** "72 suites declare a `PORT`" counted one of five spellings |
 | ~~"32 suites" bypass the reap~~ | ~~**3** — `audio.mjs`, `four-screen.mjs`, `gallery.mjs`~~ |
 | ~~the leak un-hides the port sharing~~ | ~~**no** — all three use unique ports~~ |
 
@@ -469,19 +479,21 @@ three, and reported three as the answer.
 ### What it actually is (2026-08-09, hand-verified)
 
 ```
-suites declaring a PORT:            72
-ports shared by more than one:      11, covering 23 suites   (unchanged)
 suites that spawn AND reap:         33
   ├─ bypass the reap:               23   ← the leak
   └─ exit after the finally:        10   (the correct pattern)
-leakers that also share a port:      4, on 3 ports
+ports referenced by >1 suite:       21, covering 42 suites
+leakers that also share a port:      7, on 6 ports
 ```
 
 | Claim | 2026-08-08 said | Measured 2026-08-09 |
 | --- | --- | --- |
 | suites that bypass the reap | 3 | **23** — 20 by a literal `process.exit` inside the try, 3 via a `fail()` helper |
-| the two problems compound | no | **yes, on 3 ports** — `18781` (`perdoor`), `18783` (`smb-jump`), `18792` (`shared-play` *and* `smb-render`, both leakers) |
+| the two problems compound | no | **yes, on 6 ports**, 7 suites |
 | remediation size | "three files" | **23 files**, or one `process.on('exit', …)` per spawn |
+
+*(The port half of this table said 11 ports / 23 suites when first written, a few hours
+before the section below. It was the same mistake a third time.)*
 
 `preview-capture.mjs`, which the struck section explicitly cleared as "looks like a
 fourth and is not", **is** a leaker: `spawn` at 51, `try` at 54, `process.exit(2)` at
@@ -510,6 +522,50 @@ change that deserves its own session" was closer to the truth than "three files"
 The original 32 was still not measured — it counted suites that *have* a reap — but
 being unmeasured is not the same as being wrong, and this time it was nearly right by
 accident.
+
+### Counting the ports is the wrong approach (2026-08-09)
+
+The port figure moved from 11/23 to **21/42** because suites declare a port in at
+least five different ways, and each pattern I added found more:
+
+```js
+const PORT = 18783;                                  // 1. what I originally matched
+const port = 18869;                                  // 2. lowercase
+const PORT_C = 18788, PORT_A = 18789, PORT_D = 18790;// 3. several in one declaration
+await H.startServer(18882, env);                     // 4. inline, never bound
+const romC = await buildWith(18871, {...});          // 5. inline, via a helper
+```
+
+I found (1), published a number. Found (2), published a bigger number. Found (3), (4)
+and (5) in the same ten minutes. There is no reason to believe there is not a (6), and
+that is the point: **when each attempt at a pattern finds more instances, the pattern
+is not the answer.** Applying yesterday's rule — name the arms before counting — was an
+improvement and still not enough, because the arms were not enumerable by inspection.
+
+**The checker I proposed in Appendix 3 has this exact bug.** It uses
+`/\bPORT\s*=\s*(\d{4,5})\b/` with `RE.exec`, so it is case-sensitive (misses
+`port`), does not match `PORT_C`, matches nothing inline, and — because `exec` returns
+only the first match — counts a three-port suite as one port. It would report 11
+clashes and stay silent about 10. A gate that under-reports by half, shipped as the
+remedy for a finding about a claim nothing enforced.
+
+**So do not fix this by counting better. Remove the ability to get it wrong.** Have
+`run-all.mjs` allocate a port per suite and pass it in the environment — the server
+already honours `PLAYGROUND_PORT`, and the runner already spawns every suite, so it is
+the natural owner. Then the guard becomes a rule with no arms to miss:
+
+> no suite source may contain a hard-coded port literal at all
+
+which is one grep that cannot be defeated by a naming convention, instead of an
+enumeration of every way a port might be spelled. That is the runtime-enumeration
+discipline in `prove-coverage`: assert against the real thing, or make the wrong thing
+unrepresentable.
+
+Until then, treat **any** `18xxx` literal in a suite as a possible bind. That
+over-reports (a literal could sit in a comment) but it errs toward flagging a clash
+rather than missing one, which is the correct bias for a guard. Spot-checked: the
+newly-found clashes on `18789`, `18868` and `18872` are all real declarations, not
+comments.
 
 One trap for anyone re-counting: `gallery.mjs`'s `fail()` calls `process.exit(2)`,
 not `1`, and so do many of the literal exits. A checker that greps for
@@ -593,55 +649,86 @@ and both are correct where they are.
   `PLAYGROUND_PORT`'s default; the Playwright test port 18790 and the builder
   range 18768–18894 against `start.sh`'s comment.
 
-## Appendix 3 — port-uniqueness checker
+## Appendix 3 — port checker
 
-Save as `tools/builder-tests/ports-unique.mjs` and call it from `run-all.mjs`
-alongside the other invariant checks. Exits 1 today.
+> **Rewritten 2026-08-09.** The first version of this checker had the very bug the
+> finding is about: `/\bPORT\s*=\s*(\d{4,5})\b/` with `RE.exec` is case-sensitive,
+> does not match `PORT_C = …`, sees nothing passed inline to a helper, and takes only
+> the *first* match per file. It reported 11 clashes; there are 21. Both versions are
+> below, because the difference between them is the finding.
+
+**Prefer the structural fix.** Have `run-all.mjs` allocate a port per suite and pass
+it as `PLAYGROUND_PORT`; the server already honours it. Then no suite chooses a port,
+and the guard below collapses to a rule with no arms to miss — *no suite source may
+contain a port literal* — which is one unambiguous grep rather than an enumeration of
+every way a port can be spelled.
+
+Until that lands, this is the interim checker. It is deliberately **conservative**:
+it treats any `18xxx` literal anywhere in a suite as a possible bind. That can
+over-report (a literal in a comment) but it errs toward naming a clash rather than
+missing one, which is the right bias for a guard.
 
 ```javascript
 #!/usr/bin/env node
-// Every builder suite must own a unique port.
+// No two builder suites may reference the same playground port.
 //
-// run-all.mjs's own header says each suite "spawns its own playground server on a
-// unique port". Nothing enforced that, and 23 suites share one with another.
+// run-all.mjs's header says each suite "spawns its own playground server on a unique
+// port". Nothing enforces it: 21 ports are shared across 42 suites. Sequential runs
+// normally mask that. What un-masks it is the leak -- 23 of the 33 suites that spawn
+// a server exit from inside their own try/finally, so the reap never runs, the server
+// squats the port, and the next suite sharing it dies with an opaque UND_ERR_SOCKET
+// that looks nothing like the real failure. Seven suites do both, on six ports.
 //
-// Sequential runs normally mask it. What un-masks it is the known leak: fail()
-// calls process.exit(1), which bypasses the try/finally that would reap the
-// spawned server (32 suites). A leaked server then squats the port, and the NEXT
-// suite that happens to share it dies with an opaque UND_ERR_SOCKET that looks
-// nothing like the original failure.
+// Matches ANY 18xxx literal on purpose. Suites spell the port at least five ways
+// (const PORT, const port, `const PORT_C = a, PORT_A = b`, an inline argument, and an
+// inline argument to a helper), so matching the declaration form under-reports -- as
+// the first version of this file did, by half.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const SELF = path.basename(fileURLToPath(import.meta.url));
 const DIR = path.dirname(fileURLToPath(import.meta.url));
-const RE = /\bPORT\s*=\s*(\d{4,5})\b/;
+const RE = /\b(18\d{3})\b/g;                       // global: a suite may use several
 
 const byPort = new Map();
-for (const file of fs.readdirSync(DIR).filter((f) => f.endsWith('.mjs')).sort()) {
-  const m = RE.exec(fs.readFileSync(path.join(DIR, file), 'utf8'));
-  if (!m) continue;
-  const port = Number(m[1]);
-  if (!byPort.has(port)) byPort.set(port, []);
-  byPort.get(port).push(file);
+let scanned = 0;
+for (const file of fs.readdirSync(DIR).filter((f) => f.endsWith('.mjs') && f !== 'run-all.mjs' && f !== SELF).sort()) {
+  scanned++;
+  const src = fs.readFileSync(path.join(DIR, file), 'utf8');
+  for (const port of new Set([...src.matchAll(RE)].map((m) => Number(m[1])))) {
+    if (!byPort.has(port)) byPort.set(port, []);
+    byPort.get(port).push(file);
+  }
+}
+
+// A scan that finds nothing must not look like a scan that found no clashes.
+if (scanned === 0 || byPort.size === 0) {
+  console.error(`FAIL: scanned ${scanned} suites and found ${byPort.size} ports — the scan did not run.`);
+  process.exit(2);
 }
 
 const clashes = [...byPort.entries()].filter(([, files]) => files.length > 1).sort();
 if (clashes.length === 0) {
-  console.log(`OK — ${byPort.size} suites, all on distinct ports.`);
+  console.log(`OK — ${scanned} suites, ${byPort.size} ports, none shared.`);
   process.exit(0);
 }
 
-console.error(`${clashes.length} port(s) shared by more than one suite:`);
+const affected = new Set(clashes.flatMap(([, files]) => files));
+console.error(`${clashes.length} port(s) shared by ${affected.size} of ${scanned} suites:`);
 for (const [port, files] of clashes) console.error(`  ${port}  ${files.join(', ')}`);
 console.error(
-  '\nA suite that fails leaks its server (fail() -> process.exit(1) skips the\n' +
-  'try/finally reap), and its port-mate then dies with an unrelated socket error.\n' +
-  'Give each suite its own port, or reap on exit:\n' +
-  "  process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })"
+  '\nAny suite that exits from inside its try/finally leaks its server, and its\n' +
+  'port-mate then dies with an unrelated socket error. Two fixes, either sufficient:\n' +
+  '  * let run-all.mjs assign PLAYGROUND_PORT per suite (preferred — removes the class)\n' +
+  "  * reap on exit: process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })"
 );
 process.exit(1);
 ```
+
+**Prove it can fail before trusting it:** it exits 1 on today's tree naming 21 ports.
+To see the other direction, point `DIR` at an empty directory — it must exit 2
+("the scan did not run"), not 0.
 
 ## Appendix 4 — duplicated-helper agreement test
 

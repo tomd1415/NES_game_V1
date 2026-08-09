@@ -301,8 +301,15 @@ Standing constraint until then: **do not merge to `main`.**
   > found as the total, when 20 more exit literally inside the try. The deferral is
   > reinstated. See the twice-corrected F11.
 
-- It does not fix the port sharing (11 ports, 23 suites). The two problems **do**
-  compound, on three ports — `18781`, `18783` and `18792`, the last of which has two
-  leakers sharing it. Either fix helps; both is better. Note the fixes are not the
-  same size: unique ports is a 23-file edit, whereas the reap can be closed with one
-  `process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })` per `spawn`.
+- It does not fix the port sharing — **21 ports shared across 42 suites**
+  (re-measured 2026-08-09; this bullet said 11 and 23 for a few hours, which was the
+  same undercount as the leak, from the same cause: suites spell the port five
+  different ways and I matched one). The two problems **do** compound: 7 suites both
+  leak and share a port, on 6 ports.
+
+  The recommendation has changed with the number. Do **not** hand-assign 42 unique
+  ports — have `run-all.mjs` allocate one per suite and pass `PLAYGROUND_PORT`, which
+  the server already honours. That removes the class rather than re-counting it, and
+  reduces the guard to "no suite may contain a port literal", a rule with no spellings
+  to miss. The reap is separate and still one line per `spawn`:
+  `process.on('exit', () => { try { srv.kill('SIGTERM') } catch {} })`.
