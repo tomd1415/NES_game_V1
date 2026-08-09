@@ -66,7 +66,16 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
 - **Studio E2E:** `npx playwright test` from repo root (config auto-boots the
   server). Specs in `tools/studio-tests/`.
 - **Native:** `cd native && QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest`
-  (404 tests, ~5 min).
+  on a set-up machine. **In a dev container there is no `.venv`** — it is created by
+  the setup in `native/README.md` and gitignored — so use the `pytest` already on
+  `$PATH`: `cd native && QT_QPA_PLATFORM=offscreen pytest -q`. It is a pipx install,
+  so `python3 -m pytest` will *never* work here and says nothing about availability;
+  that exact confusion once had this suite declared unrunnable for nine days
+  (`docs/guides/LESSONS_LEARNT.md`, first entry).
+
+  Count: **204 passed, 161 skipped** here (no Qt). The often-quoted "404 tests, ~5
+  min" was measured with the full venv and is unconfirmed since — see
+  `native/README.md` for the bounds.
 
   Three hard-won rules for native tests. The suite was once **fully green while the
   app rendered a transparent emulator frame, a white-on-white panel, and crashed on
@@ -104,6 +113,18 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
   and 0 failures** (F3 fixed 2026-08-07). A red line means a real one. The 161
   skips mean one thing only: this box has no Qt, so the **UI layer is untested,
   not passing**, until the container is rebuilt.
+
+  **But green does not yet mean sound.** Probing the gates on purpose found four
+  that pass for reasons unrelated to what they claim to watch — two holes still
+  open (**F14**, **F17**: both enumerate part of the program with a regex over raw
+  source, so a comment satisfies one and a changed quote character defeats the
+  other) and two registries with no gate at all (**F15** `MODE_CLASSES`, **F16**
+  the starter picker — in both, a thing written but not registered is silently
+  absent from the app). Before quoting any suite here as evidence, read
+  [`docs/guides/what-the-gates-prove.md`](docs/guides/what-the-gates-prove.md):
+  one row per gate, what a pass does and does not establish, and which have
+  actually been watched go red. All four fixes are additive and written out in
+  step 9 of the close-out plan.
 
   **Still open:** three starter ROMs (`smb`, `runner`, `geodash`) changed between
   v63 and v75 — recorded in

@@ -246,10 +246,40 @@ complete answer; silence is not.
 
 </details>
 
-## Step 9 — Merge
+## Step 9 — Close the two gate holes, and guard the two unguarded registries
 
-**Done when:** builder suite green, native suite green-or-explained, E2E run, and
-the "Active thread" line in `CLAUDE.md` deleted rather than reworded.
+*Added 2026-08-09. This step did not exist when the plan was written, and its absence
+was the plan's own version of the bug it exists to close: every step above ends "done
+when the gate is green", and four of the gates were then found to be green for reasons
+unrelated to what they claim to watch. A merge justified by those gates inherits that.*
+
+All four are additive — no ROM output changes, no product behaviour changes — and each
+has a probe already written that proves it goes red first. Do them in this order; the
+first two are holes in existing gates, the last two are missing gates.
+
+| # | Fix | Probe that must go red first |
+| --- | --- | --- |
+| a | **F17** — `test_the_cases_exercise_every_check`: enumerate `Problem(...)` ids with `ast`, not a regex over source, and assert no id is built dynamically | register a validator with `id='x'` in **single** quotes that never fires; today the gate stays green |
+| b | **F14** — `test_codegen_stays_snapshottable`: match `INCLUDE_DIRS` string *literals*, not a substring of raw source | delete the `'tools/nes_studio_core'` entry, leave a comment naming the path; today the gate stays green |
+| c | **F15** — add a test that every `Mode` subclass on disk is in `MODE_CLASSES` | add a throwaway `ui/modes/probe.py`; the test must name it |
+| d | **F16** — drive the starter picker from `StarterCatalog.styles()`, keeping `STARTERS` as a label lookup; or failing that, `ast`-assert its keys equal the manifest's | add a style to the manifest and not to `STARTERS` |
+
+Two of these need no Qt (a, b, c) and run on this box today. (d) touches a Qt module,
+so if it is done as a test rather than a refactor, parse the tuple with `ast` rather
+than importing it — the same technique (c) needs.
+
+**Done when:** each of the four probes above has been watched go red with the fix in
+and green with it out, and the result recorded in the "Which of these has been watched
+fail" section of [`../../guides/what-the-gates-prove.md`](../../guides/what-the-gates-prove.md).
+
+Detail and ready-to-apply code: F14–F17 in
+[`../../handoffs/2026-08-06-overnight-review-findings.md`](../../handoffs/2026-08-06-overnight-review-findings.md).
+
+## Step 10 — Merge
+
+**Done when:** builder suite green, native suite green-or-explained, E2E run, step 9's
+four probes watched red-then-green, and the "Active thread" line in `CLAUDE.md` deleted
+rather than reworded.
 
 Standing constraint until then: **do not merge to `main`.**
 
