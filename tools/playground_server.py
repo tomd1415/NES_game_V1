@@ -3589,9 +3589,19 @@ def _resolve_engine_versions(body):
     """(target_engine, current_engine) for build provenance / versioning.
 
     The original multi-page site defaults to v1 (stable/pinned); the Studio
-    targets the latest.  For v1..v2 the static cc65 sources are identical, so
-    this is provenance-only today — it is the hook where a future engine whose
-    static sources diverge would build the target's snapshot."""
+    targets the latest.
+
+    This is still provenance-only: the returned target is recorded, and every
+    build uses the CURRENT sources regardless of it.  Nothing here reads
+    `tools/engines/v<N>/`.
+
+    What has changed is the reason.  This said "for v1..v2 the static cc65
+    sources are identical, so there is nothing to select yet" — that stopped
+    being true at v19/v20, when the hot paths moved to hand-written 6502 under
+    `steps/Step_Playground/src/*.s`, and we are now on v78.  The snapshots that
+    a selecting build would need are frozen and have been for a long time; the
+    selection step itself is simply unbuilt.  See "Build-time selection &
+    fallback" in docs/design/engine-versioning.md for the intended algorithm."""
     try:
         current_engine = int((ROOT / "tools" / "engines" / "ENGINE_VERSION").read_text().strip())
     except Exception:
