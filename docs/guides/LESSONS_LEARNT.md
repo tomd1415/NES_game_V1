@@ -343,6 +343,54 @@ Related: the same session's `git reset --hard HEAD~1` discarded an uncommitted f
 twice, for the same underlying reason — a destructive step taken while thinking about
 something else. Commit first, then probe, then restore.
 
+## 2026-08-08 — A number nobody measured reads exactly like one somebody did
+
+Two wrong numbers surfaced this week, from unrelated documents, both load-bearing:
+
+* `native/README.md`: "the **fifteen** Qt-dependent modules by
+  `pytest.importorskip`". Twelve are guarded. Fifteen was the count of red lines
+  removed; three of those were tests that never needed Qt and were made to run.
+* F11: "**32 suites** bypass the `try/finally` reap". Three do. Thirty-three suites
+  *have* a reap — the number counted the population with the guard rather than the
+  population that defeats it.
+
+Neither was a lie and neither was careless in the moment: each is a real count of a
+real set, attached to the wrong sentence. That is what makes the failure mode hard.
+**In prose, a measured number and an invented one are typographically identical.**
+There is no hedge, no "approximately", nothing to make a reader pause — so the number
+gets quoted onward, and by the third document it is simply a fact.
+
+The 32 did real damage. The close-out plan deferred the fix as "a 32-file harness
+change that deserves its own session", and that deferral survived three passes. The
+work was three files. A number that is too big does not merely misinform, it
+**reprioritises**: it makes cheap work look expensive and it gets that work skipped.
+
+What actually helps, in order of how much:
+
+1. **Write the command next to the number.** `11 ports shared by 23 of 72 suites
+   (tools/builder-tests/ports-unique.mjs)` can be re-run by the next reader in
+   seconds. `23 suites share a port` cannot be checked at all without redoing the
+   work from scratch, so nobody does.
+2. **Re-measure before you rely on a number, especially your own.** Both of these
+   were mine, written days earlier, and I quoted them back confidently.
+3. **Distrust round-ish numbers and numbers that justify a decision.** "32 files, so
+   it needs its own session" is the shape to look at hardest — the number is doing
+   the arguing.
+
+And a trap inside the recount itself, because the obvious re-measurement was wrong
+twice:
+
+* `grep -l importorskip tests/` returns **13** files, one of which only names the
+  call inside an assertion message. Counting files that contain a string is not
+  counting files that do a thing.
+* `gallery.mjs`'s `fail()` calls `process.exit(**2**)`, not `1`. A recount grepping
+  `process.exit(1)` silently misses it — a wrong number surviving its own
+  verification, which is this file's oldest theme in a new costume.
+
+Both recounts had to be done with `ast`/structural parsing, or by reading the
+control flow (`try` at 60, `finally` at 143, `exit` at 149 — that suite does *not*
+leak), before they meant anything.
+
 ## Older entries
 
 Traps specific to the native app — assert pixels not document fields, destroy
