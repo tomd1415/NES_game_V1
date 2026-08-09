@@ -121,6 +121,28 @@ comment explaining why there is no longer a `PPU_MASK` write there.
 - **Fix, now in the file:** strip `/* */` and `//` comments before testing
   generated code. Any assertion about emitted source should run on code, not text.
 
+### Placeholder copy outlives the state it described
+
+When `window.StudioModes[id]` is missing, the dock renders "This mode arrives
+later in the redesign — the *X* tools dock in here next." That was accurate in
+Phase 0. All eight modes have shipped since, so the branch is now reachable only
+when a module **fails to load** — a renamed file, a syntax error, a `<script>`
+tag dropped from `studio.html`.
+
+- **Looked like:** a feature that hasn't been written yet.
+- **Actually:** a feature that is written, and broken. A teacher reads the
+  message, believes it, and never reports it — so the failure has no route to
+  anyone who could fix it.
+- **Why it is worth its own entry:** the other silent failures in §1 are *quiet*.
+  This one is confident and reassuring, which is worse — it does not merely fail
+  to raise the alarm, it supplies a wrong explanation good enough to stop the
+  reader looking. Anything phrased "not yet", "coming soon" or "temporarily
+  unavailable" deserves the question *what happens to this text when the
+  temporary state ends?*
+- **Fix, now in the file:** the copy stays (a pupil can do nothing about a failed
+  load), but the real reason goes to the console once per mode, and
+  `mode-module-registry.spec.js` fails if any mode on the rail has no module.
+
 ---
 
 ## 2. Two lists that must agree, with nothing checking that they do
@@ -206,6 +228,19 @@ to die, precisely as `startServer` had assumed 1500 ms was enough to bind.
 This one *is* guarded (`run-all.mjs`, "engine version constants agree"), which is
 why it has never bitten — a useful counter-example proving the guard is what makes
 the difference, not the care of the person editing.
+
+### The mode rail and the mode registry
+
+`MODES` in `studio.js` builds the rail; the eight `window.StudioModes.<id>`
+registrations live in eight separate files, each needing its own hand-written
+`<script>` tag in `studio.html`. Three places to keep in step, and until
+2026-08-09 nothing checked them — see §1 for what a mismatch showed the pupil.
+
+Worth copying from the fix: `MODES` is closure-private, so the gate does not read
+it. It enumerates the **rail the DOM actually built** and the **registry object
+that actually exists**, then compares those. A version that scanned `studio.js`
+and `studio.html` for names would have matched the comment explaining the gate
+and passed on it — the §1 mistake, made twice.
 
 ---
 
