@@ -181,6 +181,13 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
 **404 tests, ~5 minutes** (last measured with the full venv; unverified since).
+Bounds, measured 2026-08-08 on a box without Qt: `pytest --collect-only` reports
+**353**, and `ast` finds **420** functions named `test*` across the tree — so 404 is
+plausible and still wants confirming on a machine that has PySide6.
+
+Before treating a green run as safety, read
+[`docs/guides/what-the-gates-prove.md`](../docs/guides/what-the-gates-prove.md) —
+what each gate does and does not establish, and which have been watched go red.
 
 ### Running it without PySide6
 

@@ -26,6 +26,11 @@ Repository-wide contribution, ownership and cross-team review rules live in
   [README](../README.md), then
   [`guides/PUPIL_GUIDE.md`](guides/PUPIL_GUIDE.md) for the editor
   walkthrough.
+- **About to trust a green test run?** Read
+  [`guides/what-the-gates-prove.md`](guides/what-the-gates-prove.md). One page per
+  gate: what you may claim when it passes, what you may not, and which ones have
+  actually been watched go red. On this branch four separate gates were green for the
+  wrong reason.
 - **About to trust a claim in one of these docs?** Read
   [`guides/LESSONS_LEARNT.md`](guides/LESSONS_LEARNT.md) first. It records the
   things this project has already believed and been wrong about — a tool reported
