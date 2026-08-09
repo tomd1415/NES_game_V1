@@ -180,6 +180,27 @@
     var c = window.NesRender.NES_PALETTE_RGB[idx & 0x3F];
     return (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0]; // ABGR little-endian
   }
+  // Report a mode hook that threw — ONCE per mode+hook, never per frame.
+  //
+  // renderLive() runs on every interaction, so a bare console.error here would
+  // reproduce the #37 complaint exactly: a fault re-thrown into a console no
+  // pupil reads, 60x a second, while the screen sits there looking fine. But
+  // swallowing it outright — which both onRenderOverlay catches did until
+  // 2026-08-09 — is worse than either. A mode whose overlay throws just stops
+  // drawing its grid/hover/selection, for ever, with nothing anywhere saying so;
+  // and the renderTV catch a few lines below has always logged, so the silence
+  // was an oversight rather than a decision.
+  var modeHookFailed = {};
+  function reportModeHookError(hook, mode, err) {
+    var key = (mode || '?') + '.' + hook;
+    if (modeHookFailed[key]) return;          // said once is said
+    modeHookFailed[key] = true;
+    try {
+      console.error('[studio] ' + key + ' threw — that overlay is suppressed for '
+        + 'the rest of this session. Further failures are not repeated.', err);
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
+
   function renderLive() {
     renderRulers();
     var canvas = $('tv-canvas');
@@ -188,7 +209,10 @@
     // A mode may take over the TV entirely (e.g. CHARS/TILES paint canvas).
     if (mod && typeof mod.renderTV === 'function') {
       try { mod.renderTV(g, ctx); } catch (e) { console.error('[studio] renderTV', e); }
-      if (typeof mod.onRenderOverlay === 'function') { try { mod.onRenderOverlay(g, ctx); } catch (e2) {} }
+      if (typeof mod.onRenderOverlay === 'function') {
+        try { mod.onRenderOverlay(g, ctx); }
+        catch (e2) { reportModeHookError('onRenderOverlay', currentMode, e2); }
+      }
       return;
     }
     var img = g.createImageData(256, 240);
@@ -222,7 +246,8 @@
     if (!(mod && mod.hidePlayerPreview)) drawPlayerPreview(g);
     // Modes may draw an overlay (grid, hover cell, selection) on top.
     if (mod && typeof mod.onRenderOverlay === 'function') {
-      try { mod.onRenderOverlay(g, ctx); } catch (e) {}
+      try { mod.onRenderOverlay(g, ctx); }
+      catch (e) { reportModeHookError('onRenderOverlay', currentMode, e); }
     }
   }
   // A calm LIVE preview of the hero at its resting spot on the floor, so
