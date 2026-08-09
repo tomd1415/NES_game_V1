@@ -920,7 +920,7 @@
     palSec.appendChild(el('div', { class: 'dock-note',
       text: 'Keys: 0 1 2 3 pick a palette. 4 (or `) also picks 0, for keyboards where 0 is a stretch.' }));
     palSec.appendChild(el('div', { class: 'dock-note', text: 'Backdrop colour is shared by every palette. Colour is chosen per 2×2 block on the NES — use the 🎨 Colour tool.' }));
-    var clashes = countAttrConflicts(bg);
+    var clashes = countAttrConflicts(bg, ctx);
     if (clashes > 0) {
       palSec.appendChild(el('div', { class: 'dock-note', style: 'color:var(--warn)',
         text: '⚠ ' + clashes + ' block' + (clashes === 1 ? '' : 's') + ' mix two palettes (red X on screen). The NES shows one palette per 2×2 block — recolour with 🎨 to fix.' }));
@@ -1167,13 +1167,22 @@
   }
 
   // Count 2×2 chunks whose four cells disagree on palette (attribute lie).
-  function countAttrConflicts(bg) {
+  function countAttrConflicts(bg, ctx) {
     if (!bg || isMetatileBg(bg) || !Array.isArray(bg.nametable)) return 0;
+    // Count on the screen the pupil is LOOKING at, using the same view offset as
+    // the red-X overlay above. Until 2026-08-09 this scanned screen 0 always
+    // while the overlay was offset-aware, so on any level wider than one screen
+    // the dock's number and the marks on the TV described different places: a
+    // clash on screen 2 drew Xs but reported 0, and a clash on screen 0 reported
+    // a count the pupil could not find anywhere. The message says "red X on
+    // screen", so the count has to mean the same screen.
+    var c = ctx || _octx || (global.Studio && global.Studio.ctx) || null;
+    var vo = c ? off(c) : { cx: 0, cy: 0 };
     var nt = bg.nametable, n = 0;
     for (var qy = 0; qy < SCREEN_H; qy += 2) for (var qx = 0; qx < SCREEN_W; qx += 2) {
       var seen = -1, clash = false;
       for (var dy = 0; dy < 2 && !clash; dy++) for (var dx = 0; dx < 2; dx++) {
-        var cc = nt[qy + dy] && nt[qy + dy][qx + dx];
+        var cc = nt[qy + dy + vo.cy] && nt[qy + dy + vo.cy][qx + dx + vo.cx];
         var pv = cc ? (cc.palette | 0) : 0;
         if (seen < 0) seen = pv; else if (pv !== seen) { clash = true; break; }
       }
@@ -1284,7 +1293,7 @@
     },
     // Test/inspection hooks.
     _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, showTypes: showTypes, selRect: selRect, clipboard: clipboard }; },
-    _conflicts: function () { var s = global.Studio.getState(); return countAttrConflicts(s.backgrounds[s.selectedBgIdx] || s.backgrounds[0]); },
+    _conflicts: function () { var s = global.Studio.getState(); return countAttrConflicts(s.backgrounds[s.selectedBgIdx] || s.backgrounds[0], global.Studio.ctx); },
     _set: function (o) { if (o.stampTile != null) stampTile = o.stampTile; if (o.paintPalette != null) paintPalette = o.paintPalette; if (o.paintType != null) paintType = o.paintType; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);
