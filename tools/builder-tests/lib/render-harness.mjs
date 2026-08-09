@@ -168,6 +168,18 @@ export async function stopServer(srv) {
     srv.kill('SIGKILL');                                          // it ignored SIGTERM
     for (let i = 0; i < 10 && !dead(); i++) await sleep(100);     // up to 1s more
   }
+  // Surviving SIGKILL means uninterruptible sleep, and it should be very rare —
+  // but returning quietly here would leak a live server holding the port, and
+  // the cost lands on somebody else: the NEXT suite to use this port fails its
+  // pre-flight with "something is already serving", which points at the wrong
+  // run entirely. Fail where the leak happens, and say which process it is.
+  if (!dead()) {
+    throw new Error(
+      `stopServer: pid ${srv.pid} survived SIGTERM and SIGKILL after 4s and still ` +
+      'holds its port. Nothing here can reclaim it — kill it by hand.\n' +
+      '  Left alone it will fail the next suite that uses this port, with an error ' +
+      'that blames that suite rather than this one.');
+  }
 }
 
 // POST /play. Returns the raw server JSON plus `romBytes` (a Buffer) when ok.
