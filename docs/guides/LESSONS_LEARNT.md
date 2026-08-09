@@ -343,6 +343,45 @@ Related: the same session's `git reset --hard HEAD~1` discarded an uncommitted f
 twice, for the same underlying reason — a destructive step taken while thinking about
 something else. Commit first, then probe, then restore.
 
+## 2026-08-09 — My probe harness reported a hole that was really a gate not running
+
+I built a harness to break a gate on purpose and check it goes red. It decided the
+outcome from pytest's **exit code**. Three probes came back "STAYED GREEN — hole",
+which for a coverage gate is a serious finding, and I nearly wrote them up as one.
+
+They were skips. The harness ran pytest with a stripped `env=` that had no `node` on
+`PATH`, and the parity test skips itself when the web harness cannot run. `pytest`
+exits **0** for a skip, and it exits 0 for "no test matched that node id" as well. So
+three different states — the gate held, the gate never ran, the gate does not exist
+under that name — arrived as the same integer, and the one I wanted to detect was the
+least likely of the three.
+
+The tell was there and I nearly read past it: the summary line said `1 skipped in
+0.03s`, printed right next to the word GREEN in my own output.
+
+**What would have told me sooner:** assert the run happened, not just that nothing
+complained.
+
+```python
+if not re.search(r"\d+ (passed|failed)", summary):
+    raise AssertionError(f"gate did not run ({nodeid}): {summary}")
+```
+
+With that in, the same three probes re-ran and split cleanly: one genuine hole (F17),
+one control red, one phantom red. Without it, the control would have read as a hole
+too, and I would have reported a gate as broken when it works.
+
+Two things generalise:
+
+* **This is the third time on this branch that an exit code has been read as an
+  outcome** — `tail` masking node's status, `git checkout --` printing a complaint and
+  exiting 0, now pytest's skip. A harness built specifically to catch checks that pass
+  without running is worth nothing if the harness itself passes without running.
+* **A tool that is careless about the difference between "fine" and "did not happen"
+  is the tool you use to audit other tools at your peril.** Give the harness the same
+  meta-test you are demanding of the code: make it fail on purpose. Pointing it at a
+  node id that does not exist should raise, and now does.
+
 ## 2026-08-08 — A number nobody measured reads exactly like one somebody did
 
 Two wrong numbers surfaced this week, from unrelated documents, both load-bearing:

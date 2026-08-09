@@ -836,13 +836,8 @@ Probed earlier in the same session: the starter ROM-hash assertion (one-byte fli
 the fixtures-are-tracked guard (twice — the first probe was invalid), and both
 directions of `snapshot-engine.mjs --check`.
 
-**Still never watched fail**, and worth saying rather than leaving implied: the
-individual assertions *inside* those files that were not the one I broke —
-`test_manifest_states_its_provenance`, the ">30 modules were found" sanity check in
-the PySide6 probe, the `other-import-error` classification, and most of
-`test_baseline_manifest`'s remaining assertions. Hand-probing one assertion per file
-is not the same as probing the file, and doing it by hand is how F14 got written in
-the first place. That is the argument for automating this rather than repeating it.
+~~**Still never watched fail**~~ — *this list was worked through on 2026-08-09; see the
+second addendum below.*
 
 ---
 
@@ -896,11 +891,19 @@ should not re-derive them:
   consumes the tuple, and `scanline_problem` is appended *after* the loop on purpose,
   with a comment, because the web appends it last and the parity contract is on
   order as well as content.
-* **`test_the_cases_exercise_every_check`** enumerates problem ids by regex over the
+* ~~**`test_the_cases_exercise_every_check`** enumerates problem ids by regex over the
   Python source, which is the same text-instead-of-structure shape as F14. Here it
   holds: all 35 `Problem(` constructions use a literal `id="..."`, so the
   enumeration is complete. It would go blind to an id built with an f-string or a
-  variable — worth a comment saying so if one is ever added, rather than a change now.
+  variable — worth a comment saying so if one is ever added, rather than a change now.~~
+
+  > **⚠ Wrong, corrected 2026-08-09 — this is F17 below.** I judged this one by reading
+  > it and declared it fine. Probing it took four minutes and it went the other way: a
+  > registered validator whose id is written in **single** quotes is invisible to the
+  > regex, and the gate stays green. The f-string case I hypothesised is not the
+  > realistic one; changing a quote character is. Reading a check and reasoning that it
+  > holds is the thing this whole document exists to stop, and I did it anyway, in a
+  > section headed "found nothing".
 
 ## One shape left standing deliberately
 
@@ -912,3 +915,176 @@ emits a problem, the assertion fails), so this is not invisible in CI. What is
 uncovered is a validator that throws only on real project states: the pupil quietly
 loses a warning and nobody hears about it. A one-line `log.warning` in the handler
 would close that without changing the behaviour. Left as a note, not a finding.
+
+---
+
+# Addendum 2 — the remaining assertions, probed (2026-08-09)
+
+The previous addendum ended by admitting that hand-probing one assertion per file is
+how F14 happened, and that the rest were still only claims. This is the rest of them,
+done with a harness rather than by hand
+(`probe_json` / `probe_file`: mutate → run one node id → restore → **verify the
+restore by hash**). Eighteen probes, every restore verified, tree clean afterwards.
+
+## The starter-fixture gate — every assertion is load-bearing
+
+| Break applied to `manifest.json` | Result |
+| --- | --- |
+| a style removed from `fixtures` | red |
+| `source_tree_dirty` → `true` | red |
+| `what_a_pass_means` deleted | red |
+| `what_a_pass_means` **reworded to claim correctness** | red |
+| `source_commit` abbreviated to 7 chars | red |
+| `engine_version_requested` → 64 | red |
+| `rom_size` off by one byte | red |
+| `input_project_unchanged` → `false` | red |
+| `generated_source_sha256` wrong | red |
+| `play_request_json_sha256` wrong | red |
+| a fixture named that is not on disk | red |
+
+Eleven for eleven. Worth noting the fourth: the caveat assertion is not a presence
+check that a rewrite could slip past — rewording it into a claim of correctness fails
+too, because it matches on the phrase `does not mean correct`.
+
+## The PySide6 import guard — sound, and the probe shows *why* it is built that way
+
+Two of these four probes stayed green, and that is the design working rather than a
+hole:
+
+| Break | `..._probe_actually_looked...` | `..._needs_pyside6...` | `..._some_other_reason` |
+| --- | --- | --- | --- |
+| the module walk matches nothing | **red** | green (vacuous) | — |
+| a test module gains a broken import | — | green (module invisible) | **red** |
+
+`test_no_test_module_needs_pyside6_to_be_imported` passes vacuously in both cases, by
+construction: it filters for `UNGUARDED` in a dict, and an empty dict has none. Its
+two siblings exist precisely to catch that, and both fired. This is the shape the
+`prove-coverage` skill calls a known-failures list with a meta-test, and it is the
+only gate in this repo that already had one. Fully probed; no change wanted.
+
+---
+
+# F16 — a third hand-maintained starter list, in the UI, with nothing checking it
+
+*Found 2026-08-09. Same shape as F15, one layer up, and this one has a comment that
+states the invariant it does not enforce.*
+
+There are three lists of the seven starter styles:
+
+| Where | Form | Guarded? |
+| --- | --- | --- |
+| `native/src/nes_studio/resources/starters/manifest.json` | the shipped resource | source of truth |
+| `native/tests/fixtures/phase0/starters/manifest.json` | the frozen corpus | ✅ `test_packaged_starters_are_the_frozen_browser_fixture_bytes` asserts the two agree **byte-for-byte**, per style |
+| `native/src/nes_studio/ui/project_catalog.py` → `STARTERS` | the pupil-facing picker | ❌ **nothing** |
+
+The first two are properly tied together — I went looking for a gap there and there
+isn't one, which is worth recording so nobody re-checks it. The third is open:
+
+```python
+#: The starters shipped in `resources/starters/`, with names a pupil can choose
+#: between. Keys must match the manifest.
+STARTERS: tuple[tuple[str, str, str], ...] = (...)
+```
+
+"Keys must match the manifest" is an invariant written as a comment, and nothing
+enforces it. Be careful reading the grep, because it is not empty:
+
+```
+$ grep -rn "project_catalog\|STARTERS\|NewProjectDialog" native/tests/
+native/tests/unit/test_fixtures_are_tracked.py:25:STARTERS = FIXTURES / "phase0" / ...
+native/tests/unit/test_fixtures_are_tracked.py:30:    manifest = json.loads((STARTERS ...
+native/tests/unit/test_fixtures_are_tracked.py:32:        STARTERS / name / filename
+```
+
+All three are a **different, unrelated** `STARTERS` — a local `Path` constant in that
+test. No test imports `project_catalog`, names `NewProjectDialog`, or reads the UI
+tuple. A name collision that makes an unguarded thing look grepped-for is worth the
+extra three seconds of reading. The two ways it breaks:
+
+* **a style added to the manifest but not to `STARTERS`** — the starter ships on disk
+  and no pupil can select it. That is *the bug this module was written to fix*: its own
+  docstring says "six of the seven starters that ship on disk could not be opened at
+  all". Silent, and only a human clicking `New game` would notice.
+* **a key in `STARTERS` that the manifest does not have** — `StarterCatalog.create()`
+  raises `KeyError: Unknown starter style` when the child presses OK. Loud, but in
+  front of a class.
+
+There is already a runtime enumeration built for exactly this — `StarterCatalog.styles()`,
+which returns `tuple(self._manifest["fixtures"])`. It has **zero callers**
+(`grep -rn "\.styles()" native/src native/tests` → nothing). The accessor that would
+make the list self-maintaining exists and the UI hand-copies the list instead.
+
+**Fix, in preference order** (not applied — code, and unattended work here is
+documentation-only): have `NewProjectDialog` drive the list from
+`StarterCatalog.styles()` and keep `STARTERS` as a label/blurb lookup, so a missing
+entry degrades to a plain name rather than a missing starter. Failing that, a test that
+`ast`-parses `STARTERS` — no Qt needed, so it runs on this box — and asserts its keys
+equal the manifest's, in order.
+
+---
+
+# F17 — the parity coverage gate has F14's hole, and I had already cleared it by eye
+
+*Found 2026-08-09, by probing a check I had reviewed and passed the day before.*
+
+`test_the_cases_exercise_every_check` is the gate that stops a validator drifting from
+the web's because no corpus case makes it fire. It enumerates the ids to demand cases
+for like this:
+
+```python
+declared = set(re.findall(r'id="([a-z0-9-]+)"', source))
+```
+
+A regex over raw source — the same text-instead-of-structure shape as F14. Probed by
+adding a real, registered validator that never fires on the corpus:
+
+| Probe | Result |
+| --- | --- |
+| id written as `id='probe-silent-drift'` (**single** quotes) | **stayed green** |
+| the same validator with `id="probe-silent-drift"` (control) | red — "these checks have no case" |
+| a made-up id appearing only inside a `#` comment | red (a phantom the gate then demands a case for) |
+
+So the enumeration is fooled in both directions: it misses real checks and invents
+absent ones. The second is a nuisance — a spurious red someone will "fix" by editing
+the comment. The first is the hole, and it is quiet: the new validator is registered,
+it runs, it is compared against nothing, and the suite is green.
+
+**Severity.** No live bug — all 35 `Problem(...)` constructions today use a literal
+double-quoted `id=`, so the enumeration is complete *at this commit*. It opens the day
+someone writes a validator in a different quote style, which nothing in the repo
+prevents and no linter here enforces.
+
+**Fix, and it is a drop-in.** The robust technique is already in this repo, in the
+neighbouring gate: `test_codegen_stays_snapshottable` uses `ast` for its delegation
+half — the half that went red when probed — and a regex for its include half, the half
+that is F14. Use `ast` here too:
+
+```python
+tree = ast.parse(source)
+calls = [n for n in ast.walk(tree)
+         if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "Problem"]
+declared, dynamic = set(), []
+for call in calls:
+    kw = next((k for k in call.keywords if k.arg == "id"), None)
+    if kw is None:
+        continue                      # Problem(id="") default; not a reportable check
+    if isinstance(kw.value, ast.Constant):
+        declared.add(kw.value.value)
+    else:
+        dynamic.append(call.lineno)   # else the enumeration under-collects in silence
+assert not dynamic, f"Problem() builds its id dynamically at lines {dynamic}"
+```
+
+Measured at this commit: 35 `Problem()` calls, 34 distinct literal ids, **0 dynamic** —
+and the `ast` set and the regex set are *identical* today. So adopting it turns nothing
+red now; it only closes the door. Verify it by re-running the single-quote probe above
+and watching it go red.
+
+## The lesson underneath both F14 and F17
+
+Both were written by me, two days apart, and in both cases I checked the structural
+half with `ast` and the textual half with a regex, in the same file, without noticing
+the asymmetry. The rule worth keeping: **if a check enumerates part of the program,
+parse the program.** A regex over source cannot tell code from a comment, and the
+failure is always in the safe-looking direction — it finds less, so the gate demands
+less, so it passes.
