@@ -55,6 +55,33 @@ test('every mode on the rail has a registered module', async ({ page }) => {
     'studio-<mode>.js did not load, or loaded without registering').toEqual([]);
 });
 
+// ...and the other direction, which the two tests above cannot see.
+//
+// Both of those are driven by the rail: they iterate the buttons and look each
+// one up in the registry, so anything present ONLY in the registry is invisible
+// to them. A module that registers itself but was dropped from `MODES` has no
+// button, cannot be reached by a pupil, and is dead weight shipped to every
+// browser — with nothing failing anywhere.
+//
+// This test exists because of what was found in snapshot-engine.mjs the same day:
+// a gate that had been watched failing, and still had an entire direction
+// missing, because the loop was driven by one of the two lists. That applies to
+// the tests above as much as to anything else, so it is checked here rather than
+// assumed. See LESSONS-LEARNT.md, "Only one direction of a two-way comparison".
+test('every registered module is reachable from the rail', async ({ page }) => {
+  const rail = await railModes(page);
+  expect(rail.length).toBeGreaterThan(0);
+
+  const registered = await page.evaluate(() => Object.keys(window.StudioModes || {}));
+  expect(registered.length, 'window.StudioModes is empty — the mode modules did not load, ' +
+    'and this assertion would otherwise pass on nothing').toBeGreaterThan(0);
+
+  const unreachable = registered.filter((id) => !rail.includes(id));
+  expect(unreachable, `registered but not on the rail: ${unreachable.join(', ')} — ` +
+    'the module ships to every browser and no pupil can reach it, because MODES ' +
+    'in studio.js has no entry for it').toEqual([]);
+});
+
 test('no mode shows the "arrives later" placeholder', async ({ page }) => {
   const rail = await railModes(page);
   expect(rail.length).toBeGreaterThan(0);
