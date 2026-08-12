@@ -157,6 +157,38 @@ If your suite needs **two** servers (e.g. to compare the ASM and pure-C engines)
 claim both numbers explicitly in a comment — `enemy-bump.mjs` uses `PORT` and
 `PORT + 1`, so 18854 is taken without ever appearing as a literal.
 
+### Ports are NOT unique per suite — and that is only safe because the run is serial
+
+Run the grep above and you will find the same number under several suites. As of
+2026-08-12, **19 ports are claimed by more than one file**, one of them by four:
+
+| Port | Suites |
+| ---- | ------ |
+| 18792 | `asm-ai-corpus`, `asm-vscroll`, `shared-play`, `smb-render` |
+| 18791 | `asm-corpus`, `asm-realproj`, `smb-level` |
+| 18793 | `asm-ai-corpus`, `asm-vscroll`, `topdown` |
+| 18794, 18795 | `asm-ai-bench`, `asm-enemy`, `asm-smb-bench` |
+| 18796 | `asm-ai-wide`, `asm-scene`, `hud-nmi-flicker` |
+| 18869 | `pickup-collect`, `scroll-2x2`, `stomp-basic` |
+| 18871 | `render-p1-oam-cursor`, `sfx-events`, `style-starters` |
+| …and 11 more, each shared by exactly two suites | 18781, 18783, 18789, 18797, 18844, 18847, 18861, 18862, 18863, 18867, 18872 |
+
+This is **not** a bug today, and the reason is a single line: `run-all.mjs`
+executes suites strictly serially — `for (const suite of suites) { spawnSync(…) }`
+(around line 746), which blocks until each finishes. One server exists at a time,
+so reuse is free.
+
+**The point of writing this down is what it forbids.** An 8.5-minute suite is an
+obvious candidate for "just run these in parallel", and that change would collide
+19 ports the moment it landed — not in the suite you edited, but in whichever pair
+happened to overlap. Anyone doing it must give every suite a unique port *first*.
+It would at least fail loudly rather than silently: since the 2026-08-07
+hardening, `startServer` pre-flights the port and throws if anything already
+answers there (see "How `startServer` proves it owns the port" above).
+
+The corollary for running suites by hand: two at once is not supported, whatever
+the port map suggests. Run them one at a time, or check the map first.
+
 ## Env vars worth knowing
 
 Read by `tools/playground_server.py`; the test harness sets several for you.
