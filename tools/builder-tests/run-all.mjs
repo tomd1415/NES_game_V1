@@ -148,8 +148,10 @@ check('no builder-test suite claims the Studio E2E port', () => {
     throw new Error(
       `port ${e2ePort} belongs to the Studio E2E server (playwright.config.js) ` +
       `but is also claimed by: ${offenders.join(', ')}\n` +
-      '  Give each suite a free port above 18894, staying under 19000.\n' +
-      '  See docs/guides/TEST-SERVERS.md.');
+      '  Give each suite a free port above the current highest, staying under 19000.\n' +
+      '  docs/guides/TEST-SERVERS.md has the map and the grep that finds it — do\n' +
+      '  not guess, the suites spell the port several ways (PORT, PORT_C/_A/_D, an\n' +
+      '  inline startServer(...), and PORT + 1 in enemy-bump.mjs).');
   }
 }) || (anyFail = true);
 
@@ -743,6 +745,28 @@ console.log('');
 const suites = fs.readdirSync(__dirname)
   .filter(f => f.endsWith('.mjs') && f !== path.basename(__filename))
   .sort();
+// An empty suite list must not read as success — and this is the enumeration it
+// matters most for. Without this guard the loop below runs zero times, `anyFail`
+// stays false, and the runner prints "✅ All Builder regression checks pass"
+// having executed NONE of the 114 suites, golden byte-identical ROM hashes
+// included. Measured 2026-08-12 by pointing the filter at an extension that
+// matches nothing: 0 suites, exit 0, green headline, with only the 38 syntax
+// checks and 21 invariants actually run.
+//
+// This is the mirror image of the `shipped.length === 0` guard added above for
+// the syntax enumeration — same file, same shape, and this half was missed.
+//
+// KNOWN LIMIT: it catches "none", not "fewer than there should be". A filter
+// that broke down to three suites would still pass. Any floor here would be a
+// hand-maintained number that drifts, which is the failure mode this file is
+// already full of lessons about; the honest guard is the one that cannot go
+// stale.
+if (suites.length === 0) {
+  check('builder-test suites found', () => {
+    throw new Error(`no *.mjs suites found in ${__dirname} — wrong directory, or the filter broke`);
+  });
+  anyFail = true;
+}
 for (const suite of suites) {
   const full = path.join(__dirname, suite);
   process.stdout.write('suite ' + suite + ' ... ');
