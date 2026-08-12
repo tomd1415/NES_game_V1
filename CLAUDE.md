@@ -92,7 +92,14 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
 
 ## Where to start
 
-- **Active thread (2026-08-06, updated):** `main` is merged into the native branch
+- **⚠ `main` has moved on (checked 2026-08-12):** 33 commits ahead, now at engine
+  **v78**, and it has its own **`v76`** — a different one from this branch's. A
+  project stamped `engineVersion: 76` is currently ambiguous. Read
+  [`docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md)
+  **before merging or bumping the engine.** The line below describes the state as of
+  2026-08-06 and its first clause is now stale.
+- **Active thread (2026-08-06, updated):** `main` ~~is merged into~~ *was merged into*
+  the native branch
   and the v64–v75 codegen port into `nes_studio_core` is **done** — builder suite
   green. **Both of the real native failures are now fixed**, and the engine is at
   **v76**:

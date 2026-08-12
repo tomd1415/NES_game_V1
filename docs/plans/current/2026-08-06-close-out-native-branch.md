@@ -275,11 +275,35 @@ fail" section of [`../../guides/what-the-gates-prove.md`](../../guides/what-the-
 Detail and ready-to-apply code: F14–F17 in
 [`../../handoffs/2026-08-06-overnight-review-findings.md`](../../handoffs/2026-08-06-overnight-review-findings.md).
 
+## Step 9b — Merge `main` in, and resolve the `v76` collision *(added 2026-08-12)*
+
+`main` is **33 commits ahead** and at engine **v78**. Both lines created a `v76` from
+an identical `v75`, meaning different things — `main`'s is the #37 OAM fix (30 files,
+ROM output changed), this branch's is the snapshot-scope bump (41 files, ROM output
+unchanged). Full measurement and the recommended resolution:
+[`../../handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](../../handoffs/2026-08-12-main-divergence-and-the-v76-collision.md).
+
+Do this **before** step 9, not after: `main` already fixed the 18790 port double-claim
+and added a guard to `run-all.mjs`, and it carries `docs/guides/TEST-SERVERS.md`, which
+does not exist here. Doing more port work on this branch first would be redoing it.
+
+1. Merge `origin/main`. Expect 38 files touched on both sides; 31 are the `v76/`
+   directory — take `main`'s wholesale rather than merging file-by-file.
+2. Renumber this branch's bookkeeping bump to **v79**: `ENGINE_VERSION` and
+   `engine-version.js` to 79, CHANGELOG entry moved under `## v79` with a line saying
+   why, and `tools/engines/v76/` restored to `main`'s.
+3. Re-run `node scripts/snapshot-engine.mjs` — **after committing**, because it reads
+   HEAD (F9).
+
+**Done when:** `node scripts/snapshot-engine.mjs --check` prints `v79 … 41 of 41`, the
+builder suite is green, and no two snapshot directories describe different engines
+under the same number.
+
 ## Step 10 — Merge
 
-**Done when:** builder suite green, native suite green-or-explained, E2E run, step 9's
-four probes watched red-then-green, and the "Active thread" line in `CLAUDE.md` deleted
-rather than reworded.
+**Done when:** step 9b done and the `v76` ambiguity gone, builder suite green, native
+suite green-or-explained, E2E run, step 9's four probes watched red-then-green, and the
+"Active thread" line in `CLAUDE.md` deleted rather than reworded.
 
 Standing constraint until then: **do not merge to `main`.**
 

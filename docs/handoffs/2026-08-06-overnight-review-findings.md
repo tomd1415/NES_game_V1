@@ -567,6 +567,16 @@ rather than missing one, which is the correct bias for a guard. Spot-checked: th
 newly-found clashes on `18789`, `18868` and `18872` are all real declarations, not
 comments.
 
+> **Still an undercount — a sixth spelling, found 2026-08-12.** `playwright.config.js:13`
+> binds `Number(process.env.STUDIO_TEST_PORT || 18790)`, clashing with the three
+> builder suites that claim 18790. My scan never opened that file because I bounded it
+> to `tools/builder-tests/*.mjs`. Having just written that the arms were not
+> enumerable by inspection, I then scoped the search by directory and published the
+> number anyway — the directory was one more unstated assumption of the same kind.
+> `main` has already fixed this specific clash and guarded it (`ce26f44`), for the
+> reason its commit message gives: *"a doc note is not a check"*. See
+> [`2026-08-12-main-divergence-and-the-v76-collision.md`](2026-08-12-main-divergence-and-the-v76-collision.md).
+
 One trap for anyone re-counting: `gallery.mjs`'s `fail()` calls `process.exit(2)`,
 not `1`, and so do many of the literal exits. A checker that greps for
 `process.exit(1)` undercounts badly — which is how a wrong number survives being
