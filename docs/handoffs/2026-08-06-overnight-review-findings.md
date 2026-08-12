@@ -672,9 +672,47 @@ stop their own, so the two never meet — `start.sh` says so in its header comme
 
 So the check has to name the port range, not the parent:
 
-```bash
-pgrep -af playground_server.py | grep -E '187[0-9]{2}|188[0-9]{2}' && echo LEAKED
+> **Third version of this check — the first two were wrong (2026-08-12).** It scanned
+> the process list, and `main`'s `docs/LESSONS-LEARNT.md` §5 warns that `pgrep -f`
+> matches the shell running it. Testing that revealed something worse: the obvious
+> bracket-pattern fix (`awk '/[p]layground…/'`) **also** false-positives, because the
+> bracket trick hides the *pattern* from itself, not the *target string* — and any
+> command that checks for leaked servers has both the process name and the port numbers
+> sitting in its own command line. Both versions reported `LEAKED` with nothing leaked.
+>
+> The fix is to stop asking `ps` a question the kernel can answer directly: a leaked
+> server *is* "something listening on a test port".
+
+```python
+#!/usr/bin/env python3
+"""Is anything LISTENING on a builder-test port? Asks the kernel, not `ps`."""
+import sys
+
+LO, HI, LISTEN = 18768, 18897, "0A"          # 0A = TCP_LISTEN
+
+ports = set()
+for path in ("/proc/net/tcp", "/proc/net/tcp6"):
+    try:
+        lines = open(path).read().splitlines()[1:]
+    except OSError:
+        continue
+    for line in lines:
+        f = line.split()
+        if len(f) > 3 and f[3] == LISTEN:
+            ports.add(int(f[1].rsplit(":", 1)[1], 16))
+
+if not ports:                                 # a scan that finds nothing must not
+    print("FAIL: no listening sockets at all -- the scan did not run")
+    sys.exit(2)                               # look like a scan that found nothing wrong
+leaked = sorted(p for p in ports if LO <= p <= HI)
+print(f"listening sockets: {len(ports)}; in {LO}-{HI}: {leaked or 'none'}")
+sys.exit(1 if leaked else 0)
 ```
+
+Proven both ways before being written down: clean tree → `in 18768-18897: none`, exit 0;
+bind 18800 and re-run → `in 18768-18897: [18800]`, exit 1. Use Python, not `awk` — this
+container's `awk` is `mawk`, which has no `strtonum`, so a hex-parsing `awk` script
+prints nothing and exits 0 (`main`'s §1).
 
 Worth stating because it is the mirror of this register's usual complaint. A check
 that cannot fail is decoration; a check that cannot *pass* is worse, because the

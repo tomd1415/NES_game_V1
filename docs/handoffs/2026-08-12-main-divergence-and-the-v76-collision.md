@@ -482,3 +482,78 @@ runner assigning ports, again, from a third direction.
   *interface*, not its loopback) and why that is safe. This branch's untracked
   `start.sh` sets `PLAYGROUND_HOST=0.0.0.0` by hand — it is a local workaround for
   something `main` fixed properly in `devcontainer.json`'s `containerEnv`.
+
+## `main`'s lessons §3–§6 — three more corrections, and one method we can use
+
+### §4 turns our open owner question into an answerable one
+
+This is the most useful thing in the file for this branch. `main`, on a golden ROM hash
+that moved:
+
+> The tempting move is to paste the new hash in. That records the change without proving
+> its cause. **What was done instead:** rebuilt with the *old* `builder-modules.js`
+> (`git show fac8ac2:…`) and confirmed it reproduced the old hash exactly, proving the
+> new hash came from this change and nothing else. **Re-pinning a golden value is only
+> safe when you have shown sole causation.** Otherwise you have laundered an unrelated
+> regression into the baseline.
+
+We have exactly that situation open and have been treating it as a *decision*: three
+starter ROMs (`smb`, `runner`, `geodash`) changed between v63 and v75, recorded in
+[`2026-08-06-starter-fixture-rebaseline.md`](2026-08-06-starter-fixture-rebaseline.md),
+with "whether that was intended is an owner question" carried forward for a week.
+
+It is at least partly a **measurement**, and `main` has the procedure: bisect the engine
+versions, rebuild each starter at the version before and after each candidate change,
+and find the version where each ROM moved. If each drift lands on a version whose
+CHANGELOG entry explains it, the answer is "intended" without anyone having to remember.
+If one lands on a version claiming "goldens UNCHANGED", that is a real finding.
+
+Not run here — it is a cc65 build per fixture per version, which is exactly the heavy
+work this box is not for. But it converts an indefinite owner decision into a bounded
+job for a machine that can build, and that is worth knowing before asking again.
+
+### §5 caught a check I had published — and its obvious fix was wrong too
+
+> `pgrep -f` matches the shell that is running it.
+
+F11 proposed `pgrep -af playground_server.py | grep -E '187[0-9]{2}|188[0-9]{2}'`.
+Tested it: it returned clean — **by luck**. The invoking shell's command line does
+contain `playground_server.py`, but the port filter `187[0-9]{2}` does not match the
+literal characters `187[0-9]{2}` sitting in that same line. Spell the ports out and it
+self-matches.
+
+The obvious fix — `main`'s own bracket pattern, `awk '/[p]layground_server\.py/'` —
+**also false-positived**, immediately, in the very command that introduced it. The
+bracket trick hides the *pattern* from itself; it does nothing about the *target
+string*, and a command that checks for leaked servers necessarily contains both the
+process name and the port range in its own arguments.
+
+Replaced with a check that asks the kernel instead of `ps`: read `/proc/net/tcp` for
+sockets in `TCP_LISTEN` and report any in 18768–18897. Proven both directions (clean →
+exit 0; bind 18800 → exit 1) and it exits **2** if it sees no listening sockets at all.
+In Python, not `awk`, because this container's `mawk` has no `strtonum` — which is
+`main`'s §1, and is how a `/proc/net/tcp` parser once reported "nothing is listening"
+about a server that was.
+
+**The generalisation, which belongs in whichever lessons file survives the merge:** a
+check whose subject appears in its own command line cannot be made safe by escaping the
+pattern. Ask a different oracle. For "is a server leaked", the kernel's socket table is
+the oracle; the process list is a proxy that happens to include your own question.
+
+### §6 has a note that its own branch has since falsified
+
+> **Never run the E2E suite and the builder tests at the same time.** They share 18790
+> and it fails silently (§2).
+
+They no longer share 18790 — `ce26f44` moved the three suites to 18895–18897 and added
+the guard, on the same branch. The advice may still be sound on a four-core box, but
+the stated reason is now false, and it sits two sections below the entry describing the
+fix. Worth correcting when the files are merged: this is the "stale list gets trusted"
+shape, inside the file about that shape.
+
+### §3, for the record, matches our experience
+
+*"If the failures do not touch your diff, suspect the environment before the code"* —
+and host load is invisible from inside the container. Worth remembering when the Qt
+suite finally runs here: a slow first run after the rebuild is more likely to be the box
+than the code.
