@@ -137,6 +137,26 @@ test('every game style walks through all its steps', async ({ page }) => {
     { pick: 'Auto-runner', type: 'runner', tut: 'runner-first' },
     { pick: 'Racing', type: 'racer', tut: 'racer-first' },
   ];
+
+  // This test is called "every game style", and that list is hand-written — so
+  // adding a sixth tutorial would silently narrow it while the name went on
+  // claiming completeness. Enumerate the real registry and make the claim true.
+  //
+  // `scratch` is deliberately excluded: it is not a game style, and it has its
+  // own test ("the long from-scratch tutorial…") a few cases above. It is named
+  // here rather than filtered by a pattern so that a NEW tutorial cannot slip
+  // into the exemption by accident.
+  const COVERED_ELSEWHERE = ['scratch'];
+  const registered = await page.evaluate(() => Object.keys(window.STUDIO_TUTORIALS || {}));
+  expect(registered.length, 'window.STUDIO_TUTORIALS is empty — the tutorial files did not ' +
+    'load, and walking zero styles would otherwise pass').toBeGreaterThan(0);
+  const uncovered = registered
+    .filter((id) => !COVERED_ELSEWHERE.includes(id))
+    .filter((id) => !styles.some((s) => s.tut === id));
+  expect(uncovered, `tutorial(s) registered but not walked by any style here: ${uncovered.join(', ')}. ` +
+    'Add them to `styles` above (with the label its button shows and the game type it ' +
+    'sets), or to COVERED_ELSEWHERE if another test owns them.').toEqual([]);
+
   for (const st of styles) {
     await launch(page, st.pick);
     const info = await page.evaluate(() => {
