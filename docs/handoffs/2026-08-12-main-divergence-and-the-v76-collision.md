@@ -276,3 +276,60 @@ and written down in the right place — next to the check. The merged tree wants
 `main`'s comment-stripping **and** a floor assertion, and ultimately the structural fix
 that removes hard-coded ports altogether, after which both checks reduce to one
 unambiguous rule.
+
+---
+
+# Sweep finished: the remaining shared files, and the one that merges silently wrong
+
+The seven non-`v76/` files touched on both sides, all three-way merged in a scratch
+directory (`git merge-file`, nothing in the repo touched):
+
+| File | Merge result |
+| --- | --- |
+| `.gitignore` | clean — `main` adds only `*.bak-*`, so this branch's `!native/tests/fixtures/**/*.nes` negation survives. Checked because that negation is what makes the ROM contract test executable at all. |
+| `tools/builder-tests/run-all.mjs` | clean, all 28 checks retained (previous section) |
+| `tools/engines/{CHANGELOG.md,ENGINE_VERSION}` | the v76 collision, covered above |
+| `tools/engines/README.md` | **1 conflict** — loud |
+| `docs/README.md` | **1 conflict** — loud |
+| `CLAUDE.md` | **1 conflict** — loud |
+| `docs/design/engine-versioning.md` | **no divergence** — `main` never touched it (187 lines both sides) |
+
+Three conflict loudly and are therefore safe. The last row is the dangerous one.
+
+## The false statement that a clean merge would preserve
+
+Both `tools/engines/README.md` and `docs/design/engine-versioning.md` carry a
+"two eras" table this branch wrote:
+
+> | **v1 – v75** | 30 files, no Python |
+> | **v76 onward** | plus `tools/nes_studio_core/` |
+
+`main` never edited `engine-versioning.md`, so that table merges through untouched —
+and the merge itself makes it **false**, because `main`'s v76, v77 and v78 are all
+30-file snapshots with no Python. The document would then assert something wrong about
+three published versions, with nothing anywhere to contradict it.
+
+`tools/engines/README.md` does conflict — but on a different hunk entirely, about
+whether to quote the current version number in prose. So git raises the cosmetic
+disagreement and passes the substantive falsehood through in silence. That is this
+whole document's thesis in one file.
+
+The irony is worth keeping: `main`'s side of that very conflict is
+
+> The authoritative current number is `ENGINE_VERSION` in this directory —
+> deliberately not repeated here, because **a hard-coded version in prose goes stale
+> the next time one ships.**
+
+`main` is right, this branch's side is the one that hard-codes, and the staleness
+`main` warns about is exactly what the untouched table two screens above is about to
+suffer.
+
+**Fixed now, in a form that cannot recur.** Both documents state the rule derived from
+the artefact rather than as a version range — *a snapshot covers the codegen iff its
+own `manifest.json` lists files under `tools/nes_studio_core/`* — with the one-line
+command that answers it, run verbatim before shipping (on this branch today: v76 only,
+41 files). Any version number is now labelled a *result*. This is the same move as
+letting the runner assign ports: derive the fact from the thing, don't restate it in
+prose where it can drift.
+
+Take `main`'s wording on the conflicted hunk when merging.

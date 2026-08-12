@@ -45,8 +45,28 @@ were authored for.
 > | Snapshots | Cover |
 > | --- | --- |
 > | **v1 – v75** | JS + cc65 sources only. **30 files, no Python.** |
-> | **v76 onward** | the above **plus `tools/nes_studio_core/`**, the server's ROM codegen. |
+> | **v76 onward** *(on this branch)* | the above **plus `tools/nes_studio_core/`**, the server's ROM codegen. |
 >
+> **Do not read this boundary as a version range.** A snapshot covers the Python
+> codegen **iff its own `manifest.json` lists files under `tools/nes_studio_core/`**.
+> That is the definition; any version number quoted here is a *result*, and results go
+> stale. Ask the artefacts:
+>
+> ```bash
+> for m in tools/engines/v*/manifest.json; do
+>   python3 -c "import json,sys; d=json.load(open(sys.argv[1])); \
+>     print(sys.argv[1].split('/')[2], len(d['files']), \
+>     'python' if any(f['path'].startswith('tools/nes_studio_core/') for f in d['files']) else 'NO-python')" "$m"
+> done
+> ```
+>
+> On this branch today that returns Python for **v76 only**. It will *not* stay that
+> way: `main` has since published v76, v77 and v78 as 30-file snapshots with **no**
+> Python, and its v76 is a different snapshot from this branch's. Merging `main` makes
+> any sentence of the form "v76 onward includes the codegen" false for three published
+> versions — see
+> [`docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](../../docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md).
+
 > Up to v75 the codegen that emits most of the ROM was **outside** the snapshot,
 > so two matching snapshots in that range say nothing about whether it changed.
 > Treat v1–v75 as records of the templates and cc65 project, not as full records
