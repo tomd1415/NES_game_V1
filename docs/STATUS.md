@@ -6,10 +6,12 @@ work cold, and the file to refresh *last* before putting work down.
 
 - **Last updated:** 2026-08-12 (unattended maintenance — failures that reported a
   *wrong* reason rather than none, both suites re-run green; no engine change).
-  ⚠️ **15 commits are local and unpushed** (this one included), covering
-  everything in the 2026-08-09/12 section below, so `origin/main` does not yet
-  have any of it. `origin/main` is at `780cf5c` and has not moved, so the push is
-  a clean fast-forward.
+  ⚠️ **The 2026-08-09/12 work below is local and unpushed** — `origin/main` is at
+  `780cf5c` and has not moved, so it is a clean fast-forward whenever it goes.
+  For the count, ask git rather than this file:
+  `git log --oneline origin/main..main | wc -l` (16 at the time of writing, and
+  that number is exactly the kind that rots — an earlier draft of this line said
+  15 and was wrong one commit later).
 - **Branch:** `main`
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
