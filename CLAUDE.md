@@ -98,6 +98,13 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
   [`docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md)
   **before merging or bumping the engine.** The line below describes the state as of
   2026-08-06 and its first clause is now stale.
+- **⚠ `.devcontainer/` is gitignored on this branch and tracked on `main`.** The
+  Dockerfile on this disk installs the Qt runtime libraries and runs a
+  `post-create.sh` that builds the `nes_core` wheel and creates `native/.venv`;
+  `main`'s installs no Qt at all. **None of it is in the repository here**, so a fresh
+  clone cannot build a container that runs the native app, and `git add
+  .devcontainer/…` will decline in silence. Same handoff, section "The container
+  provisioning exists only on this disk".
 - **Active thread (2026-08-06, updated):** `main` ~~is merged into~~ *was merged into*
   the native branch
   and the v64–v75 codegen port into `nes_studio_core` is **done** — builder suite

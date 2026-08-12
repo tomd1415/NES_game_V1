@@ -315,6 +315,48 @@ from scratch — the full cost of the shortcut, paid in full.
 
 ---
 
+## 2026-08-12 — The broad ignore rule is the one that costs you something
+
+`.gitignore:3` is `*.nes`. It silently swallowed seven committed ROM baselines and a
+contract test's assertion never once executed — that is the 2026-08-06 entry below, and
+it cost nine days.
+
+The same shape has now happened twice more in this repo, and the pattern is sharper
+than "beware .gitignore":
+
+| Rule | Intent | What it actually took |
+| --- | --- | --- |
+| `*.nes` | ignore build output | + seven fixture baselines (F5) |
+| `.devcontainer/` | ignore local container mess | + the Dockerfile, `devcontainer.json`, `init-firewall.sh` and `post-create.sh` — i.e. every file that makes the app buildable |
+| `*.bak-*` (on `main`) | ignore `Dockerfile.bak-tools-174621` | exactly that, and nothing else |
+
+The third is the interesting one. `main` and this branch hit the *same* irritation —
+timestamped backup files cluttering `.devcontainer/` — within weeks of each other.
+`main` ignored **the backups**. This branch ignored **the directory**. Both make
+`git status` clean; only one of them loses the configuration.
+
+* **What it looks like:** nothing. `git status` is clean, which is what you wanted, and
+  `git add .devcontainer/post-create.sh` prints **no output at all** when it declines.
+  There is no state in which the repository tells you the file is missing — you have to
+  ask a different question (`git ls-tree`, `git check-ignore -v`, `git status
+  --ignored`).
+* **The false theory:** "it is in the repo, I can see it in the editor." An ignored
+  file and a committed file look identical in every tool that shows you a filesystem.
+* **The check that settles it:** for anything a documented workflow depends on, verify
+  it is *tracked*, not that it *exists* —
+
+  ```bash
+  git ls-tree -r --name-only HEAD .devcontainer/ | wc -l    # 0 means it is not there
+  ```
+
+  and when writing an ignore rule, **name the files you mean, not the place they live**.
+  A directory rule is a bet that nothing important will ever be put in that directory.
+
+The cost here has not landed yet, and that is only luck: `devcontainer up` reads the
+workspace on disk, so the rebuild works *on this machine*. The provisioning that would
+un-skip 161 tests is four untracked files, one lost container away from gone, and
+unreviewable in the meantime.
+
 ## 2026-08-08 — Restoring a probe mutation is a step that can silently not happen
 
 Breaking a gate on purpose means editing a tracked file and putting it back. I did

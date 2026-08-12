@@ -98,6 +98,73 @@ docs/README.md                    tools/engines/{CHANGELOG.md,ENGINE_VERSION,REA
 
 Both are reasons to merge `main` in *before* doing any more port work here, not after.
 
+## The container provisioning exists only on this disk
+
+Checked while looking for other divergences that a merge would resolve *cleanly but
+wrongly*. This one is not a merge hazard so much as a durability one, and it touches
+an action currently sitting with the owner.
+
+```
+$ git check-ignore -v .devcontainer/Dockerfile
+.gitignore:13:.devcontainer/    .devcontainer/Dockerfile
+
+$ git ls-tree -r --name-only HEAD .devcontainer/ | wc -l
+0
+$ git ls-tree -r --name-only origin/main .devcontainer/
+.devcontainer/Dockerfile  .devcontainer/devcontainer.json  .devcontainer/init-firewall.sh
+```
+
+`main` tracks three devcontainer files and has improved them four times since the fork
+(rootless Docker + egress allowlist, a repaired `claude` bin, **Chromium baked into the
+image**, and binding the dev server to `0.0.0.0`). This branch tracks **none** — commit
+`40b52ba` ("added devcontainer to gitignore", 2026-07-20, one line, no rationale) put
+the whole directory behind an ignore rule.
+
+The files on this disk are not main's. They are a further-developed variant that:
+
+* installs the **Qt runtime libraries** — `libgl1 libegl1 libxkbcommon0`, the full
+  `libxcb-*` set — which `main`'s Dockerfile does not (`grep -c "libxcb\|libgl1\|libxkbcommon"`
+  against `main`'s Dockerfile returns **0**);
+* adds `python3-venv python3-dev`, and a `postCreateCommand` running
+  `post-create.sh`, which builds the `nes_core` wheel from Rust source and creates
+  `native/.venv` — *the venv that `CLAUDE.md`'s documented native test command
+  depends on, and which does not exist in this container.*
+
+So the provisioning that would let the UI layer be tested rather than skipped — the
+161 skips, the largest uncovered surface on this branch — is **not in the repository at
+all**. It is four untracked files on one disk, and because the ignore rule is in force,
+`git add .devcontainer/post-create.sh` says nothing when it declines. Whoever wrote
+them may reasonably believe they are committed.
+
+**Scope this correctly.** The owner's pending rebuild (`devcontainer up
+--workspace-folder … --remove-existing-container`) reads `.devcontainer/` from the
+workspace **on disk**, so it will work here today. The exposure is that the config
+cannot be reviewed, cannot reach `main`, and does not survive a fresh clone or a lost
+container.
+
+It is also the same bug as F5 wearing different clothes: a broad ignore pattern
+swallowing files a documented workflow depends on. Note how `main` hit the same mess —
+its `*.bak-*` rule was added because of `.devcontainer/Dockerfile.bak-tools-174621`,
+which is sitting on this disk right now — and solved it *narrowly*, by ignoring the
+backups. This branch solved it *broadly*, by ignoring the directory, and lost the
+configuration.
+
+**Suggested resolution** (not applied — it changes what is tracked, which is the
+owner's call):
+
+1. Drop `.devcontainer/` from `.gitignore`; keep `main`'s `*.bak-*`, which already
+   covers the only files that genuinely should not be committed.
+2. Track `Dockerfile`, `devcontainer.json`, `init-firewall.sh`, `post-create.sh`.
+   Checked for credential-shaped content (`token|secret|password|api_key|BEGIN
+   .*PRIVATE|ssh-rsa`) — nothing matched in any of the four.
+3. On merge, **union** the two Dockerfiles rather than choosing: this branch's Qt libs
+   and venv bootstrap, `main`'s pinned `PLAYWRIGHT_VERSION`, firewall handling and
+   `claude`-bin repair. Neither side is a superset.
+
+Doing (1) and (2) would also close close-out plan step 7 ("Run the Studio E2E — never
+executed here, no Chromium"): both Dockerfiles already bake Chromium, so that blocker
+is a rebuild away rather than an open question.
+
 ## A correction this forces to my own port finding
 
 F11's port analysis on this branch scanned `tools/builder-tests/*.mjs` and concluded

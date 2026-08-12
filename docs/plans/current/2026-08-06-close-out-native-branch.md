@@ -181,6 +181,13 @@ npx playwright test
 **Done when:** it runs at all — this suite has never executed here. Record the
 result whatever it is.
 
+> **Not the open question it looks like (2026-08-12).** "No Chromium" is a property of
+> the *current* container, not of the repo: **both** this branch's on-disk Dockerfile
+> and `main`'s bake Chromium at image build. So this step is a container rebuild away,
+> not an investigation. It is entangled with step 1 and with the fact that this
+> branch's `.devcontainer/` is untracked — see
+> [`../../handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](../../handoffs/2026-08-12-main-divergence-and-the-v76-collision.md).
+
 ## Step 8 — ✅ **DONE 2026-08-06 — shipped as engine v76**
 
 `e1de8c9` (the bump) + `052ffbc` (the snapshot), in that order, because
