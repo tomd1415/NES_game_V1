@@ -296,6 +296,15 @@ does not exist here. Doing more port work on this branch first would be redoing 
 
 1. Merge `origin/main`. Expect 38 files touched on both sides; 31 are the `v76/`
    directory — take `main`'s wholesale rather than merging file-by-file.
+   `tools/builder-tests/run-all.mjs` merges cleanly with **zero** conflicts and keeps
+   all 28 checks (verified by three-way merge in a scratch dir and comparing every
+   `check()` label). Two caveats, both measured:
+   - `main`'s new port guard goes **red** on this tree, correctly, naming
+     `asm-corpus/asm-player/asm-realproj`. It resolves itself: `main` fixed those three
+     and this branch never touched them.
+   - `main`'s new "devcontainer Playwright pin" check **passes vacuously** wherever
+     `.devcontainer/` is absent — which is a fresh clone of this branch. Un-ignoring
+     `.devcontainer/` (below) is what makes it a real check rather than decoration.
 2. Renumber this branch's bookkeeping bump to **v79**: `ENGINE_VERSION` and
    `engine-version.js` to 79, CHANGELOG entry moved under `## v79` with a line saying
    why, and `tools/engines/v76/` restored to `main`'s.

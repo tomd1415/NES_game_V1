@@ -191,3 +191,88 @@ Related: [`2026-08-06-overnight-review-findings.md`](2026-08-06-overnight-review
 (F11 and the gate findings), the close-out plan's merge steps in
 [`../plans/current/2026-08-06-close-out-native-branch.md`](../plans/current/2026-08-06-close-out-native-branch.md),
 and [`../guides/LESSONS_LEARNT.md`](../guides/LESSONS_LEARNT.md).
+
+---
+
+# `run-all.mjs` merges cleanly — and that is the thing to check, not to trust
+
+*Added 2026-08-12, continuing the sweep for divergences a merge would resolve cleanly
+but wrongly. A conflict is loud and safe; a clean auto-merge of two incompatible
+changes is silent, so the clean ones are where to look.*
+
+A real three-way merge of the gate itself (`git merge-file`, into a scratch directory,
+nothing in the repo touched):
+
+```
+base 689 lines   main 756   this branch 698   merged 765   conflicts: 0
+```
+
+**The good news, checked rather than assumed.** Extracting every `check('…')` label from
+all four versions: base has 26, `main` 28, this branch 26, and the merged file has all
+**28** — nothing from either side is dropped. This branch added no new checks to the
+runner (its +9 lines are elsewhere), which is why the merge is clean.
+
+## `main`'s two new checks, run against this branch's tree
+
+Not reasoned about — extracted from the merged file with a `check()` shim and executed:
+
+```
+RED   no builder-test suite claims the Studio E2E port
+      port 18790 belongs to the Studio E2E server (playwright.config.js)
+      but is also claimed by: asm-corpus.mjs, asm-player.mjs, asm-realproj.mjs
+RED   devcontainer Playwright pin matches package-lock.json
+      .devcontainer/Dockerfile: ARG PLAYWRIGHT_VERSION not found
+```
+
+The first is the guard working exactly as intended, and it names the same three suites
+this branch's F11 found independently. It resolves on merge: `main` changed all three
+(`asm-corpus` → 18895, `asm-realproj` → 18896, `asm-player` keeps 18788) and this
+branch changed none of them, so the merge takes `main`'s fixed versions and the check
+goes green. Verified with `git diff --quiet BASE main -- <file>` against the same for
+`HEAD`.
+
+The second fails for a reason that has nothing to do with drift: this disk's untracked
+Dockerfile pins Playwright with `npm install -g playwright@1.61.1`, not `ARG
+PLAYWRIGHT_VERSION=`, so the check cannot find what it looks for.
+
+## The part that matters: both new checks pass vacuously on a tree missing their subject
+
+Run the same two checks against a tree with no `.devcontainer/` and an empty
+`tools/builder-tests/` — which is what a **fresh clone of this branch** is, since
+`.devcontainer/` is gitignored here:
+
+```
+PASS  no builder-test suite claims the Studio E2E port
+PASS  devcontainer Playwright pin matches package-lock.json
+anyFail = false
+```
+
+Green, twice, having inspected nothing. The Playwright check says so in its own
+comment — *"Skipped when the devcontainer is absent"* — which is a defensible choice on
+`main`, where the devcontainer is tracked and therefore never absent. Merged into this
+branch it becomes a permanent silent pass, because here the subject of the check is not
+in the repository. **That is F5 arriving through a merge rather than through a
+mistake:** a gate that is sound in the tree it was written for, and decorative in the
+tree it lands in.
+
+It is also a second, independent argument for tracking `.devcontainer/`: doing so is
+what makes `main`'s new guard mean something here. Two reasons now — durability, and
+un-vacuum-ing a gate.
+
+## The two port checkers are complementary; take both halves
+
+`main`'s guard and the rewritten Appendix 3 checker each close a gap the other leaves:
+
+| | `main`'s in-runner check | Appendix 3 checker |
+| --- | --- | --- |
+| Strips `//` and `/* */` before matching | **yes** — prose about the clash cannot trip it | no — over-reports on comments |
+| Asserts the scan actually ran | **no** — an empty directory passes, as above | yes — exits 2, "the scan did not run" |
+| Scope | the one E2E port, across suites | every `18xxx`, all pairs |
+| States its own limit | **yes**, in a comment: a green means "no suite *names* the port", not "no suite can bind it" | yes |
+
+`main`'s honesty about the arithmetic case (`PORT + 1`) is the same limitation this
+branch documented as "the arms are not enumerable by inspection", reached independently
+and written down in the right place — next to the check. The merged tree wants
+`main`'s comment-stripping **and** a floor assertion, and ultimately the structural fix
+that removes hard-coded ports altogether, after which both checks reduce to one
+unambiguous rule.
