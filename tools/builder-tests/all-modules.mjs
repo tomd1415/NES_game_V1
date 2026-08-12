@@ -89,7 +89,20 @@ function makeEverythingState() {
   m.players.submodules.player2.enabled = true;
   m.players.submodules.player1.config.maxHp = 3;
   m.players.submodules.player2.config.maxHp = 3;
-  // Everything optional, on.
+  // Every optional module this PLATFORMER fixture can carry, on — which is not
+  // every module that exists, and the suite's name invites reading it as the
+  // latter. Checked 2026-08-12:
+  //
+  //   - The SMB set (blocks, pipes, powerups, flagpole, smbhud, smbrender)
+  //     cannot be ticked here at all: their own descriptions in
+  //     builder-modules.js say "Needs the 🍄 SMB game type". They are covered by
+  //     the smb-*/starter-smb suites.
+  //   - `globals` is covered by physics-globals.mjs (plus enemy-bump.mjs and
+  //     render-character-bob.mjs), not by a plain .enabled flag here.
+  //
+  // So the gap is in the wording, not the coverage — but "everything optional,
+  // on" is exactly the sentence that would stop someone noticing a real gap
+  // later, which is why it now says which everything.
   m.pickups.enabled = true;
   m.damage.enabled = true;
   m.hud.enabled = true;
