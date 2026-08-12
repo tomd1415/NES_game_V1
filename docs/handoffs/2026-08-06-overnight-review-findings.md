@@ -523,6 +523,42 @@ The original 32 was still not measured — it counted suites that *have* a reap 
 being unmeasured is not the same as being wrong, and this time it was nearly right by
 accident.
 
+### The consequence is worse than I wrote (2026-08-12, from `main`'s notes)
+
+I described the cost of a shared port as the next suite dying with an opaque
+`UND_ERR_SOCKET`. That happens, and it is the *harmless* case, because it is loud.
+`main`'s `docs/LESSONS-LEARNT.md` — a file this branch does not have — documents the
+silent one, and it is verifiable here:
+
+`tools/playground_server.py:2428-2436`. If the port is already in use **and** the
+existing server answers a health ping, it prints
+`Playground server already running … -- nothing to do`, `return`s, and **exits 0**. It
+never binds, so everything the caller set in the environment — `PLAYGROUND_PORT`,
+`PLAYGROUND_ACCOUNTS_DB`, the isolated gallery dir — is silently discarded. The suite
+then runs to completion against a server it did not configure.
+
+So the failure mode is not flakiness. It is **a suite passing while testing the wrong
+thing**, with a different accounts database than the one it set up.
+
+Measured on this branch: four suites pass an isolated `PLAYGROUND_ACCOUNTS_DB` or
+`PLAYGROUND_GALLERY_DIR` — `accounts.mjs`, `account-projects.mjs`, `csrf-origin.mjs`,
+`gallery-auth.mjs` — and **all four share a port with another suite**:
+
+```
+18861  accounts.mjs, palette-render.mjs
+18862  account-projects.mjs, gallery-auth.mjs   <- both are env-isolated, sharing with each other
+18863  csrf-origin.mjs, racer.mjs
+```
+
+Every suite whose correctness depends on an isolated database is on a contended port,
+and the contention resolves by silently reusing whatever is already there. `18862` is
+the sharpest case: two auth suites sharing with each other, so whichever runs second
+inherits the first's database.
+
+This raises the priority of the port work from "tidy the harness" to "the auth suites
+may not be testing what they claim", and it is a second, independent reason to prefer
+the structural fix (the runner assigns the port) over renumbering by hand.
+
 ### Counting the ports is the wrong approach (2026-08-09)
 
 The port figure moved from 11/23 to **21/42** because suites declare a port in at

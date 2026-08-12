@@ -333,3 +333,78 @@ letting the runner assign ports: derive the fact from the thing, don't restate i
 prose where it can drift.
 
 Take `main`'s wording on the conflicted hunk when merging.
+
+---
+
+# There are two lessons files, they will not conflict, and neither reader will know
+
+```
+main:        docs/LESSONS-LEARNT.md        249 lines, created by 6f7b079
+this branch: docs/guides/LESSONS_LEARNT.md 600+ lines, created by 6ba5496
+```
+
+Different directory, different separator (`-` vs `_`), created independently within
+days of each other. They are not a rename of one another, so **git will merge them
+both in without a murmur** and the repo will carry two lessons files. `CLAUDE.md` and
+`docs/README.md` on this branch point at ours; `main`'s point at theirs. Whichever a
+reader finds first, they will have no reason to suspect the other exists — and a
+lessons file that is only half the lessons is precisely the "stale list gets trusted"
+failure it is written to prevent.
+
+They are also organised differently, and `main`'s is better: grouped **by the shape of
+the mistake** ("Checks that report clean because they never ran properly", "Two lists
+that must agree, with nothing checking that they do", "Assuming an outcome instead of
+measuring it") rather than by date, on the stated grounds that *the shape is what
+recurs*. Ours is chronological, which makes it a diary — fine for provenance, poor for
+lookup. **Merge ours into `main`'s taxonomy**, keeping `main`'s path and structure.
+Our dated entries slot into its six headings almost without residue, which is itself
+evidence the taxonomy is the right one.
+
+## What `main` already knew, that I spent this week rediscovering
+
+Reading it is uncomfortable and worth recording precisely.
+
+**`main` documents my exact mistake, including the fix.** Under "Checks that report
+clean because they never ran properly":
+
+> ### A search pattern narrower than the thing it searches for
+> Auditing which ports the builder-test suites claim, with
+> `grep -o "PORT *= *[0-9]\{5\}"`. Clean result, no conflicts — because three suites
+> declare `const PORT_C = 18790, PORT_A = 18791;` and `PORT_C` does not match `PORT *=`.
+> — **What would have told us sooner:** grep for the *value space* (`18[78][0-9][0-9]`),
+> not the *variable name*. When auditing "what claims X", match X.
+
+That is the same error, the same three suites, and the same correction I arrived at
+over two stretches and three wrong numbers. And it continues:
+
+> **The uncomfortable part:** `docs/guides/TEST-SERVERS.md` already said, in bold,
+> *"Do not trust a grep for `PORT =` — the suites spell it several ways"*, and supplied
+> the correct command. The doc was right and had been right for weeks; it was simply
+> not read before the audit that it existed to prevent. **A written warning only works
+> if it is read before the task, not after the mistake.**
+
+So the lesson `main` drew from making this mistake is *read the existing document
+first*, and I then made the same mistake, in the same area, without reading either the
+document or the lesson — neither of which is on this branch. That is not an excuse: I
+knew `main` existed and had not looked at it for three days.
+
+**Two more that overlap directly:**
+
+* *"A regex guard that matched its own explanatory comment"* — `main` found this in
+  `round2-dialogue.mjs` and **fixed** it by stripping comments before matching. That is
+  F14 and F17 exactly, and both are still open here. `main` has solved this class once
+  already; the fix belongs in our two guards too.
+* *"A green snapshot check does not mean your tree is clean"* — `main` broke that gate
+  four ways on 2026-08-06 and it caught three. Same exercise, same day, same conclusion
+  as our probe A.
+
+**And one thing `main` knows that changes a severity here**: the real cost of a shared
+port is not the loud socket error I documented, but a silent one —
+`playground_server.py` finding a healthy server already on the port prints
+`already running -- nothing to do` and **exits 0** without binding, discarding the
+caller's environment. Verified in this branch's own copy at lines 2428-2436. Recorded
+against F11.
+
+The practical conclusion for whoever merges: **`main`'s documentation is not a
+duplicate of ours to be discarded. In at least four places it is ahead of us, and in
+one it corrects us.**

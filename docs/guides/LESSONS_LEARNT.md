@@ -315,6 +315,50 @@ from scratch — the full cost of the shortcut, paid in full.
 
 ---
 
+## 2026-08-12 — The document that would have prevented it was one branch away
+
+I spent two stretches getting the builder-test port count wrong — 11/23, then 14/34,
+then 21/42 — and derived a rule from it about naming the ways a thing can happen before
+counting them.
+
+All of it was already written down. `main`'s `docs/LESSONS-LEARNT.md` (a file this
+branch does not have) contains, under the same heading class:
+
+> **A search pattern narrower than the thing it searches for.** `grep -o "PORT *= *[0-9]\{5\}"`
+> … because three suites declare `const PORT_C = 18790, PORT_A = 18791;` and `PORT_C`
+> does not match `PORT *=`. Grep for the *value space*, not the *variable name*.
+
+Same mistake, same three suites, same correction. And it goes one further: the fix was
+in `docs/guides/TEST-SERVERS.md` — also `main`-only — which said **in bold** "do not
+trust a grep for `PORT =`, the suites spell it several ways" and gave the right
+command. Somebody made this mistake, found the doc that would have prevented it, and
+wrote the meta-lesson: *a written warning only works if it is read before the task.*
+
+Then I made it again.
+
+* **What it looked like:** a clean, self-contained audit. Nothing about the task said
+  "someone has been here" — the branch has no `TEST-SERVERS.md`, and `main` was three
+  days and 33 commits away, which is a distance that does not feel like a distance.
+* **The false theory:** that "check the docs first" means *this branch's* docs. I did
+  check ours. Ours did not know.
+* **The cost:** two stretches, three published numbers, two corrections, and a decision
+  reversed in the close-out plan on the strength of the wrong one.
+
+**The check that would have settled it,** and it is embarrassingly cheap:
+
+```bash
+git fetch -q origin && git log --oneline HEAD..origin/main | head -40
+git diff --stat HEAD...origin/main -- docs/
+```
+
+Thirty seconds, before starting any audit, on any long-lived branch. A branch that has
+not merged its trunk in weeks is not a snapshot of the project; it is one **opinion**
+about the project, and the other opinion may already contain your answer.
+
+The generalisation worth keeping: **"has anyone already solved this?" has a git-shaped
+answer, not just a filesystem-shaped one.** Searching the working tree feels like
+searching the project. It is not.
+
 ## 2026-08-12 — The broad ignore rule is the one that costs you something
 
 `.gitignore:3` is `*.nes`. It silently swallowed seven committed ROM baselines and a
