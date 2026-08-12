@@ -876,6 +876,45 @@ The existing `except (OSError, KeyError, json.JSONDecodeError): continue` is the
 correct in spirit — it just stops meaning "hide this snapshot" and starts meaning
 "label it unknown".
 
+## F19 is bounded: the *primary* save path does not share its shape
+
+Checked immediately, because a finding like F19 is only worth much if you know whether
+it is one place or a pattern. It is one place.
+
+`persistence/projects.py:129 save()` writes through **SQLite inside a transaction**
+(`with self.connection:`), so there is no window between two files at all. It also
+carries optimistic concurrency — `expected_revision` — and on a mismatch it does not
+discard the losing write, it inserts it as a *"(conflict copy)"* and raises
+`StaleRevisionError`. That is a stronger guarantee than most desktop apps manage.
+
+Which makes the contrast the interesting part: **the primary store is transactional and
+loses nothing; the recovery store — the safety net — is the one with the weaker
+guarantee.** The belt is stronger than the braces. F19 is not systemic sloppiness, it is
+the single place that keeps state as two loose files instead of in the database, and it
+is worth fixing precisely because everything around it is careful.
+
+## Every process launch checks its exit status (2026-08-12)
+
+Item 11's "asserting an outcome from an exit code", swept across all Python outside the
+snapshots and `.venv`: **10 process launches, all checked** — by `check=True`, by
+reading `returncode`, or (in `test_fixtures_are_tracked.py:55`) by deliberately ignoring
+it because `git check-ignore` exits 1 when nothing matched, which is the success case
+there and is commented as such.
+
+Two notes on the *method*, both of which are the finding-shape this document is about:
+
+* **My first pass found 1 of the 10.** It matched only fully-qualified `subprocess.run`,
+  so every `from subprocess import run` and every aliased call was invisible — the
+  "search pattern narrower than the thing it searches for" error, committed one day
+  after writing it up. A clean result from a narrow pattern is the least trustworthy
+  kind.
+* **The widened pass then produced 5 false positives**, all of which dissolved on
+  reading: two were an application-level `run()` rather than a subprocess, one was the
+  deliberate `check-ignore` case, and one was a genuine `assert process.returncode == 0`
+  that sat **15 lines** below the call when my proximity window was 14. An arbitrary
+  window is itself a silent-failure shape: nothing about "14" was measured, and it
+  reported a checked call as unchecked.
+
 ## The rest of the sweep was clean, and that is worth recording
 
 * **`tools/nes_studio_core/` — 25 exception handlers, one silent swallow**
