@@ -193,7 +193,7 @@ Like every suite they're picked up automatically by `run-all.mjs`.
 
 Anything less and the Builder release should not ship.
 
-## These gates have been watched failing (2026-08-06)
+## These gates have been watched failing (2026-08-06 → 2026-08-12)
 
 A check nobody has seen fail is decoration. Each of the above was deliberately
 broken, confirmed red, and restored. Recorded so the next person does not have to
@@ -209,6 +209,14 @@ repeat it — and so the one **limitation** found is not rediscovered the hard w
 | Call `startServer(8765)` while the dev server holds it | harness `startServer` pre-flight (added 2026-08-07) | ✅ FAIL in ~90 ms, explaining that a playground server would *not* have failed here |
 | Call `startServer` on a free port | (positive control for the above) | ✅ ready in ~340 ms, child alive, banner confirmed |
 | Break the syntax of `studio-world.js` | JS syntax check (runtime-enumerated, 2026-08-07) | ✅ FAIL — and it would **not** have been caught by the old hand-written list |
+| Point the suite enumeration at an extension matching nothing | suite list non-empty (added 2026-08-12) | ✅ FAIL — before it, 0 suites ran and the runner still printed "✅ All Builder regression checks pass" |
+| `mv steps/Step_Playground/src/asm_macros.inc` aside | snapshot matches HEAD | ✅ FAIL — `MISSING (in the v78 snapshot, not in the engine any more)`. **Before 2026-08-12 this PASSED**, green, "(30 files)" |
+| Corrupt a recorded sha1 (re-run after the above fix) | snapshot matches HEAD | ✅ FAIL — `DRIFT (vs HEAD)`, confirming the pre-existing direction still works |
+| `BUILDER_GUIDE.md` claims 19 modules, code has 18 | guide module accounting (added 2026-08-12) | ✅ FAIL, naming both numbers and listing all 18 real modules |
+| Rename a tabled module to `ghostmodule` (count still 8) | guide module accounting | ✅ FAIL, naming the phantom — proves the row check fires independently of the count check |
+| Rewrite 26 `modules['x']` → `modules["x"]` (valid JS) | guide module accounting | ✅ FAIL — "the declaration form changed, and this check cannot see anything" |
+| Make `stopServer`'s child ignore every signal | harness `stopServer` (2026-08-12) | ✅ throws after 4067 ms, naming the pid, matching the 3s+1s budget |
+| Hand `stopServer` an already-dead child | (positive control for the above) | ✅ returns quietly, and never signals it |
 
 The `startServer` pair is listed because **the first version of that guard was
 wrong and the positive control is what caught it.** It polled `/health` after
@@ -225,11 +233,30 @@ or (b) any uncommitted working-tree change at all. This is deliberate — readin
 from HEAD is what makes the check deterministic — but it means **a green snapshot
 check does not mean your working tree is clean**. Commit first, then trust it.
 
-(The docstring in `scripts/snapshot-engine.mjs` justifies reading from HEAD by
-saying the build "rewrites several tracked engine sources in place". That reason
-has expired: `_build_rom()` now builds in a `TemporaryDirectory` and a `/play`
-leaves the tree clean. The HEAD-reading behaviour is still right for determinism;
-only the stated rationale is stale.)
+There used to be a third blind spot, and it is worth knowing it was there:
+**a deleted or renamed engine file was invisible.** The check walked the live
+files and looked each up in the manifest, so it saw changes and additions but
+never a disappearance — that file is not in the live enumeration, so the loop
+never visited it. Fixed 2026-08-12; the row in the table above records what it
+did before. The lesson generalises past this file: **watching a gate fail proves
+it can fail, not that it covers the ground you think.** This gate *had* been
+watched failing, at the one thing it checked.
+
+**Does everything on disk actually run?** Both runners enumerate at runtime, so
+this should be true by construction — verified end-to-end on 2026-08-12 anyway,
+because "should be" is how coverage gaps survive. 34/34 spec files and 114/114
+suites, nothing skipped. To re-check, compare a run's output against the
+directory:
+
+```bash
+# builder — every .mjs except the runner should appear as a "suite … OK" line
+diff <(node tools/builder-tests/run-all.mjs | grep -oE '^suite [^ ]+' | sed 's/^suite //' | sort -u) \
+     <(ls tools/builder-tests/*.mjs | xargs -n1 basename | grep -v '^run-all.mjs$' | sort)
+```
+
+Playwright needs no equivalent guard: it exits **1** with "No tests found" when
+nothing matches, so an empty run cannot be mistaken for a passing one (checked
+both `--list` and a real run).
 
 ## Adding a new test
 
