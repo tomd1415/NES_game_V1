@@ -408,3 +408,77 @@ against F11.
 The practical conclusion for whoever merges: **`main`'s documentation is not a
 duplicate of ours to be discarded. In at least four places it is ahead of us, and in
 one it corrects us.**
+
+---
+
+# Reading `TEST-SERVERS.md` — what it corrects on both sides
+
+Applying the lesson from the previous section rather than only writing it down: I read
+`main`'s `docs/guides/TEST-SERVERS.md`, the doc whose absence here cost two stretches.
+It corrects this branch **and** `main`.
+
+## It corrects me, and reduces the work
+
+> The runner (`run-all.mjs`) executes suites **one at a time** (`spawnSync` in a loop),
+> so several suites sharing a port is deliberate and harmless — about a dozen pairs do.
+> Only concurrent runs collide.
+
+I treated 21 shared ports across 42 suites as a defect needing remediation. It is a
+deliberate, documented choice, and sequential execution makes it safe. My framing was
+wrong.
+
+But `main`'s reasoning has an unstated premise — **that every suite reaps its server** —
+and 23 do not. Combining both facts, ordered by how `run-all` actually executes
+(`.sort()`, line 673):
+
+```
+18792:  asm-ai-corpus -> asm-vscroll -> shared-play* -> smb-render*    (* = can leak)
+```
+
+**Exactly one** of the 21 shared ports has a leak-capable suite running *before*
+another suite on that port. Elsewhere the sharers never leak, or the leaker runs last
+where a leaked server has nobody left to mislead. And that one pair sets only
+`PLAYGROUND_PORT` — no env overrides to lose — and only arises after `shared-play` has
+already failed.
+
+Neither document had this: `main`'s says "harmless" (assuming the reap), mine said
+"42 files" (not knowing the runner is sequential). The answer is one pair, and the real
+fix is the one `main` already wrote down and left unapplied — make `startServer` assert
+its child survived and poll `/health` instead of sleeping 1.5s, which converts the
+entire class into a loud failure at the point of cause.
+
+## It corrects `main`, in the fix for this very problem
+
+`main`'s new guard tells you where to put a new suite's port:
+
+```
+run-all.mjs:137      'Give each suite a free port above 18894, staying under 19000.'
+TEST-SERVERS.md:140  Take the next free port **above 18897** (the current highest)
+```
+
+18895, 18896 and 18897 are all taken on `main` — they are where `asm-corpus`,
+`asm-realproj` and `asm-player` were moved *by the commit that added the guard*. So
+following the guard's own remediation advice lands you on an occupied port. Two lists
+that must agree, disagreeing, inside the fix for a finding about two lists that must
+agree. The error message wants to say **18897**.
+
+## A seventh spelling, arriving with the merge
+
+> Do not trust a grep for `PORT =` … (`PORT`, `PORT_C`/`PORT_A`/`PORT_D`, an inline
+> `startServer(18882)` in `physics-globals.mjs`, and **`PORT + 1` in `enemy-bump.mjs`**)
+
+`enemy-bump.mjs` claims 18854 without the number ever appearing as a literal. Checked:
+this branch has **no** arithmetic ports (`grep -rnE "PORT\s*[+\-]\s*[0-9]"` → nothing),
+so the "any `18xxx` literal" scan really is a superset *here, today*. It stops being one
+the moment `main`'s four extra suites merge in. The conservative scan is not a
+permanent answer, only a currently-sufficient one — which is the argument for the
+runner assigning ports, again, from a third direction.
+
+## Two other things worth carrying
+
+* **The builder range is 18768–18897**, not 18768–18894 as this branch's notes have it.
+* **`0.0.0.0` in a container is not a widening.** `TEST-SERVERS.md` explains why the dev
+  server must bind all interfaces (Docker delivers a published port to the container's
+  *interface*, not its loopback) and why that is safe. This branch's untracked
+  `start.sh` sets `PLAYGROUND_HOST=0.0.0.0` by hand — it is a local workaround for
+  something `main` fixed properly in `devcontainer.json`'s `containerEnv`.

@@ -550,14 +550,50 @@ Measured on this branch: four suites pass an isolated `PLAYGROUND_ACCOUNTS_DB` o
 18863  csrf-origin.mjs, racer.mjs
 ```
 
-Every suite whose correctness depends on an isolated database is on a contended port,
-and the contention resolves by silently reusing whatever is already there. `18862` is
-the sharpest case: two auth suites sharing with each other, so whichever runs second
-inherits the first's database.
+> **⚠ Overstated — corrected 2026-08-09→12, one day later.** I wrote next that this
+> means "the auth suites may not be testing what they claim". **On a sequential run,
+> they are fine**, and I should have checked before saying it. `run-all.mjs` executes
+> suites `.sort()`ed and one at a time (`run-all.mjs:673`), so a shared port only bites
+> if the *earlier* suite left a server behind. None of `accounts`, `account-projects`,
+> `csrf-origin` or `gallery-auth` shares a port with a suite that can leak, so none of
+> them is exposed. The mechanism is real; my claim about who it reaches was not
+> measured. See the reconciliation below.
 
-This raises the priority of the port work from "tidy the harness" to "the auth suites
-may not be testing what they claim", and it is a second, independent reason to prefer
-the structural fix (the runner assigns the port) over renumbering by hand.
+Every suite whose correctness depends on an isolated database is on a contended port.
+That matters for **concurrent** runs, and `main`'s `docs/guides/TEST-SERVERS.md` says so
+explicitly — sequential execution is why sharing has been tolerated deliberately. (That
+file does not exist on this branch, so there is nothing to link to yet; it arrives with
+the merge.)
+
+### Reconciling this with `main`: the exposure is one pair, not forty-two
+
+`main`'s doc states that several suites sharing a port is *"deliberate and harmless …
+Only concurrent runs collide"*. That is right in general and my framing overstated the
+problem — **but it assumes every suite reaps its server**, and 23 do not. Combining the
+two facts, and ordering by how `run-all` actually executes:
+
+```
+18792:  asm-ai-corpus -> asm-vscroll -> shared-play* -> smb-render*     (* = can leak)
+        shared-play can leak; smb-render runs after it on the same port
+```
+
+**That is the only one.** Of 21 shared ports, exactly one has a leak-capable suite
+running *before* another suite on the same port. Everywhere else the sharers either
+never leak, or the leaker runs last, where a leaked server has nobody left to mislead.
+
+Severity of that one: both set only `PLAYGROUND_PORT`, no `PLAYGROUND_NO_ASM` or
+`PLAYGROUND_ACCOUNTS_DB`, so a captured server is configured the same way — and it only
+arises on a run where `shared-play` has **already failed**. The cost is a confusing
+second failure (or a false pass) downstream of a real one, not a silent wrong result on
+a green run.
+
+So the remediation is far smaller than either document implies: one `process.on('exit',
+…)` in `shared-play.mjs` closes today's only exposure, and `main`'s documented
+`startServer` fix — assert the child survived, poll `/health` instead of sleeping 1.5s —
+closes the whole class permanently. **The ordering is fragile, though:** it is a
+property of alphabetical filenames, so adding a suite whose name sorts between two
+sharers can create a new pair silently. That is the argument for the structural fix
+rather than for fixing this one file.
 
 ### Counting the ports is the wrong approach (2026-08-09)
 
