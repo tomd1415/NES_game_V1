@@ -258,9 +258,32 @@ function extractInline(file) {
   }
   return out;
 }
-for (const page of ['builder.html', 'sprites.html', 'index.html',
-                    'behaviour.html', 'code.html']) {
+// Enumerated from disk, for the same reason the .js list above is — and this was
+// the half that got left behind. The .js fix landed 2026-08-07 after finding 18 of
+// 32 shipped modules silently unchecked; this hand-list sat one screen further
+// down naming five pages when there are eight.
+//
+// Measured 2026-08-12, before the change: audio.html (~22 kB of inline JS) and
+// gallery.html (~7.8 kB) were never syntax-checked at all. studio.html has zero
+// bare <script> blocks — every one carries src= — so listing it costs nothing
+// today, but that is luck rather than design and it is the primary front-end.
+//
+// Enumerating means a new page is covered the day it appears, and a renamed one
+// cannot drop out silently, which is exactly how audio.html and gallery.html were
+// missed: nothing went red when they were added.
+const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
+// A page with no bare <script> is legitimate (studio.html), so an empty CHUNK
+// list is fine — an empty PAGE list is not, and would silently check nothing.
+if (pages.length === 0) {
+  check('HTML pages found', () => {
+    throw new Error(`no .html files under ${WEB} — wrong path, or the glob broke`);
+  });
+  anyFail = true;
+}
+let inlineBlocks = 0;
+for (const page of pages) {
   const chunks = extractInline(page);
+  inlineBlocks += chunks.length;
   chunks.forEach((p, idx) => {
     const ok = check('syntax ' + page + '[' + idx + ']', () => {
       const r = spawnSync('node', ['--check', p], { encoding: 'utf8' });
@@ -268,6 +291,28 @@ for (const page of ['builder.html', 'sprites.html', 'index.html',
     });
     if (!ok) anyFail = true;
   });
+}
+// The pages list being non-empty is not enough. extractInline finds blocks with a
+// regex, and if that regex ever stops matching — a `<script >` spelling it does
+// not expect, a build step that moves the bodies out — every page yields zero
+// chunks, zero checks run, and the whole block passes in silence with all eight
+// pages present. That is the "nothing matched" pole: the offender list is empty
+// every day, whether the detector works or not.
+//
+// Seven blocks exist today across eight pages (studio.html has none by design).
+// Asserting merely "> 0" would still be satisfied by a regex that found one and
+// missed six, but a floor of one is what can be stated without hard-coding a
+// number that rots; the planted-error fixture recorded above is what proves the
+// detector actually works.
+if (inlineBlocks === 0) {
+  check('inline <script> blocks found', () => {
+    throw new Error(
+      `no inline <script> blocks found across ${pages.length} HTML page(s) in ${WEB}.\n` +
+      '  Every page having none is possible but has never been true here — far more\n' +
+      '  likely the extraction regex stopped matching, in which case this whole\n' +
+      '  section was checking nothing.');
+  });
+  anyFail = true;
 }
 
 // Python server syntax.
