@@ -180,6 +180,69 @@ check('devcontainer Playwright pin matches package-lock.json', () => {
   }
 }) || (anyFail = true);
 
+// BUILDER_GUIDE.md admits it documents only some of the Builder modules, and
+// tables the rest so the gap reads as a gap rather than as "these do not exist".
+// That note ends: "if that count has moved, this table has gone stale, which is
+// exactly the failure this note exists to make visible."
+//
+// Nothing made it visible. It named the failure and left it to the next reader to
+// notice — which is the "a doc note is not a check" lesson that the 18790 port
+// clash already taught this project once. So: check it.
+//
+// Both directions, and the arithmetic between them:
+//   a) the claimed total must equal the modules that actually exist
+//   b) documented + tabled must equal that total (no module unaccounted for)
+//   c) every module the table names must really exist (no phantom rows)
+// It deliberately does NOT try to verify which 10 are "documented" — that would
+// mean parsing prose for coverage, and a confident number built on fragile
+// parsing is worse than an honest one maintained by hand.
+check('invariant: BUILDER_GUIDE module coverage matches builder-modules.js', () => {
+  const guide = fs.readFileSync(path.join(ROOT, 'docs', 'guides', 'BUILDER_GUIDE.md'), 'utf8');
+  const claim = guide.match(/documents\s+(\d+)\s+of\s+the\s+(\d+)\s+modules that exist/);
+  if (!claim) {
+    throw new Error('BUILDER_GUIDE.md: the "documents N of the M modules that exist" ' +
+      'sentence is gone or reworded — this check reads its numbers, so update both together');
+  }
+  const documented = Number(claim[1]);
+  const claimedTotal = Number(claim[2]);
+
+  // Scope the table to its own section so other tables in the guide cannot match.
+  const secStart = guide.indexOf('### Modules this section does not cover yet');
+  if (secStart < 0) throw new Error('BUILDER_GUIDE.md: the "does not cover yet" section is gone');
+  const secEnd = guide.indexOf('\n## ', secStart);
+  const section = guide.slice(secStart, secEnd < 0 ? undefined : secEnd);
+  const tabled = [...section.matchAll(/^\|\s*`([a-zA-Z0-9_-]+)`\s*\|/gm)].map(m => m[1]);
+
+  const src = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
+  const actual = [...new Set([...src.matchAll(/modules\['([a-zA-Z0-9_-]+)'\]/g)].map(m => m[1]))];
+  // An empty enumeration must not read as agreement — it would make (a) and (c)
+  // trivially satisfiable and the whole check decoration.
+  if (actual.length === 0) {
+    throw new Error(`no modules['<name>'] declarations found in builder-modules.js — ` +
+      'the declaration form changed, and this check cannot see anything');
+  }
+
+  if (claimedTotal !== actual.length) {
+    throw new Error(
+      `BUILDER_GUIDE.md says ${claimedTotal} modules exist; builder-modules.js has ` +
+      `${actual.length} (${actual.sort().join(', ')}).\n` +
+      '  Update the count AND the "does not cover yet" table in ' +
+      'docs/guides/BUILDER_GUIDE.md — a new module is undocumented until it is listed.');
+  }
+  if (documented + tabled.length !== claimedTotal) {
+    throw new Error(
+      `BUILDER_GUIDE.md accounts for ${documented} documented + ${tabled.length} tabled ` +
+      `= ${documented + tabled.length}, but claims ${claimedTotal} exist. ` +
+      'Every module must be either written up or listed as not-yet-written-up.');
+  }
+  const phantom = tabled.filter(m => !actual.includes(m));
+  if (phantom.length) {
+    throw new Error(
+      `BUILDER_GUIDE.md tables module(s) that do not exist: ${phantom.join(', ')}.\n` +
+      '  Renamed or removed in builder-modules.js without updating the guide.');
+  }
+}) || (anyFail = true);
+
 // Inline <script> bodies in the HTML pages.  Regex-extract, write to
 // /tmp, then node --check each one.  (These are the heavyweight scripts
 // that define the pages' entire behaviour.)
