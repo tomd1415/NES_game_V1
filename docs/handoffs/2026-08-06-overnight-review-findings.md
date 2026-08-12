@@ -816,6 +816,82 @@ validator with a bare `except Exception: continue` and no signal at all. The two
 few files apart, which makes the `log.warning` in the still-unapplied list easier to
 argue for: it is not a new convention, it is the one already used next door.
 
+# F19 — a recovery snapshot can become invisible to the recovery screen
+
+*Found 2026-08-12, sweeping the Python for silent-failure shapes. Not the swallow I
+went looking for — that one turned out to be defensible — but the write ordering
+underneath it.*
+
+`native/src/nes_studio/persistence/autosave.py`, `snapshot()`:
+
+```python
+project_path  = self.snapshot_dir / f"{stamp}-{reason}.json"
+metadata_path = project_path.with_suffix(".meta.json")
+self._atomic_write(project_path, payload)                      # 1. the pupil's work
+metadata = {"reason": reason, "created_at": created, "sha256": digest}
+self._atomic_write(metadata_path, json.dumps(metadata)...)      # 2. the index entry
+```
+
+Each write is genuinely atomic — temp file, `fsync`, `os.replace`. But they are **two**
+writes, and `entries()` builds the recovery list by globbing `*.meta.json`. So a crash
+or a full disk **between** them leaves the pupil's project on disk with no index entry,
+and the recovery screen will never show it. `_prune()` also iterates `entries()`, so the
+orphan is never cleaned up either — it accumulates outside the `SNAPSHOT_LIMIT`.
+
+The reverse case is already handled, which is what makes the gap look deliberate when it
+is not: `entries()` guards with `if project_path.is_file()`, so metadata *without* a
+payload is skipped correctly. Only payload-without-metadata falls through.
+
+**Why it is worth an entry despite the narrow window.** This is the crash-recovery
+feature. "Only on a crash" is not a mitigation here — it is the entire operating
+condition. A pupil whose session died opens recovery, is told there is nothing to
+recover, and their work is sitting in the snapshot directory. It fails silently, and in
+the direction of the user, which is the same shape as F1.
+
+**No test covers it.** `tests/unit/test_autosave.py` and `tests/ui/test_time_machine.py`
+exercise the happy path; `grep -rn "meta.json" tests/` returns nothing, so no test ever
+constructs a payload without its metadata.
+
+**Fix (not applied — code).** Drive the listing from the payload, not the index, so a
+snapshot can be *unlabelled* but never *invisible*:
+
+```python
+for project_path in self.snapshot_dir.glob("*.json"):
+    if project_path.name.endswith(".meta.json"):
+        continue
+    try:
+        m = json.loads(project_path.with_suffix(".meta.json").read_text("utf-8"))
+        reason, created, digest = m["reason"], m["created_at"], m["sha256"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        # Metadata lost or unreadable: still offer the work, labelled as unknown.
+        reason, created = "unknown", _iso(project_path.stat().st_mtime)
+        digest = self._hash(project_path.read_bytes())
+    entries.append(RecoveryEntry(project_path, reason, created, digest))
+```
+
+Verify by writing a payload file with no `.meta.json` beside it and asserting it appears
+in `entries()` — a test that fails against the current code and passes after.
+
+The existing `except (OSError, KeyError, json.JSONDecodeError): continue` is then still
+correct in spirit — it just stops meaning "hide this snapshot" and starts meaning
+"label it unknown".
+
+## The rest of the sweep was clean, and that is worth recording
+
+* **`tools/nes_studio_core/` — 25 exception handlers, one silent swallow**
+  (`collision.py:50`), and it is right: a `behaviour_types` entry whose `id` will not
+  coerce is skipped, and the slot falls back to a default name. Its neighbour at
+  `collision.py:92` coerces a malformed grid cell to `0`. Both are pupil-data coercion
+  with sane defaults, which is correct for a classroom tool — a bad field must not stop
+  a child building their game.
+* **`native/src/nes_studio/` — 64 handlers, four silent**, of which two are fine on
+  inspection: `state/store.py:82` swallows `RuntimeError`/`TypeError` from
+  disconnecting a signal that may not be connected (the standard Qt idiom), and
+  `autosave.py:49` swallows `FileNotFoundError` while unlinking a temp file inside a
+  handler that **re-raises**. Reading them mattered: an analyser that flags handlers in
+  isolation cannot see that the enclosing one re-raises.
+* The fourth is `validators.py:1222`, already recorded.
+
 ## Swept and found clean
 
 * **All 110 builder suites can actually fail** (swept 2026-08-09, which is what
