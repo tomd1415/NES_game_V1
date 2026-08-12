@@ -85,13 +85,36 @@ function main() {
     const man = JSON.parse(readFileSync(manPath, 'utf8'));
     const bySha = Object.fromEntries(man.files.map((f) => [f.path, f.sha1]));
     let drift = 0;
+    let compared = 0;
     for (const rel of files) {
       const buf = headBytes(rel);
       if (buf === null) continue; // uncommitted new file — ignore until committed
+      compared++;
+      // A committed file absent from the manifest lands here too: bySha[rel] is
+      // undefined and never equals a real hash, so additions are caught.
       if (bySha[rel] !== sha1(buf)) { console.error('DRIFT (vs HEAD): ' + rel); drift++; }
     }
+    // ...and now the other direction, which used to be missing entirely.
+    //
+    // The loop above walks the LIVE enumeration, so it can only ever visit files
+    // that still exist. A file the manifest lists which has since been deleted or
+    // renamed was never visited, and the check passed. Verified 2026-08-12 by
+    // moving steps/Step_Playground/src/asm_macros.inc aside: the gate printed
+    // "✓ v78 snapshot matches HEAD (30 files)" and exited 0, with 29 files on
+    // disk and the 30th unexamined. Losing an engine source is exactly what a
+    // frozen snapshot exists to make impossible, so it has to be drift.
+    const live = new Set(files);
+    for (const f of man.files) {
+      if (!live.has(f.path)) {
+        console.error('MISSING (in the v' + v + ' snapshot, not in the engine any more): ' + f.path);
+        drift++;
+      }
+    }
     if (drift) { console.error(`\n${drift} committed engine file(s) differ from the v${v} snapshot. Bump ENGINE_VERSION + snapshot again.`); process.exit(1); }
-    console.log(`✓ v${v} snapshot matches HEAD (${man.files.length} files).`);
+    // Report what was actually compared, not what the manifest claims to hold.
+    // The old message said "(N files)" using the manifest's own count, so it read
+    // identically whether 30 files were checked or none were.
+    console.log(`✓ v${v} snapshot matches HEAD (${compared} compared, ${man.files.length} in the snapshot).`);
     return;
   }
 
