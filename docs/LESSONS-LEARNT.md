@@ -121,6 +121,48 @@ comment explaining why there is no longer a `PPU_MASK` write there.
 - **Fix, now in the file:** strip `/* */` and `//` comments before testing
   generated code. Any assertion about emitted source should run on code, not text.
 
+### A success message that counts the wrong thing
+
+Two gates on this project printed a confident total for work they had not done.
+Both were found on 2026-08-12 by asking one question — *what does this print if
+the thing it iterates is empty?*
+
+- **`run-all.mjs`** enumerates its 114 suites from disk. Point that filter at an
+  extension matching nothing and it prints **"✅ All Builder regression checks
+  pass"**, exit 0, having run none of them — golden byte-identical ROM hashes
+  included. Only the 38 syntax checks and 21 invariants actually execute.
+- **`snapshot-engine.mjs --check`** printed `✓ v78 snapshot matches HEAD (30
+  files)` where the 30 came from `manifest.json` — the manifest's own claim about
+  itself, not a count of anything compared. It read the same whether 30 files were
+  checked or none were.
+
+- **Looked like:** the strongest green in the project. The suite that guards every
+  engine change, and the gate that guards the frozen engine snapshots.
+- **Actually:** a headline describing the *intended* scope of the run rather than
+  its actual scope, in the one situation where those differ.
+- **The rule:** a completion message must count what was done, not what was meant
+  to be done. `${man.files.length}` is the manifest talking about itself;
+  `${compared}` is the run talking about itself. Only one of them can fall.
+- **The cheap test:** make the input empty and read the output. If it still says
+  something reassuring, the message is decoration. Neither of these needed a
+  clever mutation — an extension that matches nothing, and one `mv`.
+
+### Only one direction of a two-way comparison was checked
+
+`snapshot-engine.mjs --check` walked the live engine files and looked each up in
+the frozen manifest. So it saw a file that had been *changed* (hash mismatch) and
+a file that had been *added* (absent from the manifest), but never a file that had
+been **deleted or renamed** — that file is not in the live enumeration, so the
+loop simply never visits it. Verified by moving `src/asm_macros.inc` aside: green,
+exit 0, "(30 files)".
+
+- **Why it hid:** the gate demonstrably worked. Corrupt a hash and it goes red, so
+  everyone had watched it fail — at the one thing it did check.
+- **The generalisation:** watching a gate fail proves it can fail, *not* that it
+  covers the ground you think. When two lists must agree, ask which list the loop
+  is driven by; whatever is only in the *other* one is invisible. Iterating A and
+  looking up B never sees a B without an A.
+
 ### Placeholder copy outlives the state it described
 
 When `window.StudioModes[id]` is missing, the dock renders "This mode arrives
