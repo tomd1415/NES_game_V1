@@ -281,6 +281,22 @@ no audio device.
 - **#8** — default tempo and tempo-change triggers. Per-song tempo is out of
   scope (baked into the FamiStudio export); in-game tempo changes are feasible
   but were queued behind #7/#27.
+- **Per-NPC dialogue text: the engine half is done, the UI half does not exist.**
+  Found 2026-08-12 and left alone, because exposing it is a product call.
+  A scene instance may carry its own `text`; `builder-modules.js` collects those
+  into `npcOverrides`, emits `BW_DIALOG_PER_NPC 1`, and the vblank loop consults
+  the override. It is covered by two suites — `round2-dialogue.mjs` (B7a, both
+  directions: 0 when no NPC has its own text, 1 when one does) and
+  `all-modules.mjs`. **But no Studio mode writes `instance.text`** — the WORLD
+  instance editor offers Speed, X and Y only — so a pupil cannot author it, and it
+  is reachable only by importing a project file that already has it.
+  - The dialogue module's own help still says "All NPC-tagged sprites share the
+    same dialog text in this MVP; per-NPC text is a future upgrade." That reads
+    like stale copy and is **not** — it is true of what a pupil can do, which is
+    what that audience needs. Do not "correct" it to say the feature works until
+    there is a way for them to use it.
+  - **The question for the owner:** add a text field to the WORLD instance editor
+    (small, and the engine is waiting for it), or leave the capability parked?
 
 ~~**#24** — the gallery remove-gating half is not evidenced as done.~~
 **Resolved 2026-07-28 — it *is* done; this entry was stale.** Audited end to
