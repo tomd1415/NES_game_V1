@@ -738,6 +738,59 @@ today, and it was confirmed to go red: dropping the background-mode condition fr
 The third is left alone deliberately — renaming a private helper is a real change
 and both are correct where they are.
 
+# F18 — `CLAUDE.md` taught you to ignore a real modification
+
+*Found 2026-08-12 by reading `main`'s `docs/STATUS.md`, which records the same fix on
+its own copy on 2026-08-06. This branch had not had it.*
+
+`CLAUDE.md` said, of the engine sources under `steps/Step_Playground/src/`:
+
+> they show as `M` in `git status` after any `/play`. Don't commit those
+> build-mutations.
+
+**They do not, and have not for some time.** `tools/nes_studio_core/build.py` builds
+inside a `tempfile.TemporaryDirectory` (lines 99 and 139; line 151 assembles
+`temporary_directory / "Step_Playground"`). Verified rather than read: `git status
+--porcelain steps/Step_Playground/` before and after running `smb-jump.mjs`, which
+performs a real cc65 `/play` (`✓ … compiles via cc65 (49168 bytes, engine v3)`) — empty
+both times.
+
+The direction of the error is what makes it worth an entry. A doc that under-claims
+makes you check something unnecessarily; this one **teaches you to dismiss evidence**.
+Any modification under `steps/Step_Playground/src/` today is real, and this branch's
+most-read file told you it was noise. It is also load-bearing here specifically: the
+engine snapshot workflow is built on `git status` being trustworthy, and "tree clean"
+has been the sign-off on every stretch of this session.
+
+Fixed in `CLAUDE.md`, with the old sentence struck rather than deleted, since the
+instinct it trained needs contradicting and not merely removing.
+
+## The eight dead constants are the same change's other fossil
+
+`main`'s `STATUS.md` also lists eight unreferenced path constants in
+`playground_server.py`, found and deliberately not removed (a code change). Confirmed
+identical on this branch — defined, and referenced **nowhere**, in the file or the repo:
+
+```
+SCENE_INC        = STEP_DIR / "src" / "scene.inc"          (line 98)
+PAL_INC          = STEP_DIR / "src" / "palettes.inc"       (99)
+CHR_PATH         = STEP_DIR / "assets/sprites/game.chr"    (100)
+NAM_PATH         = STEP_DIR / "assets/backgrounds/level.nam" (101)
+COLLISION_H_PATH = STEP_DIR / "src" / "collision.h"        (1112)
+BEHAVIOUR_C_PATH = STEP_DIR / "src" / "behaviour.c"        (1113)
+BG_WORLD_H_PATH  = STEP_DIR / "src" / "bg_world.h"         (1148)
+BG_WORLD_C_PATH  = STEP_DIR / "src" / "bg_world.c"         (1149)
+```
+
+`DEFAULT_MAIN_C` and `DEFAULT_MAIN_S` beside them have one use each and are live —
+worth stating, because deleting the block wholesale would take them too.
+
+These are not merely untidy: every one is a `STEP_DIR` path, and between them they name
+exactly the files the struck `CLAUDE.md` sentence listed. They are the fossil of the
+pre-`TemporaryDirectory` build, and the doc sentence is the other fossil. Each
+corroborates the other, which is how a dead-code sweep and a doc audit end up being the
+same finding.
+
 ## Swept and found clean
 
 * **All 110 builder suites can actually fail** (swept 2026-08-09, which is what

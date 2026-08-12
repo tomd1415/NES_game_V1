@@ -26,10 +26,21 @@ with the engine it was authored for (rollback/fallback). Full design:
 [`docs/design/engine-versioning.md`](docs/design/engine-versioning.md);
 workflow: [`tools/engines/README.md`](tools/engines/README.md).
 
-> Engine-source files under `steps/Step_Playground/src/` (behaviour.c,
-> bg_world.*, scene.inc, main.c, level.nam, …) are **regenerated per build**
-> by the server — they show as `M` in `git status` after any `/play`. Don't
-> commit those build-mutations; the snapshot reads from HEAD to stay stable.
+> **A `/play` no longer dirties the working tree.** `tools/nes_studio_core/build.py`
+> builds inside a `tempfile.TemporaryDirectory` (lines 99 and 139), so
+> `steps/Step_Playground/src/` is left untouched. Verified 2026-08-12 by running one
+> build suite and checking `git status steps/Step_Playground/` before and after — empty
+> both times.
+>
+> ~~Engine-source files under `steps/Step_Playground/src/` (behaviour.c, bg_world.*,
+> scene.inc, main.c, level.nam, …) are **regenerated per build** by the server — they
+> show as `M` in `git status` after any `/play`. Don't commit those build-mutations.~~
+>
+> That struck advice was true once and is now actively harmful: it teaches you to
+> dismiss a modification under `steps/Step_Playground/src/` as build noise, when today
+> any such modification is **real** and wants looking at. `main` found and fixed the
+> same sentence in its own copy on 2026-08-06 (`docs/STATUS.md`); this branch had not.
+> The snapshot still reads from HEAD, so commit before snapshotting either way (F9).
 
 ## The native Linux app (`native/`)
 
