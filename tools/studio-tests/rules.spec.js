@@ -7,7 +7,12 @@ test.beforeEach(async ({ page }) => {
   await page.locator('.mode-btn[data-mode="rules"]').click();
 });
 
-test('RULES renders a card per builder module', async ({ page }) => {
+// Named for what it checks. It was "renders a card per builder module", which
+// promises one card per module — and that is not the behaviour: the test two
+// cases below asserts RULES deliberately shows a FILTERED subset (powerups lives
+// on Style, dialogue is hidden for an auto-runner). Making the old name true
+// would have meant asserting something false, so the name was the thing to fix.
+test('RULES renders module cards, including the always-on ones', async ({ page }) => {
   await expect(page.locator('.rule-card')).not.toHaveCount(0);
   await expect(page.locator('.rule-card .card-title', { hasText: 'Game type' })).toBeVisible();
   await expect(page.locator('.rule-card .card-title', { hasText: 'Player 1' })).toBeVisible();

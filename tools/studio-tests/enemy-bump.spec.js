@@ -32,9 +32,25 @@ test('the enemy-bump toggle is on Style for every game type and writes through t
 
   // Enemies exist in every game type, so the setting must survive a type switch
   // rather than being stranded on the platformer screen.
+  //
+  // The name says "every game type", so enumerate the cards STYLE actually
+  // renders instead of listing them. The list used to read
+  // ['SMB platformer', 'Racer', 'Top-down'] — four of the five types counting the
+  // platformer default above, with **Auto-runner never tested at all**, under a
+  // name that promised all of them. A sixth type would have been missed the same
+  // way. Clicking the already-active card is a no-op by design, so including it
+  // costs nothing.
+  //
   // Exact-text on the card's own label div: the Racer card's subtitle reads
   // "top-down track", so a hasText:'Top-down' would match two cards.
-  for (const type of ['SMB platformer', 'Racer', 'Top-down']) {
+  const types = await page.evaluate(() =>
+    [...document.querySelectorAll('.style-card')]
+      .map((c) => { const d = c.querySelector('div[style*="font-weight"]'); return d && d.textContent.trim(); })
+      .filter(Boolean));
+  expect(types.length, 'no style cards found — STYLE mode or the selector broke, and the ' +
+    'loop below would assert nothing at all').toBeGreaterThan(1);
+
+  for (const type of types) {
     await page.locator(`.style-card:has(div:text-is("${type}"))`).click();
     await expect(bumpSection(page)).toBeVisible();
     await expect(bumpBox(page)).toBeChecked();
