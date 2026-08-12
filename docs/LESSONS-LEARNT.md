@@ -48,6 +48,20 @@ declare `const PORT_C = 18790, PORT_A = 18791;` and `PORT_C` does not match
   **A written warning only works if it is read before the task, not after the
   mistake.** If a doc exists for an area you are about to audit, read it first —
   that is cheaper than the audit.
+- **It keeps happening, which is the actual lesson.** Five times in one week, by
+  someone who had already written this entry: `PORT *=` missing `PORT_C`
+  (twice — the second time nearly producing "the documented 18897 is unused");
+  `modules\['<name>'\]` returning nothing when the guide's module list was
+  checked; `^#{1,4} *#[0-9]+` finding no backlog items because they are a plain
+  numbered list; anchoring on the first textual `ROLE_TABLE`, which is a comment
+  400 lines above the definition; and `\.enabled = true` reporting `globals`
+  covered by zero suites when it has a dedicated one.
+- **So stop trying to write better patterns and change what a zero means.** Every
+  one of those was caught by the same reflex and nothing else: *a search that
+  finds nothing is a claim about my pattern until proven otherwise.* Print the
+  raw region and look at it. The cost is ten seconds; the alternative is a
+  confident finding built on a regex artefact, which is worse than no finding at
+  all because it gets acted on.
 
 ### Piping a long suite through `tail`
 
@@ -162,6 +176,40 @@ exit 0, "(30 files)".
   covers the ground you think. When two lists must agree, ask which list the loop
   is driven by; whatever is only in the *other* one is invisible. Iterating A and
   looking up B never sees a B without an A.
+
+### A test name is a promise — but the fix is not always "make it true"
+
+Sweeping the suites for names carrying a universal quantifier ("every", "all",
+"per") found four over-claims on 2026-08-12. They split evenly, and the split is
+the useful part:
+
+**The name was right and the test was too narrow** — fix the test:
+- `tutorial.spec.js` "every game style" walked a hand-written list of five. Worse
+  than it sounds: that list is the slow part of the test, so *losing* a style
+  would have made it faster and still green. Now enumerates `STUDIO_TUTORIALS`.
+- `enemy-bump.spec.js` "for every game type" walked three, four counting the
+  default — **Auto-runner was never tested**, while the test's own comment said
+  "enemies exist in every game type". Now enumerates the style cards.
+
+**The name was wrong and the test was right** — fix the name:
+- `rules.spec.js` "renders a card per builder module": RULES deliberately shows a
+  *filtered* subset (powerups lives on Style; dialogue is hidden for auto-runners),
+  which the very next test asserts. Enumerating modules would have asserted
+  something false.
+- `all-modules.mjs` "Everything optional, on": eight of eighteen, because the SMB
+  set needs the SMB game type and this fixture is a platformer. Covered by the
+  `smb-*` suites instead.
+
+- **The trap:** having just fixed two by enumerating, the reflex is to enumerate
+  the next one. That would have broken `rules.spec.js` — turning a correct test
+  into a failing assertion about behaviour nobody wants.
+- **The rule:** an over-claiming name means *either* the test is too narrow *or*
+  the name is wrong, and **which one depends on the intended behaviour, which you
+  have to go and establish.** Read what the surrounding tests assert before
+  touching either.
+- **Why it is worth the sweep anyway:** the names are load-bearing. Nobody re-reads
+  a test that says it covers everything, so an over-claim is how a gap becomes
+  permanent — and two of the four were real gaps.
 
 ### Placeholder copy outlives the state it described
 
