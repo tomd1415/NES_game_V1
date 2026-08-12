@@ -791,6 +791,31 @@ pre-`TemporaryDirectory` build, and the doc sentence is the other fossil. Each
 corroborates the other, which is how a dead-code sweep and a doc audit end up being the
 same finding.
 
+## Behavioural claims in `CLAUDE.md`, audited (2026-08-12) — mostly confirmations
+
+F18 raised the obvious question: what else is stale? The transferable part of the answer
+is **why F18 survived an earlier audit**. That pass checked *referential* claims — paths,
+hashes, counts, SHAs, 76 links — and F18 was a *behavioural* one: a statement about what
+the code does when you run it. A referential audit cannot see those, so they need their
+own sweep. This is that sweep. Result: **no further defects.** Recorded so nobody
+re-derives it.
+
+| Claim | Verdict |
+| --- | --- |
+| "`run-all.mjs` fails if the two version constants disagree" | ✅ **probed.** Bumped `engine-version.js` to 77 uncommitted: `RED — ENGINE_VERSION (76) != engine-version.js (77)`, exit 1. Restored, hash-verified. |
+| "…or the current snapshot drifts from git HEAD" | ✅ true, and **precisely worded**. The same probe left the snapshot check **green**, because it reads HEAD and the edit was uncommitted. The phrase "from git HEAD" is carrying real weight — the loose paraphrase "the snapshot matches the tree" would be false. |
+| "New projects are stamped `state.engineVersion`" | ✅ `core/starters.py`: `state["engineVersion"] = self.current_engine`. |
+| "CODE's refresh invokes the cc65 codegen" | ✅ `modes/code.py:293 → _generated_c_source() → CodegenDifferential(...).assemble(...)`. **Conditional**, and worth knowing: only when no custom source is saved *and* the language is C. A pupil who has edited their code gets the cheap path. The default state is the expensive one, so the warning stands. |
+| "the shell owns no editor" | ✅ in the sense meant. `main_window.py` constructs one `QLineEdit` (line 233) — the project-name field in the title bar, chrome rather than a content-editing surface. Noting it because a naive grep for editor widgets hits it and looks like a contradiction. |
+
+One contrast the sweep threw up, which strengthens a note recorded earlier: when
+`_generated_c_source()` fails it catches the exception, calls `self.status("Could not
+generate CODE preview")` **and** returns the reason as a comment in the pane. That is
+the right shape — and it is the same codebase where `validate()` swallows a throwing
+validator with a bare `except Exception: continue` and no signal at all. The two sit a
+few files apart, which makes the `log.warning` in the still-unapplied list easier to
+argue for: it is not a new convention, it is the one already used next door.
+
 ## Swept and found clean
 
 * **All 110 builder suites can actually fail** (swept 2026-08-09, which is what
