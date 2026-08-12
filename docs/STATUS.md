@@ -21,12 +21,20 @@ work cold, and the file to refresh *last* before putting work down.
   bodies and `playground_server.py`; the 32 match the 32 non-vendored `.js` files
   on disk exactly, which is the point of enumerating them at runtime rather than
   hand-listing (it used to check 14 and silently skip the rest).
-- **Studio E2E:** ✅ **157 passed, exit 0** (`npx playwright test`, 7.1 min,
-  re-run 2026-08-12 at v78) across 34 spec files. Was 147 on 2026-07-30; the ten
-  added since are the silent-failure guards from the 2026-08-09 maintenance —
-  4 in `mode-hook-errors.spec.js`, 3 in `attr-conflict-screen.spec.js` and 3 in
+- **Studio E2E:** ✅ **158 passed, exit 0** (`npx playwright test`, re-run
+  2026-08-12 at v78) across 34 spec files. Was 147 on 2026-07-30; the eleven added
+  since are the silent-failure guards from the 2026-08-09/12 maintenance, in
+  `mode-hook-errors.spec.js`, `attr-conflict-screen.spec.js` and
   `mode-module-registry.spec.js`. Still confirms the suite survives engine
   v76/v77/v78, the emulator watchdog and the Style-tab toggle.
+  - Per-spec counts are deliberately *not* listed. They were, earlier the same
+    day, and were stale within hours of being written — one more test in one spec
+    and three numbers were wrong at once. The total is a dated measurement, not a
+    live claim; re-run to refresh it, and `grep -c '^test(' <spec>` for a
+    breakdown that cannot be out of date.
+  - Wall-clock is not a constant and is not recorded here: the same 158 tests took
+    **7.1 min** at host load ~14.5 and **3.8 min** at load ~1 on the same day. Use
+    it to judge the box, never to judge a change.
   - ⚠️ **Under host load the committed 30s per-test limit can still be too tight**,
     and the run then shows false red. Known tells, all unrelated to any recent
     change: `project-file` NAM round-trip (59.1s) and `budget` CHR (41.6s) on
@@ -145,6 +153,36 @@ looking.
   only because `run-all.mjs` is strictly serial; documented in
   [`guides/TEST-SERVERS.md`](guides/TEST-SERVERS.md) as a precondition, because
   parallelising the suite would collide all 19 on contact.
+A second theme emerged the same week and is worth separating, because it is a
+different failure: **gates that report success for work they did not do.** The
+first theme lies about *why* something broke; this one denies anything ran at all.
+
+- **`snapshot-engine.mjs --check` could not see a deleted engine file.** The gate
+  the whole versioning ritual rests on compared in one direction only: it walked
+  the live engine files and looked each up in the frozen manifest, so it caught
+  changes and additions but never a **deletion or rename** — that file is not in
+  the live enumeration, so the loop never visited it. Moving
+  `src/asm_macros.inc` aside still gave `✓ v78 snapshot matches HEAD (30 files)`
+  and exit 0. The count made it worse: it came from `manifest.json`'s own claim,
+  so it read identically whether 30 files were compared or none were. Now checked
+  both ways, and the success line reports what was actually compared.
+- **`run-all.mjs` would report "all checks pass" for zero suites.** If the suite
+  enumeration came back empty the loop ran zero times, `anyFail` stayed false, and
+  the runner printed ✅ having executed none of the 114 — golden ROM hashes
+  included. Guarded; the mirror of a guard that already existed 60 lines above it
+  for the syntax enumeration.
+- **`BUILDER_GUIDE.md`'s coverage note is now a check.** It said "if that count has
+  moved, this table has gone stale, which is exactly the failure this note exists
+  to make visible" — and nothing made it visible. `run-all.mjs` now verifies the
+  guide's module accounting against `builder-modules.js` both ways.
+- **The mode-registry spec was one-directional too**, and was fixed by applying the
+  snapshot lesson to it the same day: a module registered but dropped from `MODES`
+  is unreachable dead weight, and only a rail-driven loop could not see it.
+
+The generalisation, now in [`LESSONS-LEARNT.md`](LESSONS-LEARNT.md) §1: **watching a
+gate fail proves it can fail, not that it covers the ground you think.** The
+snapshot gate *had* been watched failing — at the one thing it checked.
+
 - **Docs corrected against the code:** `_resolve_engine_versions` in
   `playground_server.py` justified itself with "for v1..v2 the static cc65 sources
   are identical" — true until v19/v20, and we are on v78 (the conclusion still
