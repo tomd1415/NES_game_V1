@@ -4,25 +4,37 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-08-07 (unattended maintenance — docs audit, port-clash
-  fix, gate mutation-testing, `startServer` hardening; no engine change)
+- **Last updated:** 2026-08-12 (unattended maintenance — failures that reported a
+  *wrong* reason rather than none, both suites re-run green; no engine change).
+  ⚠️ **15 commits are local and unpushed** (this one included), covering
+  everything in the 2026-08-09/12 section below, so `origin/main` does not yet
+  have any of it. `origin/main` is at `780cf5c` and has not moved, so the push is
+  a clean fast-forward.
 - **Branch:** `main`
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  **114 suites, exit 0, re-verified 2026-08-07 at v78** — three times across the
-  maintenance work: before and after the port change, and again after the
-  `startServer` hardening)
-- **Studio E2E:** ✅ **147 passed** (2026-07-30) — 129 from before that week,
-  plus 5 in `emulator-crash-banner.spec.js` (#37), 2 in `enemy-bump.spec.js`
-  (#30) and **11** in `palette-keys.spec.js` (#39, which also covers the two
-  legacy painter pages; 5 originally, plus 6 for the WORLD background-palette
-  keys added 2026-07-30). Confirms the suite survives engine v76/v77/v78, the
-  emulator watchdog and the new Style-tab toggle.
-  - ⚠️ **Under host load the committed 30s per-test limit is not enough** and the
-    run shows false red. Two tests unrelated to any recent change are the tell:
-    `project-file` NAM round-trip (59.1s) and `budget` CHR (41.6s). Re-run with
-    `--timeout=120000` to distinguish an environment problem from a real one.
+  **114 suites, exit 0, re-run 2026-08-12 at v78**, ≈6 min) — plus 21 invariants
+  and 38 syntax checks. The 38 are 32 shipped `.js` modules, 5 inline HTML script
+  bodies and `playground_server.py`; the 32 match the 32 non-vendored `.js` files
+  on disk exactly, which is the point of enumerating them at runtime rather than
+  hand-listing (it used to check 14 and silently skip the rest).
+- **Studio E2E:** ✅ **157 passed, exit 0** (`npx playwright test`, 7.1 min,
+  re-run 2026-08-12 at v78) across 34 spec files. Was 147 on 2026-07-30; the ten
+  added since are the silent-failure guards from the 2026-08-09 maintenance —
+  4 in `mode-hook-errors.spec.js`, 3 in `attr-conflict-screen.spec.js` and 3 in
+  `mode-module-registry.spec.js`. Still confirms the suite survives engine
+  v76/v77/v78, the emulator watchdog and the Style-tab toggle.
+  - ⚠️ **Under host load the committed 30s per-test limit can still be too tight**,
+    and the run then shows false red. Known tells, all unrelated to any recent
+    change: `project-file` NAM round-trip (59.1s) and `budget` CHR (41.6s) on
+    2026-07-30, and `tutorial › every game style` (46.6s) on 2026-08-09 at host
+    load 39. Re-run with `--timeout=120000` to tell an environment problem from a
+    real one.
+  - The warning stands but is not a certainty: the 2026-08-12 run above was fully
+    green *with load rising to ~14.5*, `tutorial › every game style` included. So
+    a green run under load proves nothing about the next one, and a red test named
+    above is still worth re-running before believing it.
 - **Playtest ROMs:** regenerated 2026-07-28 and **byte-identical** to the
   v76-era build (`node scripts/make-playtest-roms.mjs`, hashes compared before
   and after, at v77 *and* again at v78). v77's enemy-bump is off by default and
@@ -84,6 +96,58 @@ No engine change, so **still v78**. The 2026-08-06 commits are on `origin/main`
   path constants in `playground_server.py` — `CHR_PATH`, `NAM_PATH`, `SCENE_INC`,
   `PAL_INC`, `COLLISION_H_PATH`, `BEHAVIOUR_C_PATH`, `BG_WORLD_H_PATH`,
   `BG_WORLD_C_PATH`. `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them are live.
+
+## 2026-08-09/12 unattended maintenance — what changed
+
+No engine change, so **still v78**. All of this is **local and unpushed** at the
+time of writing (see the warning under "What is genuinely open").
+
+The theme was one shape: **a failure that reports a wrong reason instead of no
+reason.** Quiet failures are already covered in `LESSONS-LEARNT.md` §1; these are
+worse, because they supply an explanation convincing enough to stop the reader
+looking.
+
+- **A mode that fails to load no longer claims it is unbuilt.** `studio.js` shows
+  a placeholder when `window.StudioModes[id]` is missing — "This mode arrives
+  later in the redesign". True in Phase 0; all eight modes have shipped since, so
+  that branch now means a module *failed to load* (renamed file, syntax error,
+  dropped `<script>`). A pupil was told the feature was planned and a teacher
+  would file it as "not finished yet". The copy stays — a pupil can do nothing
+  about a failed load — but the real reason now reaches the console once per mode.
+  Guarded by `mode-module-registry.spec.js`, which enumerates the rail and the
+  registry **at runtime**: `MODES` is closure-private, and a source-scanning
+  version would have matched the comment explaining itself.
+- **A mode whose overlay hook throws now says so, once.** Both `onRenderOverlay`
+  catches were `catch (e) {}`, so a mode silently stopped drawing its grid / hover
+  / selection for ever. Reported once per mode+hook, never per frame (#37).
+- **…and that fix's own message was wrong, and is fixed too.** It said the overlay
+  was "suppressed for the rest of this session". Nothing suppresses it: both call
+  sites are inside `renderLive()`, so the hook is called and throws on every
+  render for ever. What is said once is the message. Now pinned by a test — six
+  renders must mean six calls.
+- **WORLD's palette-clash count follows the viewed screen.** The red X overlay was
+  offset-aware and the counter was not, so on any level wider than one screen the
+  number and the marks described different places: Xs with a count of 0, or a
+  count with no Xs anywhere. A wrong number, shown to a child, with nothing
+  failing.
+- **`stopServer` waits for the child, and fails if it cannot kill it.** Two
+  commits: it used to `kill` then sleep 300 ms and hope, the mirror of the
+  `startServer` bug above; and the first fix still returned quietly if the child
+  survived SIGKILL, leaking a server whose port would then fail *someone else's*
+  suite with an error blaming them.
+- **The JS syntax gate enumerates instead of hand-listing.** It checked a
+  hardcoded 14 filenames with an `if (!exists) continue`, so 18 of 32 shipped
+  modules were never checked — including every Studio mode module. Now read from
+  disk, with an explicit failure if the enumeration comes back empty.
+- **Builder-test ports are not unique** — 19 are shared, one by four suites. Safe
+  only because `run-all.mjs` is strictly serial; documented in
+  [`guides/TEST-SERVERS.md`](guides/TEST-SERVERS.md) as a precondition, because
+  parallelising the suite would collide all 19 on contact.
+- **Docs corrected against the code:** `_resolve_engine_versions` in
+  `playground_server.py` justified itself with "for v1..v2 the static cc65 sources
+  are identical" — true until v19/v20, and we are on v78 (the conclusion still
+  holds; only the reason had rotted). Plus the BUILDER_GUIDE module coverage
+  (10 of 18) and the deliberate broken links, both signposted rather than "fixed".
 
 ## How work is tracked
 
