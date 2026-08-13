@@ -393,8 +393,16 @@ check('invariant: ladder climb checks target-cell behaviour in both templates', 
 check('invariant: playground_server.py native launch uses _play_latest.nes', () => {
   const body = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'),
                                'utf8');
-  if (!/_play_latest\.nes/.test(body)) {
-    throw new Error('native launch path must write to _play_latest.nes');
+  // Match the ASSIGNMENT, not the bare filename. `_play_latest.nes` also appears
+  // in the comment three lines above it in playground_server.py, explaining why a
+  // dedicated file is used — so a test for the bare string passes on the prose
+  // that documents the fix, exactly as the B6i dialogue guard once did. Deleting
+  // the code would leave this green. Code-shaped patterns cannot appear in prose,
+  // which is cheaper and safer here than stripping Python comments (a naive `#`
+  // strip would also cut `#` inside string literals).
+  if (!/latest_rom\s*=\s*STEP_DIR\s*\/\s*"_play_latest\.nes"/.test(body)) {
+    throw new Error('native launch path must assign latest_rom = STEP_DIR / "_play_latest.nes" ' +
+      '— a bare mention of the filename is not evidence; it appears in a comment too');
   }
   // The pre-fix bug was `Popen([FCEUX_PATH, STEP_DIR / "game.nes"])`.
   // After the fix, Popen is given `latest_rom`.  Catch the regression
