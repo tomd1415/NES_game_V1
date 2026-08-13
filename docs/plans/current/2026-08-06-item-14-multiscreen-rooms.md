@@ -73,6 +73,58 @@ wrong, and they are worth separating because only the second is fatal:
 **Outcome decides the rest.** If it passes, Step 2 is a two-line change and
 Steps 3–5 become optional. If it fails, skip to Step 3.
 
+### MEASURED 2026-08-13 — the hypothesis holds, with three corrections to this plan
+
+**Result: parking survives a wide (16-bit) build.** With `_scene_is_perroom`'s
+`x > 255` clause temporarily relaxed, a 2-room project carrying an entity at
+`x = 400` builds a real ROM in which **room 0's entity draws and room 1's does
+not** — parked at `ss_y = 0xFF` and correctly skipped despite 16-bit positions.
+
+The control matters as much as the result: **unrelaxed, the same project draws
+both entities** (the shared-scene fallback). So the absence is the parking working,
+not the sprite failing to render for some unrelated reason.
+
+**Correction 1 — the 0xEF enumeration above is misleading.** "5 matches across
+`builder-templates/*.c` and `playground_server.py`" is the right count, but
+**three of the five are comments**. Worse, it misses `steps/Step_Playground/src/ai_asm.s`
+entirely, which implements the same sentinel for the chaser and the flyer — and the
+ASM AI is the shipped default. The real tally is **four code sites in two
+languages**:
+
+| Site | Wide-build behaviour |
+| ---- | -------------------- |
+| `platformer.c:2960`, `:3022` (draw loops) | `ss_y` is u16; parked `0xFF >= 0xEF` → skipped ✓ |
+| `ai_asm.s` chaser (~385), flyer (~441) | under `SS_POS_WIDE`, high byte tested first (`bne` → skip when `ss_y >= 256`), then `cmp #$EF` on the low byte — parked `0x00FF` → skipped ✓ |
+
+That the ASM checks the high byte *before* the sentinel is why the wide case works;
+it was not obvious from the C alone, and it is the mechanism the hypothesis rests on.
+
+**Correction 2 — off-by-one in the safe range.** This plan calls wide-but-short
+`y ≤ 239`. `0xEF` **is** 239 and the test is `>= 0xEF` → skip, so an entity at
+`y = 239` is *already* treated as parked, in every build, today. The safe range is
+`y ≤ 238`. **Step 2 must reject on `y > 238`, not `y > 239`**, or it will admit
+exactly one row of entities that then vanish silently.
+
+**Correction 3 — Step 1's own test design is not buildable as written.** It asks for
+"4 screens wide". The multi-bg door path is gated on
+`BW_DOORS_MULTIBG_ENABLED && (BG_WORLD_COLS <= 64) && (BG_WORLD_ROWS <= 60)`
+(`platformer.c:1115`) — **at most 2 screens wide**. At 4 screens the door code is
+compiled out, so the transition half can never run. 2 screens still forces the
+16-bit path (`x` up to 511), so that is the size to use.
+
+**Not achieved: the door-transition half.** After three attempts the player never
+reached the door in the harness (4 wide, then 2 wide after finding the gate above,
+with `doors.enabled` + `targetBgIdx = 1` and a door tile painted two tiles right of
+the player start). The parked/present half is measured and controlled; **restoration
+after a transition is still unproven**, so Step 2 should not be treated as fully
+de-risked. What remains is a harness question (how to drive a door in a render
+test — no existing suite does it; `chunk-c-doors.mjs` is validator-level only),
+not an engine question.
+
+*Measurement script: `item14-step1.mjs`, kept in the session scratchpad rather than
+committed — it needs the production `x > 255` relaxation to mean anything, so as a
+suite it would be either red or dishonest.*
+
 ## Step 2 — Narrow the restriction to the case that actually breaks
 
 *Only if Step 1 passes.*
