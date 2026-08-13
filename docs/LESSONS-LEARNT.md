@@ -308,7 +308,7 @@ run with the same bad path correctly exits 1; only `--list` disagrees with itsel
 Found while *testing the commands before documenting them*, which is the only reason
 it was found at all — and note my first reading called it "silently succeeds", which
 was wrong: `>/dev/null 2>&1` had hidden the message I was claiming did not exist.
-Raised in `.mc-outbox.md`; not fixed here, because `mutate` is on every container.
+Written up for the tool's maintainer in [`reference/shared-tooling-findings.md`](reference/shared-tooling-findings.md); not fixed here, because `mutate` is on every container.
 
 ### A test name is a promise — but the fix is not always "make it true"
 
