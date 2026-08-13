@@ -101,11 +101,24 @@ test('Studio WORLD: the highlighted BG strip follows the key', async ({ page }) 
   await enterWorld(page);
   // The selection a pupil actually sees, not just the variable.
   await page.keyboard.press('1');
-  const selLabel = await page.evaluate(() => {
-    const s = document.querySelector('.pal-strip.sel .label');
-    return s ? s.textContent : null;
+  // Scoped to WORLD's own "Paint colour" section rather than the whole document.
+  // `.pal-strip.sel` is emitted by studio-world.js AND studio-pals.js (its shared
+  // backdrop row), so a document-wide query was relying on an invariant nobody
+  // stated: that only the current mode's dock is ever in the DOM. That is true
+  // today because renderDock replaces the dock's contents — but it is a property
+  // of the shell, not of this test, and if it ever stopped holding this would
+  // assert against PALS' strip while still looking like a WORLD test.
+  const sel = await page.evaluate(() => {
+    const sec = [...document.querySelectorAll('.dock-section')].find(
+      (d) => (d.querySelector('.title') || {}).textContent === 'Paint colour');
+    if (!sec) return { err: 'no "Paint colour" section in the dock' };
+    const s = sec.querySelector('.pal-strip.sel .label');
+    return { text: s ? s.textContent : null };
   });
-  expect(selLabel).toBe('BG 1');
+  // A missing section must fail loudly here, not read as "no selection".
+  expect(sel.err, 'WORLD dock has no "Paint colour" section — the scope anchor moved, ' +
+    'and an unscoped query would have quietly matched some other mode\'s strip').toBeUndefined();
+  expect(sel.text).toBe('BG 1');
 });
 
 // Picking a palette must not silently change the project. WORLD's block editor has
