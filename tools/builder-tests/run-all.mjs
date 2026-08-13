@@ -694,7 +694,11 @@ console.log('');
 // suite then passes against a server it did not configure. Suites are therefore
 // started detached (each becomes its own process-group leader) and the whole group is
 // signalled after it exits, which reaches a server the suite orphaned.
-const PORT_BASE = 18768;                    // start of the builder-test range
+// 18800, not 18768: the Studio E2E server binds 18790 (playwright.config.js), and an
+// allocation starting at 18768 hands block 18789-18791 to the eighth suite -- re-creating
+// the exact clash `main` fixed by moving three suites off that port. ports-unique.mjs
+// asserts this cannot come back.
+const PORT_BASE = 18800;                    // start of the builder-test range
 const PORT_BLOCK = 3;                       // asm-player.mjs needs three; most need one
 const suites = fs.readdirSync(__dirname)
   .filter(f => f.endsWith('.mjs') && f !== path.basename(__filename))

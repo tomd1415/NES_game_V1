@@ -27,8 +27,28 @@ module.exports = defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
+  // Opt-in escape hatch for a container whose image does not bake Playwright's own
+  // Chromium. The image is supposed to (`npx playwright install --with-deps chromium`
+  // at build time, because init-firewall.sh pins cdn.playwright.dev's IPs at container
+  // start and that CDN rotates them, so a runtime download hangs). When the image
+  // predates that, `apt-get install chromium` reaches deb.debian.org, which IS on the
+  // allowlist, and this points Playwright at it:
+  //
+  //   PLAYWRIGHT_CHROMIUM_PATH=$(command -v chromium) npx playwright test
+  //
+  // Prefer rebuilding the container. A distro Chromium is a DIFFERENT build from the
+  // one this Playwright version was tested against, so read a failure here twice
+  // before believing it is the app.
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
+          ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } }
+          : {}),
+      },
+    },
   ],
   webServer: {
     command: `python3 tools/playground_server.py`,

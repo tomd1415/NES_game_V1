@@ -44,10 +44,26 @@ for (const file of suites) {
 
 // The runner's allocation must stay injective and inside the reserved range. Cheap, and it
 // is the half a future edit to run-all.mjs could break without any suite changing.
-const PORT_BASE = 18768, PORT_BLOCK = 3, CEILING = 19200;
+const PORT_BASE = 18800, PORT_BLOCK = 3, CEILING = 19200;
 const bases = suites.map((_, i) => PORT_BASE + i * PORT_BLOCK);
 const overlapping = new Set(bases).size !== bases.length;
 const top = bases.length ? bases[bases.length - 1] + PORT_BLOCK - 1 : PORT_BASE;
+
+// The Studio E2E server's port, read from playwright.config.js rather than repeated
+// here. An allocation that covers it re-creates the clash `main` fixed -- which is
+// exactly what happened when this allocator was first written with base 18768.
+const cfg = fs.readFileSync(path.join(DIR, '..', '..', 'playwright.config.js'), 'utf8');
+const e2eMatch = cfg.match(/STUDIO_TEST_PORT\s*\|\|\s*(\d+)/);
+if (!e2eMatch) {
+  console.error('FAIL: could not read the default STUDIO_TEST_PORT from playwright.config.js');
+  process.exit(2);
+}
+const e2ePort = Number(e2eMatch[1]);
+if (e2ePort >= PORT_BASE && e2ePort <= top) {
+  console.error(`FAIL: the allocation ${PORT_BASE}-${top} covers the Studio E2E port ${e2ePort} ` +
+                `(playwright.config.js). A suite would be handed the port Playwright binds.`);
+  process.exit(1);
+}
 
 if (scanned === 0) {
   console.error(`FAIL: scanned ${scanned} suites — the scan did not run, so this proves nothing.`);
