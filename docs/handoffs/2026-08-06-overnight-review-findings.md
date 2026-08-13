@@ -1007,6 +1007,61 @@ rename dance across two trees would add more failure modes than it removes. The
 honest summary is that the generator is *recoverable*, not *transactional*, and it now
 refuses to start in the state that makes recovery necessary.
 
+# F21 — every engine snapshot was missing three files, and the gate said "0 missing"
+
+*Found 2026-08-13, as a direct consequence of clearing one of F8's "minor, listed for
+completeness" leftovers. The tidy was the cheap part; what it uncovered was not.*
+
+`.gitignore` carried three **bare** patterns — `scene.inc`, `game.chr`, `level.nam` —
+and git matches a bare pattern at **any depth**. That includes inside the archive. So
+`git add` silently declined those three files in **every snapshot directory, v1 through
+v77**. All 77 manifests list them. Not one archive contained them.
+
+The moment the patterns were anchored, four paths appeared as untracked — which is how
+this was found at all. `git add` says nothing when it declines an ignored path, so the
+files were written by the snapshot script, ignored on the way in, and never missed.
+
+## The gate could not see it, by construction
+
+`snapshot-engine.mjs --check` had two directions and both look at the **live** engine
+sources: direction 1 compares them against the manifest sha1s, direction 2 checks the
+manifest's files are still present and tracked. Neither ever opens the frozen copy under
+`tools/engines/v<N>/`. So it printed
+
+> `✓ v77 snapshot matches HEAD (41 of 41 files compared, 0 missing).`
+
+about an archive missing three of those 41 files. "0 missing" was true of the thing it
+checked and false of the thing a reader assumes.
+
+**Direction 3 added**: every path a manifest promises must be readable **from HEAD**
+under `tools/engines/v<N>/`, and match the recorded sha1.
+
+## The first version of direction 3 had the bug it was written to catch
+
+It used `existsSync()` on the frozen path — and passed, because the files were sitting on
+disk, untracked. Present locally, absent from every fresh clone. That is F5 exactly (the
+ROM fixtures swallowed by `*.nes`), committed inside the fix for the same class. It now
+reads the frozen copy out of HEAD and fails as it should, naming all three.
+
+**On-disk existence is not archival.** Worth stating as flatly as that, because this is
+the third time it has bitten here: the ROM fixtures, the `.devcontainer/` directory, and
+now the engine archive itself.
+
+## What is repaired and what is not
+
+* **v76 and v77 are complete.** The bytes were still on disk from when those snapshots
+  were taken in this container, and are now committed (`git add -f`, since the patterns
+  that hid them were what needed overriding). 42 tracked files each.
+* **v1–v75 cannot be repaired.** Those bytes are gone from git *and* from disk. Seventy-five
+  archives are permanently three files short — `git ls-files tools/engines/v75 | wc -l`
+  gives 28 against a manifest of 30.
+
+That is now the **second** independent hole in the same archive, after F7 (no Python
+before v76). Both were invisible until something enumerated what the archive actually
+contained rather than what its manifest said it contained — which is the whole of
+`prove-coverage` in one sentence, applied to the one artefact whose entire purpose is to
+be read back years later.
+
 # Status audit, 2026-08-13 — every finding re-checked against the code
 
 Prompted by getting one wrong. I recorded F17 as fixed when it was not: I had only
