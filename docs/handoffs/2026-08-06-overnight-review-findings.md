@@ -1062,6 +1062,72 @@ contained rather than what its manifest said it contained — which is the whole
 `prove-coverage` in one sentence, applied to the one artefact whose entire purpose is to
 be read back years later.
 
+# F22 — a codegen crash tells a child their game is too big, then shows them a Python traceback
+
+*Found 2026-08-13, by asking whether F1 was the only defect of its **kind** rather than
+the only one open. It was not. This is the same class and it is broader.*
+
+Two halves, each verified rather than read.
+
+**1. The server has two failure paths and only one is translated.**
+`tools/nes_studio_core/play.py`:
+
+```python
+except build_core.BuildError as exc:          # the cc65/ld65 path
+    "log": friendly_build_error(str(exc))     # explains, and appends
+                                              # "----- technical details -----" + raw log
+except Exception as exc:                      # EVERYTHING else — the generate stage
+    "log": f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}"
+```
+
+The second is the catch-all for the whole of project parsing and C emission, so it is the
+path for *any* bug or malformed project. It emits **no divider**.
+
+**2. The Studio's dialog uses that divider to decide what to hide, and hard-codes its
+heading.** `tools/tile_editor_web/studio.js:293`:
+
+```js
+var split = log.split('----- technical details -----');
+var friendly = split[0].trim() || log;        // <- no divider means the WHOLE log
+var technical = split.length > 1 ? split[1].trim() : '';
+...
+'<h2>😕 That game won’t fit yet</h2>'          // <- for every failure, whatever it was
+```
+
+So on a codegen exception a child is shown a modal headed **"That game won't fit yet"**,
+with `KeyError: 'sprites'` and a full Python traceback rendered *in the main body* — not
+tucked into the "Show technical details" fold, because the fold only appears when the
+divider is present. Measured, both halves:
+
+```
+overflow message contains the divider: True     -> raw log correctly hidden
+generate-stage message contains it   : False    -> traceback shown plainly
+```
+
+**Why it is worse than F1.** F1 showed one raw linker line, in a narrow one-byte case.
+This misdirects — the child is told to make their level smaller when the generator has
+crashed — and then shows them internals. The heading is not merely unhelpful, it is
+*wrong*, and a pupil who acts on it will delete work that was never the problem.
+
+## Fix, in two parts, and the second is free
+
+* **`studio.js` (not snapshotted, so no version bump):** choose the heading from
+  `res.stage`. `"build"` keeps *"That game won't fit yet"*; anything else wants something
+  honest like *"Something went wrong making your game"* with a line saying it is not the
+  child's fault and a teacher should see the details. This half alone removes the
+  misdirection.
+* **`play.py` (snapshotted, so it costs a version bump):** give the generate path the same
+  shape as the build path — a short human sentence, then the divider, then the traceback.
+  One line.
+
+**Deferred for the same reason as F8's leftovers:** `play.py` is inside the engine
+snapshot, so touching it forces **v78**, which collides with `main`'s v78 exactly as this
+branch's v76 and v77 already do. It should land after the merge and renumber (step 9b).
+
+**The test that should fail first:** assert that every `PlayService` failure result carries
+the divider, and that `showBuildError` picks its heading from `stage`. Today the first
+fails for the generate path and the second has no heading logic at all to test.
+
 ## F21's scope, measured — and the two sets that are sound
 
 Every manifest in the repo that promises files, checked against `git ls-files`:
