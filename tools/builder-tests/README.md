@@ -13,7 +13,18 @@ or an individual suite:
 node tools/builder-tests/round2-dialogue.mjs
 ```
 
-## What each suite covers
+## What some of the suites cover
+
+**This table is a selection — 8 of the 110 suites, not a directory.** It was headed
+"What each suite covers" until 2026-08-13, which is a completeness claim over 7% of
+them: a reader looking up a suite that is not here would reasonably conclude it does
+not exist. The suites are self-describing (each prints what it asserts), so rather than
+hand-maintain a 110-row table that would drift the same way, list them from the disk:
+
+```
+ls tools/builder-tests/*.mjs | grep -vE 'run-all|ports-unique'
+```
+
 
 | File                     | Scope                                                                 |
 | ------------------------ | --------------------------------------------------------------------- |
@@ -33,7 +44,7 @@ Each suite spawns its own throwaway Playground Server and exits 0 on success,
 non-zero on first failed assertion.
 
 **Suites do not choose their port — `run-all.mjs` assigns one.** Each gets a
-reserved block of 3 starting at 18768 (so 110 suites reach 19097), passed as
+reserved block of 3 starting at 18800 (so 110 suites reach 19129), passed as
 `BUILDER_TEST_PORT`, and asks for it via `lib/test-port.mjs`:
 
 ```js
