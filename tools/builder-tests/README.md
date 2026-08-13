@@ -258,6 +258,54 @@ Playwright needs no equivalent guard: it exits **1** with "No tests found" when
 nothing matches, so an empty run cannot be mistaken for a passing one (checked
 both `--list` and a real run).
 
+## Re-proving the gates: `mutations/*.json`
+
+The table above is a *record* of gates that were broken by hand. Eight of those
+breaks are now **executable**, so the next person does not have to trust the record
+— they can re-run it:
+
+```bash
+mutate tools/builder-tests/mutations/gates.json        # 6 guards + 1 declared-uncaught
+mutate tools/builder-tests/mutations/golden-rom.json   # the two golden ROM hashes
+mutate tools/builder-tests/mutations/gates.json --list # what a spec claims, without running
+```
+
+Run them **alone** — they edit source in place, so anything else reading the tree at
+the same time is reading deliberately broken code — and restart the dev server on
+8765 afterwards, because restoring a file moves its mtime.
+
+Each break names the assertion it expects to turn red, and the run fails if that
+assertion stays green, if nothing anywhere goes red, if the anchor matched zero times
+or more than once, if the baseline was not green first, or if a file does not come
+back byte-identical. A break that genuinely should not be caught is allowed but must
+carry `expect_none_because` — `gates.json` uses that for the one real limitation, the
+snapshot check's blindness to edits of its own frozen copies.
+
+**`mutate-report.sh` is why this works at all.** `mutate` parses unittest output and
+bash `PASS name` / `FAIL name`; `run-all.mjs` prints `<label> ... OK`, and **not one
+of its lines matches** (measured, by testing the regexes against real output rather
+than reading them). The adapter re-reports results in the form mutate understands,
+prefixes the raw output with `| ` so a suite's own `FAIL: message` cannot be mistaken
+for a result line, and exits with the runner's status rather than the pipeline's.
+
+**Two traps, both paid for here:**
+
+- **`: ` is rewritten to ` - ` in emitted names.** mutate's FAIL regex stops at the
+  first colon, so `invariant: X` is recorded as `invariant` when red but by its full
+  name when green — `expect` could never match. Applied to PASS and FAIL alike;
+  rewriting one side would leave the spellings disagreeing, which is the bug rather
+  than the fix. The cost: a spec names something `run-all.mjs` does not literally
+  print.
+- **Verify by hand that a break changes the output before trusting it.** Two golden
+  anchors did not, and each produced "nothing anywhere caught this" — output
+  identical to a hollow guard. `#define DEADZONE_LEFT` is dead in its translation
+  unit (`scroll.c` takes `scroll.h`'s own default), and one `jmp_up` site sits inside
+  `#if BW_GAME_STYLE == 2 && PLAYER2_ENABLED`, stripped from a no-modules build — a
+  break landing in precisely the code that invariant exists to strip. **"Stayed
+  green" cannot tell you which of the two you have.** Both dead ends are recorded in
+  `golden-rom.json`'s `anchor_note`, because they are the most natural anchors in
+  those files.
+
 ## Adding a new test
 
 Drop a new `.mjs` file in this directory.  Expected shape: spawn
