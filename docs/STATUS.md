@@ -320,6 +320,16 @@ no audio device.
 - **#8** — default tempo and tempo-change triggers. Per-song tempo is out of
   scope (baked into the FamiStudio export); in-game tempo changes are feasible
   but were queued behind #7/#27.
+- **10 modules' worth of pupil help is invisible in the Studio.** Found 2026-08-13.
+  `detailedHelp` is an array of explanatory lines carried by 10 of the 18 Builder
+  modules — `dialogue` alone has 18 of them — and it is rendered **only** by
+  `builder.html`, one of the legacy pages that CLAUDE.md marks critical-fix-only.
+  The Studio's RULES card renders `def.description` (one sentence) and nothing else,
+  so a pupil on the primary front-end never sees any of it.
+  - Not a defect I should fix unasked: whether RULES grows a help disclosure, and
+    what it looks like, is a design decision of the same kind as the three questions
+    already raised. Raising it rather than guessing.
+  - Worth knowing either way, because the text exists and somebody wrote it.
 - **Per-NPC dialogue text: the engine half is done, the UI half does not exist.**
   Found 2026-08-12 and left alone, because exposing it is a product call.
   A scene instance may carry its own `text`; `builder-modules.js` collects those

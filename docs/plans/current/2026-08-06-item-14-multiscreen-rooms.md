@@ -138,6 +138,19 @@ suite it would be either red or dishonest.*
 
 ### Ride-along when Step 2 does the v79 ritual
 
+**Two** stale comments are stranded in frozen engine files. Neither can be fixed on
+its own, because any committed byte-change turns `engine snapshot matches live
+sources` red and demands a version bump, a changelog entry and a re-snapshot —
+spending an engine version on a comment, and leaving a no-op entry in the engine
+changelog. Both are free on the back of a bump that is already happening.
+
+1. **`tools/tile_editor_web/builder-modules.js`** (frozen, sha1 `cfe5e665…`) — its
+   header says *"Chunk 1 ships two modules — `game` and `players`"*. There are **18**.
+   It also documents six entry keys but omits two that are in active use:
+   `detailedHelp` (10 modules) and `customRender` (3).
+2. **`steps/Step_Playground/Makefile`** (frozen, sha1 `d0ee844f…`) — see below.
+
+
 `steps/Step_Playground/Makefile`'s header comment is stale and **cannot be fixed on
 its own**. It says the playground server "writes src/scene.inc, src/palettes.inc,
 assets/sprites/game.chr and assets/backgrounds/level.nam" into that folder "then
