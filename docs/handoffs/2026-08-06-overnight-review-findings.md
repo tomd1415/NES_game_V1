@@ -1059,14 +1059,25 @@ list quietly becomes a to-do list nobody owns. Checked:
 * `friendly_build_error(None)` still returns `None`, not `""`. Now covered by
   `test_none_does_not_raise`, which asserts falsiness rather than the exact value —
   deliberately, so it does not become a false alarm.
-* `.gitignore` lines 9–11 are still the bare filenames `level.nam`, `game.chr`,
-  `scene.inc`. Benign today because those specific files are tracked, but the patterns
-  have no path anchor, so they would silently swallow a *new* file of that name anywhere
-  in the repo — which is exactly what `*.nes` did to the ROM fixtures (F5), and the same
-  class as the `.devcontainer/` directory rule.
+* ~~`.gitignore` lines 9–11 are still the bare filenames~~ — **fixed 2026-08-13.**
+  Anchored to `/steps/*/assets/backgrounds/level.nam`, `/steps/*/assets/sprites/game.chr`
+  and `/steps/*/src/scene.inc`. Proved both directions: before, an untracked
+  `native/tests/scene.inc` and `tools/game.chr` were silently swallowed (`git status`
+  showed nothing, `check-ignore` named lines 10 and 11); after, both appear as `??`,
+  while an untracked `steps/Step_1_Player_Movement/src/scene.inc` is still correctly
+  ignored, so the intent survives. Note `game.chr` exists at **five** paths, so F8's own
+  suggested fix — a single anchor — would have been wrong.
 
-None is urgent; all four are one-line changes. The point of recording it is that "minor,
-listed for completeness" had become indistinguishable from "handled".
+**The other three are deferred, and the reason is worth recording**: `world.py`,
+`preparation.py` and `play.py` are all inside the engine snapshot, so touching any of
+them costs an `ENGINE_VERSION` bump — which would be **v78**, colliding with `main`'s
+v78 exactly as this branch's v76 and v77 already collide. Three one-line tidies are not
+worth a third collision. They should land *after* the merge and renumber (step 9b), when
+version numbers are cheap again.
+
+That is a real cost of the immutability rule worth stating plainly: any edit to
+`tools/nes_studio_core/`, however cosmetic, is gated behind a version bump, because the
+snapshot gate compares bytes rather than behaviour.
 
 ## Swept and found clean
 

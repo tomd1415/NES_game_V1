@@ -6,9 +6,14 @@ build/
 # native/tests/contract/test_phase0_starter_fixtures.py had never once executed
 # (F5). Keep the negation ahead of any later *.nes rule.
 !native/tests/fixtures/**/*.nes
-level.nam
-game.chr
-scene.inc
+# Build outputs inside the tutorial steps. ANCHORED on purpose: these were bare
+# filenames, which git matches at ANY depth, so an untracked `game.chr` or `scene.inc`
+# anywhere in the repo was silently swallowed — the same trap `*.nes` set for the ROM
+# fixtures (F5). Every file these currently match is tracked, so the patterns have no
+# effect on them at all; the anchoring costs nothing and removes the hazard.
+/steps/*/assets/backgrounds/level.nam
+/steps/*/assets/sprites/game.chr
+/steps/*/src/scene.inc
 *.bak
 .devcontainer/
 # Runtime gallery entries — pupil publishes land here; the playground
