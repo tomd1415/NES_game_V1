@@ -135,6 +135,26 @@ comment explaining why there is no longer a `PPU_MASK` write there.
 - **Fix, now in the file:** strip `/* */` and `//` comments before testing
   generated code. Any assertion about emitted source should run on code, not text.
 
+**It happened again, in a different file (2026-08-13).**
+`invariant: playground_server.py native launch uses _play_latest.nes` tested the raw
+file for the bare string `_play_latest.nes`. That name appears twice there: in code,
+and in a comment three lines above explaining why a dedicated file is used. Changing
+the assignment while leaving the comment left the guard **green**; the replacement,
+which matches `latest_rom = STEP_DIR / "_play_latest.nes"`, goes red.
+
+- **Matching the assignment beats stripping comments here.** A naive `#` strip for
+  Python also cuts `#` inside string literals. A code-shaped pattern cannot appear in
+  prose, so it needs no stripping at all — cheaper, and it cannot corrupt the input.
+- **The whole set was then audited, and the risk is not uniform.** 16 of run-all's
+  invariants read source; only 2 strip comments. That sounds alarming and mostly is
+  not: a **negative** assertion ("must not contain X") *fails* on a comment — loud and
+  annoying, never silent. Only **positive** assertions ("must contain X") pass on
+  prose. Checking just those found one real case (above); the rest require
+  code-shaped anchors — `def _docs_static(self,`, `ROLE_TABLE = [`,
+  `state.sprite_tiles[t] =`, `PPU_MASK = 0x1E | 0x20` — which prose does not contain.
+  **So the question to ask is not "does this strip comments" but "could a sentence
+  satisfy this pattern".**
+
 ### A success message that counts the wrong thing
 
 Two gates on this project printed a confident total for work they had not done.
