@@ -47,6 +47,12 @@ Repository-wide contribution, ownership and cross-team review rules live in
   running both at once mostly loads it. That is a courtesy to the box, not a
   warning that the E2E is fragile: it is green at the committed timeout at load
   ~14.5, and [`STATUS.md`](STATUS.md) carries the measured detail.
+- **Adding a Studio mode?** Read
+  [`guides/ADDING-A-STUDIO-MODE.md`](guides/ADDING-A-STUDIO-MODE.md) — the three
+  places that must agree (`MODES`, the `window.StudioModes` registration, and a
+  hand-written `<script>` tag), the full optional-hook contract, and what the
+  registry gate checks. Miss the script tag and the mode renders a placeholder
+  claiming the feature "arrives later", which is not what went wrong.
 - **Working on the UI/UX redesign?** (branch `redesign/ui-ux`)
   Start with the roadmap
   [`design/phased-plan.md`](design/phased-plan.md) and its companions
