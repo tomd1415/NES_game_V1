@@ -23,7 +23,9 @@
 //   T4. /play end-to-end with style=topdown — the ROM compiles + links
 //       cleanly with cc65, returning a non-trivial NES image.
 //
-// Port 18793 keeps us out of the way of the other suites.
+// 18793 is only a STANDALONE fallback -- run-all.mjs assigns the real port
+// (BUILDER_TEST_PORT). This comment used to claim 18793 kept us clear of the
+// other suites; it was shared with three of them at the time.
 
 import fs from 'node:fs';
 import path from 'node:path';

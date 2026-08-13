@@ -13,7 +13,9 @@
 //   P5. Byte-identical payload regardless of which "page" loaded the
 //       state (proves items 1/10 — same settings from any page).
 //
-// Port 18792 keeps us out of the way of the other suites.
+// 18792 is only a STANDALONE fallback -- run-all.mjs assigns the real port
+// (BUILDER_TEST_PORT). This comment used to claim 18792 kept us clear of the
+// other suites; it was shared with three of them at the time.
 
 import fs from 'node:fs';
 import path from 'node:path';
