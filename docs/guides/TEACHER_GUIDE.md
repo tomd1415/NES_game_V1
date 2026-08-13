@@ -104,7 +104,7 @@ When a sprite is deleted, `btn-sprite-del` rewrites every animation's `frames` a
 Python stdlib HTTP server on `127.0.0.1:8765`. Two roles:
 
 1. **Serves the editor** over HTTP (the `file://` protocol breaks `fetch()` CORS when the editor tries to POST).
-2. **POST `/play`** — accepts the full editor state, encodes sprite_tiles + bg_tiles into a single 8 KB CHR (sprite pool at $0000, BG pool at $1000 — `PPU_CTRL=0x10` selects $1000 for the background), encodes the active nametable into 1024 bytes (960 tile + 64 attribute), writes all of that plus the generated sources and a Makefile into a **private temporary directory**, and runs `make` there. The ROM comes back to the browser for in-browser play; `fceux` is launched only in **"native" mode**, which needs fceux on the server's PATH and a desktop to show it on (the server falls back to returning the ROM, with a warning, if it is missing).
+2. **POST `/play`** — accepts the full editor state, encodes sprite_tiles + bg_tiles into a single 8 KB CHR (sprite pool at $0000, BG pool at $1000 — `PPU_CTRL` bit 4 (`0x10`) selects $1000 for the background; the shipped value is `0x90`, that bit plus NMI-enable), encodes the active nametable into 1024 bytes (960 tile + 64 attribute), writes all of that plus the generated sources and a Makefile into a **private temporary directory**, and runs `make` there. The ROM comes back to the browser for in-browser play; `fceux` is launched only in **"native" mode**, which needs fceux on the server's PATH and a desktop to show it on (the server falls back to returning the ROM, with a warning, if it is missing).
 
    > **Nothing is written into `steps/Step_Playground/`.** An earlier version of this paragraph said `/play` writes `src/scene.inc` + `src/palettes.inc` there and runs `make -C steps/Step_Playground`. Both build paths moved into a temp directory, so a play leaves `git status` clean — and if you *do* see engine sources modified after one, that is a real edit rather than build noise.
 
@@ -400,7 +400,11 @@ POST body:
 }
 ```
 
-`mode` is `"browser"` (default) or `"native"`. Native auto-falls-back to browser (with a warning in the response) if `fceux` isn't on PATH. When `customMainC` is present and non-empty, the build runs in a per-request tempdir so concurrent pupil edits don't race; without it, the shared `steps/Step_Playground/` build path is used (serialised through `BUILD_LOCK`).
+`mode` is `"browser"` (default) or `"native"`. Native auto-falls-back to browser (with a warning in the response) if `fceux` isn't on PATH.
+
+**Every** build runs in its own throwaway tempdir — the pupil's `customMainC` and the default stock build alike — so nothing races on the shared tree and nothing is left behind. Concurrent Plays therefore run **in parallel**, capped by a semaphore sized to the machine (`BUILD_SEM = BoundedSemaphore(max(2, min(8, cpu_count)))`), rather than one at a time.
+
+> This paragraph used to say the no-`customMainC` case used the shared `steps/Step_Playground/` path, serialised through `BUILD_LOCK`. Both halves are gone: there is no shared build path any more, and `BUILD_LOCK` no longer exists — it was replaced precisely because serialising every build is a bottleneck when thirty pupils press Play at once. If you sized a classroom on "builds are serialised", size it again.
 
 Native mode writes the just-built ROM to `steps/Step_Playground/_play_latest.nes` and launches `fceux` against **that** file, not the shared `game.nes`.  The tempdir build path never updates `game.nes`, so an earlier bug had fceux loading whatever stale ROM the last offline `make` had left there; the dedicated `_play_latest.nes` keeps the offline workflow's stock `game.nes` authoritative while giving `/play` a predictable launch target.  `*.nes` is already in `.gitignore`, so nothing new to ignore.
 
@@ -474,13 +478,17 @@ reference.  A few teacher-relevant bits:
 ### Regression tests
 
 Run `node tools/builder-tests/run-all.mjs` from the repo root.
-It syntax-checks every module + inline script, verifies the
-byte-identical baseline invariant, and runs eight smoke-test
-suites covering Player 2, HP+HUD, runtime animations, teleport
-doors, multi-background doors, the polish sweep (P2 HP + P2
-animation + enemy/pickup idle), and dialogue (including a
-regression guard against the old `draw_text()` / `clear_text_row()`
-from-per-frame pattern that caused a one-frame sprite stutter).
+It syntax-checks every shipped module and every inline `<script>`,
+checks the byte-identical golden-ROM invariants, and then runs
+**every** smoke-test suite in `tools/builder-tests/`.
+
+The runner enumerates those suites from disk rather than from a list,
+so the count is simply whatever is in the directory — 115 on
+2026-08-13, up from the eight this paragraph used to name. What they
+cover is documented per-suite in
+[`tools/builder-tests/README.md`](../../tools/builder-tests/README.md),
+which is the file to read rather than a summary here that goes stale
+the next time someone adds one.
 
 The suite should be green before any Builder change ships.
 
