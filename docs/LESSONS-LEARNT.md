@@ -300,6 +300,33 @@ the useful part:
   a test that says it covers everything, so an over-claim is how a gap becomes
   permanent — and two of the four were real gaps.
 
+### One behaviour change, four wrong descriptions — and the last one is frozen
+
+`_build_rom()` moved from writing into the tracked tree to building in a
+`tempfile.TemporaryDirectory`. That single change falsified the same paragraph in
+**four** places, found weeks apart:
+
+| Where | Fixed |
+| --- | --- |
+| `CLAUDE.md` | 2026-08-06 |
+| `playground_server.py`'s module docstring — the first thing anyone reads in that file | 2026-08-13 |
+| `docs/guides/TEACHER_GUIDE.md`, twice (the server section and the `/play` contract) | 2026-08-13 |
+| `steps/Step_Playground/Makefile` header | **cannot be fixed alone** |
+
+- **The lesson about finding them:** fixing the first instance felt like closing the
+  issue, and three more sat untouched for a week. When a behaviour changes, grep for
+  the *old behaviour's nouns* — here `scene.inc`, `palettes.inc`, `make -C
+  steps/Step_Playground` — not for the file you already know about.
+- **The lesson about the fourth:** it is a frozen engine file. Its HEAD bytes hash
+  exactly as the v78 manifest records, so **any** committed change — a comment
+  included — turns `engine snapshot matches live sources` red and demands a version
+  bump, a changelog entry and a re-snapshot. Correcting a comment is not worth a
+  version number, and would leave a no-op entry in the engine changelog. It is
+  recorded as a ride-along for the next bump instead
+  ([#14 Step 2](plans/current/2026-08-06-item-14-multiscreen-rooms.md)).
+- **Worth knowing before you try:** an *uncommitted* edit there looks fine, because
+  `--check` reads HEAD, not the working tree. The red appears after you commit.
+
 ### Placeholder copy outlives the state it described
 
 When `window.StudioModes[id]` is missing, the dock renders "This mode arrives

@@ -136,6 +136,25 @@ suite it would be either red or dishonest.*
   one; and `_rom-equiv.mjs` still passes (no golden project is multi-room, so
   the hashes must not move at all).
 
+### Ride-along when Step 2 does the v79 ritual
+
+`steps/Step_Playground/Makefile`'s header comment is stale and **cannot be fixed on
+its own**. It says the playground server "writes src/scene.inc, src/palettes.inc,
+assets/sprites/game.chr and assets/backgrounds/level.nam" into that folder "then
+invokes `make run` here". Neither half is true: every build clones into a
+`tempfile.TemporaryDirectory` and runs plain `make -C <tmpdir>`.
+
+It is stuck because that Makefile is a **frozen engine file** — it is in the v78
+snapshot manifest, and its HEAD bytes hash `d0ee844f…` exactly as the manifest
+records. Any committed content change, comment included, makes those differ and turns
+`engine snapshot matches live sources` red, which then demands a version bump, a
+changelog entry and a re-snapshot. Spending a version number on a comment would also
+put a no-op entry in the engine changelog.
+
+So: when Step 2 bumps to v79 anyway, correct that comment in the same commit. The
+fix costs nothing on the back of a bump that is already happening, and the golden ROM
+hashes are unaffected because no emitted byte changes.
+
 ## Step 3 — Give "parked" its own flag
 
 *The real fix; needed for tall rooms regardless of Step 1's outcome.*
