@@ -52,11 +52,12 @@ work cold, and the file to refresh *last* before putting work down.
       load", which was true of a loaded box in July and had become a reason to
       distrust a suite that is fine. It is gone rather than annotated: a
       correction printed under the claim it corrects gets read as the claim.
-- **Playtest ROMs:** regenerated 2026-07-28 and **byte-identical** to the
-  v76-era build (`node scripts/make-playtest-roms.mjs`, hashes compared before
-  and after, at v77 *and* again at v78). v77's enemy-bump is off by default and
-  v78 only changes dialogue-enabled builds, so the ROMs waiting on the attended
-  playtests are unaffected and do not need re-judging against a newer engine.
+- **Playtest ROMs:** ✅ **re-verified 2026-08-13** — `node scripts/make-playtest-roms.mjs`
+  run again at v78 produced output **byte-identical** to the files on disk from
+  2026-07-28 (all three sha1s unchanged: `5945fb3d…`, `cc2943e3…`, `c6a71980…`).
+  So "the ROMs are current, do not rebuild before playtesting" is measured, not
+  inferred. The reasoning behind it still holds too: v77's enemy-bump is off by
+  default and v78 only changes dialogue-enabled builds, so neither touches these.
   - ✅ **Run the normal way** — `npx playwright test` from the repo root, no
     config override, against the image's **own baked Chromium** (build 1228,
     matching Playwright 1.61.1). The earlier caveats are retired: the container
