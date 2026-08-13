@@ -315,6 +315,47 @@ from scratch — the full cost of the shortcut, paid in full.
 
 ---
 
+## 2026-08-13 — An archive can be incomplete from the day it is written
+
+Every engine snapshot in `tools/engines/` — all 77 of them — was missing the same three
+files, and had been since v1. `.gitignore` carried bare patterns (`scene.inc`,
+`game.chr`, `level.nam`), git matches a bare pattern at **any depth**, and that includes
+inside the archive. `git add` declined them silently, in every snapshot, for the whole
+life of the scheme.
+
+* **What it looked like:** `✓ v77 snapshot matches HEAD (41 of 41 files compared, 0
+  missing).` Green, specific, and quoted in `CLAUDE.md` as the thing that keeps engine
+  changes safe.
+* **Why the gate could not see it:** both its directions compared the **live** engine
+  sources against the manifest. Neither ever opened the frozen copy. "0 missing" was true
+  of what it checked and false of what any reader assumes it checked. An archive is the
+  one artefact whose *stored* copy is the entire point, and that copy was the one thing
+  unexamined.
+* **How it surfaced:** not by looking for it. Anchoring those `.gitignore` patterns —
+  a one-line tidy filed under "minor, listed for completeness" a week earlier — made four
+  paths appear as untracked, and the question "why are those untracked?" did the rest.
+* **The damage:** v76 and v77 were repairable because their bytes were still on disk in
+  this container. **v1–v75 are permanently three files short**, gone from git and disk
+  both. The scheme exists so a future engine can rebuild a game with the engine it was
+  authored for; seventy-five of them cannot.
+
+**The check, and it is one line of intent:** *enumerate the manifest and assert every
+promised file is readable from HEAD at its archived path.* Not that it exists — that it
+is **in the repository**.
+
+**My first version of that check used `existsSync()` and passed**, because the files were
+sitting on disk untracked: present locally, absent from every fresh clone. That is F5
+(the ROM fixtures swallowed by `*.nes`) committed inside the fix for F5's own class.
+Three incidents here now share one sentence, so it is worth stating flatly:
+
+> **On-disk existence is not archival, and `git add` says nothing when it declines.**
+
+The generalisation worth carrying to any project: if something keeps a **manifest** and a
+set of **files it promises**, one test must enumerate the manifest and assert each promise
+is tracked. In this repo three artefact sets have a manifest; two had that test and are
+sound, one did not and had rotted since v1. That is as close to a controlled experiment as
+this kind of thing gets.
+
 ## 2026-08-13 — A golden that does not use a feature cannot detect it changing
 
 Three shipped starter games (`smb`, `runner`, `geodash`) changed ROM bytes between
