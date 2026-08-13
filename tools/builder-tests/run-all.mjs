@@ -555,17 +555,35 @@ check('invariant: playground_server.py exposes /docs/ route for editor doc links
   }
 }) || (anyFail = true);
 
+// `if (!trigger) continue;` is how a guard stops guarding without anyone noticing
+// (LESSONS.md §4 — "nothing found" and "never ran" must not look the same). If the
+// <script src="storage.js"> spelling ever changes — a bundler, type="module", a
+// different filename — every page is skipped, the loop body never runs, and this
+// prints OK having checked nothing. So the trigger's own hit-count is asserted.
+//
+// studio.html is exempt BY NAME rather than by a pattern: it does load storage.js,
+// but calls createTileEditorStorage from studio.js instead of inline, so requiring
+// the call in the page would be a false failure. Naming it means a NEW page cannot
+// drift into the exemption by resembling it.
+const STORAGE_INIT_EXTERNAL = ['studio.html'];   // init lives in a module, not inline
 check('invariant: every page that loads storage.js calls createTileEditorStorage', () => {
-  const pages = ['index.html', 'sprites.html', 'behaviour.html',
-                 'builder.html', 'code.html', 'audio.html', 'gallery.html'];
+  const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
+  let triggered = 0;
   for (const p of pages) {
     const html = fs.readFileSync(path.join(WEB, p), 'utf8');
-    const loadsStorage = /<script\s+src=["']storage\.js["']/i.test(html);
-    if (!loadsStorage) continue;
+    if (!/<script\s+src=["']storage\.js["']/i.test(html)) continue;
+    triggered++;
+    if (STORAGE_INIT_EXTERNAL.includes(p)) continue;
     if (!/createTileEditorStorage\s*\(/.test(html)) {
       throw new Error(`${p} loads storage.js but never calls createTileEditorStorage(...)` +
         ' — Storage.loadCurrent will hit the browser\'s Web Storage interface and throw');
     }
+  }
+  if (triggered === 0) {
+    throw new Error(
+      `no page under ${WEB} matched <script src="storage.js"> — the trigger, not the\n` +
+      '  pages. Every page was skipped and this guard checked nothing. Either the tag\n' +
+      '  spelling changed, or storage.js is no longer loaded that way.');
   }
 }) || (anyFail = true);
 
@@ -619,15 +637,32 @@ check('invariant: btn-sprite-dup handler clones tile pixels (not just sprite str
 // code.html) must convert via String.fromCharCode before loadROM.  Both
 // regressed here once: openEmulator received the raw Uint8Array.  Pure
 // source-text guard until a JSDOM/emulator harness exists.
+// Same self-disabling shape as the storage guard above, and the same fix. The
+// `.loadROM(` test IS the selector for "this page drives its own emulator", so
+// the pages are enumerated rather than hand-listed — a NEW page that grows a
+// private emulator is then covered on arrival instead of being invisible — and
+// the selector's hit-count is asserted, because if `.loadROM(` stops appearing
+// (renamed, wrapped, moved into a module) every page is skipped and this prints
+// OK having checked nothing.
 check('invariant: private-emulator pages convert ROM bytes to a binary string for jsnes', () => {
-  for (const p of ['sprites.html', 'code.html']) {
+  const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
+  let triggered = 0;
+  for (const p of pages) {
     const html = fs.readFileSync(path.join(WEB, p), 'utf8');
     if (!/\.loadROM\s*\(/.test(html)) continue;   // no private emulator → nothing to guard
+    triggered++;
     if (!/String\.fromCharCode\(/.test(html)) {
       throw new Error(`${p}: drives its own jsnes.loadROM but never converts the ROM ` +
         'Uint8Array to a binary string (String.fromCharCode) — the in-browser ' +
         '"Play in NES" will throw "Not a valid NES ROM."');
     }
+  }
+  if (triggered === 0) {
+    throw new Error(
+      `no page under ${WEB} calls .loadROM( — the selector, not the pages. Every page\n` +
+      '  was skipped and this guard checked nothing. sprites.html and code.html drove\n' +
+      '  their own jsnes instance when this was written; if that moved into a module,\n' +
+      '  this guard has to follow it rather than silently pass.');
   }
 }) || (anyFail = true);
 
