@@ -16,11 +16,13 @@ work cold, and the file to refresh *last* before putting work down.
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  **114 suites, exit 0, re-run 2026-08-12 at v78**, ≈6 min) — plus 22 invariants
-  and 38 syntax checks. The 38 are 32 shipped `.js` modules, 5 inline HTML script
-  bodies and `playground_server.py`; the 32 match the 32 non-vendored `.js` files
-  on disk exactly, which is the point of enumerating them at runtime rather than
-  hand-listing (it used to check 14 and silently skip the rest).
+  **115 suites, exit 0, re-run 2026-08-13 at v78**) — plus 22 invariants and 40
+  syntax checks. The 40 are 32 shipped `.js` modules, 7 inline HTML script bodies
+  and `playground_server.py`; the 32 match the 32 non-vendored `.js` files on disk
+  exactly, and the 7 cover every HTML page carrying a bare `<script>`. Both sets
+  are enumerated at runtime rather than hand-listed — the `.js` list used to name
+  14 and silently skip 18, and the HTML list named 5 of 8, leaving `audio.html`
+  and `gallery.html` unchecked.
 - **Studio E2E:** ✅ **158 passed, exit 0** (`npx playwright test`, re-run
   2026-08-12 at v78) across 34 spec files. Was 147 on 2026-07-30; the eleven added
   since are the silent-failure guards from the 2026-08-09/12 maintenance, in
@@ -35,16 +37,21 @@ work cold, and the file to refresh *last* before putting work down.
   - Wall-clock is not a constant and is not recorded here: the same 158 tests took
     **7.1 min** at host load ~14.5 and **3.8 min** at load ~1 on the same day. Use
     it to judge the box, never to judge a change.
-  - ⚠️ **Under host load the committed 30s per-test limit can still be too tight**,
-    and the run then shows false red. Known tells, all unrelated to any recent
-    change: `project-file` NAM round-trip (59.1s) and `budget` CHR (41.6s) on
-    2026-07-30, and `tutorial › every game style` (46.6s) on 2026-08-09 at host
-    load 39. Re-run with `--timeout=120000` to tell an environment problem from a
-    real one.
-  - The warning stands but is not a certainty: the 2026-08-12 run above was fully
-    green *with load rising to ~14.5*, `tutorial › every game style` included. So
-    a green run under load proves nothing about the next one, and a red test named
-    above is still worth re-running before believing it.
+  - **The committed 30 s per-test limit is adequate to at least host load ~15.**
+    Measured, not estimated. The full suite is green at the committed timeout with
+    no override at load ~1 *and* at load ~14.5 (both 2026-08-12), and the two tests
+    that once blew it — `project-file` NAM round-trip and `budget` CHR — took
+    59.1 s and 41.6 s at load ~30 but **2.0 s and 2.5 s** at load ~1.8 (2026-08-08).
+    Only one test has exceeded it since: `tutorial › every game style`, 46.6 s at
+    load **39** (2026-08-09).
+    - **So the rule is about the box, not the suite.** A red test named above,
+      *with the load average high*, is an environment result — confirm with
+      `--timeout=120000`. A red test on a quiet box is a real failure, and
+      reaching for the override there hides a regression.
+    - This replaces an earlier blanket warning that the limit "is not enough under
+      load", which was true of a loaded box in July and had become a reason to
+      distrust a suite that is fine. It is gone rather than annotated: a
+      correction printed under the claim it corrects gets read as the claim.
 - **Playtest ROMs:** regenerated 2026-07-28 and **byte-identical** to the
   v76-era build (`node scripts/make-playtest-roms.mjs`, hashes compared before
   and after, at v77 *and* again at v78). v77's enemy-bump is off by default and
