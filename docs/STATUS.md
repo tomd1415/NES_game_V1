@@ -4,14 +4,14 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-08-12 (unattended maintenance — failures that reported a
-  *wrong* reason rather than none, both suites re-run green; no engine change).
-  ⚠️ **The 2026-08-09/12 work below is local and unpushed** — `origin/main` is at
-  `780cf5c` and has not moved, so it is a clean fast-forward whenever it goes.
-  For the count, ask git rather than this file:
-  `git log --oneline origin/main..main | wc -l` (16 at the time of writing, and
-  that number is exactly the kind that rots — an earlier draft of this line said
-  15 and was wrong one commit later).
+- **Last updated:** 2026-08-13 (unattended maintenance — an eleven-item accepted
+  work-list worked to completion; no engine change).
+  ✅ **Everything below is pushed.** `main` and `origin/main` agree; the four-day
+  divergence that earlier versions of this line warned about is closed.
+  Do not restate a commit count here — ask git:
+  `git log --oneline origin/main..main | wc -l` (0 means in step). Two earlier
+  drafts of this line carried a hand-written count and both were wrong within one
+  commit.
 - **Branch:** `main`
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
@@ -24,7 +24,7 @@ work cold, and the file to refresh *last* before putting work down.
   14 and silently skip 18, and the HTML list named 5 of 8, leaving `audio.html`
   and `gallery.html` unchecked.
 - **Studio E2E:** ✅ **158 passed, exit 0** (`npx playwright test`, re-run
-  2026-08-12 at v78) across 34 spec files. Was 147 on 2026-07-30; the eleven added
+  2026-08-13 at v78) across 34 spec files. Was 147 on 2026-07-30; the eleven added
   since are the silent-failure guards from the 2026-08-09/12 maintenance, in
   `mode-hook-errors.spec.js`, `attr-conflict-screen.spec.js` and
   `mode-module-registry.spec.js`. Still confirms the suite survives engine
@@ -109,15 +109,46 @@ No engine change, so **still v78**. The 2026-08-06 commits are on `origin/main`
   by mistake-shape, including the false theories) and a step-by-step plan for
   #14's remaining slice at
   [`plans/current/2026-08-06-item-14-multiscreen-rooms.md`](plans/current/2026-08-06-item-14-multiscreen-rooms.md).
-- **Dead code found, not removed** (needs a non-doc change): eight unreferenced
-  path constants in `playground_server.py` — `CHR_PATH`, `NAM_PATH`, `SCENE_INC`,
-  `PAL_INC`, `COLLISION_H_PATH`, `BEHAVIOUR_C_PATH`, `BG_WORLD_H_PATH`,
-  `BG_WORLD_C_PATH`. `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them are live.
+- ~~**Dead code found, not removed**: eight unreferenced path constants in
+  `playground_server.py`.~~ **Removed 2026-08-13** (`4c108ec`).
+  `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them were live and stayed.
+
+## 2026-08-13 — an accepted work-list, worked to completion
+
+Eleven items, ten done and one deliberately partial. Everything is pushed. The theme
+was **proving guards can fail**, and the recurring finding is worth stating once
+rather than eleven times:
+
+> Three times, a guard that looked hollow was correct and my *break* was the defect.
+> "Nothing caught this" cannot distinguish *the guard is broken* from *the mutation
+> was a no-op* — so measure that the break changes the output before believing
+> either.
+
+- **Two more coverage lists now enumerate at runtime.** The inline-`<script>` check
+  hand-listed 5 of 8 HTML pages, leaving `audio.html` (~22 kB of JS) and
+  `gallery.html` (~7.8 kB) never syntax-checked. Both storage/emulator guards also
+  enumerate now, and each asserts its own trigger's hit-count — previously a renamed
+  trigger would have skipped every page and printed OK.
+- **Six gate mutations are executable** rather than prose:
+  `tools/builder-tests/mutations/gates.json`, run with `mutate`. 7 caught / 0 not,
+  including the snapshot-copy limitation kept as `expect_none_because` so it cannot
+  be forgotten. Needed a new suite first — `harness-startserver.mjs` — because
+  `startServer`'s pre-flight had no named assertion to turn red.
+- **The golden byte-identical-ROM invariants have now been watched failing**
+  (`golden-rom.json`), which had never been done. Both took two wrong anchors first:
+  `DEADZONE_LEFT` is dead in its translation unit, and one `jmp_up` site is stripped
+  by `#if BW_GAME_STYLE == 2 && PLAYER2_ENABLED` — a break landing in exactly the
+  code this invariant exists to strip.
+- **`preflight` run for the first time**: clean, and proved non-vacuous. Two
+  shared-tool caveats recorded in [`LESSONS-LEARNT.md`](LESSONS-LEARNT.md).
+- **#14 Step 1 measured** — per-room parking *does* survive a wide (16-bit) build.
+  The plan is corrected three ways, including an off-by-one that would have let
+  Step 2 admit a row of silently-parked entities. The door-transition half is
+  **unproven** and marked so: no suite drives a door in a render test.
 
 ## 2026-08-09/12 unattended maintenance — what changed
 
-No engine change, so **still v78**. All of this is **local and unpushed** at the
-time of writing (see the warning under "What is genuinely open").
+No engine change, so **still v78**. All of this is now on `origin/main`.
 
 The theme was one shape: **a failure that reports a wrong reason instead of no
 reason.** Quiet failures are already covered in `LESSONS-LEARNT.md` §1; these are
