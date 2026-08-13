@@ -315,6 +315,41 @@ from scratch — the full cost of the shortcut, paid in full.
 
 ---
 
+## 2026-08-13 — A golden that does not use a feature cannot detect it changing
+
+Three shipped starter games (`smb`, `runner`, `geodash`) changed ROM bytes between
+engine v63 and v75 and nobody noticed for twelve versions. Bisected to `4554de9`
+("compress ANY multi-screen level", v66), and the change was **deliberate** — column
+dedup is supposed to alter how a multi-screen level is emitted.
+
+The interesting part is the guard. Every version in that range says, correctly:
+
+> goldens `1730448e` + `_rom-equiv` `0aed6e95` **UNCHANGED**
+
+and every one of those claims is **true**. The goldens are the stock `Step_Playground`
+ROM and the no-modules template — deliberately minimal projects. Neither has a
+multi-screen level, so neither can observe multi-screen emission changing.
+
+* **What it looked like:** a byte-identical-ROM gate, green across twelve engine
+  versions, quoted in `CLAUDE.md` as the lever that keeps engine changes safe.
+* **The false theory:** that "goldens unchanged" meant "ROM output is stable". It means
+  "**unused** features are stripped and add nothing" — which is what the goldens were
+  built to prove, and they prove it well. The larger reading was never justified.
+* **Why the gap is structural, not careless:** a minimal golden is the *right* design
+  for the claim it makes. You cannot fix it by making the golden bigger without losing
+  the property that makes it a useful invariant. You fix it by adding a **second**
+  corpus of realistic projects — which is what `native/tests/fixtures/phase0/` now is,
+  and it is why the drift surfaced at all.
+* **The check that would have told us sooner:** for each feature gated "off by
+  default", one fixture with it **on**. Ask of any golden: *which of my features does
+  this project actually exercise?* The answer is the list of things it can detect —
+  and everything else is uncovered, however green it goes.
+
+The specificity is the tell that this is a real rule rather than a vague worry: `racer`
+is multi-screen (2×2) and was **not** affected, because the change is *column* dedup and
+racer uses the four-screen path. Exactly the projects that used the changed feature
+changed; exactly the ones that did not, did not.
+
 ## 2026-08-12 — The document that would have prevented it was one branch away
 
 I spent two stretches getting the builder-test port count wrong — 11/23, then 14/34,

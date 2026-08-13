@@ -136,3 +136,86 @@ build from `tools/engines/v63/`, or the fixtures should stop claiming a version
 they are not built with. The re-baseline takes the second option — it names the
 commit instead — but the first is the one that would make the label mean
 something.
+
+---
+
+# Answered 2026-08-13 — it was `4554de9`, and it was intended
+
+Work-list item 6, bisected on the owner's instruction. **The drift was deliberate**, and
+the reason nobody noticed is more useful than the commit.
+
+## Method
+
+Each starter's **frozen input project** (`project.json.gz` as it is today) was rebuilt at
+each candidate commit in a throwaway `git worktree`, assembling `main.c` with that
+commit's `builder-assembler.js` and template and POSTing it to that commit's
+`playground_server.py`. Holding the input constant isolates the **engine** from the
+starter definition, which changed over the same range. The harness was validated first
+by reproducing today's committed hash for `smb` (`30fae8ae…`) before any result was
+trusted.
+
+## The commit
+
+**`4554de9` — "feat(#10): compress ANY multi-screen level so detailed 5–8 screen levels
+fit" (engine v66)**, whose hunk is `player_asm.s`, `project.inc` and `platformer.c`
+(21 insertions, 5 deletions).
+
+| starter | at `ef88f8e` (its parent) | at `4554de9` | today |
+| --- | --- | --- | --- |
+| `smb` | `4427934d` | `1882640c` | `30fae8ae` (moved again later) |
+| `runner` | `8bfefb00` | **`890944e9`** | `890944e9` — unchanged since |
+| `geodash` | `4a441574` | **`414f2a80`** | `414f2a80` — unchanged since |
+
+For `runner` and `geodash` the hash changes **there and only there**: parent gives the
+old value, the commit gives today's, and every later version bump through v75 leaves it
+alone. `smb` moves at `4554de9` too and then again four more times.
+
+## Why exactly those three
+
+The affected starters are precisely the **horizontally** multi-screen levels:
+
+```
+basics 1x1  no    smb 2x1  YES    topdown 1x1  no    runner 4x1  YES
+geodash 6x1 YES   racer 2x2  no   scratch 1x1  no
+```
+
+`racer` is multi-screen (2×2) and **not** affected, which is what makes the rule
+specific rather than "big levels changed": the v64–v66 work is **column** dedup, so it
+reaches levels that scroll horizontally and leaves the four-screen 2×2 path alone.
+
+## Why nothing caught it — the part worth keeping
+
+Every one of these engine versions declares, accurately:
+
+> goldens `1730448e` + `_rom-equiv` `0aed6e95` **UNCHANGED**
+
+That claim is **true**, and it is what the "gate new behaviour behind an off-by-default
+flag" discipline is supposed to produce. The two goldens are the stock
+`Step_Playground` ROM and the no-modules template — *minimal* projects. Neither has a
+multi-screen level, so neither can observe a change to how multi-screen levels are
+emitted.
+
+**A golden that does not use a feature cannot detect that feature changing.** The
+goldens prove "unused features are stripped and add nothing", which is exactly what they
+were built for and is genuinely valuable. They were then read as "ROM output is stable",
+which is a different and much larger claim. Three shipped starter games changed under
+that reading, and the only reason it surfaced at all is that the phase-0 fixtures froze
+real projects and someone later compared them.
+
+So: **not a regression, and not something to revert.** The re-baseline froze the correct
+current behaviour. What was missing was a ROM-level check over a project that *uses* the
+features — which is what `native/tests/fixtures/phase0/` now is.
+
+## Commits tested
+
+`72f038d` (v63), `e7e49df` (v64), `2616391` (v65), `ef88f8e`, **`4554de9`** (v66),
+`2cae4a2` (v67), `33a49e3`, `2357815` (v68), `8446e27` (v69), `6c65967` (v70),
+`13f63ed` (v71), `bc4a933` (v72), `3f36d2d` (v73), `3803e77` (v74), `d696bcf` (v75).
+
+**One caveat, stated because the method caught me out.** Sampling at version-bump commits
+first attributed `runner`'s change to `2cae4a2` (v67) — but its parent `33a49e3` already
+had the new hash, so the bump commit was innocent and the change had landed earlier. The
+parent-and-commit test is what found that. `smb`'s four *later* moves are therefore
+located only to a version range, not to an exact commit: they fall somewhere in
+(v66,v67], (v67,v68], (v68,v69] and (v69,v70]. Pinning them would be four more bisects,
+and nothing depends on it — `smb` has been stable since v70.
