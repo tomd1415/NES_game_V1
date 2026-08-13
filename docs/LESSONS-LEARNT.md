@@ -109,6 +109,30 @@ Full-screen preview". Weaker — nothing on screen contradicts it — and what i
 *should* show (current screen, or the whole level scaled) is a product call. Also
 raised rather than guessed.
 
+### Interrupting `run-all.mjs` can leave a frozen engine source modified
+
+`invariant: template (no modules) ROM matches golden hash` swaps the Builder template
+over `steps/Step_Playground/src/main.c`, builds, compares the hash, and restores the
+original in a `finally`. Kill the process before that `finally` runs — which
+`timeout N node run-all.mjs` does, and which I did repeatedly on 2026-08-13 while
+sampling early invariants — and **`main.c` is left holding foreign content**.
+
+- **Why it matters more than ordinary build dirt:** `main.c` is a frozen engine file
+  in the snapshot manifest. Commit it by accident and `engine snapshot matches live
+  sources` goes red, and the fix is a version bump nobody wanted.
+- **Why it is easy to miss:** the leftover is a perfectly valid C file, and the next
+  thing most people do is read *other* output. I only noticed because I ran
+  `git status` for an unrelated reason two commands later.
+- **What to do:** after any interrupted `run-all`, check
+  `git status steps/Step_Playground/` before doing anything else. If it is dirty,
+  restore it — and prefer `cp` from a backup you took, or `git checkout --` **only**
+  when you have confirmed the file holds no work of your own (this file normally
+  does not, which is the one case where §5's "never `git checkout`" rule is safe to
+  set aside — say so out loud when you do).
+- **Better still, do not interrupt it.** Sampling an early check with a short
+  `timeout` is exactly how this happens. Redirect a full run to a file and read the
+  file; the run is ~6 minutes and the cleanup is not.
+
 ### A green snapshot check does not mean your tree is clean
 
 `run-all.mjs`'s *"engine snapshot matches live sources"* was deliberately broken
