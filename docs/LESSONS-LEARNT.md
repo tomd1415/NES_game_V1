@@ -177,6 +177,48 @@ exit 0, "(30 files)".
   is driven by; whatever is only in the *other* one is invisible. Iterating A and
   looking up B never sees a B without an A.
 
+### A clean scan from `preflight`, triaged (2026-08-13)
+
+Run over this project for the first time. Recorded so it is not re-run blind, and
+because the useful part is not the clean result.
+
+**Result:** `preflight --all` → **0 findings, 17 files, exit 0.**
+
+**The clean result is real, and that had to be proved.** Planting the
+`verification-through-a-pipe` fixture (`run-checks --all | grep PASS`) in a `.sh`
+made the scan go red. Without that, "no findings" and "no detector could see
+anything" are the same output — the distinction this whole file is about. My
+*first* probe was hand-written from the detector's description and was **not**
+caught; using the detector's own fixture was what worked. A positive control
+written from memory can fail for the wrong reason and be read as a broken scan.
+
+**Python coverage is nominal, not real — and I got this wrong twice.**
+- `preflight --list` shows each detector's files as `*.sh, *.bash, godot-job`, so I
+  wrote that no detector covers Python. That display **truncates** the tuple: it is
+  seven entries, and two detectors (`sudo-with-redirect`, `git-checkout-to-undo`)
+  do list `*.py`.
+- But they cannot fire there. `scan_text` calls `strip_noise(..., python=True)`,
+  which blanks string literals — correctly, so a detector never fires on prose
+  describing itself. In Python, `git checkout -- x.py` and `sudo … < key` occur
+  essentially *only* inside strings (`subprocess`, `os.system`). Measured: the bare
+  fixture fires as `x.py`; the identical text inside `os.system("…")` does not.
+- So a clean Python result means **no detector could look**, not that nothing is
+  wrong. Six detectors, all of them shell-shaped.
+
+**`--self-test` exits 1 here, and it is not a broken detector.**
+`rsync-unanchored-exclude` cites commit `43dd216`, which is not in this repository —
+its incident is a Godot project (`ArtRegistry`, `scripts/core/`). The check asserts
+every cited sha is reachable in the repo being scanned, which only holds in the repo
+where the incident happened; these detectors are fleet-wide. All three *logic*
+assertions (fires on its incident, quiet on sound code, quiet on prose) passed for
+every detector. Worth knowing before someone reads `1 detector problem(s)` as a
+reason to distrust the scan — or as a reason to ignore the self-test entirely.
+
+**And the trap I walked into while running it:** `preflight --self-test | tail -25;
+echo $?` printed `0`. That is `tail`'s status. The real exit was 1. Same lesson as
+§1's "piping a long suite through `tail`", committed by someone who had just
+re-read it.
+
 ### A test name is a promise — but the fix is not always "make it true"
 
 Sweeping the suites for names carrying a universal quantifier ("every", "all",
