@@ -9,10 +9,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { testPort } from './lib/test-port.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const WEB = path.join(ROOT, 'tools', 'tile_editor_web');
-const PORT = 18784;
+const PORT = testPort(18784);
 
 globalThis.window = globalThis;
 globalThis.NES_TARGET_ENGINE = 4; // SMB actors require targeting engine v4+

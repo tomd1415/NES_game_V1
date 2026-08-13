@@ -29,10 +29,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { testPort } from './lib/test-port.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
-const PORT = 18793;
+const PORT = testPort(18793);
 
 globalThis.window = globalThis;
 for (const f of ['sprite-render.js', 'builder-assembler.js',

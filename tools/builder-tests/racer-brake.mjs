@@ -6,8 +6,9 @@
 // refactor; brake floors at 0.)  Asserts the car builds speed under accelerate,
 // then DOWN bleeds it off far quicker than friction and brings it to a stop.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18843;
+const PORT = testPort(18843);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

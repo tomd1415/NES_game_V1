@@ -7,10 +7,11 @@
 //   * a v10 PATROL paces horizontally while its Y stays put (nothing pulls it
 //     down), confirming the new path works outside the platformer too.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 globalThis.NES_TARGET_ENGINE = 10;   // patrol needs engine v10+
 
-const PORT = 18867;
+const PORT = testPort(18867);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

@@ -5,8 +5,9 @@
 // pickup in the player's path, walk into it, and assert its OAM cell parks
 // off-screen. The player is OAM sprites 0-3, the pickup scene sprite is 4-7.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18869;
+const PORT = testPort(18869);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

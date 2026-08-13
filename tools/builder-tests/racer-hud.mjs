@@ -7,8 +7,9 @@
 // the on-screen lap number tracks the race.  (How the glyph LOOKS is the visual
 // pass.)
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18844;
+const PORT = testPort(18844);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

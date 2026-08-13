@@ -20,10 +20,11 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { testPort } from './lib/test-port.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
-const PORT = 18861;
+const PORT = testPort(18861);
 const BASE = `http://127.0.0.1:${PORT}`;
 const DB = path.join('/tmp', `accounts-test-${process.pid}.db`);
 const JOIN = 'OPEN-SESAME';

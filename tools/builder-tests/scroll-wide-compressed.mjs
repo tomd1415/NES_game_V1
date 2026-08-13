@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 const WEB = H.WEB;
 function fail(m) { console.error('FAIL:', m); process.exit(1); }
@@ -76,9 +77,9 @@ function nametableAfter(romBytes, frames) {
   return out;
 }
 
-const romC = await buildWith(18867, { PLAYGROUND_NO_ASM: '1' });   // pure-C engine
+const romC = await buildWith(testPort(18867), { PLAYGROUND_NO_ASM: '1' });   // pure-C engine
 assert(romC.ok, '12-screen world did not build on the C engine (compression should fit ROM): ' + String(romC.log || '').slice(-300));
-const romA = await buildWith(18868, {});                            // shipped ASM engine
+const romA = await buildWith(testPort(18868, 1), {});                            // shipped ASM engine
 assert(romA.ok, '12-screen world did not build on the ASM engine: ' + String(romA.log || '').slice(-300));
 console.log('✓ 12-screen world builds + fits ROM on both engines (raw would overflow -> compression works)');
 

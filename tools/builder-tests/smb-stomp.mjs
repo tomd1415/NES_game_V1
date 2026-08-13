@@ -10,8 +10,9 @@
 // off-screen (≥ 0xEF). (Its bottom row wraps to y≈7 when parked — which is why
 // a naive on-screen count only drops by 2, not 4; we check the top cell.)
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18867;
+const PORT = testPort(18867);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

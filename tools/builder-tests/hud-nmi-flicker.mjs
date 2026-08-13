@@ -19,9 +19,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 const WEB = H.WEB;
-const PORT = 18796;
+const PORT = testPort(18796);
 
 globalThis.window = globalThis;
 globalThis.global = globalThis;

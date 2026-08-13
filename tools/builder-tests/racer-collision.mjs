@@ -9,8 +9,9 @@
 //   3. still slides along it on the free axis (diagonal into a wall → the car
 //      keeps moving along the wall instead of sticking).
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18840;
+const PORT = testPort(18840);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

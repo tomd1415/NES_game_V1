@@ -6,10 +6,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { testPort } from './lib/test-port.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
-const PORT = 18781;
+const PORT = testPort(18781);
 
 globalThis.window = globalThis;
 globalThis.NES_TARGET_ENGINE = 2; // per-door requires targeting engine v2+

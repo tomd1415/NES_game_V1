@@ -3,8 +3,9 @@
 // the four-way movement + no-gravity that distinguishes top-down from the
 // platformer engine, plus wall collision. Reads the player's OAM position.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18865;
+const PORT = testPort(18865);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

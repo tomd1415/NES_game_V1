@@ -10,8 +10,9 @@
 //   2. the player's drawn tile differs between frames (heading 0 vs 2 vs 8).
 //   3. adjacent headings (0 and 1) share a frame — "8 dirs across 16 headings".
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18842;
+const PORT = testPort(18842);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

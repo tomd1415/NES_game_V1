@@ -12,8 +12,9 @@
 // actually reach the screen). See the Arc A plan.
 
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18822;
+const PORT = testPort(18822);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

@@ -19,12 +19,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const jsnes = require(path.join(H.ROOT, 'tools', 'tile_editor_web', 'jsnes.min.js'));
 
-const PORT_C = 18794, PORT_A = 18795;
+const PORT_C = testPort(18794), PORT_A = testPort(18795, 1);
 const NEN = 26;            // enough enemies that the frame is genuinely loaded
 const WARM = 80;           // frames to let the scroll/boot settle before sampling
 const RUN = 600;           // emulated frames the tick count is measured over

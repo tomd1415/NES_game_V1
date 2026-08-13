@@ -24,12 +24,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const jsnes = require(path.join(H.ROOT, 'tools', 'tile_editor_web', 'jsnes.min.js'));
 
-const PORT_C = 18796, PORT_A = 18797;
+const PORT_C = testPort(18796), PORT_A = testPort(18797, 1);
 let failed = false;
 const ok = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

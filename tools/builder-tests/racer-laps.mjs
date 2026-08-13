@@ -9,8 +9,9 @@
 //   2. crossing the finish again WITHOUT a fresh checkpoint does NOT count;
 //   3. completing the last lap sets the finished flag and freezes the car.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18841;
+const PORT = testPort(18841);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

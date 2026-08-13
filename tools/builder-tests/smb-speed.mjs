@@ -4,8 +4,9 @@
 // player actually travels. A 1-screen level means no camera scroll, so the
 // player's OAM X equals its world X.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18866;
+const PORT = testPort(18866);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

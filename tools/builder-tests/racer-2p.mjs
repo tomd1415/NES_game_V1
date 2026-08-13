@@ -6,8 +6,9 @@
 // two cars are driven INDEPENDENTLY: controller 2 moves P2 (not P1), and
 // controller 1 moves P1 (not P2).
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18845;
+const PORT = testPort(18845);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

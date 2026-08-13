@@ -7,8 +7,9 @@
 //   1. finish → CP1 → CP2 → finish counts a lap;
 //   2. finish → CP1 → finish (skipping CP2) does NOT count (order enforced).
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18846;
+const PORT = testPort(18846);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

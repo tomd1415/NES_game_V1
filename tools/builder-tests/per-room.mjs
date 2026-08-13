@@ -12,10 +12,11 @@
 //   3. Door transition: walking through a door to room 1 flips it — B appears,
 //      A is gone.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 globalThis.NES_TARGET_ENGINE = 75;   // per-room + per-door need a modern target
 
-const PORT = 18894;
+const PORT = testPort(18894);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

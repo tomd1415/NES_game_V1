@@ -19,10 +19,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { testPort } from './lib/test-port.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
-const PORT = 18792;
+const PORT = testPort(18792);
 
 // Load the browser JS into a Node sandbox using the same pattern as
 // the other suites.  Every file sets things on `window`; we point

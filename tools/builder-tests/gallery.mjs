@@ -10,9 +10,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { testPort } from './lib/test-port.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
-const PORT = 18801;
+const PORT = testPort(18801);
 const BASE = `http://127.0.0.1:${PORT}`;
 const GALLERY_DIR = path.join(ROOT, 'tools', 'gallery');
 

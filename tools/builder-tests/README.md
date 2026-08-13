@@ -29,11 +29,32 @@ node tools/builder-tests/round2-dialogue.mjs
 The four `render-*.mjs` suites are described under
 [The render harness](#the-render-harness-librender-harnessmjs) below.
 
-Each suite spawns its own throwaway Playground Server on a unique
-port (18768–18776 for the original suites, 18820–18823 for the
-render suites) and exits 0 on success, non-zero on first failed
-assertion.  The runner runs them one at a time, so ports never
-collide.
+Each suite spawns its own throwaway Playground Server and exits 0 on success,
+non-zero on first failed assertion.
+
+**Suites do not choose their port — `run-all.mjs` assigns one.** Each gets a
+reserved block of 3 starting at 18768 (so 110 suites reach 19097), passed as
+`BUILDER_TEST_PORT`, and asks for it via `lib/test-port.mjs`:
+
+```js
+import { testPort } from './lib/test-port.mjs';
+const PORT = testPort(18783);          // 18783 only when run standalone
+const SECOND = testPort(18784, 1);     // a suite needing two servers
+```
+
+The number in the call is a **fallback for a standalone run**, where nothing else
+is running and so nothing can clash. `ports-unique.mjs` fails the run if a suite
+mentions a port outside a `testPort(...)` call — the one rule with no spellings to
+miss, after three separate audits of "who claims which port" gave three different
+answers.
+
+The runner also **reaps**: each suite runs detached, as its own process-group
+leader, and the group is signalled after it exits. 23 of the 33 suites that spawn
+a server can exit from inside their own `try`/`finally`, so the reap never runs and
+the server squats the port — which does not fail loudly, because
+`playground_server.py` finds a healthy server there, prints `already running --
+nothing to do`, exits 0 **without binding**, and discards the environment the
+caller set.
 
 ## The render harness (`lib/render-harness.mjs`)
 

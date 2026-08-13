@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 const WEB = H.WEB;
 function fail(m) { console.error('FAIL:', m); process.exit(1); }
@@ -48,7 +49,7 @@ function makeState() {
   return s;
 }
 
-const port = 18869;
+const port = testPort(18869);
 const srv = await H.startServer(port, {});
 let r;
 try {

@@ -11,8 +11,9 @@
 //   * a sprite at world x=100 (screen 1) is visible from the start,
 //   * scrolling right brings the screen-2 sprite into view.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18847;
+const PORT = testPort(18847);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

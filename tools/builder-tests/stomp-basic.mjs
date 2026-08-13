@@ -5,8 +5,9 @@
 // of taking damage.  Gated #ifdef BW_STOMP_DEFEAT, so OFF is byte-identical —
 // this test proves BOTH: ON defeats + bounces, OFF leaves the enemy alive.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18869;
+const PORT = testPort(18869);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

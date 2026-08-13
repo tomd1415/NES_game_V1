@@ -9,8 +9,9 @@
 // See docs/plans/current/2026-06-18-arc-c-tier2-backlog.md (R-4).
 
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18826;
+const PORT = testPort(18826);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

@@ -14,11 +14,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { testPort } from './lib/test-port.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
 const STEP = path.join(ROOT, 'steps', 'Step_Playground');
-const PORT = 18768;
+const PORT = testPort(18768);
 
 globalThis.window = globalThis;
 for (const f of ['sprite-render.js', 'builder-assembler.js',

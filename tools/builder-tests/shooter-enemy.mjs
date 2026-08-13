@@ -15,8 +15,9 @@
 globalThis.NES_TARGET_ENGINE = 72;
 
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18852;
+const PORT = testPort(18852);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

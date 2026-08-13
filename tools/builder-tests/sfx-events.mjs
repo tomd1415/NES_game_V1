@@ -15,9 +15,10 @@
 //      identical to a plain build, so a project can't accidentally enable it.
 import crypto from 'node:crypto';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 const sha1 = (b) => crypto.createHash('sha1').update(b).digest('hex');
-const PORT = 18871;
+const PORT = testPort(18871);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

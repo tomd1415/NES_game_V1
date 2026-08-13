@@ -21,8 +21,9 @@
 // See docs/plans/current/2026-06-18-arc-a-render-test-harness.md.
 
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18820;
+const PORT = testPort(18820);
 const HELLO = [0x48, 0x45, 0x4C, 0x4C, 0x4F];   // tile indices = ASCII 'HELLO'
 let failed = false;
 const ok   = (m) => console.log('✓ ' + m);

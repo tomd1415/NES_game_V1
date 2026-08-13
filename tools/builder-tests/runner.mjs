@@ -10,8 +10,9 @@
 //   3. tapping A makes the player jump (py rises then returns).
 //   4. touching a spike tile resets the run (cam_x snaps back near 0).
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18837;
+const PORT = testPort(18837);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

@@ -9,10 +9,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { testPort } from './lib/test-port.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
-const PORT = 18863;
+const PORT = testPort(18863);
 const HOST = `127.0.0.1:${PORT}`;
 const DB = path.join('/tmp', `csrf-${process.pid}.db`);
 const GALLERY = path.join('/tmp', `csrf-${process.pid}`);

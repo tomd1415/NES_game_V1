@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 const WEB = H.WEB;
 function fail(m) { console.error('FAIL:', m); process.exit(1); }
@@ -71,10 +72,10 @@ function makeState(globalsCfg, jumpHeight) {
 // knobs work there, not just in the C fallback (engine v67: the ASM player now
 // reads JUMP_BUDGET / JUMP_SPEED / PLAYER_GRAVITY from project.inc).
 async function buildRom(globalsCfg, jumpHeight, env = {}) {
-  const srv = await H.startServer(18882, env);
+  const srv = await H.startServer(testPort(18882), env);
   try {
     const s = makeState(globalsCfg, jumpHeight);
-    const r = await H.buildRom(18882, {
+    const r = await H.buildRom(testPort(18882), {
       state: s, playerSpriteIdx: 0, playerStart: { x: 120, y: 180 }, sceneSprites: [],
       mode: 'browser', customMainC: window.BuilderAssembler.assemble(s, tpl),
       targetEngine: globalThis.NES_TARGET_ENGINE,
@@ -148,10 +149,10 @@ function runnerState(grav) {
   return s;
 }
 async function runnerFallRate(grav, env) {
-  const srv = await H.startServer(18882, env);
+  const srv = await H.startServer(testPort(18882), env);
   try {
     const s = runnerState(grav);
-    const r = await H.buildRom(18882, {
+    const r = await H.buildRom(testPort(18882), {
       state: s, playerSpriteIdx: 0, playerStart: { x: 120, y: 60 }, sceneSprites: [],
       mode: 'browser', customMainC: window.BuilderAssembler.assemble(s, tpl),
       targetEngine: globalThis.NES_TARGET_ENGINE,

@@ -14,9 +14,10 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { testPort } from './lib/test-port.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
-const PORT = 18809;
+const PORT = testPort(18809);
 
 const mkCells = (w, h, t = 1) => Array.from({ length: h }, () =>
   Array.from({ length: w }, () => ({ tile: t, palette: 0, empty: false })));

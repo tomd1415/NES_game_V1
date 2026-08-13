@@ -14,9 +14,12 @@
 //      "Builder additions don't leak into a no-modules project"
 //      guarantee.
 //   3. The individual smoke scripts, each of which spawns its own
-//      playground server on a unique port.
+//      playground server on a port THIS RUNNER ASSIGNS (BUILDER_TEST_PORT),
+//      and whose process group is reaped afterwards. Suites do not choose
+//      their own port -- `ports-unique.mjs` fails the run if one tries.
 //
-// Exits 0 if every step passes, 1 on the first failure.  Can be
+// Exits 0 if every step passes, 1 at the END if any failed -- it does not stop
+// on the first failure, it accumulates `anyFail`.  Can be
 // invoked as `node tools/builder-tests/run-all.mjs` from the repo
 // root, or `./tools/builder-tests/run-all.mjs`.
 
@@ -99,6 +102,13 @@ check('engine version constants agree', () => {
 check('engine snapshot matches live sources', () => {
   const r = spawnSync('node', [path.join(ROOT, 'scripts', 'snapshot-engine.mjs'), '--check'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || '').trim());
+}) || (anyFail = true);
+
+// No suite may choose its own port; the runner assigns them (see Step 4). A doc note is
+// not a check -- this exact clash was described in prose for weeks and drifted anyway.
+check('no builder-test suite chooses its own port', () => {
+  const r = spawnSync('node', [path.join(__dirname, 'ports-unique.mjs')], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error((r.stdout || '') + (r.stderr || ''));
 }) || (anyFail = true);
 
 // Inline <script> bodies in the HTML pages.  Regex-extract, write to
@@ -665,16 +675,52 @@ console.log('');
 
 // --- Step 4: run each smoke suite -------------------------------------
 //
-// Each `.mjs` file in tools/builder-tests (excluding this runner)
-// spawns its own server on a unique port and exits 0 on success.
-// We run them one-at-a-time so ports don't collide.
+// Each `.mjs` file in tools/builder-tests (excluding this runner) spawns its own
+// playground server and exits 0 on success. We run them one at a time.
+//
+// THE RUNNER ASSIGNS THE PORT. The old header claimed each suite used "a unique
+// port"; nothing enforced it and 21 ports were shared across 42 of the 110 suites.
+// Three audits of "who claims what" gave three answers because suites spell the port
+// five different ways, so the fix is to remove the choice rather than to count better:
+// each suite gets a reserved block in BUILDER_TEST_PORT and asks lib/test-port.mjs for
+// it. A suite's own literal survives only as a standalone fallback, where nothing else
+// is running and so nothing can clash.
+//
+// AND THE RUNNER REAPS. 23 of the 33 suites that spawn a server can exit from inside
+// their own try/finally, so the reap never runs and the server squats the port for
+// whoever comes next -- which does not fail loudly: playground_server.py finds a
+// healthy server on its port, prints "already running -- nothing to do", exits 0
+// WITHOUT binding, and silently discards the environment the caller set. The next
+// suite then passes against a server it did not configure. Suites are therefore
+// started detached (each becomes its own process-group leader) and the whole group is
+// signalled after it exits, which reaches a server the suite orphaned.
+const PORT_BASE = 18768;                    // start of the builder-test range
+const PORT_BLOCK = 3;                       // asm-player.mjs needs three; most need one
 const suites = fs.readdirSync(__dirname)
   .filter(f => f.endsWith('.mjs') && f !== path.basename(__filename))
   .sort();
-for (const suite of suites) {
+
+const portCeiling = PORT_BASE + suites.length * PORT_BLOCK;
+if (portCeiling > 19200) {
+  console.error(`Port allocation would reach ${portCeiling}, past the reserved range. ` +
+                'Raise the ceiling deliberately rather than overlapping another service.');
+  process.exit(2);
+}
+
+suites.forEach((suite, index) => {
   const full = path.join(__dirname, suite);
+  const base = PORT_BASE + index * PORT_BLOCK;
   process.stdout.write('suite ' + suite + ' ... ');
-  const r = spawnSync('node', [full], { encoding: 'utf8' });
+  const r = spawnSync('node', [full], {
+    encoding: 'utf8',
+    detached: true,                          // its own process group, so the reap below
+    env: { ...process.env,                   // can reach a server it orphaned
+           BUILDER_TEST_PORT: String(base),
+           BUILDER_TEST_PORT_BLOCK: String(PORT_BLOCK) },
+  });
+  // Reap whatever the suite left behind. Signalling the group is a no-op when the
+  // suite cleaned up after itself, which is the usual case.
+  if (r.pid) { try { process.kill(-r.pid, 'SIGTERM'); } catch { /* group already gone */ } }
   if (r.status === 0) {
     // Print just the last line (summary) so the runner's output
     // stays scannable.
@@ -687,7 +733,7 @@ for (const suite of suites) {
     console.error((r.stderr || '').split('\n').slice(-15).join('\n'));
     anyFail = true;
   }
-}
+});
 
 console.log('');
 if (anyFail) {

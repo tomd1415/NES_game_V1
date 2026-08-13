@@ -15,6 +15,7 @@
 
 import { createHash } from 'node:crypto';
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
 // The everything-on ROM hash.  Each verbatim per-frame loop move (Sprint 7
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
@@ -34,7 +35,7 @@ import * as H from './lib/render-harness.mjs';
 //   42a45ca8… was the pure-C -Os value; ce62ec47… the no-opt value.
 const EXPECT = '0aed6e95684bc3bbd665353759f2a003dad45bf6';
 
-const PORT = 18834;
+const PORT = testPort(18834);
 
 function mkCells(w, h) {
   return Array.from({ length: h }, () =>

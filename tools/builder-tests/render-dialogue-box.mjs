@@ -22,8 +22,9 @@
 // See docs/plans/current/2026-06-18-arc-b-readable-dialogue-box.md.
 
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18824;
+const PORT = testPort(18824);
 const HELLO = [0x48, 0x45, 0x4C, 0x4C, 0x4F];
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);

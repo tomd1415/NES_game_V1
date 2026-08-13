@@ -5,8 +5,9 @@
 // it stops: onto a TRIGGER strip it freezes early (the win); with no trigger it
 // runs to the right-edge clamp. The gap proves the win actually fired + froze.
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18868;
+const PORT = testPort(18868);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };

@@ -8,8 +8,9 @@
 // the runner branch — and keeps auto-scrolling with them on.  (Dialogue is
 // deliberately excluded: it's disabled in runner builds, covered by runner.mjs.)
 import * as H from './lib/render-harness.mjs';
+import { testPort } from './lib/test-port.mjs';
 
-const PORT = 18838;
+const PORT = testPort(18838);
 let failed = false;
 const ok  = (m) => console.log('✓ ' + m);
 const bad = (m) => { console.error('FAIL: ' + m); failed = true; };
