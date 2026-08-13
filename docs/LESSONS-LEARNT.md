@@ -257,6 +257,15 @@ echo $?` printed `0`. That is `tail`'s status. The real exit was 1. Same lesson 
 §1's "piping a long suite through `tail`", committed by someone who had just
 re-read it.
 
+**A third, found the same way (2026-08-13):** `mutate --list <spec-that-does-not-exist>`
+**exits 0**. It prints `[Errno 2] No such file or directory`, so a human sees it — but
+the status says success, so `mutate --list spec.json && …` proceeds on a typo. A real
+run with the same bad path correctly exits 1; only `--list` disagrees with itself.
+Found while *testing the commands before documenting them*, which is the only reason
+it was found at all — and note my first reading called it "silently succeeds", which
+was wrong: `>/dev/null 2>&1` had hidden the message I was claiming did not exist.
+Raised in `.mc-outbox.md`; not fixed here, because `mutate` is on every container.
+
 ### A test name is a promise — but the fix is not always "make it true"
 
 Sweeping the suites for names carrying a universal quantifier ("every", "all",
