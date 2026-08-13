@@ -43,8 +43,10 @@ Repository-wide contribution, ownership and cross-team review rules live in
   servers listens on which port (dev `8765`, Studio E2E `18790`, builder-tests
   `18768–18897`), how to start each, and how to pick a port for a new suite.
   The old 18790 double-claim is fixed (2026-08-06) and `run-all.mjs` now guards
-  against it, but still run the two suites sequentially — the box is small and a
-  loaded host makes the E2E fail on tests unrelated to your change.
+  against it, but still run the two suites sequentially — the box is small and
+  running both at once mostly loads it. That is a courtesy to the box, not a
+  warning that the E2E is fragile: it is green at the committed timeout at load
+  ~14.5, and [`STATUS.md`](STATUS.md) carries the measured detail.
 - **Working on the UI/UX redesign?** (branch `redesign/ui-ux`)
   Start with the roadmap
   [`design/phased-plan.md`](design/phased-plan.md) and its companions

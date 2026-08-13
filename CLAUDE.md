@@ -59,8 +59,10 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
   `18768–18897` (one at a time). The old 18790 double-claim was fixed on
   2026-08-06 and `run-all.mjs` now fails if any suite names the E2E port — but
   still run the two suites **sequentially**: this box has four cores and carries
-  ten containers, and a loaded host makes the E2E time out on tests unrelated to
-  your change. Full table:
+  ten containers, so running both at once mostly loads the box. Do NOT read that
+  as "the E2E fails under load" — measured, it is green at the committed timeout
+  at load ~14.5, and only one test has ever exceeded it, at load 39. STATUS.md
+  has the numbers; don't restate them here. Full table:
   [`docs/guides/TEST-SERVERS.md`](docs/guides/TEST-SERVERS.md).
 
 ## Where to start
