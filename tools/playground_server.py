@@ -7,10 +7,20 @@ POST /play endpoint that takes the current editor state plus a little
 scene definition (which sprite is the Player, which static sprites to
 drop on the background and where) and:
 
-  1. writes the CHR + nametable into steps/Step_Playground/assets/
-  2. writes palettes.inc and scene.inc into steps/Step_Playground/src/
-  3. runs `make -C steps/Step_Playground` to build game.nes
-  4. launches FCEUX on the freshly-built ROM
+  1. writes the CHR, nametable, generated sources and a Makefile into a
+     private `tempfile.TemporaryDirectory`
+  2. runs `make` in that directory to build game.nes
+  3. returns the ROM for in-browser play (jsnes), or — in "native" mode
+     only, and only when fceux is on PATH — launches FCEUX on the
+     server's own desktop
+
+**Nothing is written into steps/Step_Playground/.** This used to write CHR,
+nametable, palettes.inc and scene.inc straight into the tracked tree and run
+`make -C steps/Step_Playground`; both build paths (C and asm) now build in a
+temp directory, so a /play leaves `git status` clean. The old description
+survived here long enough to teach people to expect modified engine sources
+and wave them through — which would mask a real edit. If you DO see files
+modified under steps/Step_Playground/ after a play, something is wrong.
 
 The server is intentionally a single-file stdlib-only script so it works
 on any box with Python 3 and cc65 installed -- no extra dependencies.

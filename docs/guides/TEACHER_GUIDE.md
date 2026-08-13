@@ -104,7 +104,9 @@ When a sprite is deleted, `btn-sprite-del` rewrites every animation's `frames` a
 Python stdlib HTTP server on `127.0.0.1:8765`. Two roles:
 
 1. **Serves the editor** over HTTP (the `file://` protocol breaks `fetch()` CORS when the editor tries to POST).
-2. **POST `/play`** — accepts the full editor state, encodes sprite_tiles + bg_tiles into a single 8 KB CHR (sprite pool at $0000, BG pool at $1000 — `PPU_CTRL=0x10` selects $1000 for the background), encodes the active nametable into 1024 bytes (960 tile + 64 attribute), writes `src/scene.inc` + `src/palettes.inc` into `steps/Step_Playground/`, runs `make -C steps/Step_Playground`, and spawns `fceux` detached on the resulting ROM.
+2. **POST `/play`** — accepts the full editor state, encodes sprite_tiles + bg_tiles into a single 8 KB CHR (sprite pool at $0000, BG pool at $1000 — `PPU_CTRL=0x10` selects $1000 for the background), encodes the active nametable into 1024 bytes (960 tile + 64 attribute), writes all of that plus the generated sources and a Makefile into a **private temporary directory**, and runs `make` there. The ROM comes back to the browser for in-browser play; `fceux` is launched only in **"native" mode**, which needs fceux on the server's PATH and a desktop to show it on (the server falls back to returning the ROM, with a warning, if it is missing).
+
+   > **Nothing is written into `steps/Step_Playground/`.** An earlier version of this paragraph said `/play` writes `src/scene.inc` + `src/palettes.inc` there and runs `make -C steps/Step_Playground`. Both build paths moved into a temp directory, so a play leaves `git status` clean — and if you *do* see engine sources modified after one, that is a real edit rather than build noise.
 
 The server is stdlib-only — no pip installs needed. Keep it that way.
 
