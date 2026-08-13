@@ -141,7 +141,7 @@ Two gates on this project printed a confident total for work they had not done.
 Both were found on 2026-08-12 by asking one question — *what does this print if
 the thing it iterates is empty?*
 
-- **`run-all.mjs`** enumerates its 114 suites from disk. Point that filter at an
+- **`run-all.mjs`** enumerates its suites from disk. Point that filter at an
   extension matching nothing and it prints **"✅ All Builder regression checks
   pass"**, exit 0, having run none of them — golden byte-identical ROM hashes
   included. Only the 38 syntax checks and 21 invariants actually execute.

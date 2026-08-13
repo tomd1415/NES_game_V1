@@ -32,8 +32,11 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
 > `_build_rom()` writes them into a `tempfile.TemporaryDirectory` — both the C
 > and the ASM paths — so `git status` stays clean. The only artifact left behind
 > is `steps/Step_Playground/_play_latest.nes`, which `.gitignore` covers via
-> `*.nes`. Evidence: a full `run-all.mjs` (114 suites, all doing real cc65
-> builds) left `git status steps/Step_Playground/` completely empty.
+> `*.nes`. Evidence: a full `run-all.mjs` (2026-08-06: 114 suites at the time,
+> all doing real cc65 builds) left `git status steps/Step_Playground/` completely
+> empty — re-confirmed 2026-08-13 with a single real build. The suite count is
+> whatever `tools/builder-tests/` holds; it is dated here because it is a record
+> of one run, not a live figure.
 >
 > This paragraph used to say those files show as `M` after any `/play` and
 > should not be committed. That was true of an earlier in-place build and is now
