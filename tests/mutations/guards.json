@@ -140,6 +140,15 @@
       "expect": [
         "test_one_byte_overflow_is_still_translated"
       ]
+    },
+    {
+      "id": "parity-coverage-blind-to-single-quotes",
+      "file": "native/src/nes_studio/core/validators.py",
+      "find": "#: The order the web runs them in",
+      "replace": "def _probe_silent_drift(state: dict) -> Problem | None:\n    if state.get(\"__never__\"):\n        return Problem(id='probe-silent-drift', severity=\"warn\", message=\"p\", fix=\"p\")\n    return None\n\n\n#: The order the web runs them in",
+      "expect": [
+        "test_the_cases_exercise_every_check"
+      ]
     }
   ]
 }

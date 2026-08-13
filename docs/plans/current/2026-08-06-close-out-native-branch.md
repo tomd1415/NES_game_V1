@@ -166,20 +166,27 @@ inside an unrelated assertion. Check the failure mode, not just the pass.
 `missing fixture artefacts: runner/game.nes`; flipping one byte of
 `smb/game.nes` fails on the `rom_sha256` comparison. Both restored after.
 
-## Step 6 — Fix F1, and add the test that found it
+## Step 6 — ✅ **DONE 2026-08-13 — shipped as engine v77**
 
-One line: `_OVERFLOW_RE` → `by (\d+) bytes?`. Test is in the findings appendix.
+`_OVERFLOW_RE` → `by (\d+) bytes?`. The seven-test file was extracted verbatim from the
+findings appendix and failed exactly `test_one_byte_overflow_is_still_translated` first,
+with the raw ld65 line in the assertion. A bump was needed because `play.py` is inside the
+snapshot from v76 and snapshots are immutable — the gate is byte-drift, not behaviour.
+**v77 collides with `main`'s v77**, exactly as v76 does; both renumber under step 9b.
+Permanent break: `overflow-regex-loses-the-singular`.
 
-**Done when:** all seven tests pass, and they fail again if the `?` is removed.
+## Step 7 — ✅ **DONE 2026-08-13 — 129 passed, 0 failed, 6.2 min**
 
-## Step 7 — Run the Studio E2E
+It had never executed here. It does now, and nothing needed explaining away. The gap to
+`main`'s 147 is accounted for: main's three extra spec files (5 + 2 + 11) do not exist on
+this branch — 28 spec files here against 31.
 
-```
-npx playwright test
-```
-
-**Done when:** it runs at all — this suite has never executed here. Record the
-result whatever it is.
+**And the blocker was not what this plan said it was.** The note below claimed a container
+rebuild was required. It was not: `cdn.playwright.dev` is off the egress allowlist, but
+`deb.debian.org` is on it, so `apt-get install chromium` works today. A rebuild is still
+*preferable* — a distro Chromium is not the build this Playwright was tested against, and
+the apt install does not survive one — but the suite is no longer blocked on it.
+`playwright.config.js` gained an opt-in `PLAYWRIGHT_CHROMIUM_PATH` hook.
 
 > **Not the open question it looks like (2026-08-12).** "No Chromium" is a property of
 > the *current* container, not of the repo: **both** this branch's on-disk Dockerfile
@@ -266,8 +273,8 @@ first two are holes in existing gates, the last two are missing gates.
 
 | # | Fix | Probe that must go red first |
 | --- | --- | --- |
-| a | **F17** — `test_the_cases_exercise_every_check`: enumerate `Problem(...)` ids with `ast`, not a regex over source, and assert no id is built dynamically | register a validator with `id='x'` in **single** quotes that never fires; today the gate stays green |
-| b | **F14** — `test_codegen_stays_snapshottable`: match `INCLUDE_DIRS` string *literals*, not a substring of raw source | delete the `'tools/nes_studio_core'` entry, leave a comment naming the path; today the gate stays green |
+| ~~a~~ | ✅ **DONE 2026-08-13** — **F17** now enumerates `Problem(...)` ids with `ast` and asserts none is built dynamically | `parity-coverage-blind-to-single-quotes` in the mutation spec. Watched stay green first, then redden |
+| ~~b~~ | ✅ **DONE 2026-08-13** — **F14** matches `INCLUDE_DIRS` string *literals* with comments stripped | `snapshot-include-list-removed`. Caught by `mutate` on its first run, having been hand-proved two days earlier |
 | c | **F15** — add a test that every `Mode` subclass on disk is in `MODE_CLASSES` | add a throwaway `ui/modes/probe.py`; the test must name it |
 | d | **F16** — drive the starter picker from `StarterCatalog.styles()`, keeping `STARTERS` as a label lookup; or failing that, `ast`-assert its keys equal the manifest's | add a style to the manifest and not to `STARTERS` |
 

@@ -330,12 +330,35 @@ class ValidatorParityTests(unittest.TestCase):
         fire — which is precisely when the two are free to diverge unnoticed.
         """
 
-        import re
+        import ast
 
         source = Path(
             NATIVE_ROOT / "src" / "nes_studio" / "core" / "validators.py"
         ).read_text(encoding="utf-8")
-        declared = set(re.findall(r'id="([a-z0-9-]+)"', source))
+
+        # Parse, do not regex. The previous version matched `id="..."` in raw source,
+        # so a validator whose id was written in SINGLE quotes was invisible and needed
+        # no case at all -- the check silently asked less than it claimed (F17). Same
+        # shape as F14 one file away: if a check enumerates part of the program, parse
+        # the program.
+        declared, dynamic = set(), []
+        for node in ast.walk(ast.parse(source)):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "Problem"):
+                continue
+            keyword = next((k for k in node.keywords if k.arg == "id"), None)
+            if keyword is None:
+                continue                      # Problem(id="") default; not a reportable check
+            if isinstance(keyword.value, ast.Constant):
+                declared.add(keyword.value.value)
+            else:
+                dynamic.append(node.lineno)   # else the enumeration under-collects in silence
+        self.assertEqual(
+            dynamic,
+            [],
+            "Problem() builds its id dynamically at these lines, so this check cannot "
+            "enumerate what it is supposed to demand a case for",
+        )
+
         # `scanline-overflow` lives in studio.js, not builder-validators.js, so
         # the web's `validate()` never emits it.
         declared.discard("scanline-overflow")
