@@ -4,7 +4,7 @@
   "command": [
     "bash",
     "-c",
-    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree"
+    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree tests.unit.test_friendly_build_error"
   ],
   "breaks": [
     {
@@ -130,6 +130,15 @@
       "replace": "\"source_tree_dirty\": null",
       "expect": [
         "test_manifest_states_its_provenance"
+      ]
+    },
+    {
+      "id": "overflow-regex-loses-the-singular",
+      "file": "tools/nes_studio_core/play.py",
+      "find": "by (\\d+) bytes?\")",
+      "replace": "by (\\d+) bytes\")",
+      "expect": [
+        "test_one_byte_overflow_is_still_translated"
       ]
     }
   ]

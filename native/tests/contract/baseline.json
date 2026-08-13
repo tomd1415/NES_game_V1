@@ -3,7 +3,7 @@
   "what_a_pass_means": "This manifest records what was verified, when, and by which command. A passing test_baseline_manifest means the RECORD is well-formed and tracks the live engine version. It does not re-run any of the evidence below, and it does not mean the product is correct.",
   "renamed_from": "baseline-v63.json",
   "rename_reason": "The old name asserted that the contents described engine v63. They no longer did: the file sat at engine_version 63 while the live engine reached 75, so test_manifest_tracks_the_live_engine_baseline failed for twelve versions (F6). A baseline that has to be renamed every engine bump will not be, so it is now version-neutral and carries the version as data.",
-  "engine_version": 76,
+  "engine_version": 77,
   "repository_commit": "32a7c4b359ccc4f5929470abe5084efa64f6dfbe",
   "captured_on": "2026-08-06",
   "scope": "studio_plus_legacy_union",
@@ -17,22 +17,22 @@
   },
   "automated_results": {
     "builder_regression": {
-      "status": "pass",
+      "status": "pending",
       "command": "node tools/builder-tests/run-all.mjs",
       "verified_on": "2026-08-06",
-      "notes": "110 suites, 0 failures, re-run at this commit rather than inherited from the 2026-07-10 capture. Confirms the v76 snapshot-scope bump changed no ROM output. An earlier run of this same tree was discarded: a probe moved cfg/nes.cfg aside mid-run and broke one suite at the ld65 link step."
+      "notes": "Last run in full at v76 (110 suites, 0 failures). **NOT re-run at v77.** The v77 delta is one character in an error-message regex in play.py, on the build-FAILURE path, so it cannot alter a ROM \u2014 but that is an argument, not a measurement, and this box is not for a 25-minute cc65 pass. Re-run before merge."
     },
     "engine_snapshot": {
       "status": "pass",
       "command": "node scripts/snapshot-engine.mjs --check",
-      "verified_on": "2026-08-06",
-      "notes": "Confirms the v76 snapshot matches HEAD. From v76 this includes tools/nes_studio_core (the server's ROM codegen); v1-v75 snapshots were taken without any Python and are not comparable (F7, closed by the v76 bump)."
+      "verified_on": "2026-08-13",
+      "notes": "Confirms the v77 snapshot matches HEAD. From v76 this includes tools/nes_studio_core (the server's ROM codegen); v1-v75 snapshots were taken without any Python and are not comparable (F7, closed by the v76 bump)."
     },
     "native_unittest": {
       "status": "partial",
       "command": "cd native && QT_QPA_PLATFORM=offscreen pytest -q --continue-on-collection-errors",
-      "verified_on": "2026-08-06",
-      "notes": "PySide6 is absent in this container, so the Qt UI layer is untested here, not passing. Do not read the pass count as coverage.",
+      "verified_on": "2026-08-13",
+      "notes": "PySide6 is absent in this container, so the Qt UI layer is untested here, not passing. Do not read the pass count as coverage. Re-run at v77: 208 passed, 161 skipped.",
       "known_gaps": [
         "12 modules import PySide6 at module scope and report as collection ERRORS instead of skips; 3 more import it inside the test body and report as plain FAILURES (F3). Both are absent-dependency, not defects.",
         "The Qt UI suite has never been run anywhere. Step 1-2 of the close-out plan covers it."

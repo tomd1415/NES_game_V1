@@ -14,7 +14,7 @@ from . import build as build_core
 
 BuildCallable = Callable[[dict[str, Any]], tuple[bytes, str]]
 
-_OVERFLOW_RE = re.compile(r"overflows memory area '(\w+)' by (\d+) bytes")
+_OVERFLOW_RE = re.compile(r"overflows memory area '(\w+)' by (\d+) bytes?")
 
 
 def friendly_build_error(log: str) -> str:

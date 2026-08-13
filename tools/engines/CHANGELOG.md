@@ -9,6 +9,38 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v77 — 2026-08-13 — A one-byte cartridge overflow is explained, not dumped (F1)
+
+### Changed — error text only. **No ROM output changes.**
+
+`friendly_build_error` is the only thing between a pupil and a raw linker error.
+`_OVERFLOW_RE` demanded `by (\d+) bytes`, but ld65's format string — read out of the
+shipped binary rather than guessed (`strings $(command -v ld65) | grep -i overflow`,
+V2.18 / Debian 2.19-1) — is:
+
+    Segment '%s' overflows memory area '%s' by %lu byte%c
+
+`byte%c`: cc65 puts `s` there for a plural and a **space** for exactly one. So an
+overflow of precisely one byte never matched, and the child was shown
+`Segment 'RODATA' overflows memory area 'ROM0' by 1 byte` instead of the explanation.
+It failed silently and in the direction of the user: nothing logged that the friendly
+path had been skipped. The fix is one character, `bytes?`.
+
+- Covered by `native/tests/unit/test_friendly_build_error.py` (7 tests), and by the
+  `overflow-regex-loses-the-singular` break in `tests/mutations/guards.json`, which
+  reverts the `?` and must redden `test_one_byte_overflow_is_still_translated`.
+- **Why a bump at all**, when this alters no ROM output and no project↔ROM contract:
+  `tools/nes_studio_core/play.py` is inside the snapshot from v76, and snapshots are
+  immutable — so any change to a snapshotted file needs a new version, whatever it
+  does. The gate is a byte-drift check, not a behaviour check.
+
+> **⚠ This number collides with `main`.** `main` already publishes a different v77
+> ("Enemies can no longer stand inside each other", #30) and a v78, and this branch's
+> v76 collides likewise. Both must be renumbered when `main` is merged — step 9b of
+> the close-out plan, which prescribes taking `main`'s v76–v78 wholesale and moving
+> this branch's bumps to the next free numbers. Recorded here so the collision cannot
+> be discovered only at merge time.
+
 ## v76 — 2026-08-06 — The snapshot now covers the server's ROM codegen
 
 ### Changed — snapshot scope only. **No ROM output changes.**
