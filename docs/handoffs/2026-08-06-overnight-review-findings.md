@@ -931,6 +931,82 @@ Two notes on the *method*, both of which are the finding-shape this document is 
   isolation cannot see that the enclosing one re-raises.
 * The fourth is `validators.py:1222`, already recorded.
 
+# F20 — the fixture generator, read back as if someone else had written it
+
+*Work-list item 4. I made `generate_phase0_starters.mjs` write both the test corpus and
+the starters the app ships, so one source owns both and they cannot drift. That means a
+**test generator now edits what the app ships**, and I wrote it at the end of a long
+session. This is the read-back. Two hazards found, both fixed; one more introduced by
+item 2 and fixed with them.*
+
+## Hazard A — nothing stopped it running on a dirty tree
+
+The manifest recorded `source_tree_dirty`, and `test_manifest_states_its_provenance`
+asserted it was false. That is a **detector, not a guard**: by the time it tells you,
+`fs.rmSync(OUT, {recursive: true, force: true})` has already deleted the corpus,
+rebuilt it, and copied the result over `native/src/nes_studio/resources/starters/`.
+
+**The scenario.** You are mid-edit on `builder-assembler.js`, uncommitted. You run the
+generator to see what a change does to a starter. It records dirty, wipes the corpus,
+builds seven ROMs from your work in progress, and syncs the projects into the app's
+shipped resources. If you then commit with a message like "regenerate fixtures" without
+running the suite, the shipped starters were built from work in progress and
+`source_commit` names a commit that did not produce them. The only way back is git.
+
+**Fixed:** the generator now refuses before the `rmSync`, and says why. `--allow-dirty`
+overrides deliberately — and the manifest still records it, so the test fails too.
+Demonstrated against a genuinely dirty tree: exit 2, and `git status` on both trees
+empty afterwards.
+
+## Hazard B — the dirty flag failed open, and its neighbour did not
+
+```js
+function gitDirty() {  ... } catch { return null; }      // null is falsy
+function gitHead()  {  ... } catch { return 'unknown'; } // rejected by the SHA regex
+```
+
+Two adjacent functions, written together, disagreeing about what to do when git cannot
+be consulted. `assertFalse(None)` **passes**, so "could not tell" read as "clean" and
+the provenance flag silently meant nothing.
+
+Proved rather than argued, with a mutation that sets the flag to `null`: it **stayed
+green**. The guard now uses `assertIs(..., False)` and the same break goes red; the
+generator's refusal also treats "cannot tell" as a refusal (`!== false`), so the two
+functions finally behave the same way.
+
+## Hazard C — item 2 put the runner's ports on top of this generator's
+
+Introduced this week by me: `run-all.mjs` now allocates blocks from 18768 and reaches
+**19097** for 110 suites, and this generator hard-coded **18920** — inside that range,
+so a suite could be assigned the port the generator uses. Moved to 19150 with a comment
+saying why. `ports-unique.mjs` could not have caught it: the generator lives in
+`native/tests/contract/`, not `tools/builder-tests/`, so it is outside the scan. That is
+the same lesson as the sixth port spelling turning up in `playwright.config.js` — the
+scan covers a directory, not the problem.
+
+## Partial failure: checked, and it is survivable rather than clean
+
+The second thing the item asked about. The order is: capture provenance → `rmSync(OUT)`
+→ build and write each fixture → **`if (failed) process.exit(1)`** → write
+`OUT/manifest.json` → copy into `PACKAGED` → write `PACKAGED/manifest.json`.
+
+* **A failed build** (any style) exits **before** the manifest is written and **before**
+  `PACKAGED` is touched. So the shipped resources keep their old, self-consistent state,
+  and the corpus is left partially rebuilt **with no manifest** — by inspection,
+  `_expected_fixture_paths()` then raises `FileNotFoundError` and the fixture tests
+  *error* rather than fail cleanly. Ugly, loud, and recoverable with
+  `git checkout -- native/tests/fixtures`, since every file is tracked.
+* **A crash between the two manifest writes** (disk full, SIGINT) leaves the corpus new
+  and `PACKAGED` half-copied with its old manifest. This one is caught, by
+  `test_packaged_starters_are_the_frozen_browser_fixture_bytes`, which compares the
+  bytes per style *and* against the packaged manifest's hashes.
+
+So there is **no atomicity across the two trees**, and I am not adding any: every file
+is tracked, both inconsistent states are either loud or test-caught, and a temp-dir-plus-
+rename dance across two trees would add more failure modes than it removes. The
+honest summary is that the generator is *recoverable*, not *transactional*, and it now
+refuses to start in the state that makes recovery necessary.
+
 ## Swept and found clean
 
 * **All 110 builder suites can actually fail** (swept 2026-08-09, which is what

@@ -122,6 +122,15 @@
       "replace": "def _smbhud_bg_enabled(state: dict) -> bool:",
       "expect": [],
       "expect_none_because": "a type hint changes no behaviour. Recorded rather than omitted: it proves these tests assert AGREEMENT, not source equality -- a text-comparison test would have gone red here, and would then have been deleted for crying wolf."
+    },
+    {
+      "id": "provenance-dirty-flag-goes-null",
+      "file": "native/tests/fixtures/phase0/starters/manifest.json",
+      "find": "\"source_tree_dirty\": false",
+      "replace": "\"source_tree_dirty\": null",
+      "expect": [
+        "test_manifest_states_its_provenance"
+      ]
     }
   ]
 }

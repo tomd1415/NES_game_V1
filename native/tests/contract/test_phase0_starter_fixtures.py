@@ -41,10 +41,18 @@ class PhaseZeroStarterFixtureTests(unittest.TestCase):
 
         commit = self.manifest["source_commit"]
         self.assertRegex(commit, r"^[0-9a-f]{40}$", "source_commit must name a real commit")
-        self.assertFalse(
+        # `assertIs(..., False)`, not `assertFalse(...)`. The generator's gitDirty()
+        # returns **null** when it cannot consult git at all, and `assertFalse(None)`
+        # passes — so the flag failed open: unable-to-tell read as clean, silently.
+        # Its neighbour gitHead() fails closed (it records "unknown", which the SHA
+        # regex below rejects), and the pair should behave the same way.
+        self.assertIs(
             self.manifest["source_tree_dirty"],
-            "baselines were generated from a dirty tree, so source_commit does not "
-            "describe the code that produced them — regenerate from a clean checkout",
+            False,
+            "source_tree_dirty must be exactly false. `true` means the baselines were "
+            "generated from a dirty tree, so source_commit does not describe the code "
+            "that produced them; `null` means the generator could not tell, which is "
+            "not the same as clean. Either way, regenerate from a clean checkout.",
         )
 
         # engine_version_requested is only a stamp; targetEngine does not select an
