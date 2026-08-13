@@ -87,10 +87,6 @@ def _load_dotenv(path):
 # account join code/admin secret, etc.
 _load_dotenv(ROOT / ".env")
 STEP_DIR = ROOT / "steps" / "Step_Playground"
-SCENE_INC = STEP_DIR / "src" / "scene.inc"
-PAL_INC = STEP_DIR / "src" / "palettes.inc"
-CHR_PATH = STEP_DIR / "assets" / "sprites" / "game.chr"
-NAM_PATH = STEP_DIR / "assets" / "backgrounds" / "level.nam"
 DEFAULT_MAIN_C = STEP_DIR / "src" / "main.c"
 DEFAULT_MAIN_S = STEP_DIR / "src" / "main.s.starter"
 LESSONS_DIR = ROOT / "lessons"
@@ -2598,10 +2594,6 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120, player_idx2
     return "\n".join(lines)
 
 
-COLLISION_H_PATH = STEP_DIR / "src" / "collision.h"
-BEHAVIOUR_C_PATH = STEP_DIR / "src" / "behaviour.c"
-
-
 # ---------------------------------------------------------------------------
 # Full-world background data (Sprint 11 S-1 slice 1)
 #
@@ -2856,8 +2848,6 @@ def build_bg_world_c(state):
     return "\n".join(lines)
 
 
-BG_WORLD_H_PATH = STEP_DIR / "src" / "bg_world.h"
-BG_WORLD_C_PATH = STEP_DIR / "src" / "bg_world.c"
 
 
 # ---------------------------------------------------------------------------
