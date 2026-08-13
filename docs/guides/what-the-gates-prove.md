@@ -41,11 +41,11 @@ when each one is green**, and the claims you may not.
   an error. Skipped is *not* passing: this is now the largest uncovered surface on the
   branch, and stays that way until the container is rebuilt.
 * ~~**The Studio E2E suite.** `npx playwright test` has never executed in this container.~~
-  **Ran 2026-08-13: 129 passed, 0 failed, 6.2 min.** Not a gap any more, with two caveats:
-  it needs `PLAYWRIGHT_CHROMIUM_PATH` pointing at an apt-installed Chromium until the
-  container is rebuilt (a *different* build from the one this Playwright was tested
-  against), and the count is 18 short of `main`'s 147 because three spec files main added
-  do not exist here.
+  **Ran 2026-08-13: 129 passed, 0 failed, 6.2 min**, and **watched fail** — see below.
+  Two caveats remain: it needs `PLAYWRIGHT_CHROMIUM_PATH` pointing at an apt-installed
+  Chromium until the container is rebuilt (a *different* build from the one this
+  Playwright was tested against), and the count is 18 short of `main`'s 147 because three
+  spec files main added do not exist here.
 * **Starter *content*.** `targetEngine: 63` pins the engine version stamp; it does not
   pin what the starter projects contain, so a fixture claiming "engine v63" is only
   half-pinned.
@@ -83,6 +83,15 @@ breaks, each naming the assertion it must redden, and fails if a named assertion
 green, if nothing fails anywhere, or if the anchor matched zero or more than one time. It
 caught F14 on its first run — a guard I had hand-proved two days earlier. Hand-probing is
 six steps with no feedback when one is skipped; this is the tooling that replaces it.
+
+**The Studio E2E suite can fail, and precisely.** A green run from a suite nobody had
+ever executed here is exactly the claim this page exists to distrust, so it was probed:
+changing the promo banner's wording in `studio-promo.js` from "Early testing build" to
+"Early preview release" reddened `promo.spec.js:9`'s
+`toContainText('testing build')` — the named assertion, naming the expected substring —
+while the file's *other* test stayed green. Restored, hash-verified identical, green
+again. One targeted break is not a mutation sweep of all 28 spec files, and that is
+stated rather than implied.
 
 **Green by design, and correctly so:** `test_no_test_module_needs_pyside6_to_be_imported`
 passes vacuously if the module walk finds nothing or a module fails to import. Its two
