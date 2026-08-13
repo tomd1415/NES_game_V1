@@ -10,7 +10,7 @@
     {
       "id": "baseline-engine-version-stale",
       "file": "native/tests/contract/baseline.json",
-      "find": "\"engine_version\": 76",
+      "find": "\"engine_version\": 77",
       "replace": "\"engine_version\": 63",
       "expect": [
         "test_manifest_tracks_the_live_engine_baseline"
