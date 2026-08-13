@@ -109,6 +109,46 @@ Full-screen preview". Weaker — nothing on screen contradicts it — and what i
 *should* show (current screen, or the whole level scaled) is a product call. Also
 raised rather than guessed.
 
+### A run with failing suites leaves orphaned servers — and `ss` will not show them
+
+Two findings from one incident (2026-08-14), and the second is the dangerous one.
+
+A deliberately-broken run failed 25 suites. Suites that fail before their
+`stopServer` leave the server they spawned **orphaned** (`ppid=1`). The very next
+full run then failed two unrelated suites — `asm-player` and `smb-hud`, which share
+port 18789 — with:
+
+```
+Port 18789 is in use by something else (not a playground server).
+```
+
+The orphans held the sockets without answering `/health`, which is exactly why the
+server classified them as "something else". The hardened `startServer` did its job:
+it refused and named the port, instead of silently testing against a server it had
+not configured.
+
+- **After any run with failing suites, clear orphans before re-running.** They are
+  reparented to init, so they do not die with the run.
+
+**`ss` did not show them.** `ss -ltn` reported *nothing* listening across the whole
+18768–18897 range while two processes were holding ports in it. I had used that same
+check minutes earlier to conclude "no orphans, clear" — and it was wrong then too.
+
+- **What worked instead:** read `PLAYGROUND_PORT` out of `/proc/<pid>/environ` for
+  every `playground_server.py` process. That identifies which port each one owns, and
+  lets you kill exactly the right ones without touching the dev server on 8765.
+  ```bash
+  for p in $(pgrep -f playground_server.py); do
+    printf 'pid=%s PORT=%s\n' "$p" \
+      "$(tr '\0' '\n' < /proc/$p/environ | grep '^PLAYGROUND_PORT=' | cut -d= -f2)"
+  done
+  ```
+- **The general shape:** this is §1's "tool that returns a confident wrong answer"
+  wearing a different hat. `ss` printing nothing is indistinguishable from `ss`
+  seeing nothing, and in this container it is the former. **A negative result from a
+  process/socket tool needs a positive control** — probe a port you know is open, or
+  read the state from somewhere else entirely.
+
 ### Interrupting `run-all.mjs` can leave a frozen engine source modified
 
 `invariant: template (no modules) ROM matches golden hash` swaps the Builder template
