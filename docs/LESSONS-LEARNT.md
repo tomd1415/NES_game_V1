@@ -177,6 +177,44 @@ exit 0, "(30 files)".
   is driven by; whatever is only in the *other* one is invisible. Iterating A and
   looking up B never sees a B without an A.
 
+### The `silent-success` skill proposal, and why nothing was authored (2026-08-13)
+
+Recorded because "we decided not to build it" is worth as much as the reverse, and
+because the next person to notice this shape will otherwise re-propose it.
+
+The proposal was a skill covering *checks that pass because they never ran*, built
+from five instances found in one night. The devil's advocate said drop the abstract
+version — "silent success" is a concept, not a task, so nothing would ever load it —
+keep a narrow task-named one, and merge it with `reportgen`'s `list-drift-gates`
+proposal. **I agreed then and still do.** The abstract framing was me liking a
+pattern, which the proposal admitted at the time.
+
+What settles it now is that `prove-coverage` exists on disk and was measured against
+the proposal's five method points rather than assumed to cover them:
+
+| Proposed method | In `prove-coverage`? |
+| --- | --- |
+| Every check needs a positive control | **yes** — it is the spine of the skill |
+| If two lists must agree, something must fail when they don't | **yes** |
+| Distrust a tool that signals failure by producing no output | partly — the "nothing matched" pole |
+| Match on the value space, not the variable name you expect | **no** |
+| Assertions about generated source must strip comments first | **no** |
+
+So two points survive uncovered — and both are already here, in §1, with the
+narrow-pattern entry carrying its five-times-in-one-week tally.
+
+**Neither deserves a skill, and the reason is worth keeping.** A skill is a
+procedure you follow; these two are *reflexes* you apply in a second — treat an
+empty result as a claim about your pattern; strip comments before asserting on
+generated code. A one-line reflex loaded from a skill file arrives too late to help,
+because you have already run the grep. The narrow-pattern entry proves the point
+against itself: it was written down, and then violated five times in the week after.
+That is not a filing problem, and moving it into a skill would not have fixed it.
+
+**Still open, and not mine:** the merge with `reportgen`'s `list-drift-gates`
+proposal needs someone who can see both, which this container cannot. The owner's
+answer on the work-list is "taken care of, if not now soon".
+
 ### A clean scan from `preflight`, triaged (2026-08-13)
 
 Run over this project for the first time. Recorded so it is not re-run blind, and
