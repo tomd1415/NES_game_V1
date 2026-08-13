@@ -41,8 +41,20 @@ printf '%s\n' "$out" | sed 's/^/| /'
 
 # `... OK` and `... FAIL` are what run-all's check() prints. The trailing `.*`
 # absorbs a suite's summary tail (`suite a11y.mjs ... OK — smoke-test complete.`).
+#
+# The `: ` -> ` - ` rewrite is the workaround for the colon limit described above,
+# and it is applied to PASS and FAIL ALIKE — that is the whole point. Rewriting one
+# side only would leave the two spellings disagreeing, which is the bug rather than
+# the fix. `invariant: X` therefore reaches a spec as `invariant - X`.
+#
+# The cost, stated so nobody is surprised: a spec names something run-all does not
+# literally print. That is a real downside of doing it here, and the alternatives
+# were worse — renaming the assertions changes output that the docs quote, and
+# patching mutate changes a tool on every container. Revisit if that is resolved
+# upstream; this is a translation layer and the mapping is one line.
 printf '%s\n' "$out" | sed -n \
   -e 's/^\(.*\) \.\.\. OK.*$/  PASS \1/p' \
-  -e 's/^\(.*\) \.\.\. FAIL.*$/  FAIL \1/p'
+  -e 's/^\(.*\) \.\.\. FAIL.*$/  FAIL \1/p' \
+  | sed 's/: / - /g'
 
 exit "$rc"
