@@ -135,6 +135,38 @@ function main() {
       drift++; // once per file, however many ways it has gone missing
     }
 
+    // Direction 3: the ARCHIVE itself must contain what its manifest promises.
+    //
+    // Directions 1 and 2 both look at the LIVE engine sources. Neither ever opens the
+    // frozen copy under tools/engines/v<N>/, so a snapshot could list a file it does not
+    // actually contain and this gate would still print "41 of 41 files compared, 0
+    // missing" — which is precisely what happened. Bare `.gitignore` patterns
+    // (`scene.inc`, `game.chr`, `level.nam`) matched at any depth, including inside the
+    // archive, so `git add` silently declined those three in EVERY snapshot v1..v77.
+    // The bytes for v1-v75 are now gone from disk as well as from git: those archives
+    // are permanently incomplete, and the point of an archive is to rebuild a game with
+    // the engine it was authored for.
+    // Read the frozen copy out of HEAD, NOT off the filesystem. The first version of
+    // this check used existsSync() and passed here while the files were untracked --
+    // present on disk, absent from every fresh clone. That is the same mistake as F5
+    // (the ROM fixtures) and the same one this direction exists to catch, made inside
+    // the fix for it. On-disk existence is not archival.
+    let absent = 0;
+    const relTo = outDir.slice(ROOT.length + 1);
+    for (const { path: rel, sha1: want } of man.files) {
+      const frozen = headBytes(relTo + '/' + rel);
+      if (frozen === null) {
+        console.error(`ABSENT FROM THE ARCHIVE (v${v}): ` + rel + ' — the manifest lists it, but ' + relTo + '/' + rel + ' is not in HEAD, so a fresh clone does not get it');
+        absent++;
+        continue;
+      }
+      if (sha1(frozen) !== want) {
+        console.error(`ARCHIVE CORRUPT (v${v}): ` + rel + ' — the frozen copy does not match the sha1 the manifest records for it');
+        absent++;
+      }
+    }
+    if (absent) { console.error(`\n${absent} file(s) the v${v} manifest promises are missing from or wrong in tools/engines/v${v}/. A snapshot that cannot be read back is not a snapshot.`); process.exit(1); }
+
     if (drift) { console.error(`\n${drift} engine file(s) differ from or are missing against the v${v} snapshot. Bump ENGINE_VERSION + snapshot again.`); process.exit(1); }
     // Report what was actually compared, not the manifest's length. The old
     // message printed man.files.length regardless, so it read as a stronger
