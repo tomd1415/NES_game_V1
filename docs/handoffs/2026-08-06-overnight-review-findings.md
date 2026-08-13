@@ -1007,6 +1007,67 @@ rename dance across two trees would add more failure modes than it removes. The
 honest summary is that the generator is *recoverable*, not *transactional*, and it now
 refuses to start in the state that makes recovery necessary.
 
+# Status audit, 2026-08-13 — every finding re-checked against the code
+
+Prompted by getting one wrong. I recorded F17 as fixed when it was not: I had only
+*described* its fix, then wrote "both now fixed" from memory while refreshing
+`what-the-gates-prove.md`. It was caught by luck. This is the systematic version — every
+finding's claimed status verified against the **code**, not against the note.
+
+**Result: F17 was the only false claim.** Everything else labelled fixed is genuinely
+fixed, and everything labelled open is genuinely open.
+
+| | Verified by | Status |
+| --- | --- | --- |
+| F1 | `bytes?` in `_OVERFLOW_RE` | fixed (v77) |
+| F2 | `test_friendly_build_error.py` exists, 7 tests | fixed |
+| F4 | the header denies stopping on first failure | fixed — *see the note below* |
+| F7 | `nes_studio_core` in the v77 manifest | fixed |
+| F11 | `ports-unique.mjs` exits 0 | fixed |
+| F12 | `test_duplicated_helpers_agree.py` exists | fixed |
+| F14 | the include guard matches literals | fixed |
+| F17 | the parity check calls `ast.parse` | **fixed today, was falsely recorded** |
+| F18 | `CLAUDE.md` says builds no longer dirty the tree | fixed |
+| F20 | the generator has `--allow-dirty` | fixed |
+| F15, F16, F19 | no test names them; `autosave` still globs `*.meta.json` | open, and queued |
+
+## The audit script fell into the trap the lessons file names
+
+F4 first came back **STILL-OPEN**, from `grep -q 'on the first failure'`. The phrase is
+there — inside the sentence that *corrects* it:
+
+> Exits 0 if every step passes, 1 at the END if any failed — it **does not stop
+> on the first failure**, it accumulates `anyFail`.
+
+That is `LESSONS.md` §5 exactly: *a source-scanning test can be contaminated by the comment
+the fix adds*. Worth noticing which direction it failed in. My check was the **negative**
+form (does the old wrong phrase still appear?), so contamination made it shout — loud, and
+it made me look. The **positive** form (does the fix's wording appear?) would have passed
+on the very text it searched for, and I would have recorded "fixed" for the wrong reason
+and moved on. When auditing a text fix, prefer the assertion that gets *louder* when
+contaminated.
+
+## F8's four minor items are all still open, and that was never stated
+
+They were "listed for completeness" and then never revisited, which is how a completeness
+list quietly becomes a to-do list nobody owns. Checked:
+
+* `bg_compression()` is **not** memoised — still re-runs `world_nametable()` and
+  `_dedup_columns()` per call, from three callers.
+* `preparation.py` still calls `graphics._inject_racer_rotation(...)` — a private name
+  across a module boundary.
+* `friendly_build_error(None)` still returns `None`, not `""`. Now covered by
+  `test_none_does_not_raise`, which asserts falsiness rather than the exact value —
+  deliberately, so it does not become a false alarm.
+* `.gitignore` lines 9–11 are still the bare filenames `level.nam`, `game.chr`,
+  `scene.inc`. Benign today because those specific files are tracked, but the patterns
+  have no path anchor, so they would silently swallow a *new* file of that name anywhere
+  in the repo — which is exactly what `*.nes` did to the ROM fixtures (F5), and the same
+  class as the `.devcontainer/` directory rule.
+
+None is urgent; all four are one-line changes. The point of recording it is that "minor,
+listed for completeness" had become indistinguishable from "handled".
+
 ## Swept and found clean
 
 * **All 110 builder suites can actually fail** (swept 2026-08-09, which is what
