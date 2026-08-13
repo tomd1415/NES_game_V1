@@ -1,0 +1,60 @@
+{
+  "name": "builder gates",
+  "why": "Six guards were proved by hand on 2026-08-06/07 and the results written up as prose in tools/builder-tests/README.md. Prose decays, and it cannot detect a guard that stops working later. LESSONS.md §5 is explicit that hand mutation is a tooling gap rather than a discipline one: six steps to perform correctly every time, with no feedback when one is skipped. This is that record made executable.",
+  "command": ["bash", "tools/builder-tests/mutate-report.sh"],
+  "breaks": [
+    {
+      "id": "e2e-port-reclaimed",
+      "file": "tools/builder-tests/asm-corpus.mjs",
+      "find": "const PORT_C = 18895, PORT_A = 18791;",
+      "replace": "const PORT_C = 18790, PORT_A = 18791;",
+      "expect": ["no builder-test suite claims the Studio E2E port"]
+    },
+    {
+      "id": "engine-version-constants-desynced",
+      "file": "tools/tile_editor_web/engine-version.js",
+      "find": "global.NES_ENGINE_VERSION = 78;",
+      "replace": "global.NES_ENGINE_VERSION = 79;",
+      "expect": ["engine version constants agree"]
+    },
+    {
+      "id": "engine-version-bumped-without-snapshot",
+      "file": "tools/engines/ENGINE_VERSION",
+      "find": "78",
+      "replace": "79",
+      "expect": [
+        "engine version constants agree",
+        "engine snapshot matches live sources"
+      ]
+    },
+    {
+      "id": "snapshot-manifest-sha-corrupted",
+      "file": "tools/engines/v78/manifest.json",
+      "find": "dca93d97f6ec4b6a29d887215e76baf059cfc79f",
+      "replace": "0000000000000000000000000000000000000000",
+      "expect": ["engine snapshot matches live sources"]
+    },
+    {
+      "id": "startserver-preflight-removed",
+      "file": "tools/builder-tests/lib/render-harness.mjs",
+      "find": "  if (await healthOk(port)) {",
+      "replace": "  if (false && await healthOk(port)) {",
+      "expect": ["suite harness-startserver.mjs"]
+    },
+    {
+      "id": "shipped-js-syntax-broken",
+      "file": "tools/tile_editor_web/studio-world.js",
+      "find": "function countAttrConflicts(bg, ctx) {",
+      "replace": "function countAttrConflicts(bg, ctx) { (((",
+      "expect": ["syntax studio-world.js"]
+    },
+    {
+      "id": "frozen-snapshot-copy-edited",
+      "file": "tools/engines/v78/tools/tile_editor_web/builder-modules.js",
+      "find": " * Builder module catalogue — chunk 1.",
+      "replace": " * Builder module catalogue — chunk 1. MUTATION",
+      "expect": [],
+      "expect_none_because": "--check compares git HEAD against manifest.json, so an edit to the frozen snapshot COPY under tools/engines/v78/ is invisible to it by design. This is the one limitation found when these gates were mutated by hand on 2026-08-06, and it is recorded here as a declared-uncaught break so it cannot be quietly forgotten or mistaken for a gap nobody noticed. The same property is why a green snapshot check does NOT mean the working tree is clean."
+    }
+  ]
+}
