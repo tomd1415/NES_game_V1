@@ -1062,6 +1062,49 @@ contained rather than what its manifest said it contained — which is the whole
 `prove-coverage` in one sentence, applied to the one artefact whose entire purpose is to
 be read back years later.
 
+## F21's scope, measured — and the two sets that are sound
+
+Every manifest in the repo that promises files, checked against `git ls-files`:
+
+| Manifest | Promises | Untracked |
+| --- | --- | --- |
+| phase0 fixture corpus | 28 | **0** |
+| packaged starters (what the app ships) | 7 | **0** |
+| engine snapshots | 77 archives | **75 incomplete**, 3 files each |
+
+So F21 is exactly v1–v75; v76 and v77 are the repaired ones. The other two artefact sets
+are sound — worth stating, because both are guarded by a test that enumerates the
+manifest and asserts the files are tracked (`test_fixtures_are_tracked`,
+`test_packaged_starters_are_the_frozen_browser_fixture_bytes`). **The engine archive was
+the one manifest-backed artefact set with no such test**, and it is the one that rotted.
+That is not a coincidence and it is the whole argument for the pattern.
+
+**No second guard is being added, deliberately.** A check over *all* 77 archives would be
+permanently red for the 75 that cannot be repaired — the "cannot pass" antipattern, which
+trains everyone to wave the check through and is worse than no check. Direction 3 guards
+the current version at the moment it is created and on every `--check` thereafter, and a
+frozen archive is immutable, so a snapshot that passes once cannot silently rot later.
+The 75 are recorded here rather than enforced.
+
+## The ignored-file sweep that followed, which found nothing new
+
+F21 was the third time an ignore rule had hidden something the repo depends on, after the
+ROM fixtures (F5) and `.devcontainer/`. Enumerating every ignored file that still exists
+on disk, outside the obvious build noise, gives twelve — and all of them are correct:
+
+* `.devcontainer/` (6) — the known one, queued.
+* `game.nes` ×2, `steps/Step_Playground/build/`, `test-results/`, `tools/gallery/…` — build
+  and run output.
+* `tools/accounts.db*` (3) — the pupil accounts database. **Correctly ignored and must
+  stay so.**
+* `feedback-handled.json` — runtime state for the feedback viewer, and
+  `docs/guides/TEACHER_GUIDE.md` says in terms that it and `feedback.jsonl` are
+  gitignored. Documented and intended.
+
+The sweep has a stated limit: it can only see files that still **exist**. F21's were
+partly gone from disk as well as from git, so this class needs the manifest check above,
+not the ignore sweep. Both, not either.
+
 # Status audit, 2026-08-13 — every finding re-checked against the code
 
 Prompted by getting one wrong. I recorded F17 as fixed when it was not: I had only
