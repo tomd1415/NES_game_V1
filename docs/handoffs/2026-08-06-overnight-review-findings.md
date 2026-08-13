@@ -1254,6 +1254,33 @@ That is a real cost of the immutability rule worth stating plainly: any edit to
 `tools/nes_studio_core/`, however cosmetic, is gated behind a version bump, because the
 snapshot gate compares bytes rather than behaviour.
 
+## The pupil-facing error surface, swept (2026-08-13) — F22 was the last one
+
+F22 came from asking whether F1 was the only defect of its **kind** rather than the only
+one open. Having found one, the same question was pushed through the rest of the surface
+a child can reach. **Nothing further.** Recorded so the vein is not re-worked.
+
+* **Project import** (`importProjectText`) is guarded at every step and every message is
+  child-authored: a `JSON.parse` failure gives *"That is not a valid project file."* with
+  the exception swallowed rather than shown; `validateState` returns the app's own short
+  reasons (*"missing backgrounds"*), so the one string concatenation
+  (`'That project file is not valid: ' + err`) interpolates an app message, not an
+  exception. `migrateState` sits between the two outside any `try`, which looked like a
+  gap — it is not: a non-object returns unchanged for the validator to reject, and blank
+  or missing arrays reseed a starter rather than throw.
+* **Asset imports** (`.chr`, `.pal`, `.nam`) each check length and shape first and explain
+  in plain words, including the 16×16-blocks case, which tells the child what to change
+  and where.
+* **Storage exhaustion** names the cause and the remedy — *"Open the projects menu and
+  delete an old project"* — rather than surfacing a `QuotaExceededError`.
+
+The pattern worth naming, because it is what made F1 and F22 the exceptions: **every one
+of these paths converts a machine failure into a sentence before it reaches a child, and
+does it at the point of failure.** F1 and F22 were both places where that conversion was
+attempted but incomplete — a regex that missed the singular, and a divider only one of two
+paths emitted. Neither was an absence of care; both were a conversion that did not cover
+all its inputs. That is a more useful thing to look for next time than "unhandled errors".
+
 ## Swept and found clean
 
 * **All 110 builder suites can actually fail** (swept 2026-08-09, which is what
