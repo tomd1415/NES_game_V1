@@ -1254,6 +1254,33 @@ That is a real cost of the immutability rule worth stating plainly: any edit to
 `tools/nes_studio_core/`, however cosmetic, is gated behind a version bump, because the
 snapshot gate compares bytes rather than behaviour.
 
+## The QComboBox trap, checked statically — 19 combos, 0 violations
+
+`CLAUDE.md` names a trap that has bitten: *populate every `QComboBox` **before**
+connecting its signals, because adding the first item to an empty one fires
+`currentIndexChanged`, and a handler that calls `refresh()` re-enters the mode's own
+constructor.* The UI layer is 161 skipped tests on this box, but that rule is checkable
+without Qt, so it was. **19 `QComboBox` widgets across 31 UI files, none violating it.**
+
+**My first version of the check reported four violations, and all four were wrong.** It
+matched any widget populated after its signal was connected, which flagged
+`world.py`'s `metatile_list`/`scene_list` and `chars.py`'s `animation_list`/`sprite_list`.
+Two things were wrong with that partition:
+
+* all four are **`QListWidget`**, not `QComboBox` — a different signal with different
+  behaviour, and not what the rule is about;
+* the `addItem` calls are three hundred lines away inside `refresh_sprites()`. Populating
+  on refresh is the **intended** pattern; the trap is specifically populating *during
+  construction*, in the same function as the connect, while the widget is still empty.
+
+Corrected to require both — a real `QComboBox`, and the `addItem` in the same function as
+and after the `connect` — it reports zero.
+
+**And zero is worth nothing until the check has been shown to report one**, so a positive
+control was planted: a throwaway `__init__` with `QComboBox` → `connect` → `addItem`. The
+same logic detects it (`('__init__', 'self.picker', 6, [7])`). The rule is being followed,
+and the check that says so can fail.
+
 ## The pupil-facing error surface, swept (2026-08-13) — F22 was the last one
 
 F22 came from asking whether F1 was the only defect of its **kind** rather than the only
