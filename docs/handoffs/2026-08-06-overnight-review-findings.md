@@ -1109,6 +1109,17 @@ This misdirects — the child is told to make their level smaller when the gener
 crashed — and then shows them internals. The heading is not merely unhelpful, it is
 *wrong*, and a pupil who acts on it will delete work that was never the problem.
 
+> **Client half fixed 2026-08-13.** `studio.js` now picks its heading from `res.stage`
+> and folds anything that looks like internals (a `Traceback` or a bare `…Error:`) into
+> the details pane whatever the server sent, with an honest replacement body: *"This one
+> is not your fault — the game maker hit a problem while building your game, and your
+> work is safe. Please show a teacher the technical details below."* Covered by
+> `tools/studio-tests/build-error.spec.js`, the first test this dialog has ever had —
+> two cases, seen to fail first (`Received string: "😕 That game won't fit yet"`), and
+> the overflow case passed throughout, so the fix did not disturb the path that already
+> worked. **The server half is still open** and still wants doing, because the client
+> should not have to recognise a traceback to know it is one.
+
 ## Fix, in two parts, and the second is free
 
 * **`studio.js` (not snapshotted, so no version bump):** choose the heading from

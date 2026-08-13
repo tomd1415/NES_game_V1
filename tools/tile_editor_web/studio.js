@@ -295,12 +295,32 @@
     // The friendly server message comes before a "technical details" divider;
     // lead with that, and offer the raw log underneath for the curious.
     var split = log.split('----- technical details -----');
-    var friendly = split[0].trim() || log;
+    var friendly = split[0].trim();
     var technical = split.length > 1 ? split[1].trim() : '';
+
+    // Only the cc65 failure path sends the divider. Anything else — a crash in the
+    // generator, say — arrives as a bare Python traceback, and without this it landed
+    // in the body as though it were an explanation for a child (F22). If it looks like
+    // internals, treat it as internals whatever the server sent.
+    if (!technical && /(^|\n)Traceback \(most recent call last\)|(^|\n)[A-Za-z_]+Error:/.test(log)) {
+      technical = log;
+      friendly = '';
+    }
+    // The heading has to follow the actual failure. It used to be hard-coded to the
+    // cartridge-size message, so a crash told the child to shrink a level that was
+    // never the problem — and a pupil acting on that deletes good work.
+    var tooBig = res.stage === 'build';
+    if (!friendly) {
+      friendly = tooBig
+        ? 'The game is too big to fit on the cartridge.'
+        : 'This one is not your fault — the game maker hit a problem while building your ' +
+          'game, and your work is safe. Please show a teacher the technical details below.';
+    }
     var bd = document.createElement('div');
     bd.className = 'modal-backdrop open';
     bd.innerHTML = '<div class="modal" role="dialog" aria-modal="true">' +
-      '<h2>😕 That game won’t fit yet</h2>' +
+      (tooBig ? '<h2>😕 That game won’t fit yet</h2>'
+              : '<h2>😕 Something went wrong making your game</h2>') +
       '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;max-height:45vh;overflow:auto">' +
         escapeHtml(friendly) + '</div>' +
       (technical ? '<details style="margin-top:10px;font-size:11px;color:var(--muted)">' +
