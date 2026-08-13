@@ -25,6 +25,7 @@ else entirely.
 from __future__ import annotations
 
 import ast
+import re
 import unittest
 from pathlib import Path
 
@@ -94,15 +95,26 @@ class CodegenStaysSnapshottableTests(unittest.TestCase):
                 )
 
     def test_the_snapshot_actually_includes_the_package_it_delegates_to(self) -> None:
-        """The delegation is only worth anything while the target is snapshotted."""
+        """The delegation is only worth anything while the target is snapshotted.
+
+        Match the string *literals* in INCLUDE_DIRS, not a substring of the raw
+        source. The substring form was satisfied by a comment naming the path --
+        deleting the entry and leaving `// removed for now: tools/nes_studio_core
+        was slowing the walk` kept this green (F14). A guard over emitted or
+        declared code has to read the code, not the text around it.
+        """
         script = SNAPSHOT_SCRIPT.read_text(encoding="utf-8")
         include_dirs = script.split("const INCLUDE_DIRS", 1)[1].split("]", 1)[0]
+        # Strip comments first, then take only quoted literals.
+        code_only = re.sub(r"//[^\n]*", "", include_dirs)
+        literals = re.findall(r"['\"]([^'\"]+)['\"]", code_only)
         self.assertIn(
             "tools/nes_studio_core",
-            include_dirs,
+            literals,
             "playground_server.py delegates its codegen to tools/nes_studio_core, but "
-            "that directory is no longer in the engine snapshot's INCLUDE_DIRS -- so "
-            "the codegen is unsnapshotted again (F7)",
+            "that directory is no longer a string literal in the engine snapshot's "
+            "INCLUDE_DIRS -- so the codegen is unsnapshotted again (F7). Entries "
+            f"actually declared: {literals}",
         )
 
 
