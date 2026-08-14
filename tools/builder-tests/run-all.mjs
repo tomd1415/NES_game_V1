@@ -374,10 +374,15 @@ check('invariant: ladder climb checks target-cell behaviour in both templates', 
   for (const t of readTwoTemplates()) {
     // Both up and down branches should probe behaviour_at on their
     // target row and honour a LADDER / SOLID_GROUND tie-break.
-    if (!/up_ladder\s*=.*BEHAVIOUR_LADDER/s.test(t.body)) {
+    // Scoped to the same statement (`[^;]*`, no dotall). The original used
+    // `.*` with /s, so the two tokens could sit thousands of lines apart and
+    // still match — it asserted "both names appear in order", not "the climb-up
+    // branch tests LADDER". They are adjacent today, so this is a latent
+    // weakness rather than a live gap, but the name promises the stronger thing.
+    if (!/up_ladder\s*=[^;]*BEHAVIOUR_LADDER/.test(t.body)) {
       throw new Error(t.name + ': ladder climb-up guard missing (up_ladder LADDER check)');
     }
-    if (!/dn_ladder\s*=.*BEHAVIOUR_LADDER/s.test(t.body)) {
+    if (!/dn_ladder\s*=[^;]*BEHAVIOUR_LADDER/.test(t.body)) {
       throw new Error(t.name + ': ladder climb-down guard missing (dn_ladder LADDER check)');
     }
     if (!/if \(up_ladder \|\| !up_solid\)/.test(t.body)) {
