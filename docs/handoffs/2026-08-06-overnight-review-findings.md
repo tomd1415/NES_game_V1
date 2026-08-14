@@ -688,7 +688,10 @@ So the check has to name the port range, not the parent:
 """Is anything LISTENING on a builder-test port? Asks the kernel, not `ps`."""
 import sys
 
-LO, HI, LISTEN = 18768, 18897, "0A"          # 0A = TCP_LISTEN
+LO, HI, LISTEN = 18768, 19129, "0A"          # 0A = TCP_LISTEN; the runner now
+                                             # allocates 18800-19129, and this said
+                                             # 18897 until 2026-08-14 — a check whose
+                                             # range stopped covering the thing it guards
 
 ports = set()
 for path in ("/proc/net/tcp", "/proc/net/tcp6"):

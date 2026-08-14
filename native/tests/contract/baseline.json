@@ -17,10 +17,10 @@
   },
   "automated_results": {
     "builder_regression": {
-      "status": "pending",
+      "status": "pass",
       "command": "node tools/builder-tests/run-all.mjs",
-      "verified_on": "2026-08-06",
-      "notes": "Last run in full at v76 (110 suites, 0 failures). **NOT re-run at v77.** The v77 delta is one character in an error-message regex in play.py, on the build-FAILURE path, so it cannot alter a ROM \u2014 but that is an argument, not a measurement, and this box is not for a 25-minute cc65 pass. Re-run before merge."
+      "verified_on": "2026-08-14",
+      "notes": "110 suites, 0 failures, 154 invariant checks, exit 0 \u2014 re-run in full at v77 (11m23s). First end-to-end run since the runner began assigning each suite's port and reaping its process group: no listener survived anywhere in the allocated range 18800-19129 afterwards, and `git status` was empty, which also confirms across 110 real builds what F18 established from one \u2014 a /play no longer dirties the working tree."
     },
     "engine_snapshot": {
       "status": "pass",
