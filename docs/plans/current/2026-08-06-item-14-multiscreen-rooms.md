@@ -36,7 +36,8 @@ A wide or tall project promotes `ss_x[]`/`ss_y[]` to 16-bit (`wide_pos` in
 `playground_server.py`, set when any coordinate exceeds 255). Two things then go
 wrong, and they are worth separating because only the second is fatal:
 
-- **Wide but one screen tall** (`x > 255`, `y ≤ 239`): parking at `ss_y = 0xFF`
+- **Wide but one screen tall** (`x > 255`, `y ≤ 238` — see the Step 1 measurement;
+  239 is already parked): parking at `ss_y = 0xFF`
   still reads as "not alive", so this case may in fact already be safe. The
   current guard rejects it anyway, because it tests `x` as well as `y`.
 - **Two screens tall** (`y` up to 479): a *legitimately placed* entity can have
@@ -99,11 +100,14 @@ languages**:
 That the ASM checks the high byte *before* the sentinel is why the wide case works;
 it was not obvious from the C alone, and it is the mechanism the hypothesis rests on.
 
-**Correction 2 — off-by-one in the safe range.** This plan calls wide-but-short
-`y ≤ 239`. `0xEF` **is** 239 and the test is `>= 0xEF` → skip, so an entity at
-`y = 239` is *already* treated as parked, in every build, today. The safe range is
-`y ≤ 238`. **Step 2 must reject on `y > 238`, not `y > 239`**, or it will admit
-exactly one row of entities that then vanish silently.
+**Correction 2 — off-by-one in the safe range.** The safe range is **`y ≤ 238`**:
+`0xEF` *is* 239 and the engine's test is `>= 0xEF` → skip, so an entity at exactly
+239 is already treated as parked, in every build, today. An earlier draft of this
+plan put the boundary one higher, which would have admitted exactly one row of
+entities that then vanish silently. **Step 1 and Step 2 above now both carry the
+measured figure** — this note records why it changed, and the superseded number is
+deliberately not repeated, because a correction printed beside the claim it corrects
+gets read as the claim.
 
 **Correction 3 — Step 1's own test design is not buildable as written.** It asks for
 "4 screens wide". The multi-bg door path is gated on
@@ -129,8 +133,11 @@ suite it would be either red or dishonest.*
 
 *Only if Step 1 passes.*
 
-- Change `_scene_is_perroom` to reject on **`y > 239`** rather than on
-  `x > 255 or y > 255`.
+- Change `_scene_is_perroom` to reject on **`y > 238`** rather than on
+  `x > 255 or y > 255`. **238, not 239** — `0xEF` *is* 239 and the engine's test is
+  `>= 0xEF`, so an entity at exactly 239 is already treated as parked in every build.
+  Measured 2026-08-13; see the Step 1 result above. Using 239 here admits one row of
+  entities that then vanish silently, which is the bug this step exists to avoid.
 - **Verifiable when:** a new suite asserts `BW_SCENE_PERROOM` **is** emitted for
   a wide/short multi-room project and **is not** emitted for a 2-screen-tall
   one; and `_rom-equiv.mjs` still passes (no golden project is multi-room, so
