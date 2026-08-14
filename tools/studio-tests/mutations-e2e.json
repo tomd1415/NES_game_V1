@@ -1,0 +1,42 @@
+{
+  "name": "studio E2E gates",
+  "why": "158 Playwright tests had never been mutation-tested as a body. Individual E2E guards were watched failing by hand this week, but nothing said the rest could fail at all — and an E2E suite is the easiest place in this project for a test to go quietly hollow, because a selector that matches nothing and a behaviour that is correct look identical from the outside. Three behaviours are broken here, chosen because each is guarded by a DIFFERENT spec file, so a single adapter or reporter fault cannot make all three look caught.",
+  "command": [
+    "bash",
+    "tools/studio-tests/mutate-report.sh"
+  ],
+  "breaks": [
+    {
+      "id": "mode-hook-error-never-reported",
+      "file": "tools/tile_editor_web/studio.js",
+      "find": "    if (modeHookFailed[key]) return;          // said once is said",
+      "replace": "    if (modeHookFailed[key] || true) return;   // MUTATION: report nothing, ever",
+      "expect": [
+        "mode-hook-errors.spec.js - a throwing overlay hook is reported, and names the mode and hook",
+        "mode-hook-errors.spec.js - it is reported exactly once, not once per render"
+      ],
+      "note": "A mode whose overlay hook throws must say so. Silenced, the overlay is simply missing from the TV with nothing in the console — the failure shape this project keeps finding, where a clean screen reads as a working one."
+    },
+    {
+      "id": "clash-count-ignores-viewed-screen",
+      "file": "tools/tile_editor_web/studio-world.js",
+      "find": "    var vo = c ? off(c) : { cx: 0, cy: 0 };",
+      "replace": "    var vo = { cx: 0, cy: 0 };   // MUTATION: always count screen 0",
+      "expect": [
+        "attr-conflict-screen.spec.js - the clash count follows the viewed screen",
+        "attr-conflict-screen.spec.js - a clash on another screen is not attributed to this one"
+      ],
+      "note": "Restores the exact bug fixed in 6a93e3f: the dock counted screen 0 while the red-X overlay was offset-aware, so on any level wider than one screen the number and the marks described different places."
+    },
+    {
+      "id": "missing-module-never-reported",
+      "file": "tools/tile_editor_web/studio.js",
+      "find": "    var key = (mode || '?') + '.module';",
+      "replace": "    var key = (mode || '?') + '.module'; if (mode) return;   // MUTATION: report nothing",
+      "expect": [
+        "mode-module-registry.spec.js - a missing module says so in the console, once"
+      ],
+      "note": "A mode with no registered module falls back to the 'arrives later in the redesign' placeholder, which is not the real reason. Without the console line there is nothing to distinguish 'not built yet' from 'failed to load'."
+    }
+  ]
+}
