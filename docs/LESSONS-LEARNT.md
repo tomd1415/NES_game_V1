@@ -219,6 +219,43 @@ which matches `latest_rom = STEP_DIR / "_play_latest.nes"`, goes red.
   **So the question to ask is not "does this strip comments" but "could a sentence
   satisfy this pattern".**
 
+### A guard can be tight on the token and loose on the gap
+
+Two hollow assertions were found on 2026-08-13/14, and they failed in different
+ways. The first matched a bare string that also appeared in a comment. The second —
+`invariant: ladder climb checks target-cell behaviour` — matched the *right two
+tokens* with a gap that spanned the whole file:
+
+```js
+/up_ladder\s*=.*BEHAVIOUR_LADDER/s      // dotall: `.*` crosses everything
+```
+
+`BEHAVIOUR_LADDER` occurs six times in `platformer.c`, so gutting the climb-up
+branch — the exact regression the guard is named for — left it **green**. Scoped to
+one statement (`[^;]*`, no `/s`) it goes red.
+
+- **The question that finds these:** not "does this pass?" but **"could this pass on
+  something it should not?"** Both were invisible to a passing run and obvious the
+  moment a break was planted.
+- **The audit is cheap and worth repeating** after adding assertions. Every regex
+  used in a `.test()` call, flagged if it contains an unbounded gap:
+
+  ```bash
+  python3 - <<'EOF'
+  import re
+  src = open('tools/builder-tests/run-all.mjs').read()
+  for pat, flags in re.findall(r"/((?:[^/\\\n]|\\.)+)/([a-z]*)\.test", src):
+      if re.search(r"\.\*|\[\^;\]\*|\.\+", pat):
+          print(f"/{pat}/{flags}")
+  EOF
+  ```
+
+  Run 2026-08-14: 35 regex literals, 2 with an unbounded gap — both the deliberately
+  statement-scoped `[^;]*` ladder pair. Nothing else in the file is loose.
+- **`/s` on a pattern containing no `.` is a no-op**, so its presence is not evidence
+  of looseness by itself. The one other dotall regex here (`Popen\(\s*\[…`) is
+  tight; only the gap matters.
+
 ### A success message that counts the wrong thing
 
 Two gates on this project printed a confident total for work they had not done.
