@@ -49,8 +49,15 @@ has no `strtonum`, so it emitted nothing and exited quietly.
 - **Cost:** a confident, wrong report to the user, which they then had to correct
   from the host.
 - **What would have told us sooner:** any output at all from a positive control.
-  If the parser cannot see a port you *know* is open, the parser is broken. Prefer
-  a Python connect-scan or `ss -ltnp` over hand-rolled `/proc` parsing.
+  If the parser cannot see a port you *know* is open, the parser is broken.
+- **What to use instead, in this container:** a **connect probe** —
+  `curl -fsS http://127.0.0.1:<port>/health` — and, to find which process owns a
+  port, `PLAYGROUND_PORT` read out of `/proc/<pid>/environ`. The socket-listing
+  tools are not dependable here; measured 2026-08-14, and the orphaned-servers entry
+  in this section has the evidence and the working snippet.
+  *(An earlier version of this line recommended a socket-listing tool as the cure.
+  The recommendation is withdrawn and is not repeated here, because a correction
+  printed next to the claim it corrects gets read as the claim.)*
 
 ### A search pattern narrower than the thing it searches for
 
