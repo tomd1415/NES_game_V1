@@ -1254,6 +1254,42 @@ That is a real cost of the immutability rule worth stating plainly: any edit to
 `tools/nes_studio_core/`, however cosmetic, is gated behind a version bump, because the
 snapshot gate compares bytes rather than behaviour.
 
+## The window-disposal trap, checked — respected, and one near-miss
+
+The second of the six documented traps checkable without Qt. `_dispose` exists because a
+merely-closed `MainWindow` keeps ~1,170 widgets alive and every later `setStyleSheet()`
+re-polishes all of them: one file went from 1.4 s for its first test to 12 s for its
+ninth. Checked:
+
+* **No UI test constructs a `MainWindow` directly.** Every one goes through the helper in
+  `support.py`, which registers `addCleanup(self._dispose, window)`.
+* **Of six `QDialog` subclasses, exactly one is constructed in a test**, and it looked
+  like a violation: `test_time_machine.py:20` registers `addCleanup(dialog.close)` —
+  *close*, which the `_dispose` docstring says in terms is **not enough**. It is fine:
+  the dialog is `super().__init__(window)`, so Qt destroys it with the parent, and the
+  parent is disposed properly. Cleanup order helps rather than hurts — `addCleanup` is
+  LIFO and the dialog's runs first.
+
+## A rate worth stating: most of what looks like a finding here is not
+
+Three static checks this week produced eleven apparent violations. **Ten dissolved on
+reading**, and only one was real:
+
+| Check | Apparent | Real |
+| --- | --- | --- |
+| combo populated after connect | 4 | 0 — all `QListWidget`, and populated in `refresh()`, which is the intended pattern |
+| a finding's status vs the code (F4) | 1 | 0 — the grep matched the phrase inside the sentence *correcting* it |
+| dialog cleanup uses `close` | 1 | 0 — parented, so destroyed with the window |
+| F21, snapshot archive incomplete | 5 (per version) | **all real** |
+
+That is not an argument against the checks — F21 came out of the same habit and was the
+most consequential finding of the week. It is an argument for a specific discipline:
+**read every hit before reporting any of them, and report the count only after.** Each of
+those ten would have sent someone to "fix" correct code, and four of them would have made
+it worse by unpicking constructors that were already right. A reviewer who reported all
+eleven would have been wrong ten times and right once, and would deserve to be ignored
+the twelfth time.
+
 ## The QComboBox trap, checked statically — 19 combos, 0 violations
 
 `CLAUDE.md` names a trap that has bitten: *populate every `QComboBox` **before**
