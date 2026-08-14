@@ -46,14 +46,22 @@ try {
   await stopServer(second.srv);
 } catch (e) {
   const msg = e.message || String(e);
-  if (/already serving \/health on this port/.test(msg)) {
-    ok('an occupied port is refused by the pre-flight, before spawning anything');
-  } else if (/between the pre-flight check and the spawn|exited .* instead of binding/.test(msg)) {
-    bad('the port was refused, but NOT by the pre-flight — it got as far as '
-      + 'spawning a child that surrendered. The pre-flight is missing or no longer '
-      + 'runs first. Message was: ' + msg);
+  // STRUCTURAL discriminator, not a prose one. The pre-flight throws BEFORE
+  // spawning, so its error carries no captured child output; every later failure
+  // path appends `--- server output ---`. Matching the sentence instead would make
+  // this test fail whenever someone improves the wording — and worse, it would then
+  // report "the pre-flight is missing", which is the wrong diagnosis. A gate that
+  // cries wolf with a misleading message is deleted faster than one that stays quiet.
+  const spawnedAChild = /--- server output ---/.test(msg);
+  if (!spawnedAChild) {
+    ok('an occupied port is refused BEFORE a child is spawned (the pre-flight)');
+    if (!/already serving \/health on this port/.test(msg)) {
+      console.log('  note: the pre-flight message has been reworded since this test was '
+        + 'written. That is fine — the structural check above is what this asserts.');
+    }
   } else {
-    bad('refused for an unrecognised reason: ' + msg);
+    bad('the port was refused only AFTER spawning a child — the error carries captured '
+      + 'server output, so the pre-flight did not run first. Message was: ' + msg);
   }
 }
 
