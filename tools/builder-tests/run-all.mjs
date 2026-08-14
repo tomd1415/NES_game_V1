@@ -213,7 +213,15 @@ check('invariant: BUILDER_GUIDE module coverage matches builder-modules.js', () 
   const section = guide.slice(secStart, secEnd < 0 ? undefined : secEnd);
   const tabled = [...section.matchAll(/^\|\s*`([a-zA-Z0-9_-]+)`\s*\|/gm)].map(m => m[1]);
 
-  const src = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
+  // Comments stripped first. A module cannot be DECLARED in a comment, so this
+  // can only remove false positives — unlike narrowing a value pattern, it cannot
+  // hide a real one. The exposure is not hypothetical: a "how to add a module"
+  // note written into this file (`// modules['example'] = { ... }`) would invent a
+  // 19th module, and the count check would fail complaining the guide is stale
+  // when nothing is wrong. A gate that cries wolf gets deleted.
+  const src = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
   const actual = [...new Set([...src.matchAll(/modules\['([a-zA-Z0-9_-]+)'\]/g)].map(m => m[1]))];
   // An empty enumeration must not read as agreement — it would make (a) and (c)
   // trivially satisfiable and the whole check decoration.
