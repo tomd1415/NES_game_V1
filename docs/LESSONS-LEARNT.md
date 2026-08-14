@@ -9,6 +9,28 @@ Include the false theory you held on the way — the next person will hold it to
 Entries are grouped by the *shape* of the mistake, not by date, because the shape
 is what recurs. Most of these cost between twenty minutes and a whole session.
 
+## If you read nothing else
+
+This file is 800 lines and you are told to read it *before* debugging, which nobody
+does. So: four reflexes account for most of what it contains, and each costs seconds.
+
+1. **A search that finds nothing is a claim about your pattern, not about the code.**
+   Print the raw region and look. Five separate times in one week this was the only
+   thing standing between a regex artefact and a confidently wrong report. (§1)
+2. **"Nothing caught this" is ambiguous.** It means either the guard is hollow *or*
+   your break was a no-op — and they are indistinguishable from the output. Verify
+   the break changes what you are measuring, then interpret. Twice this stopped a
+   working guard being reported as broken. (§1, §5)
+3. **Ask both questions of a guard.** Could it *pass* when something is wrong? Could
+   it *fail* when nothing is? The second is the one nobody asks, and a gate that
+   cries wolf gets deleted along with its coverage. (§1)
+4. **A dated measurement and a live claim read identically in prose.** "114 suites"
+   is true forever as a record and wrong the next time someone adds a file. Mark
+   which you mean; it costs four words. (§3)
+
+Everything below is an instance of one of those, with the false theory that was held
+on the way.
+
 ---
 
 ## 1. Checks that report "clean" because they never ran properly
