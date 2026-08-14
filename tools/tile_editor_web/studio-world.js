@@ -923,7 +923,7 @@
     var clashes = countAttrConflicts(bg, ctx);
     if (clashes > 0) {
       palSec.appendChild(el('div', { class: 'dock-note', style: 'color:var(--warn)',
-        text: '⚠ ' + clashes + ' block' + (clashes === 1 ? '' : 's') + ' mix two palettes (red X on screen). The NES shows one palette per 2×2 block — recolour with 🎨 to fix.' }));
+        text: '⚠ ' + clashes + ' block' + (clashes === 1 ? '' : 's') + ' mix two palettes (red X on this screen). The NES shows one palette per 2×2 block — recolour with 🎨 to fix.' }));
     }
     dock.appendChild(palSec);
 
@@ -1136,6 +1136,13 @@
   }
 
   // Render a background's nametable cleanly (no grid/entities) into a canvas.
+  // Renders the WHOLE background, every screen of it — not screen 0. Until
+  // 2026-08-14 both loops stopped at SCREEN_W/SCREEN_H, so on any level bigger
+  // than one screen "Full-screen preview" always showed the top-left screen no
+  // matter which one the pupil was looking at. Same shape as the palette-clash
+  // count fixed in 6a93e3f: a control that describes a different place from the
+  // one you are on, and silent about it, because a correct-looking screen is
+  // indistinguishable from the right screen.
   function renderBgInto(cv, bg, state, scale) {
     var g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
@@ -1143,7 +1150,8 @@
     g.fillStyle = backdrop; g.fillRect(0, 0, cv.width, cv.height);
     var nt = (isMetatileBg(bg) && global.MetatileLib) ? global.MetatileLib.expand(bg).nametable : bg.nametable;
     if (!Array.isArray(nt)) return;
-    for (var cy = 0; cy < SCREEN_H; cy++) for (var cx = 0; cx < SCREEN_W; cx++) {
+    var cols = worldCols(bg), rows = worldRows(bg);
+    for (var cy = 0; cy < rows; cy++) for (var cx = 0; cx < cols; cx++) {
       if (!nt[cy] || !nt[cy][cx]) continue;
       var c = (nt[cy] && nt[cy][cx]) || { tile: 0, palette: 0 };
       var tile = state.bg_tiles[c.tile | 0];
@@ -1154,13 +1162,22 @@
   function openPreview(ctx) {
     var state = ctx.getState();
     var bg = activeBg(ctx);
-    var scale = 2;
-    var cv = el('canvas', { width: SCREEN_W * 8 * scale, height: SCREEN_H * 8 * scale,
+    var cols = worldCols(bg), rows = worldRows(bg);
+    var screensX = Math.max(1, Math.round(cols / SCREEN_W));
+    var screensY = Math.max(1, Math.round(rows / SCREEN_H));
+    // Scale down as the level grows so a 4x2 world still fits a laptop screen.
+    // A single screen keeps the 2x it has always had.
+    var scale = screensX * screensY <= 1 ? 2 : (Math.max(screensX, screensY) >= 3 ? 1 : 2);
+    var cv = el('canvas', { width: cols * 8 * scale, height: rows * 8 * scale,
       style: 'image-rendering:pixelated;max-width:100%;border:2px solid var(--line);display:block;margin:0 auto' });
     renderBgInto(cv, bg, state, scale);
+    var many = screensX * screensY > 1;
     UI.modal({
       title: '⛶ ' + (bg.name || 'background'),
-      sub: 'Full-screen preview — the background exactly as the NES draws it (no grid or entities).',
+      sub: many
+        ? ('Full-screen preview — the whole level, all ' + screensX + '\u00D7' + screensY
+           + ' screens of it, exactly as the NES draws it (no grid or entities).')
+        : 'Full-screen preview — the background exactly as the NES draws it (no grid or entities).',
       bodyNodes: [cv],
       actions: [{ label: 'Close', value: 'close', kind: 'primary' }],
     });

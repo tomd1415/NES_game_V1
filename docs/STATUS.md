@@ -13,22 +13,31 @@ work cold, and the file to refresh *last* before putting work down.
   drafts of this line carried a hand-written count and both were wrong within one
   commit.
 - **Branch:** `main`
-- **Engine version:** **v78** (the dialogue box no longer flashes the screen)
+- **Engine version:** **v79** (multi-screen rooms keep their own entities, #14 Step 2 —
+  and with it a fix for entities on rows 239-255 being silently swallowed)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  **116 suites, exit 0, re-run 2026-08-14 at v78**) — plus 22 invariants and 40
+  **117 suites, exit 0, re-run 2026-08-14 at v79**) — plus 22 invariants and 40
   syntax checks. The 40 are 32 shipped `.js` modules, 7 inline HTML script bodies
   and `playground_server.py`; the 32 match the 32 non-vendored `.js` files on disk
   exactly, and the 7 cover every HTML page carrying a bare `<script>`. Both sets
   are enumerated at runtime rather than hand-listed — the `.js` list used to name
   14 and silently skip 18, and the HTML list named 5 of 8, leaving `audio.html`
   and `gallery.html` unchecked.
-- **Studio E2E:** ✅ **158 passed, exit 0** (`npx playwright test`, re-run
-  2026-08-13 at v78) across 34 spec files. Was 147 on 2026-07-30; the eleven added
-  since are the silent-failure guards from the 2026-08-09/12 maintenance, in
-  `mode-hook-errors.spec.js`, `attr-conflict-screen.spec.js` and
-  `mode-module-registry.spec.js`. Still confirms the suite survives engine
-  v76/v77/v78, the emulator watchdog and the Style-tab toggle.
+- **Studio E2E:** ✅ **164 passed, exit 0** (`npx playwright test`, re-run
+  2026-08-14 at v79) across 35 spec files. Was 147 on 2026-07-30 and 158 on
+  2026-08-13; the eleven before that are the silent-failure guards from the
+  2026-08-09/12 maintenance, and the six since are the whole-level preview
+  assertion in `world.spec.js` plus `starter-hook.spec.js`. Still confirms the
+  suite survives engine v76-v79, the emulator watchdog and the Style-tab toggle.
+  - **The suite is now mutation-tested as a body**, which it never had been:
+    `tools/studio-tests/mutations-e2e.json`, 3 breaks in 3 different spec files,
+    all 3 caught. Run it with `mutate tools/studio-tests/mutations-e2e.json`.
+    Note it deliberately runs with a longer timeout than the committed config —
+    a test that reddens because the box was busy is indistinguishable from one
+    that reddened because the break was caught, so a slow test manufactures false
+    "caught" verdicts. Measured at load 19 the two `tutorial.spec.js` long tests
+    do exactly that.
   - Per-spec counts are deliberately *not* listed. They were, earlier the same
     day, and were stale within hours of being written — one more test in one spec
     and three numbers were wrong at once. The total is a dated measurement, not a

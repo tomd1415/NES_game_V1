@@ -74,8 +74,8 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
   Engine version, test state, what's open, what's blocked and on whom. It's a
   living file: refresh it when an engine version ships or a session ends.
 - **Live handoff (delete this line when it's resolved):**
-  [`HANDOVER.md`](HANDOVER.md) — v78 shipped; the two attended playtests and the
-  redeploy (now v78) are still open and both need a human.
+  [`HANDOVER.md`](HANDOVER.md) — v79 shipped; the two attended playtests and the
+  redeploy (now **v79**) are still open and both need a human.
 - Docs index: [`docs/README.md`](docs/README.md).
 - Studio redesign status: `docs/plans/current/2026-07-05-studio-redesign.md`.
 - Engine work sequencing/risk:

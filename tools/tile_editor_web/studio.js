@@ -815,9 +815,39 @@
     } catch (e) {}
   }
 
+  // "Load a starter game" needs studio-starter.js to have registered
+  // window.StudioStarter. A host page that does not load it made the old code
+  // throw on `window.StudioStarter.list` at the first click — so the button
+  // looked live, did nothing, and said nothing anywhere a pupil would look.
+  // Returns null (not []) when the hook is absent, so "not wired" and "wired but
+  // empty" stay distinguishable; both disable the button, for different reasons.
+  function starterList() {
+    try {
+      if (!window.StudioStarter || typeof window.StudioStarter.list !== 'function') return null;
+      var l = window.StudioStarter.list();
+      return Array.isArray(l) ? l : null;
+    } catch (e) { return null; }
+  }
+  // Sibling of reportMissingModule, sharing its said-once map for the same reason.
+  function reportNoStarters(wired) {
+    var key = 'starters.missing';
+    if (modeHookFailed[key]) return;
+    modeHookFailed[key] = true;
+    try {
+      console.error('[studio] "Load a starter game" is disabled: '
+        + (wired ? 'StudioStarter.list() returned no starters.'
+                 : 'studio-starter.js did not load, or loaded without registering '
+                   + 'window.StudioStarter.')
+        + ' The button is disabled rather than left looking live — a control that '
+        + 'does nothing when clicked is indistinguishable from a broken pupil project. '
+        + 'Said once.');
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
+
   function onNewGame() {
     Storage.flushPending();
-    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
+    var starters = starterList();
+    if (!starters || !starters.length) { reportNoStarters(!!starters); return; }
     // One starter (or no modal helper) → keep the simple confirm flow.
     if (starters.length <= 1 || !(window.StudioUI && window.StudioUI.modal)) {
       if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
@@ -1674,6 +1704,20 @@
     });
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
+    // Decided 2026-08-14 (the owner left this one to me): DISABLE rather than
+    // log-and-continue. Both make the console honest; only disabling is visible
+    // to the person actually using the page, and the pupil never opens a console.
+    // Safe to test here because studio-starter.js is loaded before studio.js in
+    // studio.html and boot runs on DOMContentLoaded, so the registry is settled.
+    (function () {
+      var b = $('btn-new-game');
+      var l = starterList();
+      if (b && (!l || !l.length)) {
+        b.disabled = true;
+        b.title = 'Starter games are unavailable on this page — studio-starter.js did not load.';
+        reportNoStarters(!!l);
+      }
+    })();
     $('btn-tutorial').addEventListener('click', onTutorial);
     $('quest-collapse').addEventListener('click', function () { setQuestsCollapsed(true); });
     $('quest-expand').addEventListener('click', function () { setQuestsCollapsed(false); });

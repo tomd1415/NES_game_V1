@@ -119,6 +119,57 @@ declare `const PORT_C = 18790, PORT_A = 18791;` and `PORT_C` does not match
   confident finding built on a regex artefact, which is worse than no finding at
   all because it gets acted on.
 
+### A test satisfied by anything is green for the life of the bug
+
+`world.spec.js` had this, and had had it since the preview was written:
+
+```js
+test('full-screen preview opens a modal with a canvas', async ({ page }) => {
+  await expect(dlg.locator('canvas')).toBeVisible();
+});
+```
+
+Meanwhile `renderBgInto` looped `cx < SCREEN_W`, so on any level bigger than one
+screen the preview showed the **top-left screen**, whatever screen the pupil was
+actually on. The test never had a chance of catching it: *any* canvas satisfies
+it, including the wrong one.
+
+- **The tell is in the assertion, not the code.** "A canvas is visible", "the
+  response was 200", "no exception was thrown" — each is true of the working
+  version *and* of most broken ones. Ask what the assertion would reject.
+- **Fix:** assert a quantity that only the correct behaviour produces. Here, the
+  canvas is as wide as the LEVEL — 2 screens is 64 columns, 1024 device pixels,
+  against 512 for the old render. Proved by putting the old behaviour back and
+  watching it go red, and the original test stayed green while it did, which is
+  the clearest possible statement of what it was worth.
+- Same family as the palette-clash count (`6a93e3f`) and worth naming: **a
+  control that describes a different place from the one you are on**, silently,
+  because a plausible-looking screen and the right screen are indistinguishable.
+
+### A meta-test that cannot tell the bug from the fix
+
+Writing #14 Step 2, the accepted work-list specified its own proof: *"flip the
+threshold to 239 and the tall-project assertion must go red."* It does not.
+
+The tall fixture places an entity at `y = 400`. The old threshold rejects
+`y > 238`; the broken one rejects `y > 239`. **400 exceeds both**, so that
+assertion passes under the correct threshold and under the off-by-one alike, and
+would have signed off the bug.
+
+Only an entity at **exactly 239** separates them — which is the whole point of
+that number, since `0xEF` *is* 239 and the draw guards test `>=`.
+
+- **The rule:** a meta-test has to exercise the *boundary*, not merely a value on
+  the far side of it. "Well past the limit" proves the check exists; only the
+  limit itself proves the check is in the right place.
+- **And it was written by someone who knew why 238 mattered** — the same document
+  explains the `0xEF` collision two paragraphs above. Knowing the boundary and
+  testing the boundary are separate acts, and the second is the one that counts.
+- Caught only because the suite was written with a case per side of the gate
+  rather than one case per feature. **If a gate has a threshold, give it a test
+  at the threshold, and expect the plan's own suggested proof to be one value
+  out.**
+
 ### Piping a long suite through `tail`
 
 `node tools/builder-tests/run-all.mjs | tail -40` on a failing run shows the

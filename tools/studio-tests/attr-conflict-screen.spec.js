@@ -3,7 +3,13 @@
 //
 // A 2×2 chunk can show only one palette on the NES, so WORLD outlines offending
 // chunks with a red X and the dock says "N blocks mix two palettes (red X on
-// screen)". The overlay applies the view-screen offset; until 2026-08-09 the
+// this screen)" — tightened to "this screen" on 2026-08-14, because "on screen"
+// could be read as "on the display". NOT an owner decision: the question of
+// whether the count should cover the whole level or the current screen was
+// asked and the reply came back unreadable, so the standing behaviour since
+// 6a93e3f (current screen) was kept and the label made to say so. If the answer
+// arrives and it is "whole level", this comment and that label both change.
+// The overlay applies the view-screen offset; until 2026-08-09 the
 // counter did not, and always scanned screen 0. On any level wider than one
 // screen the two therefore described different places:
 //
