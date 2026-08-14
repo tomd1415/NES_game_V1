@@ -219,6 +219,39 @@ which matches `latest_rom = STEP_DIR / "_play_latest.nes"`, goes red.
   **So the question to ask is not "does this strip comments" but "could a sentence
   satisfy this pattern".**
 
+### When a guard leans on prose — and when that is fine
+
+Three gates here could fail with nothing wrong, all for the same reason: they
+asserted something **incidental** rather than the structural fact. The useful part is
+that only two were worth changing, and the rule for telling them apart.
+
+| Gate | Coupled to | Verdict |
+| ---- | ---------- | ------- |
+| BUILDER_GUIDE module count | a comment mentioning `modules['example']` | **fixed** — strip comments |
+| `harness-startserver` pre-flight | the *wording* of the error message | **fixed** — assert structure |
+| E2E-port literal scan | digits inside a sha1 | measured, **left** (1 in 150,000) |
+| `mode-hook-errors` / `mode-module-registry` console text | the wording of a message | **left** — see below |
+
+**The test is not "does it touch text". It is two questions:**
+
+1. **Is the prose a proxy for a structural fact?** `harness-startserver` matched a
+   sentence to decide *which code path threw* — a fact the code already exposes
+   another way (the pre-flight throws before spawning, so its error carries no
+   captured child output). Asserting the proxy instead of the fact is the bug.
+   Where the message **is** the deliverable — a developer-facing report that must
+   name the mode and hook — asserting its content is legitimate.
+2. **Does the false failure misdiagnose?** The reworded pre-flight message made the
+   test report *"the pre-flight is missing"*, sending someone to hunt a guard that
+   was sitting there. By contrast `expect(hits[0]).toContain('threw')` fails with the
+   assertion visible in the message: obviously a wording check, obviously fixable, no
+   wrong turn taken. A loud, self-explaining false failure is cheap; a confidently
+   wrong one is not.
+
+So the console-message assertions were left alone deliberately. **Churning every
+string assertion would be its own mistake** — each change to a working guard is a
+chance to open a hole, and the two that were fixed had a structural alternative that
+strictly dominated.
+
 ### Measuring a gate's false-alarm rate instead of arguing about it
 
 A gate that fires when nothing is wrong gets called flaky, then skipped, then
