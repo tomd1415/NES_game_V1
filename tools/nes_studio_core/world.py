@@ -203,7 +203,18 @@ def build_bg_world_h(state: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _hex_table(name: str, size_expression: str, data: bytes) -> list[str]:
+def _hex_table_declared(name: str, size_expression: str, data: bytes) -> list[str]:
+    """A C byte array whose length is DECLARED BY THE CALLER, as an expression.
+
+    `size_expression` is emitted verbatim — usually a macro like `BG_WORLD_COLS`, not a
+    number — so the declaration can be longer than the initialiser and C zero-fills the
+    rest. That is why the empty case cannot be shared with the self-sizing variant in
+    collision.py: collapsing to `[1]` would contradict the declared size.
+
+    Named apart from `_hex_table_sized` deliberately. The two were both called
+    `_hex_table`, took different arguments and disagreed on empty input, and the
+    agreement test had to spend a docstring explaining that they must NOT be unified.
+    """
     output = [f"const unsigned char {name}[{size_expression}] = {{"]
     if not data:
         output.append("  0")
@@ -241,16 +252,16 @@ def build_bg_world_c(state: dict[str, Any]) -> str:
             f"index; the raw array would be {columns * rows} bytes. The scroll core "
             f"reads bg_col_data[bg_col_index[col] * BG_WORLD_ROWS + rr]. */",
         ]
-        lines += _hex_table("bg_col_index", "BG_WORLD_COLS", column_index)
+        lines += _hex_table_declared("bg_col_index", "BG_WORLD_COLS", column_index)
         lines += [""]
-        lines += _hex_table("bg_col_data", "BG_COL_UNIQ * BG_WORLD_ROWS", column_data)
+        lines += _hex_table_declared("bg_col_data", "BG_COL_UNIQ * BG_WORLD_ROWS", column_data)
     else:
-        lines += _hex_table("bg_world_tiles", "BG_WORLD_COLS * BG_WORLD_ROWS", tiles)
+        lines += _hex_table_declared("bg_world_tiles", "BG_WORLD_COLS * BG_WORLD_ROWS", tiles)
     lines += [
         "",
         f"/* {attribute_columns} x {attribute_rows} attribute bytes ({attribute_columns * attribute_rows} bytes). */",
     ]
-    lines += _hex_table(
+    lines += _hex_table_declared(
         "bg_world_attrs", "BG_WORLD_ATTR_COLS * BG_WORLD_ATTR_ROWS", attributes
     )
     lines += ["", "#endif", ""]

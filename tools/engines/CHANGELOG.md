@@ -9,6 +9,37 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v78 — 2026-08-14 — Two same-named helpers get different names (F12 follow-on)
+
+### Changed — names only. **No ROM output changes.**
+
+`world.py` and `collision.py` both defined `_hex_table`. They are not the same function:
+one takes a C size **expression** from the caller (`[BG_WORLD_COLS]`, usually a macro, so
+the declaration can be longer than the initialiser and C zero-fills the rest), the other
+sizes itself from the data (`[len(data)]`, or `[1]` when empty). They also disagree on
+empty input, deliberately — collapsing the first to `[1]` would contradict its declared
+size.
+
+Sharing a name meant the agreement test had to spend a docstring arguing that two
+identically-named functions must **not** be unified. Renamed:
+
+- `world._hex_table` → **`_hex_table_declared`** (the caller declares the size)
+- `collision._hex_table` → **`_hex_table_sized`** (the array sizes itself)
+
+Behaviour is untouched; `test_duplicated_helpers_agree.py` passes unchanged apart from
+the names, and the `hex-table-loses-its-size-expression` mutation still reddens it.
+Verified no ROM movement: both golden hashes and the full 110-suite pass are green.
+
+- **Why a bump at all**, when this changes no ROM output and no project↔ROM contract:
+  both files are inside the snapshot, and snapshots are immutable, so *any* byte change
+  to one needs a new version. The gate compares bytes, not behaviour.
+
+> **⚠ This number collides with `main`, and it is now the third.** `main` publishes a
+> different v76 (#37), v77 (#30) and v78 (#31); this branch has its own v76, v77 and now
+> v78. All three renumber when `main` is merged — which is the very next item on the
+> work-list, so this collision exists for one item's duration by design rather than by
+> accident. Recorded here so it cannot be discovered only at merge time.
+
 ## v77 — 2026-08-13 — A one-byte cartridge overflow is explained, not dumped (F1)
 
 ### Changed — error text only. **No ROM output changes.**

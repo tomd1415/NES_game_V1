@@ -3,7 +3,7 @@
   "what_a_pass_means": "This manifest records what was verified, when, and by which command. A passing test_baseline_manifest means the RECORD is well-formed and tracks the live engine version. It does not re-run any of the evidence below, and it does not mean the product is correct.",
   "renamed_from": "baseline-v63.json",
   "rename_reason": "The old name asserted that the contents described engine v63. They no longer did: the file sat at engine_version 63 while the live engine reached 75, so test_manifest_tracks_the_live_engine_baseline failed for twelve versions (F6). A baseline that has to be renamed every engine bump will not be, so it is now version-neutral and carries the version as data.",
-  "engine_version": 77,
+  "engine_version": 78,
   "repository_commit": "32a7c4b359ccc4f5929470abe5084efa64f6dfbe",
   "captured_on": "2026-08-06",
   "scope": "studio_plus_legacy_union",
@@ -20,7 +20,7 @@
       "status": "pass",
       "command": "node tools/builder-tests/run-all.mjs",
       "verified_on": "2026-08-14",
-      "notes": "110 suites, 0 failures, 154 invariant checks, exit 0 \u2014 re-run in full at v77 (11m23s). First end-to-end run since the runner began assigning each suite's port and reaping its process group: no listener survived anywhere in the allocated range 18800-19129 afterwards, and `git status` was empty, which also confirms across 110 real builds what F18 established from one \u2014 a /play no longer dirties the working tree."
+      "notes": "110 suites, 0 failures, 154 invariant checks, exit 0 \u2014 re-run in full at v77 (11m23s). First end-to-end run since the runner began assigning each suite's port and reaping its process group: no listener survived anywhere in the allocated range 18800-19129 afterwards, and `git status` was empty, which also confirms across 110 real builds what F18 established from one \u2014 a /play no longer dirties the working tree. Re-run at v77; v78 is a rename with no ROM movement, confirmed by both golden hashes."
     },
     "engine_snapshot": {
       "status": "pass",

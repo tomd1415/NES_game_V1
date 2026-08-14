@@ -126,7 +126,7 @@ def selected_background_index(state: dict[str, Any]) -> int:
     return index
 
 
-def _hex_table(
+def _hex_table_sized(
     name: str,
     data: bytes,
     columns_per_line: int = 16,
@@ -160,7 +160,7 @@ def build_behaviour_c(state: dict[str, Any]) -> str:
     for index, background in enumerate(backgrounds_to_emit):
         map_bytes = behaviour_map_for_background(background, columns, rows)
         lines.append(f"/* Behaviour map for background {index}. */")
-        lines += _hex_table(f"behaviour_map_{index}", map_bytes)
+        lines += _hex_table_sized(f"behaviour_map_{index}", map_bytes)
         lines.append("")
 
     initial_index = selected if background_list else 0
@@ -189,7 +189,7 @@ def build_behaviour_c(state: dict[str, Any]) -> str:
             "const unsigned char sprite_reactions[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };",
         ]
     else:
-        lines += _hex_table("sprite_reactions", reaction_bytes, columns_per_line=8)
+        lines += _hex_table_sized("sprite_reactions", reaction_bytes, columns_per_line=8)
     lines += [
         "",
         "/* behaviour_at + reaction_for have hand-written 6502 twins in",

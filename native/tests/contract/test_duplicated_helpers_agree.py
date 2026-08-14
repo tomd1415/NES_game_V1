@@ -12,7 +12,8 @@ What each pair is, and what is asserted:
   names and type hints. Asserted to agree on a corpus that reaches every branch.
 * `cell_tile` — `scene.py` and `graphics.py`. Byte-identical bodies today. Asserted to
   agree on a corpus including the `empty` short-circuit and out-of-range tiles.
-* `_hex_table` — `world.py` and `collision.py`. **Not the same function.** See
+* `_hex_table_declared` / `_hex_table_sized` — `world.py` and `collision.py`. Two
+  different functions, and since 2026-08-14 two different names. See
   `test_hex_table_...` below for which behaviour is canonical for which caller.
 """
 
@@ -92,49 +93,51 @@ class DuplicatedHelpersAgreeTests(unittest.TestCase):
             data = bytes(range(length))
             with self.subTest(length=length):
                 self.assertEqual(
-                    world._hex_table("t", str(len(data)), data),
-                    collision._hex_table("t", data),
+                    world._hex_table_declared("t", str(len(data)), data),
+                    collision._hex_table_sized("t", data),
                     "the shared emission format has drifted between world.py and "
                     "collision.py; these bytes become C arrays in the same ROM",
                 )
 
     def test_hex_table_differs_deliberately_and_here_is_which_is_which(self) -> None:
-        """They share a name and are **not** interchangeable. Do not "unify" them.
+        """Two different functions that are **not** interchangeable. Do not "unify" them.
 
-        `collision._hex_table` is **self-sizing**: the array length is `len(data)`, or
+        `collision._hex_table_sized` is **self-sizing**: the array length is `len(data)`, or
         `[1]` when empty, and it takes a column width and a storage qualifier. Its
         callers hold the bytes and want the declaration to match them.
 
-        `world._hex_table` is **caller-sized**: the length is a C *expression* handed in
+        `world._hex_table_declared` is **caller-sized**: the length is a C *expression* handed in
         by the caller — often a macro rather than a number — so the declaration can say
         `[WORLD_LEN]` while the initialiser is shorter and C zero-fills the rest. That
         is the whole reason it exists separately, and it is why the empty case cannot be
         shared: collapsing to `[1]` would contradict the declared size.
 
-        If you make them agree, `world`'s callers lose the size expression. Change the
-        name, not the behaviour.
+        They now have different names, which is what the rename in item 4 was for — this
+        test no longer has to argue that two identically-named functions are deliberately
+        different. It still pins the behaviours, because the names alone do not enforce
+        them.
         """
         self.assertEqual(
-            world._hex_table("t", "WORLD_LEN", b"")[0],
+            world._hex_table_declared("t", "WORLD_LEN", b"")[0],
             "const unsigned char t[WORLD_LEN] = {",
-            "world._hex_table must keep honouring a size EXPRESSION, not a byte count",
+            "world._hex_table_declared must keep honouring a size EXPRESSION, not a byte count",
         )
         self.assertEqual(
-            collision._hex_table("t", b""),
+            collision._hex_table_sized("t", b""),
             ["const unsigned char t[1] = { 0 }; /* empty */"],
-            "collision._hex_table must keep self-sizing to [1] on empty input",
+            "collision._hex_table_sized must keep self-sizing to [1] on empty input",
         )
         # Stated as an assertion so "they are the same function" cannot creep back in.
         self.assertNotEqual(
-            world._hex_table("t", "1", b""),
-            collision._hex_table("t", b""),
+            world._hex_table_declared("t", "1", b""),
+            collision._hex_table_sized("t", b""),
             "these two are deliberately different on empty input -- if you have just "
             "made them agree, read this test's docstring before deleting this line",
         )
         self.assertEqual(
-            collision._hex_table("t", bytes(range(4)), columns_per_line=2, qualifier="static"),
+            collision._hex_table_sized("t", bytes(range(4)), columns_per_line=2, qualifier="static"),
             ["static unsigned char t[4] = {", "  0x00, 0x01,", "  0x02, 0x03,", "};"],
-            "collision._hex_table's column width and qualifier are part of its contract",
+            "collision._hex_table_sized's column width and qualifier are part of its contract",
         )
 
 
