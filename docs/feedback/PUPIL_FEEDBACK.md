@@ -1,13 +1,26 @@
-# Pupil Feedback Log
+# Pupil Feedback Log — SUPERSEDED, kept for history
+
+> **Do not add to this file.** New pupil feedback goes in
+> [`recently-observed-bugs.md`](recently-observed-bugs.md), the numbered list that
+> is the project's actual backlog and the one `STATUS.md` triages from.
+>
+> This is the older unnumbered themed log. It is real history and worth reading —
+> it just is not the intake any more. The line below said "append freely" and the
+> teacher guide pointed here, so anything logged here since the numbered list took
+> over has gone unread; that is the reason for this banner rather than a quiet
+> deletion.
 
 A running log of pupil feedback on the Visual Tile Editor and the wider
-workspace, with a concrete mitigation idea for each item. Append freely.
+workspace, with a concrete mitigation idea for each item.
 
 ---
 
-## How to use this doc
+## How this doc WAS used
 
-When a pupil gives you feedback:
+*Kept so the existing entries below can be read in the format they were written in.
+For anything new, see the banner at the top — this is not the intake any more.*
+
+The original process was: when a pupil gives you feedback,
 
 1. Add a row to the **Summary table** below.
 2. Add a block under the matching **theme section** with:
