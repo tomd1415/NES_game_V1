@@ -63,13 +63,27 @@ wrong, and they are worth separating because only the second is fatal:
 
 *No production change. This is a measurement.*
 
-- Enumerate every site that tests `0xEF` (5 matches today across
-  `builder-templates/*.c` and `playground_server.py`) and write down, for each,
-  whether it is reachable in a wide build.
-- Build a project that is **4 screens wide, 1 screen tall, 2 rooms**, with
-  `_scene_is_perroom`'s `x > 255` clause temporarily relaxed.
+*Done 2026-08-13 — the result and its corrections are recorded below. The steps here
+have been updated to what actually works, so re-running or extending this measurement
+does not repeat the three false starts it took.*
+
+- Enumerate every site that tests `0xEF` and record, for each, whether it is
+  reachable in a wide build. **There are four code sites in two languages**: two
+  draw-loop guards in `builder-templates/*.c`, and the chaser and flyer in
+  `steps/Step_Playground/src/ai_asm.s` — the ASM AI is the shipped default and is
+  easy to miss. Grep hits in `playground_server.py` and several in the templates are
+  comments; count code only.
+- Build a project **2 screens wide, 1 screen tall, 2 rooms**, with
+  `_scene_is_perroom`'s `x > 255` clause temporarily relaxed. **2, not more** —
+  the multi-bg door path is gated on
+  `BW_DOORS_MULTIBG_ENABLED && (BG_WORLD_COLS <= 64) && (BG_WORLD_ROWS <= 60)`
+  (`platformer.c`), so a wider room compiles the door code out and the transition can
+  never fire. 2 screens still forces the 16-bit path (`x` up to 511), which is what
+  the measurement needs.
 - **Verifiable when:** a render test shows room 0's entities present and room 1's
-  absent, and the reverse after a door transition.
+  absent, and the reverse after a door transition. The first half is measured; the
+  second is still unproven — no suite in this project can drive a door in a render
+  test, which is why it is item 1 of the queued work-list.
 
 **Outcome decides the rest.** If it passes, Step 2 is a two-line change and
 Steps 3–5 become optional. If it fails, skip to Step 3.
@@ -85,11 +99,9 @@ The control matters as much as the result: **unrelaxed, the same project draws
 both entities** (the shared-scene fallback). So the absence is the parking working,
 not the sprite failing to render for some unrelated reason.
 
-**Correction 1 — the 0xEF enumeration above is misleading.** "5 matches across
-`builder-templates/*.c` and `playground_server.py`" is the right count, but
-**three of the five are comments**. Worse, it misses `steps/Step_Playground/src/ai_asm.s`
-entirely, which implements the same sentinel for the chaser and the flyer — and the
-ASM AI is the shipped default. The real tally is **four code sites in two
+**Correction 1 — the enumeration was wrong, and Step 1 above now carries the fix.**
+The original asked for sites in `builder-templates/*.c` and `playground_server.py`
+only, and counted comments among them. The real tally is **four code sites in two
 languages**:
 
 | Site | Wide-build behaviour |
@@ -109,12 +121,10 @@ measured figure** — this note records why it changed, and the superseded numbe
 deliberately not repeated, because a correction printed beside the claim it corrects
 gets read as the claim.
 
-**Correction 3 — Step 1's own test design is not buildable as written.** It asks for
-"4 screens wide". The multi-bg door path is gated on
-`BW_DOORS_MULTIBG_ENABLED && (BG_WORLD_COLS <= 64) && (BG_WORLD_ROWS <= 60)`
-(`platformer.c:1115`) — **at most 2 screens wide**. At 4 screens the door code is
-compiled out, so the transition half can never run. 2 screens still forces the
-16-bit path (`x` up to 511), so that is the size to use.
+**Correction 3 — the test size was unbuildable, and Step 1 above now carries the
+fix.** The multi-bg door path is gated on `BG_WORLD_COLS <= 64`, so a room wider than
+two screens compiles the door code out and the transition half can never run. This
+cost three attempts before the gate was found.
 
 **Not achieved: the door-transition half.** After three attempts the player never
 reached the door in the harness (4 wide, then 2 wide after finding the gate above,
