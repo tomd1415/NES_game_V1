@@ -77,14 +77,41 @@ declare `const PORT_C = 18790, PORT_A = 18791;` and `PORT_C` does not match
   **A written warning only works if it is read before the task, not after the
   mistake.** If a doc exists for an area you are about to audit, read it first —
   that is cheaper than the audit.
-- **It keeps happening, which is the actual lesson.** Five times in one week, by
+- **It keeps happening, which is the actual lesson.** Six times in one week, by
   someone who had already written this entry: `PORT *=` missing `PORT_C`
   (twice — the second time nearly producing "the documented 18897 is unused");
   `modules\['<name>'\]` returning nothing when the guide's module list was
   checked; `^#{1,4} *#[0-9]+` finding no backlog items because they are a plain
   numbered list; anchoring on the first textual `ROLE_TABLE`, which is a comment
-  400 lines above the definition; and `\.enabled = true` reporting `globals`
-  covered by zero suites when it has a dedicated one.
+  400 lines above the definition; `\.enabled = true` reporting `globals`
+  covered by zero suites when it has a dedicated one; and the sixth, below,
+  which is a different shape and the most expensive of them.
+- **The sixth: searching the wrong DIMENSION, not writing a bad pattern.**
+  Asked whether any suite could drive a door transition, the search was
+  `grep -ln door *.mjs` — suites whose *name or text* mentions doors. Four
+  matched and none of them emulate anything, so the conclusion was "no suite
+  does this", and it went into an accepted work-list as the justification for
+  building one. `per-room.mjs` had been doing exactly it since v75: it builds a
+  ROM, walks the player onto a door tile, and asserts the active room changed.
+  It was missed because it is named for the *feature* it tests, not the
+  *mechanism* it uses — and no pattern over the word "door" would ever have
+  found it, however carefully written.
+  - **The fix is to search by behaviour.** What was actually being asked was
+    "which suites emulate input?", and that has a direct signature:
+    `grep -c 'buildRom'`, `grep -c 'BTN\.'`, `grep -c 'nes.frame'` across every
+    suite. Two lines, and it names the right file immediately. **When a
+    name-based search comes back empty, ask what the thing DOES and search for
+    that** — the name is the one attribute free to vary.
+  - **It was caught by luck plus one habit**: reading a neighbouring file before
+    writing a new one. The claim had already been accepted by the owner. Nothing
+    would have failed if it had gone unnoticed — a redundant suite is green
+    forever, and duplicated coverage is invisible in exactly the way missing
+    coverage is not.
+  - Not wasted, but only because the gap turned out to be real and narrower:
+    every room in `per-room.mjs` is 1x1, so `px` is an 8-bit screen coordinate
+    and the 16-bit world path is untested. The new suite is the wide case. **A
+    wrong premise that happens to produce useful work is still a wrong premise;
+    say so rather than quietly re-scoping and letting the record stand.**
 - **So stop trying to write better patterns and change what a zero means.** Every
   one of those was caught by the same reflex and nothing else: *a search that
   finds nothing is a claim about my pattern until proven otherwise.* Print the

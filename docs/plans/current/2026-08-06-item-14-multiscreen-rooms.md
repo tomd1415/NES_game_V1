@@ -126,14 +126,35 @@ fix.** The multi-bg door path is gated on `BG_WORLD_COLS <= 64`, so a room wider
 two screens compiles the door code out and the transition half can never run. This
 cost three attempts before the gate was found.
 
-**Not achieved: the door-transition half.** After three attempts the player never
-reached the door in the harness (4 wide, then 2 wide after finding the gate above,
-with `doors.enabled` + `targetBgIdx = 1` and a door tile painted two tiles right of
-the player start). The parked/present half is measured and controlled; **restoration
-after a transition is still unproven**, so Step 2 should not be treated as fully
-de-risked. What remains is a harness question (how to drive a door in a render
-test — no existing suite does it; `chunk-c-doors.mjs` is validator-level only),
-not an engine question.
+**The door-transition half — resolved 2026-08-14, and it was never an engine
+problem.** Three attempts had failed to get the player onto a door in a wide build,
+and this section previously concluded that no suite could drive a door at all. That
+was wrong twice over:
+
+- `per-room.mjs` has driven a door and asserted the room changed since v75. It was
+  missed by searching for suites that *mention* doors; it is named for the feature,
+  not the mechanism. (Recorded in `docs/LESSONS-LEARNT.md` — searching the wrong
+  dimension, not a badly written pattern.)
+- The wide case genuinely was untested, and now is:
+  **`tools/builder-tests/door-transition-wide.mjs`**. Both rooms are 2 screens wide,
+  so `SCROLL_BUILD` is on and `px` is a u16 world coordinate.
+
+Measured, in a wide build: the near door transitions room 0 → 1 after 26 frames; a
+door at **world x=320 — past the 8-bit boundary — fires after 290 frames**, with the
+player reaching world x=496 and `cam_x=256`. So the 16-bit world position does reach
+the door table, and the earlier failures were the harness, not the engine.
+
+The suite reads `current_bg` out of RAM (poked at `0x0702`) rather than inferring the
+room from what is on screen. That is deliberate: `_scene_is_perroom` disables per-room
+activation whenever **any entity sits past x=255 or y=255** — note it keys on the
+entity coordinates, not on the room's width, so a 2-screen room whose entities all sit
+below 255 keeps per-room today. The layouts #14 exists to fix are exactly the ones that
+trip it, so for those, "which entities are visible" cannot identify the room until
+Step 2 lands. Reading `current_bg` is independent of all of that and works either
+side of the change, which is the point.
+
+**Restoration after a transition is therefore now drivable, but still not asserted** —
+that needs Step 2's narrowed guard first, and is the assertion Step 2 should add.
 
 *Measurement script: `item14-step1.mjs`, kept in the session scratchpad rather than
 committed — it needs the production `x > 255` relaxation to mean anything, so as a

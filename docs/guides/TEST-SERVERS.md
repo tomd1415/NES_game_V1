@@ -144,7 +144,15 @@ STUDIO_TEST_PORT=18990 npx playwright test
 
 ## Adding a suite: picking a port
 
-Take the next free port **above 18897** (the current highest) and stay under 19000.
+Either take the next free port **above 18897** (the current highest, stay under
+19000), **or reuse an unclaimed gap inside 18768–18897** — there are several, and
+using one keeps the documented range stable. That matters more than it looks:
+the range `18768–18897` is quoted in the project's `CLAUDE.md` as well as in the
+table above, so going above 18897 silently makes two other documents wrong.
+Whichever you pick, **prove it free with the command below first** — a gap is only
+safe if you checked, and "it looked unused" is not checking. (`door-transition-wide.mjs`
+took 18777 this way on 2026-08-14.)
+
 Do not trust a grep for `PORT =` — the suites spell it several ways
 (`PORT`, `PORT_C`/`PORT_A`/`PORT_D`, an inline `startServer(18882)` in
 `physics-globals.mjs`, and `PORT + 1` in `enemy-bump.mjs`). This catches all of them:

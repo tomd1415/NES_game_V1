@@ -16,7 +16,7 @@ work cold, and the file to refresh *last* before putting work down.
 - **Engine version:** **v78** (the dialogue box no longer flashes the screen)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  **115 suites, exit 0, re-run 2026-08-13 at v78**) — plus 22 invariants and 40
+  **116 suites, exit 0, re-run 2026-08-14 at v78**) — plus 22 invariants and 40
   syntax checks. The 40 are 32 shipped `.js` modules, 7 inline HTML script bodies
   and `playground_server.py`; the 32 match the 32 non-vendored `.js` files on disk
   exactly, and the 7 cover every HTML page carrying a bare `<script>`. Both sets
