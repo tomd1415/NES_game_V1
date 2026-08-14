@@ -219,6 +219,41 @@ which matches `latest_rom = STEP_DIR / "_play_latest.nes"`, goes red.
   **So the question to ask is not "does this strip comments" but "could a sentence
   satisfy this pattern".**
 
+### Measuring a gate's false-alarm rate instead of arguing about it
+
+A gate that fires when nothing is wrong gets called flaky, then skipped, then
+deleted — and takes its coverage with it. The E2E-port guard scans every suite file
+for the Studio port as a literal:
+
+```js
+new RegExp('(?<![\\d.])' + e2ePort + '(?![\\d.])')
+```
+
+Hex hashes are made of digits too, and the lookarounds only exclude digits and dots —
+so `a18790b3c` **matches**. Verified, not assumed. A golden sha1 in a suite file could
+therefore fail the port guard with a message about port collisions.
+
+**Measured rather than argued**, generating sha1s exactly as the real ones are shaped:
+
+| | rate |
+|---|---|
+| a random 40-char sha1 trips the guard | **1 in 150,000** |
+| long hex literals in the scanned suite files today | **1** |
+
+So the chance of a false alarm on a given run is about 1 in 150,000, and my
+back-of-envelope guess beforehand was 1 in 29,000 — **five times too pessimistic**,
+which is the whole argument for generating the numbers.
+
+**No change made.** The fix is one regex tweak (exclude hex neighbours as well as
+digits), but narrowing a working guard for a 1-in-150,000 risk buys less than the
+chance of introducing a hole while doing it — and every narrowing needs its own
+two-way proof. Recorded instead, with the threshold that would change the answer:
+
+> **This becomes worth fixing if golden hashes move into suite files.** The rate is
+> per hash and scales linearly. Ten hashes is 1 in 15,000; a hundred is 1 in 1,500,
+> which is a false red every few weeks on a different suite each time — the exact
+> pattern that gets a gate deleted.
+
 ### Six copies of a list, checked, and deliberately not gated
 
 Searching for a constant's *name* does not find its duplicates — the name is the one
