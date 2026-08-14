@@ -219,6 +219,39 @@ which matches `latest_rom = STEP_DIR / "_play_latest.nes"`, goes red.
   **So the question to ask is not "does this strip comments" but "could a sentence
   satisfy this pattern".**
 
+### Six copies of a list, checked, and deliberately not gated
+
+Searching for a constant's *name* does not find its duplicates — the name is the one
+part of a copy that is free to differ. Searching for its **contents** does:
+
+```python
+# any file quoting 4+ of the six behaviour-type names as literals
+found = [n for n in names if f"'{n}'" in src or f'"{n}"' in src]
+if len(found) >= 4: ...
+```
+
+Run 2026-08-14: **31 files** carry their own behaviour-type list; exactly one uses
+the shared `BEHAVIOUR_TYPES` export. A `grep BEHAVIOUR_TYPES` finds that one file and
+misses thirty. Of the 31, 24 are test fixtures (fine — each defines its own world) and
+**six are production**, in four different shapes: `{id, name}` arrays in three HTML
+pages, a name→id map in `builder-validators.js`, an enum option list in
+`builder-modules.js`, and a starter that extends the defaults.
+
+**They agree, and no gate was added.** That is the judgement, not laziness:
+
+- The set is `0..6` plus per-project slots, **hardware-capped at 8** — the behaviour
+  map packs 3 bits (`v & 0x07` in `playground_server.py`). It cannot grow the way
+  routes or config keys grow, which is the trigger for a coverage gate.
+- `studio-starter.js` carrying an extra `{id: 7, name: 'finish'}` is **not** drift: the
+  racer starter extends the defaults for its ring track, and the server maps custom
+  slot ids generically. I nearly filed that as an inconsistency; reading the call site
+  is what stopped it.
+- The skill's own "when this does not apply" covers exactly this: *a set that is small,
+  stable and visible in one screen costs more to gate than it saves.*
+
+Recorded because the next person to run a contents-search will find the same 31 files
+and be tempted. The count is alarming and the risk is not.
+
 ### A guard can be tight on the token and loose on the gap
 
 Two hollow assertions were found on 2026-08-13/14, and they failed in different
