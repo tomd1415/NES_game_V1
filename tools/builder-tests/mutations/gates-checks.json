@@ -1,0 +1,71 @@
+{
+  "name": "builder gates (check-level)",
+  "why": "The check-level half of the builder gates. Every break here is decided before the first suite spawns, so it runs with RUNALL_CHECKS_ONLY=1: 9 seconds instead of 11.4 minutes, which is what makes proving these affordable at all (measured 2026-08-14 — the full spec at 14 runs is 2.7 hours). Split from gates.json by a real property, not by taste: a break belongs here if its expected assertion is a check or invariant, and in gates.json if it needs a suite to run — `startserver-preflight-removed` is the current example of the latter. If you add a break whose expectation is a `suite X` line, it goes in gates.json or it will never be satisfied here.",
+  "command": [
+    "bash",
+    "-c",
+    "RUNALL_CHECKS_ONLY=1 bash tools/builder-tests/mutate-report.sh"
+  ],
+  "breaks": [
+    {
+      "id": "builder-guide-coverage-desynced",
+      "file": "docs/guides/BUILDER_GUIDE.md",
+      "find": "**This reference documents 10 of the 18 modules that exist.**",
+      "replace": "**This reference documents 10 of the 19 modules that exist.**",
+      "expect": [
+        "invariant - BUILDER_GUIDE module coverage matches builder-modules.js"
+      ],
+      "note": "The guide's claimed module total must match what builder-modules.js actually registers at runtime. 19 is a lie about a file the gate enumerates, so the gate must catch it."
+    },
+    {
+      "id": "shipped-js-enumeration-empty",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": ".filter(f => f.endsWith('.js') && !f.endsWith('.min.js'))",
+      "replace": ".filter(f => f.endsWith('.zzz') && !f.endsWith('.min.js'))",
+      "expect": [
+        "shipped JS modules found"
+      ],
+      "note": "Breaks the glob, not the guard — it is the empty RESULT that must be caught. Enumerating zero shipped modules must not read as 'all 32 syntax checks passed'."
+    },
+    {
+      "id": "html-page-enumeration-empty",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();\n// A page with no bare <script> is legitimate (studio.html), so an empty CHUNK",
+      "replace": "const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.zzz')).sort();\n// A page with no bare <script> is legitimate (studio.html), so an empty CHUNK",
+      "expect": [
+        "HTML pages found"
+      ],
+      "note": "Two-line anchor on purpose: this filter line appears three times in run-all.mjs and a one-line anchor would be ambiguous. Only the first occurrence guards the page enumeration."
+    },
+    {
+      "id": "suite-list-enumeration-empty",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": ".filter(f => f.endsWith('.mjs') && f !== path.basename(__filename))",
+      "replace": ".filter(f => f.endsWith('.zzz') && f !== path.basename(__filename))",
+      "expect": [
+        "builder-test suites found"
+      ],
+      "note": "The most valuable of the three. Measured 2026-08-12: without this guard zero suites ran and the runner still printed the green headline, golden ROM hashes included."
+    },
+    {
+      "id": "storage-trigger-never-matches",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "if (!/<script\\s+src=[\"']storage\\.js[\"']/i.test(html)) continue;",
+      "replace": "if (!/<script\\s+src=[\"']storageZZZ\\.js[\"']/i.test(html)) continue;",
+      "expect": [
+        "invariant - every page that loads storage.js calls createTileEditorStorage"
+      ],
+      "note": "Breaks the TRIGGER, not a page. Every page is then skipped and the guard checks nothing — which without its hit-count assertion prints OK."
+    },
+    {
+      "id": "loadrom-trigger-never-matches",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "if (!/\\.loadROM\\s*\\(/.test(html)) continue;",
+      "replace": "if (!/\\.loadROMZZZ\\s*\\(/.test(html)) continue;",
+      "expect": [
+        "invariant - private-emulator pages convert ROM bytes to a binary string for jsnes"
+      ],
+      "note": "Same shape as the storage trigger, listed separately because they are two independent selectors and one can rot without the other."
+    }
+  ]
+}

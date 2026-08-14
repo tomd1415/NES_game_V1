@@ -83,12 +83,16 @@ const shipped = fs.readdirSync(WEB)
   .sort();
 // An empty enumeration must not read as "all clear" — that is the same
 // silent-success shape this block was written to remove.
-if (shipped.length === 0) {
-  check('shipped JS modules found', () => {
+// Unconditional on purpose. This used to be `if (shipped.length === 0) { check(...) }`,
+// so on a healthy run the assertion did not exist at all — it only appeared in the
+// output when it was already failing. That is a guard you cannot prove is present:
+// delete the whole block and nothing changes in a green run. Mutation testing found
+// it (2026-08-14) by naming an assertion the baseline did not have.
+check('shipped JS modules found', () => {
+  if (shipped.length === 0) {
     throw new Error(`no non-vendored .js files under ${WEB} — wrong path, or the glob broke`);
-  });
-  anyFail = true;
-}
+  }
+}) || (anyFail = true);
 for (const f of shipped) {
   const ok = check('syntax ' + f, () => {
     const r = spawnSync('node', ['--check', path.join(WEB, f)], { encoding: 'utf8' });
@@ -282,12 +286,11 @@ function extractInline(file) {
 const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
 // A page with no bare <script> is legitimate (studio.html), so an empty CHUNK
 // list is fine — an empty PAGE list is not, and would silently check nothing.
-if (pages.length === 0) {
-  check('HTML pages found', () => {
+check('HTML pages found', () => {
+  if (pages.length === 0) {
     throw new Error(`no .html files under ${WEB} — wrong path, or the glob broke`);
-  });
-  anyFail = true;
-}
+  }
+}) || (anyFail = true);
 let inlineBlocks = 0;
 for (const page of pages) {
   const chunks = extractInline(page);
@@ -925,13 +928,31 @@ const suites = fs.readdirSync(__dirname)
 // hand-maintained number that drifts, which is the failure mode this file is
 // already full of lessons about; the honest guard is the one that cannot go
 // stale.
-if (suites.length === 0) {
-  check('builder-test suites found', () => {
+check('builder-test suites found', () => {
+  if (suites.length === 0) {
     throw new Error(`no *.mjs suites found in ${__dirname} — wrong directory, or the filter broke`);
-  });
-  anyFail = true;
+  }
+}) || (anyFail = true);
+// CHECKS-ONLY mode — for mutation testing the check-level gates above.
+//
+// A full run is ~11.4 minutes (measured 2026-08-14), so proving one gate with
+// `mutate` costs 11 minutes and proving six costs an hour and a quarter. Every
+// gate above this line is decided before the first suite spawns, so running the
+// suites to prove them buys nothing.
+//
+// THIS IS A SILENT-SUCCESS HAZARD AND IS HANDLED AS ONE. A skip flag that still
+// printed the normal green headline would be exactly the failure this file is
+// full of lessons about — worse, because it would be a supported way to produce
+// it. So the mode is loud in three places: it says so when it starts, it never
+// prints the green line, and its headline states that ZERO suites ran. Anything
+// consuming the output for a pass/fail verdict sees a different sentence.
+const CHECKS_ONLY = process.env.RUNALL_CHECKS_ONLY === '1';
+if (CHECKS_ONLY) {
+  console.log('');
+  console.log('⚠️  RUNALL_CHECKS_ONLY=1 — skipping all ' + suites.length +
+    ' suites. This is NOT a full run and must not be reported as one.');
 }
-for (const suite of suites) {
+for (const suite of CHECKS_ONLY ? [] : suites) {
   const full = path.join(__dirname, suite);
   process.stdout.write('suite ' + suite + ' ... ');
   const r = spawnSync('node', [full], { encoding: 'utf8' });
@@ -953,6 +974,13 @@ console.log('');
 if (anyFail) {
   console.error('❌ One or more checks failed.');
   process.exit(1);
+} else if (CHECKS_ONLY) {
+  // Deliberately NOT the green sentence. `mutate-report.sh` keys off the
+  // per-check `... OK` / `... FAIL` lines, not this one, so the checks-only run
+  // is still machine-readable — but no human or script skimming for the
+  // familiar headline can mistake this for a full pass.
+  console.log('⚠️  Checks and invariants pass — but 0 of ' + suites.length +
+    ' suites ran (RUNALL_CHECKS_ONLY=1). NOT a full regression pass.');
 } else {
   console.log('✅ All Builder regression checks pass.');
 }
