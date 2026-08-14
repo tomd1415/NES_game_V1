@@ -557,3 +557,63 @@ shape, inside the file about that shape.
 and host load is invisible from inside the container. Worth remembering when the Qt
 suite finally runs here: a slow first run after the rebuild is more likely to be the box
 than the code.
+
+
+---
+
+# Merge attempted 2026-08-14 — aborted, and the reason is the real finding
+
+Work-list item 5. **The merge is not a merge.** It is a port-forward, and treating it as
+a text-conflict exercise would silently delete a shipped bug fix.
+
+`main` is now **105 commits ahead** (it was 33 when this document was written), and both
+lines are at `ENGINE_VERSION` 78 with three colliding versions rather than one.
+
+## What resolved cleanly
+
+Most of it. 23 conflicts, of which 16 were mechanical and were resolved:
+
+* **11 snapshot files** — took `main`'s v76/v77/v78 wholesale, then checked out the whole
+  of each directory so no half-merged archive could survive.
+* **3 builder suites** (`asm-corpus`, `asm-player`, `asm-realproj`) — both sides were
+  right and compose: `main` moved them off 18790 and explained why, this branch made
+  `run-all.mjs` *assign* the port. Keeping both gives non-colliding fallbacks that
+  nothing has to remember.
+* **`.gitignore`** — kept both rules, with the `.devcontainer/` tension flagged for item 7
+  rather than decided inside a merge.
+* **`CHANGELOG.md` + the version constants** — `main`'s v76–v78 kept; this branch's three
+  local bumps collapsed into a single **v79** entry, because they never left the branch
+  and inventing three historical snapshots of a merged tree would be dishonest.
+
+## The blocker
+
+`tools/playground_server.py`. **This branch's side of the conflict is empty** — the ROM
+gating logic was ported into `tools/nes_studio_core/`. `main` kept developing it in place,
+and has since added:
+
+| `main`'s addition | in `nes_studio_core`? |
+| --- | --- |
+| `_scene_is_perroom` fallbacks (v75 per-room scene instances) | **no** |
+| `_pd_oam_fits` / the item **#37** OAM-cursor guard (v76) | **no** |
+| `nes_asm_pdraw` gating | **no** |
+| `BW_P1_OAM_FITS` | **no** |
+
+Taking "ours" — the obvious resolution for an empty side — **silently drops `main`'s #37
+fix**, which is the shipped remedy for *"random mess on screen / the emulator froze for no
+reason"*: an 8-bit OAM cursor wrapping and letting later writers draw over the player from
+slot 0. Silent corruption, no crash, and reachable because the Builder allows an 8×8
+player. Deleting it would be the worst instance of the clean-but-wrong merge this document
+is about, and it reaches a classroom.
+
+## What it actually needs
+
+Not a merge resolution: a port-forward of `main`'s engine advances into
+`nes_studio_core`, one gate at a time, each with the A/B suite that proves it
+byte-identical. That is a piece of engineering with its own acceptance checks, and it
+wants to be scoped as such rather than done inside a conflict editor at the end of a
+session.
+
+**Aborted cleanly.** `git merge --abort` refused (`.gitignore` had been staged then
+edited), so the tree was reset to the recorded pre-merge SHA `84f1937`. Verified after:
+tree clean, `v78 snapshot matches HEAD (41 of 41)`, native 217 passed / 161 skipped, ports
+green, both mutation specs green. Nothing was committed at any point.
