@@ -1,0 +1,20 @@
+{
+  "name": "builder suite \u2014 smb-jump",
+  "why": "A suite-level break, on a suite never mutation-tested. Suites exit on their FIRST failed assertion, so a break reddens exactly one name and the rest never run; expect must name that first one.",
+  "command": [
+    "node",
+    "tools/builder-tests/lib/mutation-report.mjs",
+    "smb-jump.mjs"
+  ],
+  "breaks": [
+    {
+      "id": "smb-jump-define-no-longer-emitted",
+      "file": "tools/tile_editor_web/builder-modules.js",
+      "find": "'#define BW_SMB_JUMP 1',",
+      "replace": "'#define BW_SMB_JUMP_DISABLED 1',",
+      "expect": [
+        "smb-jump.mjs"
+      ]
+    }
+  ]
+}

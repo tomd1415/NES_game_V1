@@ -1,0 +1,31 @@
+{
+  "name": "builder invariants + suites",
+  "why": "The 110 builder suites and run-all.mjs's own invariants are the gate CLAUDE.md calls the lever that keeps engine changes safe, and not one of them had ever had a NAMED assertion watched go red. Output is translated by mutation-report.mjs, because mutate reads unittest or PASS/FAIL lines and the builder tests speak neither. NOTE: two attempts to move the no-modules golden via template CONSTANTS (an unused DEADZONE_LEFT, then a used BW_SFX_JUMP) both stayed green, and that is the design rather than a hole: a no-modules build preprocesses feature code out, so the golden can only detect changes to code that is ALWAYS compiled in. The OAM break below is such a change, and it reddens the golden as well as the OAM invariant.",
+  "command": [
+    "node",
+    "tools/builder-tests/lib/mutation-report.mjs",
+    "--invariants"
+  ],
+  "breaks": [
+    {
+      "id": "oam-dma-pipeline-reverted-to-per-byte-writes",
+      "file": "tools/tile_editor_web/builder-templates/platformer.c",
+      "find": "OAM_DMA  = 0x02;",
+      "replace": "OAM_DATA = 0x02;",
+      "count": 2,
+      "expect": [
+        "invariant \u2014 both templates use OAM DMA (not per-byte OAM_DATA writes)",
+        "invariant \u2014 template (no modules) ROM matches golden hash"
+      ]
+    },
+    {
+      "id": "builder-modules-string-emits-a-ppu-mask-tint-again",
+      "file": "tools/tile_editor_web/builder-modules.js",
+      "find": "'#define BW_SMB_JUMP 1',",
+      "replace": "'#define BW_SMB_JUMP 1',\n          '  PPU_MASK = 0x1E | 0x01;',",
+      "expect": [
+        "invariant \u2014 game-over tint is engine-owned and uses 0x1E (no greyscale bit)"
+      ]
+    }
+  ]
+}

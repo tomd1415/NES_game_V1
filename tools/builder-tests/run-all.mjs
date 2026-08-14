@@ -107,7 +107,7 @@ check('engine snapshot matches live sources', () => {
 // No suite may choose its own port; the runner assigns them (see Step 4). A doc note is
 // not a check -- this exact clash was described in prose for weeks and drifted anyway.
 check('no builder-test suite chooses its own port', () => {
-  const r = spawnSync('node', [path.join(__dirname, 'ports-unique.mjs')], { encoding: 'utf8' });
+  const r = spawnSync('node', [path.join(__dirname, 'lib', 'ports-unique.mjs')], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error((r.stdout || '') + (r.stderr || ''));
 }) || (anyFail = true);
 
@@ -709,6 +709,18 @@ if (portCeiling > 19200) {
   console.error(`Port allocation would reach ${portCeiling}, past the reserved range. ` +
                 'Raise the ceiling deliberately rather than overlapping another service.');
   process.exit(2);
+}
+
+// The invariant checks above are cheap; the 110 suites below are ~25 minutes. Mutation
+// testing needs to break an invariant and see which assertion reddens, which is
+// impossible to do repeatedly if every run costs half an hour. This skips step 4 only.
+// It is NOT a way to shorten a real run: the summary below still reports what ran.
+if (process.env.BUILDER_TESTS_SKIP_SUITES === '1') {
+  console.log('(suites skipped: BUILDER_TESTS_SKIP_SUITES=1 — invariant checks only)');
+  console.log('');
+  if (anyFail) { console.error('❌ One or more checks failed.'); process.exit(1); }
+  console.log('✅ Invariant checks pass (suites not run).');
+  process.exit(0);
 }
 
 suites.forEach((suite, index) => {

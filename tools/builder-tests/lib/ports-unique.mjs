@@ -16,8 +16,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SELF = path.basename(fileURLToPath(import.meta.url));
-const DIR = path.dirname(fileURLToPath(import.meta.url));
+// Lives in lib/ so run-all.mjs's suite glob (a non-recursive readdir of the parent)
+// cannot mistake it for a suite -- it did exactly that until 2026-08-14, quietly
+// running the checker as a test and inflating the port allocation by one block.
+const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER = 'run-all.mjs';
 
 // A port literal that is NOT the first argument of testPort(...).
@@ -29,7 +31,7 @@ function stripComments(src) {
 }
 
 const suites = fs.readdirSync(DIR)
-  .filter((f) => f.endsWith('.mjs') && f !== RUNNER && f !== SELF)
+  .filter((f) => f.endsWith('.mjs') && f !== RUNNER)
   .sort();
 
 const offenders = [];
