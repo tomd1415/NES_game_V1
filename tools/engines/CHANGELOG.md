@@ -9,6 +9,44 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v79 — 2026-08-14 — Multi-screen rooms keep their own entities (#14 Step 2)
+
+**Changed (migration: none needed).** `_scene_is_perroom` now refuses a project
+only when an entity sits at **y > 238**. Up to v78 it refused any entity past
+**x > 255 or y > 255**, which made per-room scene instances and multi-screen
+levels mutually exclusive: paint a level two screens wide and every room quietly
+shared one scene, with nothing to say the feature had stood down.
+
+*Why x could go.* Measured 2026-08-13 (#14 Step 1): parking survives a wide
+16-bit build. Off-room actors are parked at `ss_y = 0xFF` and skipped by the draw
+guards — the C loops compare a u16 `ss_y`, and `ai_asm.s` tests the high byte
+before comparing the low one against `0xEF`. Four code sites in two languages,
+all correct for wide positions. So the x half of the old restriction rejected a
+case that already worked.
+
+*Why 238 and not 239.* `0xEF` **is** 239 and the guards test `>= 0xEF`, so an
+entity legitimately placed on row 239 is indistinguishable from a parked one:
+it never appears and nothing reports why. 238 is the highest row that cannot be
+confused with the sentinel.
+
+**This also fixes a bug that predates the feature.** Under v78's `y > 255` bound,
+rows 239–255 were admitted, so a multi-room project with an entity anywhere in
+that band silently lost it. That was reachable on a plain single-screen-tall
+project and is now refused.
+
+The bound is on the ENTITY's coordinate, not the room's height — a two-screen-tall
+room whose entities all sit on the upper screen still gets per-room, because the
+sentinel collision is a property of the coordinate.
+
+**ROM output for existing projects is unchanged**, verified rather than argued:
+both goldens still hash `1730448e…` and the everything-on fixture still hashes
+`e86a91b8…`. Nothing that built per-room before builds differently; projects that
+previously fell back to the shared scene now get what they asked for.
+
+Covered by `tools/builder-tests/perroom-wide-gate.mjs` — four cases, including a
+same-geometry control that differs only by one room tag, and the y=239 case that
+is the only one able to tell 238 from 239.
+
 ## v78 — 2026-07-28 — The dialogue box no longer flashes the screen (#31)
 
 ### Changed (dialogue projects only; goldens UNCHANGED)
