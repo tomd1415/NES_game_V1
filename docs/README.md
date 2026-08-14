@@ -47,6 +47,10 @@ Repository-wide contribution, ownership and cross-team review rules live in
   running both at once mostly loads it. That is a courtesy to the box, not a
   warning that the E2E is fragile: it is green at the committed timeout at load
   ~14.5, and [`STATUS.md`](STATUS.md) carries the measured detail.
+- **Looking for what is actually planned?** `docs/plans/current/` is misleading —
+  archiving stopped in April 2026, so most of the 21 plans in there describe shipped
+  work. [`plans/current/README.md`](plans/current/README.md) says which, with the
+  evidence, and names the two that are genuinely outstanding.
 - **Adding a Studio mode?** Read
   [`guides/ADDING-A-STUDIO-MODE.md`](guides/ADDING-A-STUDIO-MODE.md) — the three
   places that must agree (`MODES`, the `window.StudioModes` registration, and a
