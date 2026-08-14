@@ -4,7 +4,7 @@
   "command": [
     "bash",
     "-c",
-    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree tests.unit.test_friendly_build_error"
+    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree tests.unit.test_friendly_build_error tests.unit.test_registries_are_complete"
   ],
   "breaks": [
     {
@@ -148,6 +148,24 @@
       "replace": "def _probe_silent_drift(state: dict) -> Problem | None:\n    if state.get(\"__never__\"):\n        return Problem(id='probe-silent-drift', severity=\"warn\", message=\"p\", fix=\"p\")\n    return None\n\n\n#: The order the web runs them in",
       "expect": [
         "test_the_cases_exercise_every_check"
+      ]
+    },
+    {
+      "id": "a-mode-drops-out-of-the-registry",
+      "file": "native/src/nes_studio/ui/modes/__init__.py",
+      "find": "    CodeMode,\n",
+      "replace": "",
+      "expect": [
+        "test_every_mode_on_disk_is_registered_in_mode_classes"
+      ]
+    },
+    {
+      "id": "a-shipped-starter-drops-out-of-the-picker",
+      "file": "native/src/nes_studio/ui/project_catalog.py",
+      "find": "    (\"scratch\", \"📄 Blank project\", \"Nothing at all. Build it from scratch.\"),\n",
+      "replace": "",
+      "expect": [
+        "test_the_starter_picker_offers_exactly_what_is_shipped"
       ]
     }
   ]
