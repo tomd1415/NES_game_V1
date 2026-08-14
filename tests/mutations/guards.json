@@ -8,10 +8,10 @@
   ],
   "breaks": [
     {
-      "id": "baseline-engine-version-stale",
+      "id": "baseline-scope-no-longer-matches",
       "file": "native/tests/contract/baseline.json",
-      "find": "\"engine_version\": 77",
-      "replace": "\"engine_version\": 63",
+      "find": "\"scope\": \"studio_plus_legacy_union\"",
+      "replace": "\"scope\": \"studio_only\"",
       "expect": [
         "test_manifest_tracks_the_live_engine_baseline"
       ]
