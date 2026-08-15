@@ -170,6 +170,31 @@ that number, since `0xEF` *is* 239 and the draw guards test `>=`.
   at the threshold, and expect the plan's own suggested proof to be one value
   out.**
 
+### The script you write to audit a stale list is itself unaudited
+
+Checking the guides against the code (2026-08-15), three throwaway scripts were written
+and **all three were wrong on the first run**, each in a way that produced a confident
+finding:
+
+| audit | first answer | why it was wrong |
+|---|---|---|
+| do doc-referenced paths exist? | 18 missing | Python's `glob` skips dot-directories, so `.devcontainer/*` read as absent |
+| are the guides' ports real? | 1 orphan | 18990 is an example value for an env override the config does honour |
+| how many ports are shared? | 25 | counted `run-all.mjs` — which contains `18790` *inside the guard forbidding it* — and counted ports named in comments |
+
+Every one of those, reported without checking, would have been a plausible bug report
+that cost someone an afternoon. The last is the sharpest: the guard against claiming the
+E2E port was itself counted as a claim on the E2E port.
+
+- **The rule:** an audit script is code written in one minute to judge code written over
+  months, and it gets the benefit of no review at all. **Triage every hit by hand before
+  reporting a count.** Of 18+1+25 apparent findings, exactly one was real — the shared-port
+  figure, which had genuinely drifted 19 → 20.
+- **And when the fix is "refresh the list", ship the command instead**, with its traps
+  written down. `TEST-SERVERS.md` now carries the regeneration snippet and both
+  contamination warnings, because the next person to recount will make the same two
+  mistakes — the evidence being that the person who *knew about them* made them anyway.
+
 ### Piping a long suite through `tail`
 
 `node tools/builder-tests/run-all.mjs | tail -40` on a failing run shows the

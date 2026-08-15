@@ -168,18 +168,52 @@ claim both numbers explicitly in a comment — `enemy-bump.mjs` uses `PORT` and
 ### Ports are NOT unique per suite — and that is only safe because the run is serial
 
 Run the grep above and you will find the same number under several suites. As of
-2026-08-12, **19 ports are claimed by more than one file**, one of them by four:
+**2026-08-15, 20 ports are claimed by more than one suite**, three of them by four:
 
 | Port | Suites |
 | ---- | ------ |
 | 18792 | `asm-ai-corpus`, `asm-vscroll`, `shared-play`, `smb-render` |
+| 18869 | `pickup-collect`, `scroll-2x2`, `scroll-wide-too-varied`, `stomp-basic` |
+| 18871 | `render-p1-oam-cursor`, `scroll-narrow-compressed`, `sfx-events`, `style-starters` |
 | 18791 | `asm-corpus`, `asm-realproj`, `smb-level` |
 | 18793 | `asm-ai-corpus`, `asm-vscroll`, `topdown` |
 | 18794, 18795 | `asm-ai-bench`, `asm-enemy`, `asm-smb-bench` |
 | 18796 | `asm-ai-wide`, `asm-scene`, `hud-nmi-flicker` |
-| 18869 | `pickup-collect`, `scroll-2x2`, `stomp-basic` |
-| 18871 | `render-p1-oam-cursor`, `sfx-events`, `style-starters` |
-| …and 11 more, each shared by exactly two suites | 18781, 18783, 18789, 18797, 18844, 18847, 18861, 18862, 18863, 18867, 18872 |
+| 18867 | `scroll-wide-compressed`, `smb-stomp`, `topdown-enemies` |
+| 18872 | `build-concurrency`, `render-p1-oam-cursor`, `scroll-narrow-compressed` |
+| …and 10 more, each shared by exactly two suites | 18781, 18783, 18789, 18797, 18844, 18847, 18861, 18862, 18863, 18868 |
+
+**This is a dated snapshot, so regenerate it rather than trusting it** — the 2026-08-12
+version of this table said 19 and "one of them by four", and was wrong on both by
+2026-08-15 without anyone touching it:
+
+```bash
+python3 - <<'EOF'
+import re, glob, os, collections
+strip = lambda s: re.sub(r'//.*$', '', re.sub(r'/\*.*?\*/', '', s, flags=re.S), flags=re.M)
+own = collections.defaultdict(set)
+for f in sorted(glob.glob('tools/builder-tests/*.mjs')):
+    if os.path.basename(f) == 'run-all.mjs': continue
+    for m in re.finditer(r'\b18[0-9]{3}\b', strip(open(f).read())):
+        own[int(m.group(0))].add(os.path.basename(f))
+shared = {p: s for p, s in sorted(own.items()) if len(s) > 1}
+print(len(own), 'distinct;', len(shared), 'shared')
+for p, s in shared.items():
+    if len(s) >= 3: print(p, sorted(s))
+EOF
+```
+
+**Two traps in that recount, both of which I fell into on the first attempt** — a naive
+`grep -c 18[0-9]{3}` over `*.mjs` gives 25, which is simply wrong:
+
+- **Exclude `run-all.mjs`.** It is the runner, not a suite, and it *contains the string
+  `18790`* — inside the guard whose whole job is to forbid a suite from claiming the E2E
+  port. Counting it makes the guard look like the violation it prevents.
+- **Strip comments first.** Several suites name other suites' ports in explanatory
+  comments. Counted raw, three ports gain phantom claimants.
+
+Verified 2026-08-15: **no suite claims 18790**, comments excluded — which is what the
+`no builder-test suite claims the Studio E2E port` invariant asserts on every run.
 
 This is **not** a bug today, and the reason is a single line: `run-all.mjs`
 executes suites strictly serially — `for (const suite of suites) { spawnSync(…) }`
