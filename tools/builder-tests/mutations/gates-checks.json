@@ -146,6 +146,26 @@
         "invariant - both templates use OAM DMA (not per-byte OAM_DATA writes)"
       ],
       "note": "The other half of the same invariant, and the half that actually protects. Its first two clauses are EXISTENCE checks — they detect the DMA being deleted outright, which would be obvious on screen anyway. This clause is the negative one: no `OAM_DATA = <identifier>` anywhere. That is what catches per-byte writes creeping back in beside a DMA that is still present, which is the realistic regression and the invisible one. Same anchor as the break above, different replacement — breaks are applied one at a time, so sharing an anchor is fine."
+    },
+    {
+      "id": "scene-ai-stops-probing-solids",
+      "file": "tools/tile_editor_web/builder-modules.js",
+      "find": "static unsigned char bw_sprite_blocked(",
+      "replace": "static unsigned char bw_sprite_blockedZZZ(",
+      "expect": [
+        "invariant - scene enemy AI probes solids via bw_sprite_blocked"
+      ],
+      "note": "Scene enemies must test the solid map before moving, or they walk through walls and off ledges. The check scans builder-modules.js as TEXT (it is the emitter, not the emitted), so renaming the declaration is a source-level probe and does not reach any compile step in the checks-only run."
+    },
+    {
+      "id": "ladder-check-loses-its-named-constant",
+      "file": "tools/tile_editor_web/builder-templates/platformer.c",
+      "find": "                unsigned char up_ladder = (up_l == BEHAVIOUR_LADDER) ||\n                                          (up_r == BEHAVIOUR_LADDER);",
+      "replace": "                unsigned char up_ladder = (up_l == 6) ||\n                                          (up_r == 6);",
+      "expect": [
+        "invariant - ladder climb checks target-cell behaviour in both templates"
+      ],
+      "note": "BEHAVIOUR_LADDER is 6 (collision.h), so this compiles and behaves identically — deliberate, because the golden ROM builds DO run under RUNALL_CHECKS_ONLY and an uncompilable template would redden those instead and say nothing about this guard. It probes that the guard is anchored on the real up_ladder expression; it is not a realistic regression. BOTH OPERANDS MUST CHANGE, and that is the point of the anchor's size: the first attempt changed only `up_l` and nothing went red. The guard's regex is `up_ladder\\s*=[^;]*BEHAVIOUR_LADDER` and `[^;]*` runs across the newline to the second operand, which still carried the constant — so the break was a no-op and 'nothing caught this' meant my break, not a hollow guard. The guard has been sound since it was tightened on 2026-08-12, when its `.*` dotall was letting it match across unrelated statements."
     }
   ]
 }
