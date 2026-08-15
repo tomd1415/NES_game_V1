@@ -196,6 +196,36 @@
         "invariant - sprites.html warns on player-size animation frame mismatch"
       ],
       "note": "The other half: the mismatch can be computed perfectly and still have nowhere to appear. Dropping only the id leaves both CSS rules and the class attribute in place, which is precisely what the old string-anywhere check could not distinguish from a working warning."
+    },
+    {
+      "id": "role-table-renamed",
+      "file": "tools/playground_server.py",
+      "find": "ROLE_TABLE = [",
+      "replace": "ROLE_TABLEZZZ = [",
+      "expect": [
+        "invariant - asm + C scene emitters share role codes + ss_* identifiers"
+      ],
+      "note": "The ASM and C scene emitters must agree on role codes and ss_* names, or an enemy built with the ASM engine behaves as a different role from the same project built with C — a divergence that shows up as wrong behaviour in a ROM, never as an error. Renaming keeps the file valid Python, so the syntax check stays green and only the named invariant reddens."
+    },
+    {
+      "id": "dialogue-font-never-seeded",
+      "file": "tools/playground_server.py",
+      "find": "    _seed_dialogue_font(state)",
+      "replace": "    pass  # _seed_dialogue_font(state)",
+      "expect": [
+        "invariant - dialogue ships a built-in font + uppercases + warns on unsupported chars"
+      ],
+      "note": "Dialogue needs a font seeded into CHR or the text renders as whatever tiles happen to occupy those slots — garbage, not a blank. THE CHECK HAD TO BE TIGHTENED FIRST. It tested for `_seed_dialogue_font(` anywhere, which the `def` line satisfies on its own, so dropping the CALL left it green. Found the long way round: renaming the def proved nothing because the call still matched, and the mirror of that is that removing the call proves nothing because the def matches. A name appearing in both a definition and its call site cannot tell you which one survives. The check now requires a call at the start of a line, and this break removes exactly that."
+    },
+    {
+      "id": "tint-string-emitted-again",
+      "file": "tools/tile_editor_web/builder-modules.js",
+      "find": "static unsigned char bw_sprite_blocked(",
+      "replace": "PPU_MASK = 0x1E | 0x20; static unsigned char bw_sprite_blocked(",
+      "expect": [
+        "invariant - game-over tint is engine-owned and uses 0x1E (no greyscale bit)"
+      ],
+      "note": "This breaks the NEGATIVE half of that invariant — builder-modules.js must NOT string-emit a PPU_MASK tint, because the win/death tint moved into the engine where it is compiled rather than typed into a string. The POSITIVE half cannot be probed this way: it requires `0x1E | 0x20` and `0x1E | 0x80` to appear in the template, and they appear 2 and 3 times respectively, so breaking one site leaves the others matching. Same limitation as the OAM DMA check — an existence clause is only probeable where the thing exists once."
     }
   ]
 }

@@ -856,9 +856,20 @@ check('invariant: Builder scene preview renders with only a Player sprite', () =
 // Guard all three so the fix can't silently regress.
 check('invariant: dialogue ships a built-in font + uppercases + warns on unsupported chars', () => {
   const server = fs.readFileSync(path.join(ROOT, 'tools', 'playground_server.py'), 'utf8');
-  if (!/_seed_dialogue_font\(/.test(server) || !/_DIALOGUE_FONT/.test(server)) {
-    throw new Error('playground_server.py no longer seeds a dialogue font — dialogue on a ' +
-      'project with no painted font will show garbage again (web-feedback bug 31)');
+  // Assert the seeder is CALLED, not merely defined.
+  //
+  // This tested `/_seed_dialogue_font\(/` anywhere until 2026-08-15, which the
+  // `def _seed_dialogue_font(` line satisfies on its own. So the realistic
+  // regression — the call being dropped while the function stays — left the
+  // check green and dialogue rendering garbage. Found by mutation: renaming the
+  // def changed nothing, because the call still matched; and the mirror of that
+  // is that removing the call changes nothing either, because the def matches.
+  // A name that appears in both a definition and its call site cannot tell you
+  // which of the two you still have.
+  if (!/^\s*_seed_dialogue_font\(/m.test(server) || !/_DIALOGUE_FONT/.test(server)) {
+    throw new Error('playground_server.py no longer CALLS _seed_dialogue_font(...) — dialogue ' +
+      'on a project with no painted font will show garbage again (web-feedback bug 31). ' +
+      'The function may still be defined; a definition nothing calls seeds nothing.');
   }
   const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
   if (!/toUpperCase\(\)/.test(mods.slice(mods.indexOf('function strToBytes')))) {
