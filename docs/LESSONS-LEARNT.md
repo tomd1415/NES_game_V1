@@ -230,6 +230,21 @@ error anywhere, which is exactly why someone wrote a guard for it.
   flags. A widened guard that fires on legitimate code gets reverted within a day, taking
   the coverage with it — the mirror failure in `prove-coverage`.
 
+**Scope, checked rather than assumed.** Three guards in `run-all.mjs` had this defect, so the
+obvious question is how far it spreads. Measured 2026-08-15: **36 builder suites do
+source-scanning assertions, and none of them has it.** They already do the thing the
+`run-all.mjs` checks did not — *slice the region first, then assert inside it*:
+`emulator-watchdog.mjs` extracts `startLoop()`'s body before checking it calls
+`watchdog.tick(`, and `round2-dialogue.mjs` walks marker-to-marker through generated output
+rather than grepping the whole file. So the fault is not "source-scanning tests are bad"; it
+is **asserting a name over a whole file instead of the property over the right region**. The
+suites were written the careful way and the invariants were not.
+
+*A first attempt at this scope check returned zero and I nearly believed it* — the pattern
+that produced the zero was mine, not the code's, so two suites were read by hand before the
+result was trusted. Same reflex as §1, applied to a negative finding, which is the case where
+it is easiest to skip because the answer is the one you were hoping for.
+
 ### Piping a long suite through `tail`
 
 `node tools/builder-tests/run-all.mjs | tail -40` on a failing run shows the
