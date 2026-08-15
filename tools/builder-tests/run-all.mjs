@@ -590,6 +590,41 @@ check('invariant: playground_server.py exposes /docs/ route for editor doc links
 // the call in the page would be a false failure. Naming it means a NEW page cannot
 // drift into the exemption by resembling it.
 const STORAGE_INIT_EXTERNAL = ['studio.html'];   // init lives in a module, not inline
+// A best-effort re-render that throws must not discard the REASON.
+//
+// studio.js re-renders menus after actions that must not be rolled back by a
+// failed redraw, so `try { render(); } catch` is the right structure — but four
+// of them were written with an empty body, which also threw away the only
+// evidence the pupil's menu had gone stale. Same class as the mode-hook and
+// missing-module reporters already in that file; this stops it growing back.
+//
+// COMMENTS ARE STRIPPED FIRST, and that is not incidental. The comment
+// explaining this fix necessarily quotes `catch (e) {}` — so a scan of the raw
+// source matches its own explanation and fails forever, which is precisely the
+// contamination LESSONS records for source-scanning tests. Verified by checking
+// that the raw text does contain the pattern in a comment while the stripped
+// text does not.
+check('invariant: no best-effort re-render in studio.js swallows its error', () => {
+  const raw = fs.readFileSync(path.join(WEB, 'studio.js'), 'utf8');
+  const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\/\/.*$/gm, '');
+  const offenders = [];
+  const re = /catch\s*\(\s*\w+\s*\)\s*\{\s*\}/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const before = src.slice(Math.max(0, m.index - 90), m.index);
+    if (/\brender[A-Za-z]*\s*\(/.test(before)) {
+      offenders.push(before.trim().split('\n').pop().trim().slice(-70));
+    }
+  }
+  if (offenders.length) {
+    throw new Error('studio.js has ' + offenders.length + ' re-render(s) whose catch block is '
+      + 'empty, so a failed redraw leaves stale UI with nothing reported:\n  '
+      + offenders.join('\n  ')
+      + '\nUse reportRenderFailure(<what>, e) — it says it once per source and does not '
+      + 'abort the action the redraw followed.');
+  }
+}) || (anyFail = true);
+
 check('invariant: every page that loads storage.js calls createTileEditorStorage', () => {
   const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
   let triggered = 0;

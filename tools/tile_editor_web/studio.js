@@ -611,7 +611,7 @@
     if (window.StudioModes && window.StudioModes.world) selectMode('world');
     renderLive(); renderDock(); refreshQuestsAndAttention();
     setSaveState('saved');
-    if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+    if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); } }
     // A new project may target a newer engine than the last one — refresh the
     // engine button / advisor affordance.
     if (typeof refreshEngineButton === 'function') { try { refreshEngineButton(); } catch (e) {} }
@@ -714,7 +714,7 @@
       if (v === 'save') {
         var pr = Storage.readPrefs() || {};
         pr.teacherConfig = cfg; Storage.writePrefs(pr);
-        if (window.StudioTutorial && typeof window.StudioTutorial.render === 'function') { try { window.StudioTutorial.render(); } catch (e) {} }
+        if (window.StudioTutorial && typeof window.StudioTutorial.render === 'function') { try { window.StudioTutorial.render(); } catch (e) { reportRenderFailure('StudioTutorial.render', e); } }
       }
       if (v === 'edit') { openStepEditor(function () { openTeacherSettings(onClose); }); return; }
       if (typeof onClose === 'function') onClose();
@@ -841,6 +841,23 @@
         + ' The button is disabled rather than left looking live — a control that '
         + 'does nothing when clicked is indistinguishable from a broken pupil project. '
         + 'Said once.');
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
+
+  // Third sibling of reportModeHookError / reportMissingModule, for the same
+  // reason and sharing the same said-once map. Four best-effort re-renders in
+  // this file were written as `try { render(); } catch (e) {}` — correct in that
+  // a failed menu redraw must not abort the save that preceded it, wrong in that
+  // the pupil is then looking at a stale menu with nothing anywhere saying so.
+  // Swallowing the ABORT is right; swallowing the REASON is not.
+  function reportRenderFailure(what, err) {
+    var key = 'render.' + what;
+    if (modeHookFailed[key]) return;
+    modeHookFailed[key] = true;
+    try {
+      console.error('[studio] ' + what + ' threw while re-rendering — whatever it draws is '
+        + 'now stale on screen. The action that triggered it DID complete; only the redraw '
+        + 'failed. Said once per source.', err);
     } catch (_) { /* console itself is gone; nothing useful left to do */ }
   }
 
@@ -1533,7 +1550,7 @@
               if (!window.confirm('Delete "' + (p.name || 'untitled') + '"? This cannot be undone.')) return;
               Storage.deleteProject(p.id);
               updateStorageIndicator();
-              if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+              if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); } }
               rerender();
             },
           }));
@@ -1730,7 +1747,7 @@
     }
     // Fill the (previously empty) #projects-menu with the local Games dropdown so
     // saved games can be reopened without an account.
-    try { renderProjectsMenu(); } catch (e) {}
+    try { renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); }
 
     // TV pointer interaction — delegated to the active mode module.
     // A mode implements onTvDown/onTvMove/onTvUp(cell, ctx, evt).
