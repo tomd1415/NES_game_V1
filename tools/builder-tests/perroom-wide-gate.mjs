@@ -28,6 +28,8 @@
 //   3  tall, entity past y=238         -> per-room OFF  (the case that really breaks)
 //   4  an entity at exactly y=239      -> per-room OFF  (238 vs 239 — the only
 //                                         assertion that can tell them apart)
+//   5  an entity at exactly y=238      -> ADMITTED, and the engine must not park
+//                                         it (the other side of the same boundary)
 //
 // Case 2 matters most for trusting the rest: it is byte-for-byte the same project
 // as case 1 except for one `bg` field, so a pass in 1 cannot be an artefact of the
@@ -36,6 +38,14 @@
 // Cases 3 and 4 assert a room-1 entity IS drawn at boot. That is the direction
 // that catches an over-eager gate: if per-room switched on when it should not,
 // that entity would be parked and simply absent.
+//
+// Case 5 was added a day later, after writing a lesson about meta-tests that only
+// probe one side of a threshold — and then noticing this suite did exactly that.
+// 3 and 4 both pin values the gate REJECTS. If 238 were itself unsafe (if the
+// guards skipped >= 0xEE, say) every assertion here would still have passed while
+// the gate admitted a row that silently vanishes. It reads OAM rather than pixels,
+// because y=238 renders a sliver at the bottom of a 240-line screen and "can I see
+// it" would test the screen edge instead of the sentinel.
 import * as H from './lib/render-harness.mjs';
 
 globalThis.NES_TARGET_ENGINE = 79;   // per-room in wide rooms is a v79 behaviour
@@ -181,6 +191,41 @@ try {
     if (b) ok(label + ': the room-1 entity is still drawn (per-room correctly OFF — ' + why + ')');
     else bad(label + ': the room-1 entity at (150,100) is NOT drawn, so per-room switched ON for a '
       + 'project it must reject — ' + why + '. This is the threshold being one too high.');
+  }
+  // ---- 5. The ADMITTED side of the boundary. Added 2026-08-15 after writing a
+  //         lesson about exactly this gap: cases 3 and 4 both pin values the gate
+  //         REJECTS, and a threshold tested only from above is half tested. If
+  //         238 were itself unsafe — if the guards skipped >= 0xEE, say — every
+  //         assertion above would still pass while the gate admitted a row that
+  //         silently vanishes.
+  {
+    const label = 'an entity at exactly y=238, the highest admitted row';
+    const s = mkState(2, 1, [
+      { spriteIdx: 1, x: 100, y: 238, bg: 0 },
+      { spriteIdx: 2, x: 400, y: 120, bg: 1 },
+    ]);
+    const h = await build(label, s, { wide: true });
+    if (h) {
+      h.frames(20);
+      // Read OAM directly rather than looking for pixels: y=238 renders only a
+      // sliver at the bottom of a 240-line screen, so "can I see it" would be a
+      // test of the screen edge, not of the parking sentinel. What matters is
+      // that the engine did NOT park it — parked is ss_y = 0xFF, and every draw
+      // guard skips >= 0xEF.
+      let parked = true, oamY = null;
+      for (let i = 0; i < 64; i++) {
+        const sp = H.oamSprite(h.nes, i);
+        if (sp.tile === A_TILE) { oamY = sp.y; if (sp.y < 0xEF) parked = false; }
+      }
+      if (oamY === null)
+        bad(label + ': the entity is not in OAM at all, so whether it was parked cannot be read.');
+      else if (!parked)
+        ok(label + ': it is active, not parked (OAM y=' + oamY + ' < 0xEF) — 238 is genuinely safe to admit');
+      else
+        bad(label + ': the engine parked it (OAM y=' + oamY + ' >= 0xEF) even though the gate '
+          + 'admitted it. The threshold and the draw guards disagree: the gate lets in a row that '
+          + 'the engine then treats as parked, which is the silent-swallow this bound exists to stop.');
+    }
   }
 } catch (e) {
   bad('threw: ' + (e && e.stack || e));
