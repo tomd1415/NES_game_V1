@@ -625,7 +625,14 @@ check('invariant: no best-effort re-render in studio.js swallows its error', () 
   const raw = fs.readFileSync(path.join(WEB, 'studio.js'), 'utf8');
   const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\/\/.*$/gm, '');
   const offenders = [];
-  const re = /catch\s*\(\s*\w+\s*\)\s*\{\s*\}/g;
+  // The binding is OPTIONAL — `catch {}` is ES2019 and storage.js already uses
+  // it three times, so requiring `catch (e)` here was a hole in a guard written
+  // the same day, not a hypothetical one. Enumerated rather than guessed: the
+  // ways an error can be discarded here are `catch (e) {}`, `catch {}`, and
+  // `catch (e) { /* only a comment */ }` — the third is handled by stripping
+  // comments before this runs, which also stops the guard matching the comment
+  // that explains it.
+  const re = /catch\s*(?:\(\s*\w+\s*\)\s*)?\{\s*\}/g;
   let m;
   while ((m = re.exec(src)) !== null) {
     const before = src.slice(Math.max(0, m.index - 90), m.index);
