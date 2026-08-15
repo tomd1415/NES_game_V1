@@ -215,15 +215,37 @@ hashes are unaffected because no emitted byte changes.
 > sentinel and must move with the C, and nothing in the suite would currently
 > notice if it did not. Sub-step 0 exists because of that and must come first.
 
-**Sub-step 0 — make the divergence detectable, before changing anything.**
-`asm-ab.mjs` asserts the ASM engine and the C engine agree, and that is the only
-thing standing between this change and a silent split. But **no `asm-*` suite
-builds a multi-room project** — checked 2026-08-15: every one of them passes a
-single background (`backgrounds: [H.flatBackground(...)]`), so per-room has never
-been exercised on the ASM path at all. Add a multi-room fixture to the A/B
-comparison FIRST and watch it pass. Until that exists, every later verification
-in this step is being read off a comparison that cannot see the thing being
-changed.
+**Sub-step 0 — understand why the ASM AI is switched off here, before changing it.**
+
+> **Correction, same day.** An earlier version of this sub-step said the ASM AI
+> is the shipped default for these projects and that Step 3 would silently split
+> it from the C. **That was wrong** and the alarm was misplaced. The server
+> disables the ASM AI for multi-room projects outright:
+> `nes_asm_ai = bool(... and not _scene_is_perroom(scene_sprites))`.
+> So no divergence is possible today, and the reason no `asm-*` suite covers
+> multi-room is by design, not oversight.
+
+The gating exists for a concrete reason worth carrying into Step 3: of the four
+ASM AI routines, **`chaser` (ai_asm.s:379) and `flyer` (:435) test the parking
+sentinel; `walker` (:306) and `patrol` (:334) do not.** Without the fallback a
+parked walker would crawl back on screen, so multi-room takes the C AI, which
+guards `ss_y < 0xEF` in every body.
+
+That has three consequences for this step, and they replace the alarm:
+
+- **The fallback's stated reason expires with Step 3.** It is written in terms of
+  `ss_y = 0xFF` parking. Once "parked" is `ss_active[k] == 0`, the comment on that
+  gate is describing a mechanism that no longer exists, and the gate itself is
+  either unnecessary or needs re-deriving from the new flag. Do not leave it
+  saying something untrue about the engine.
+- **`chaser`/`flyer`'s sentinel checks become dead** — they test for a value the
+  engine has stopped writing. Harmless, and exactly the kind of dead guard that
+  reads as live protection later.
+- **Lifting the fallback is a separate, later decision.** If multi-room is ever to
+  get the ASM AI back (~1.2x faster, per `asm-ai-bench`), `walker` and `patrol`
+  must learn `ss_active` first. THAT is when a multi-room A/B fixture becomes
+  necessary — and it must be added and watched passing *before* the fallback is
+  lifted, not after.
 
 **Sub-step 1 — emit the flag.** `ss_active[]`, one byte per entity, alongside
 `ss_room[]`, under `BW_SCENE_PERROOM` only. There is no cap on entity count in

@@ -43,9 +43,26 @@ both goldens still hash `1730448e…` and the everything-on fixture still hashes
 `e86a91b8…`. Nothing that built per-room before builds differently; projects that
 previously fell back to the shared scene now get what they asked for.
 
-Covered by `tools/builder-tests/perroom-wide-gate.mjs` — four cases, including a
-same-geometry control that differs only by one room tag, and the y=239 case that
-is the only one able to tell 238 from 239.
+Covered by `tools/builder-tests/perroom-wide-gate.mjs` — five cases, including a
+same-geometry control that differs only by one room tag, and the y=238/239 pair
+that is the only thing able to tell the two thresholds apart.
+
+**Knock-on effect, found 2026-08-15 and not noticed when this shipped.** Two ASM
+paths are gated on `not _scene_is_perroom(...)` — the scene DRAW loop
+(`nes_asm_scene`) and the scene AI (`nes_asm_ai`). Both fall back to C for
+multi-room projects, because the hand-written versions do not honour the
+`ss_y = 0xFF` parking sentinel: the ASM draw has no skip for parked actors, and
+of the four ASM AI routines only `chaser` and `flyer` test the sentinel —
+`walker` and `patrol` do not, so a parked walker would crawl back on screen.
+
+Widening `_scene_is_perroom` therefore **switches both ASM paths off for
+wide multi-room projects that previously used them**. That is correct and
+necessary — parking now applies to those projects, so the fallbacks must apply
+too — but it means such a build gets the C draw and C AI: byte-behaviour-identical
+(the `asm-scene` / `asm-ai` A/B suites prove that), and about 1.2x slower with a
+slightly larger ROM (`asm-ai-bench`). Anyone benchmarking a wide multi-room
+project against a v78 build will see that difference and should not go hunting
+for a regression: it is this gate, working as intended.
 
 ## v78 — 2026-07-28 — The dialogue box no longer flashes the screen (#31)
 
