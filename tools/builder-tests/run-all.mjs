@@ -556,7 +556,12 @@ check('invariant: PPU register macros are volatile', () => {
     // a hardware address, because the hazard is the missing `volatile`, not the
     // brackets around it. Measured when installed: 24 such casts across these
     // three files, every one already volatile, so this passes on merit.
-    const re = /\(\s*(volatile\s+)?unsigned\s+char\s*\*\s*\)\s*0x[0-9A-Fa-f]+/g;
+    // The address may be parenthesised — `(*(unsigned char*)(0x2006))` is at
+    // least as common an idiom as the bare form, and slipped straight through
+    // the first version of this fix. Enumerated rather than guessed, along with
+    // the shapes that must NOT be flagged: `volatile unsigned char*` and
+    // `unsigned char volatile*` are both correct C and both pass.
+    const re = /\(\s*(volatile\s+)?unsigned\s+char\s*\*\s*\)\s*\(?\s*0x[0-9A-Fa-f]+/g;
     let m;
     while ((m = re.exec(raw)) !== null) {
       if (m[1]) continue;               // has volatile — fine
