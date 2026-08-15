@@ -260,19 +260,70 @@ both `--list` and a real run).
 
 ## Re-proving the gates: `mutations/*.json`
 
-The table above is a *record* of gates that were broken by hand. Eight of those
-breaks are now **executable**, so the next person does not have to trust the record
-— they can re-run it:
+The table above is a *record* of gates that were broken by hand. Most of those breaks
+are now **executable**, so the next person does not have to trust the record — they
+can re-run it. There are four specs, and **which one your break belongs in is decided
+by what it expects, not by taste**:
 
 ```bash
-mutate tools/builder-tests/mutations/gates.json        # 6 guards + 1 declared-uncaught
-mutate tools/builder-tests/mutations/golden-rom.json   # the two golden ROM hashes
-mutate tools/builder-tests/mutations/gates.json --list # what a spec claims, without running
+# fast (~1 min): every break whose expected assertion is a check or invariant,
+# i.e. decided before the first suite spawns. Runs with RUNALL_CHECKS_ONLY=1.
+mutate tools/builder-tests/mutations/gates-checks.json
+
+# slow (~11 min per break): breaks whose expected assertion is a `suite X` line
+# and therefore need the suites to actually run.
+mutate tools/builder-tests/mutations/gates.json
+
+# the two golden ROM hashes (real cc65 builds).
+mutate tools/builder-tests/mutations/golden-rom.json
+
+# the Studio E2E suite, via its own adapter (~5 min per break).
+mutate tools/studio-tests/mutations-e2e.json
+
+mutate <spec> --list      # what a spec claims, without running anything
 ```
+
+Counts are deliberately not written here. They were, and went stale the same week.
+`--list` prints them and cannot be wrong.
+
+**Why the builder specs are split.** A full `run-all.mjs` is ~11 minutes, so proving
+a dozen check-level gates through it costs an afternoon, and a gate that expensive to
+verify does not get verified. `RUNALL_CHECKS_ONLY=1` skips the suites — 9 seconds —
+and every gate decided before the first suite spawns can be proved that way. File a
+break in the wrong half and it fails loudly with *"names an assertion the suite does
+not have"* rather than passing quietly, which is what keeps the split honest.
+
+That mode is a silent-success hazard and is built as one: it announces itself, never
+prints the green headline, and its closing line states that **0 of N suites ran**. If
+you ever see that sentence in something reported as a full pass, it is not one.
 
 Run them **alone** — they edit source in place, so anything else reading the tree at
 the same time is reading deliberately broken code — and restart the dev server on
 8765 afterwards, because restoring a file moves its mtime.
+
+### Writing a break that actually proves something
+
+Four traps, each of which produced a wrong conclusion here before it was understood:
+
+- **The anchor must match exactly once.** mutate refuses zero or many, because a
+  break landing in more places than it claims makes a red assertion evidence about
+  something other than the guard named. Check with `grep -Fc` *on the exact string
+  you are going to use* — checking one spelling and then pasting another out of
+  grep's output has happened.
+- **An existence clause can only be probed where the thing exists once.** The OAM DMA
+  check requires its pattern once per template, and `platformer.c` contains it twice:
+  breaking one site leaves the other matching and proves nothing. `main.c` has one, so
+  the break lives there. Same for the game-over tint's positive half, which is why
+  only its *negative* clause has a break.
+- **Do not break compilation.** The golden ROM builds run even under
+  `RUNALL_CHECKS_ONLY`, so a template that no longer compiles reddens the goldens and
+  tells you nothing about the guard under test. Prefer a change that compiles and is
+  behaviour-identical — swapping `BEHAVIOUR_LADDER` for its literal `6`, or adding a
+  `continue;` as the last statement of a loop body.
+- **"Nothing caught this" is ambiguous.** It means the guard is hollow *or* your break
+  was a no-op, and the output cannot tell you which. Four times here it was the break.
+  Before reporting a hollow guard, run the guard's own pattern against the before and
+  after text and confirm it changed.
 
 Each break names the assertion it expects to turn red, and the run fails if that
 assertion stays green, if nothing anywhere goes red, if the anchor matched zero times
