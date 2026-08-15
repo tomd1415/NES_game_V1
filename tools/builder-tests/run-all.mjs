@@ -796,6 +796,32 @@ check('invariant: scene enemy AI probes solids via bw_sprite_blocked', () => {
 // B-8 (feedback F16, bug 38): the Sprites page must warn when an assigned
 // walk/jump animation has frames that aren't the player size, because the
 // server silently drops those frames (JUMP_FRAME_COUNT 0 → jump plays walk).
+// Does `name` appear as a CALL somewhere in `src` — not as its declaration, and
+// not inside a comment?
+//
+// Both halves are load-bearing and each was learned by getting it wrong:
+//   * matching a name anywhere passes on the declaration alone, so a function
+//     nobody calls reads as wired up (three guards had this, 2026-08-15);
+//   * matching one calling syntax (`= name(`, or a call at line start) cries
+//     wolf on a legitimate refactor to `if (name(...))`, which is the same
+//     pinned-to-one-spelling fault seen from the other side;
+//   * and matching any call INCLUDING commented-out ones passes on
+//     `// name(...)`, which is exactly what a mutation leaves behind — caught
+//     because widening the pattern made two proven breaks stop being caught.
+// So: any call, minus the declaration, minus anything after a comment marker on
+// the same line.
+function callsOutsideComments(src, name, declKeyword, lineComment) {
+  const re = new RegExp('(?<!' + declKeyword + '\\s)' + name + '\\s*\\(', 'g');
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const lineStart = src.lastIndexOf('\n', m.index) + 1;
+    const before = src.slice(lineStart, m.index);
+    if (before.includes(lineComment)) continue;   // commented out
+    return true;
+  }
+  return false;
+}
+
 check('invariant: sprites.html warns on player-size animation frame mismatch', () => {
   const html = fs.readFileSync(path.join(WEB, 'sprites.html'), 'utf8');
   // Assert the warning is COMPUTED and DISPLAYED, not merely that the two names
@@ -808,7 +834,13 @@ check('invariant: sprites.html warns on player-size animation frame mismatch', (
   // `.anim-assign-warn` even if the element and the logic are both gone. Found
   // by mutation — renaming the declaration left the call site matching, so the
   // check stayed green with the guarded property half removed.
-  if (!/=\s*animFrameSizeMismatch\s*\(/.test(html)) {
+  // Any CALL, excluding the declaration — not one calling syntax.
+  // The first fix here matched `= animFrameSizeMismatch(`, which pins the guard to
+  // assignment: a refactor to `if (animFrameSizeMismatch(...))` would have failed it
+  // with nothing wrong. That is the same 'pinned to one spelling' fault this guard was
+  // tightened to escape, reintroduced while escaping it. A negative lookbehind for the
+  // declaration keyword says what is actually meant: called from somewhere, anywhere.
+  if (!callsOutsideComments(html, 'animFrameSizeMismatch', 'function', '//')) {
     throw new Error('sprites.html no longer CALLS animFrameSizeMismatch(...) — a wrong-size ' +
       'jump animation will silently play as walk (web-feedback bug 38). The function may ' +
       'still be declared; a declaration nothing calls is not a warning.');
@@ -866,7 +898,10 @@ check('invariant: dialogue ships a built-in font + uppercases + warns on unsuppo
   // is that removing the call changes nothing either, because the def matches.
   // A name that appears in both a definition and its call site cannot tell you
   // which of the two you still have.
-  if (!/^\s*_seed_dialogue_font\(/m.test(server) || !/_DIALOGUE_FONT/.test(server)) {
+  // Any call, excluding the `def` line — see the animFrameSizeMismatch guard above for
+  // why this is a lookbehind and not a line-anchored match: `^\s*name(` would reject a
+  // perfectly good `if cond: _seed_dialogue_font(state)` and cry wolf.
+  if (!callsOutsideComments(server, '_seed_dialogue_font', 'def', '#') || !/_DIALOGUE_FONT/.test(server)) {
     throw new Error('playground_server.py no longer CALLS _seed_dialogue_font(...) — dialogue ' +
       'on a project with no painted font will show garbage again (web-feedback bug 31). ' +
       'The function may still be defined; a definition nothing calls seeds nothing.');

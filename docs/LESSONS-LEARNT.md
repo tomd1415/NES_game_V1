@@ -245,6 +245,33 @@ that produced the zero was mine, not the code's, so two suites were read by hand
 result was trusted. Same reflex as §1, applied to a negative finding, which is the case where
 it is easiest to skip because the answer is the one you were hoping for.
 
+### Fixing a guard three times: name, then syntax, then comments
+
+One guard, three wrong versions in a single sitting, each fixing the last one's fault and
+introducing the next:
+
+| version | matched | what it got wrong |
+|---|---|---|
+| original | `animFrameSizeMismatch\(` anywhere | the **declaration** satisfies it — a function nobody calls reads as wired up |
+| fix 1 | `= animFrameSizeMismatch\(` | pinned to **assignment**; a refactor to `if (name(...))` would fail with nothing wrong |
+| fix 2 | any call (lookbehind on `function`) | matched the **commented-out call** a mutation leaves behind, so two proven breaks silently stopped being caught |
+
+Only the third was caught automatically — by re-running the mutation spec and seeing 22 of
+24 instead of 24 of 24. The first two needed someone to sit and think about what the guard
+was *for*.
+
+- **This is the `prove-coverage` trade-off in miniature.** Narrowing a guard opens silent
+  holes; widening it creates false alarms. Both were done here within an hour, in the same
+  guard, by someone who had just written the entry above about pinning a guard to one
+  spelling.
+- **The settled shape:** *any call, minus the declaration, minus anything after a comment
+  marker on the line.* Extracted as `callsOutsideComments()` in `run-all.mjs` and shared by
+  both guards that needed it, with all three failure modes named in its comment — because
+  the next person will re-derive exactly one of them and think they are done.
+- **Re-run the mutation spec after touching a guard, not just the suite.** The suite was
+  green for all three versions. Only the spec could tell that fix 2 had quietly unprotected
+  two things it used to catch, and it cost 4 seconds to find out.
+
 ### Piping a long suite through `tail`
 
 `node tools/builder-tests/run-all.mjs | tail -40` on a failing run shows the
