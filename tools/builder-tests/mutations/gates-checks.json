@@ -226,6 +226,26 @@
         "invariant - game-over tint is engine-owned and uses 0x1E (no greyscale bit)"
       ],
       "note": "This breaks the NEGATIVE half of that invariant — builder-modules.js must NOT string-emit a PPU_MASK tint, because the win/death tint moved into the engine where it is compiled rather than typed into a string. The POSITIVE half cannot be probed this way: it requires `0x1E | 0x20` and `0x1E | 0x80` to appear in the template, and they appear 2 and 3 times respectively, so breaking one site leaves the others matching. Same limitation as the OAM DMA check — an existence clause is only probeable where the thing exists once."
+    },
+    {
+      "id": "bare-continue-back-in-scroll-streaming",
+      "file": "steps/Step_Playground/src/scroll.c",
+      "find": "            for (rr = 0; rr < 30; rr++) {\n                col_buf[rr] = bg_world_tiles[(unsigned int)rr *\n                                             BG_WORLD_COLS + col];\n            }",
+      "replace": "            for (rr = 0; rr < 30; rr++) {\n                col_buf[rr] = bg_world_tiles[(unsigned int)rr *\n                                             BG_WORLD_COLS + col];\n                continue;\n            }",
+      "expect": [
+        "invariant - scroll.c has no bare `continue` in streaming blocks"
+      ],
+      "note": "A `continue` at the top level of the column/row streaming blocks skipped the PPU writes that must happen every frame, and the symptom was torn scrolling with no error. THE BREAK IS A SEMANTIC NO-OP ON PURPOSE — `continue` as the last statement of a loop body does nothing — because the golden ROM builds compile scroll.c during the checks-only run. A bare `continue` outside a loop would not compile and would redden the goldens instead, telling me nothing about this guard; anything that changed behaviour would move the golden hash and bury the signal in noise. The guard treats ANY occurrence as a regression, which is what makes a no-op sufficient to prove it."
+    },
+    {
+      "id": "scene-preview-gated-on-placeables-again",
+      "file": "tools/tile_editor_web/builder.html",
+      "find": "preview = document.createElement('div')",
+      "replace": "preview = placeable.length > 0 && document.createElement('div')",
+      "expect": [
+        "invariant - Builder scene preview renders with only a Player sprite"
+      ],
+      "note": "Reported from production 2026-06-21: the whole scene preview was wrapped in `if (placeable.length > 0)`, so a project with only a Player sprite lost the background AND the player start marker — dragging Player 1/2 is useful before any enemy exists. The check slices the renderSceneInstances body out and looks for the canvas being created unconditionally, so this re-gates it in place."
     }
   ]
 }
