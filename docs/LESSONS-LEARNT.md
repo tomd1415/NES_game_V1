@@ -271,6 +271,16 @@ was *for*.
 - **Re-run the mutation spec after touching a guard, not just the suite.** The suite was
   green for all three versions. Only the spec could tell that fix 2 had quietly unprotected
   two things it used to catch, and it cost 4 seconds to find out.
+- **There was a fourth version.** Reviewing the extracted helper an hour later: it handled
+  `//` and nothing else, so a call disabled inside `/* ... */` or `<!-- ... -->` still
+  satisfied it — and commenting a block out is the *more* likely way someone switches a
+  feature off. Both returned `true` when tested.
+- **The actual failure across all four is not regex skill, it is never enumerating the set.**
+  Each version fixed the case in front of me and left its neighbour. The question "in how
+  many ways can this call be absent or disabled?" — declaration-only, line comment, block
+  comment, HTML comment — takes thirty seconds and was not asked until the fourth pass.
+  When a guard's job is *"X is really there"*, **write down every way X can fail to be there
+  before writing the pattern**, and test the list. Six directions, one table, done.
 
 ### Piping a long suite through `tail`
 

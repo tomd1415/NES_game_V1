@@ -811,12 +811,25 @@ check('invariant: scene enemy AI probes solids via bw_sprite_blocked', () => {
 // So: any call, minus the declaration, minus anything after a comment marker on
 // the same line.
 function callsOutsideComments(src, name, declKeyword, lineComment) {
-  const re = new RegExp('(?<!' + declKeyword + '\\s)' + name + '\\s*\\(', 'g');
+  // Block and HTML comments are blanked FIRST — replaced with spaces of equal
+  // length so every offset below still lines up with the original. A call
+  // sitting inside `/* ... */` or `<!-- ... -->` is disabled just as surely as
+  // one behind `//`, and commenting a block out is the more likely way someone
+  // switches a feature off. (Found by testing this helper an hour after writing
+  // it: both cases returned true.)
+  const blanked = src
+    .replace(/\/\*[\s\S]*?\*\//g, (t) => ' '.repeat(t.length))
+    .replace(/<!--[\s\S]*?-->/g,      (t) => ' '.repeat(t.length));
+  // `name` is escaped rather than trusted: it is a parameter, and a caller
+  // passing anything with regex punctuation in it would otherwise get a pattern
+  // that quietly means something else.
+  const safe = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(?<!' + declKeyword + '\\s)' + safe + '\\s*\\(', 'g');
   let m;
-  while ((m = re.exec(src)) !== null) {
-    const lineStart = src.lastIndexOf('\n', m.index) + 1;
-    const before = src.slice(lineStart, m.index);
-    if (before.includes(lineComment)) continue;   // commented out
+  while ((m = re.exec(blanked)) !== null) {
+    const lineStart = blanked.lastIndexOf('\n', m.index) + 1;
+    const before = blanked.slice(lineStart, m.index);
+    if (before.includes(lineComment)) continue;   // behind a line comment
     return true;
   }
   return false;
