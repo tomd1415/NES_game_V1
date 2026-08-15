@@ -821,26 +821,46 @@
   // looked live, did nothing, and said nothing anywhere a pupil would look.
   // Returns null (not []) when the hook is absent, so "not wired" and "wired but
   // empty" stay distinguishable; both disable the button, for different reasons.
+  // Returns { list, why, err }. `why` distinguishes the reasons a starter list
+  // can be unusable, because they send you to different places:
+  //   'ok'        — a usable list
+  //   'empty'     — registered and callable, but returned nothing
+  //   'absent'    — studio-starter.js did not load, or did not register
+  //   'threw'     — it loaded and list() raised; `err` carries what
+  //   'not-array' — it returned something that is not a list
+  // The first version of this collapsed all four to null and then reported
+  // 'studio-starter.js did not load', which is false for three of them and
+  // discarded the exception — the same swallowed-reason bug fixed in the
+  // re-render handlers earlier the same day, written by the same hand hours
+  // later. Distinguishing them costs four lines.
   function starterList() {
-    try {
-      if (!window.StudioStarter || typeof window.StudioStarter.list !== 'function') return null;
-      var l = window.StudioStarter.list();
-      return Array.isArray(l) ? l : null;
-    } catch (e) { return null; }
+    if (!window.StudioStarter || typeof window.StudioStarter.list !== 'function') {
+      return { list: null, why: 'absent', err: null };
+    }
+    var l;
+    try { l = window.StudioStarter.list(); }
+    catch (e) { return { list: null, why: 'threw', err: e }; }
+    if (!Array.isArray(l)) return { list: null, why: 'not-array', err: null };
+    return { list: l, why: l.length ? 'ok' : 'empty', err: null };
   }
   // Sibling of reportMissingModule, sharing its said-once map for the same reason.
-  function reportNoStarters(wired) {
+  var STARTER_REASON = {
+    empty:       'StudioStarter.list() returned an empty list.',
+    absent:      'studio-starter.js did not load, or loaded without registering window.StudioStarter.',
+    threw:       'StudioStarter.list() threw — the file DID load; the error follows.',
+    'not-array': 'StudioStarter.list() returned something that is not an array.',
+  };
+  function reportNoStarters(res) {
     var key = 'starters.missing';
     if (modeHookFailed[key]) return;
     modeHookFailed[key] = true;
+    var why = (res && res.why) || 'absent';
     try {
       console.error('[studio] "Load a starter game" is disabled: '
-        + (wired ? 'StudioStarter.list() returned no starters.'
-                 : 'studio-starter.js did not load, or loaded without registering '
-                   + 'window.StudioStarter.')
+        + (STARTER_REASON[why] || STARTER_REASON.absent)
         + ' The button is disabled rather than left looking live — a control that '
         + 'does nothing when clicked is indistinguishable from a broken pupil project. '
-        + 'Said once.');
+        + 'Said once.', (res && res.err) || '');
     } catch (_) { /* console itself is gone; nothing useful left to do */ }
   }
 
@@ -863,8 +883,9 @@
 
   function onNewGame() {
     Storage.flushPending();
-    var starters = starterList();
-    if (!starters || !starters.length) { reportNoStarters(!!starters); return; }
+    var res = starterList();
+    var starters = res.list;
+    if (!starters || !starters.length) { reportNoStarters(res); return; }
     // One starter (or no modal helper) → keep the simple confirm flow.
     if (starters.length <= 1 || !(window.StudioUI && window.StudioUI.modal)) {
       if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
@@ -1728,11 +1749,14 @@
     // studio.html and boot runs on DOMContentLoaded, so the registry is settled.
     (function () {
       var b = $('btn-new-game');
-      var l = starterList();
-      if (b && (!l || !l.length)) {
+      var res = starterList();
+      if (b && res.why !== 'ok') {
         b.disabled = true;
-        b.title = 'Starter games are unavailable on this page — studio-starter.js did not load.';
-        reportNoStarters(!!l);
+        // The tooltip stays general because it is read by a pupil, who cannot act
+        // on any of the four causes. The precise one goes to the console, which is
+        // where whoever CAN act on it will look.
+        b.title = 'Starter games are unavailable on this page — see the browser console for why.';
+        reportNoStarters(res);
       }
     })();
     $('btn-tutorial').addEventListener('click', onTutorial);

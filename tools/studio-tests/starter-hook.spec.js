@@ -39,7 +39,26 @@ test('with no starters available the button is disabled and says why', async ({ 
 
   const btn = page.locator('#btn-new-game');
   await expect(btn).toBeDisabled();
-  await expect(btn).toHaveAttribute('title', /studio-starter\.js did not load/);
+  await expect(btn).toHaveAttribute('title', /see the browser console for why/);
+});
+
+// The four causes are distinguished because they send you to different places —
+// "it did not load" and "it loaded and threw" want different fixes, and the
+// first version of this reported the former for all of them while discarding
+// the exception. This fixture is the `empty` case, so the console must say
+// exactly that and NOT blame a file that loaded perfectly well.
+test('the console names the actual cause, not a generic one', async ({ page }) => {
+  const errors = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+
+  await withEmptyStarterList(page);
+  await page.goto('/studio.html');
+  await page.waitForFunction(() => document.body.dataset.studioReady === '1');
+
+  const said = errors.filter((t) => /Load a starter game" is disabled/.test(t));
+  expect(said.length).toBe(1);
+  expect(said[0]).toMatch(/returned an empty list/);
+  expect(said[0]).not.toMatch(/did not load/);
 });
 
 test('clicking it in that state reports rather than throwing', async ({ page }) => {
