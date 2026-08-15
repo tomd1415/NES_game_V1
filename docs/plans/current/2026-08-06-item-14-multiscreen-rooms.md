@@ -210,20 +210,56 @@ hashes are unaffected because no emitted byte changes.
 
 *The real fix; needed for tall rooms regardless of Step 1's outcome.*
 
-- Emit `ss_active[]` (one byte per entity) alongside `ss_room[]`, under
-  `BW_SCENE_PERROOM` only.
-- `scene_set_active_bg` sets `ss_active[k] = (ss_room[k] == n)` and restores home
-  positions, instead of writing the `0xFF` sentinel.
-- Add `&& ss_active[k]` to the draw loop and each AI body — **but only inside
-  `#ifdef BW_SCENE_PERROOM`**, so non-per-room builds emit the identical code
-  they do today.
-- **Verifiable when:** (a) `_rom-equiv.mjs` unchanged; (b) a generated-C guard
-  asserts `ss_active` appears in a multi-room build and is *absent* from a
-  single-room one; (c) the Step 1 render test passes for a 2-screen-tall project.
+> **Re-planned 2026-08-15, before any code.** Two things below were not in the
+> original and change the order of work: the ASM engine implements the same
+> sentinel and must move with the C, and nothing in the suite would currently
+> notice if it did not. Sub-step 0 exists because of that and must come first.
+
+**Sub-step 0 — make the divergence detectable, before changing anything.**
+`asm-ab.mjs` asserts the ASM engine and the C engine agree, and that is the only
+thing standing between this change and a silent split. But **no `asm-*` suite
+builds a multi-room project** — checked 2026-08-15: every one of them passes a
+single background (`backgrounds: [H.flatBackground(...)]`), so per-room has never
+been exercised on the ASM path at all. Add a multi-room fixture to the A/B
+comparison FIRST and watch it pass. Until that exists, every later verification
+in this step is being read off a comparison that cannot see the thing being
+changed.
+
+**Sub-step 1 — emit the flag.** `ss_active[]`, one byte per entity, alongside
+`ss_room[]`, under `BW_SCENE_PERROOM` only. There is no cap on entity count in
+the server (`n = len(scene_sprites)`), so the RAM cost is unbounded in principle
+and worth a measured figure on a realistic project rather than an estimate.
+
+**Sub-step 2 — C side.** `scene_set_active_bg` sets `ss_active[k] = (ss_room[k]
+== n)` and restores home positions instead of writing the `0xFF` sentinel. Add
+`&& ss_active[k]` to the draw loop and each C AI body, **only inside
+`#ifdef BW_SCENE_PERROOM`**, so non-per-room builds emit identical code.
+
+**Sub-step 3 — ASM side, and it is not optional.** `steps/Step_Playground/src/ai_asm.s`
+tests the sentinel itself — the chaser at ~384 (`lda _ss_y+1,y / bne` then
+`cmp #$EF`) and the flyer likewise. It is the SHIPPED DEFAULT, not a variant. If
+the C stops parking at `0xFF` and the ASM keeps testing for it, the test never
+fires, and off-room entities are no longer skipped by the AI: they carry on
+moving and colliding while the draw loop correctly hides them. **Invisible
+enemies that can still hit you** — the worst shape of bug this project produces,
+because the screen looks right.
+
+**Verifiable when, in order:**
+  a. sub-step 0's multi-room A/B fixture exists and passes BEFORE any change;
+  b. `_rom-equiv.mjs` unchanged — safe by construction, its fixture has a single
+     background so `_scene_is_perroom` returns False for it either way;
+  c. a generated-C guard asserts `ss_active` appears in a multi-room build and is
+     *absent* from a single-room one;
+  d. `perroom-wide-gate.mjs` extended with a 2-screen-TALL case (it covers wide
+     today), asserting the room-1 entity is parked rather than merely off-screen;
+  e. the multi-room A/B fixture from (a) still passes — this is the one that
+     catches sub-step 3 being skipped, and it is worthless unless (a) was
+     watched passing first.
 
 **Cost to weigh:** one byte of RAM per placed entity, and one extra branch per
-entity per frame in the draw and AI loops. Worth measuring against
-`asm-benchmark.mjs` before committing to it.
+entity per frame in the draw and AI loops. Measure against `asm-benchmark.mjs`
+before committing — the ASM AI exists because the C was too slow, so a per-entity
+branch is exactly the kind of cost that motivated it.
 
 ## Step 4 — Remove the coordinate restriction
 
