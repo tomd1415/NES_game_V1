@@ -298,6 +298,37 @@ was *for*.
   When a guard's job is *"X is really there"*, **write down every way X can fail to be there
   before writing the pattern**, and test the list. Six directions, one table, done.
 
+### "The code contains X" is not "X runs" — three times in one day
+
+The same error wearing three costumes, all on 2026-08-15, all by the same hand:
+
+| where | what was found | what was concluded | what was true |
+|---|---|---|---|
+| `sprites.html` | `animFrameSizeMismatch(` appears | the warning is computed | it was the **declaration**; nothing called it |
+| `playground_server.py` | `_seed_dialogue_font(` appears | the font is seeded | it was the **`def` line**; the call could be dropped invisibly |
+| `ai_asm.s` | `cmp #$EF` sentinel test appears | the ASM AI honours parking | it is **never linked for these projects** — `nes_asm_ai` is gated on `not _scene_is_perroom(...)` |
+
+The first two were guards making the mistake. The third was **me** making it, in
+prose, in a committed plan — asserting the ASM AI was "the SHIPPED DEFAULT" and
+would silently diverge, having checked that the file contains the test and never
+checked whether it is built. Half the evidence, stated with full confidence, in a
+document written to be acted on.
+
+- **The check is always the same and always cheap:** having found the text, ask
+  *what makes this run?* A call site. A registration. A build flag. An `#ifdef`.
+  For anything behind a build toggle, grep the toggle, not the symbol — the
+  server's `nes_asm_ai = bool(...)` expression answered it in one line.
+- **Guards and prose fail this identically**, which is why they belong in one
+  entry. A guard that matches a declaration and a sentence that cites a file's
+  contents are both asserting presence and both being read as liveness.
+- **It is worst when the conclusion is alarming.** "Invisible enemies that can
+  still hit you" is exactly the sentence someone reorders their week around. A
+  claim's cost of being wrong should set how hard you check it, and that one was
+  checked less than a typo would have been.
+- *And the correction was worth more than the alarm:* the real asymmetry —
+  `chaser`/`flyer` test the sentinel, `walker`/`patrol` do not — is why the gate
+  exists at all, and it is the thing the next engine change has to preserve.
+
 ### Piping a long suite through `tail`
 
 `node tools/builder-tests/run-all.mjs | tail -40` on a failing run shows the
