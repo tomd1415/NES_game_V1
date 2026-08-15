@@ -195,6 +195,41 @@ E2E port was itself counted as a claim on the E2E port.
   contamination warnings, because the next person to recount will make the same two
   mistakes — the evidence being that the person who *knew about them* made them anyway.
 
+### A guard pinned to one spelling of the code it guards
+
+`invariant: PPU register macros are volatile` had been green since it was written and
+**could not have gone red**. Its regex was
+
+```js
+/\*\s*\(\s*\(\s*unsigned\s+char\s*\*\s*\)\s*0x[0-9A-Fa-f]+\s*\)/   // *((unsigned char*)0x20XX)
+```
+
+— the double-paren spelling the files used *before* the original fix. Every macro is now
+written `(*(volatile unsigned char*)0x2006)`. Delete the `volatile` and you get
+`(*(unsigned char*)0x2006)`: one paren after the `*`, so the pattern never matched. The
+guard was looking for a spelling nobody uses any more.
+
+What it was protecting is not cosmetic: without `volatile`, cc65 elides repeated writes to
+the same address, and the scroll stride silently stops updating — a rendering fault with no
+error anywhere, which is exactly why someone wrote a guard for it.
+
+- **Only mutation testing finds this.** Reading the check, it looks right: it names the
+  hazard, the comment explains the mechanism, the error message is good. Nothing about it
+  reads as broken. It was found by planting the exact fault it claims to catch and watching
+  the suite stay green.
+- **The shape:** *a guard written against the code as it was spelled that day.* The fix that
+  prompted the guard also **reformatted the thing being guarded**, so the guard shipped
+  matching the pre-fix text. Suspect any check whose pattern encodes punctuation — brackets,
+  spacing, argument order — rather than the thing that actually matters.
+- **The repair is to match the hazard, not the line.** The hazard is a hardware address
+  dereferenced through a cast with no `volatile`; the brackets around it are irrelevant. The
+  check now matches the *cast* and passes when `volatile` is present, which covers both
+  spellings and any future one. Measured on install: 24 such casts across the three files,
+  all volatile, so it passes on merit rather than on vacuity.
+- **And measure that, too.** Before installing a widened pattern, run it and count what it
+  flags. A widened guard that fires on legitimate code gets reverted within a day, taking
+  the coverage with it — the mirror failure in `prove-coverage`.
+
 ### Piping a long suite through `tail`
 
 `node tools/builder-tests/run-all.mjs | tail -40` on a failing run shows the

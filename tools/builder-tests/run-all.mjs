@@ -540,13 +540,30 @@ check('invariant: PPU register macros are volatile', () => {
     const raw = fs.readFileSync(f, 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, ' ')
       .replace(/\/\/[^\n]*/g,       ' ');
-    // Match the literal pattern these files used before the fix.
-    // `*((unsigned char*)0x20XX)` without `volatile` is the hazard.
-    const m = /\*\s*\(\s*\(\s*unsigned\s+char\s*\*\s*\)\s*0x[0-9A-Fa-f]+\s*\)/.exec(raw);
-    if (m) {
+    // Match the CAST, not one historical spelling of the whole macro.
+    //
+    // This guard was hollow until 2026-08-15 and had been since it was written.
+    // It looked for `*((unsigned char*)0x20XX)` — the double-paren form these
+    // files used before the original fix — while every macro here is now spelled
+    // `(*(volatile unsigned char*)0x2006)`. Delete the `volatile` today and you
+    // get `(*(unsigned char*)0x2006)`, which has ONE paren after the `*` and so
+    // never matched. The check could not fail on the code it guards, and was
+    // green for the most boring reason there is: it was looking for a spelling
+    // nobody uses. Found by mutation testing, which is the only thing that would
+    // have found it — reading it, it looks fine.
+    //
+    // Matching the cast covers both spellings and anything else that dereferences
+    // a hardware address, because the hazard is the missing `volatile`, not the
+    // brackets around it. Measured when installed: 24 such casts across these
+    // three files, every one already volatile, so this passes on merit.
+    const re = /\(\s*(volatile\s+)?unsigned\s+char\s*\*\s*\)\s*0x[0-9A-Fa-f]+/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      if (m[1]) continue;               // has volatile — fine
       throw new Error(path.relative(ROOT, f) +
-        ' has a non-volatile PPU/OAM macro near offset ' + m.index +
-        ' — keep `(*(volatile unsigned char*)0xNNNN)` or cc65 will elide stride writes');
+        ' has a non-volatile PPU/OAM cast `' + m[0] + '` near offset ' + m.index +
+        ' — keep `(*(volatile unsigned char*)0xNNNN)` or cc65 will elide repeated ' +
+        'writes to the same address and the scroll stride silently stops updating');
     }
   }
 }) || (anyFail = true);

@@ -66,6 +66,46 @@
         "invariant - private-emulator pages convert ROM bytes to a binary string for jsnes"
       ],
       "note": "Same shape as the storage trigger, listed separately because they are two independent selectors and one can rot without the other."
+    },
+    {
+      "id": "render-failure-swallowed-again",
+      "file": "tools/tile_editor_web/studio.js",
+      "find": "    try { renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); }",
+      "replace": "    try { renderProjectsMenu(); } catch (e) {}",
+      "expect": [
+        "invariant - no best-effort re-render in studio.js swallows its error"
+      ],
+      "note": "Third time this class has been fixed in studio.js; the first two fixes did not stop the next one appearing, which is why it is guarded rather than merely corrected. The guard strips comments first — without that it matches the comment explaining itself (measured: raw 1 offender, stripped 0)."
+    },
+    {
+      "id": "goldens-disagree",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "const GOLDEN_TEMPLATE = '1730448eca6d4857d3468407b33e41de7806bf99';",
+      "replace": "const GOLDEN_TEMPLATE = '0000000000000000000000000000000000000000';",
+      "expect": [
+        "invariant - goldens equal (template adds nothing at no-modules)"
+      ],
+      "note": "The cross-file guarantee that the template at no-modules compiles to the same bytes as stock. Expect the template-hash invariant to go red alongside it — that is the same pin seen from the other side, not a second fault."
+    },
+    {
+      "id": "docs-route-removed",
+      "file": "tools/playground_server.py",
+      "find": "if parsed.path.startswith(\"/docs/\"):",
+      "replace": "if parsed.path.startswith(\"/docsZZZ/\"):",
+      "expect": [
+        "invariant - playground_server.py exposes /docs/ route for editor doc links"
+      ],
+      "note": "audio.html links straight at /docs/guides/AUDIO_GUIDE.md. Losing the route 404s a link a pupil follows, and nothing in the build would notice."
+    },
+    {
+      "id": "ppu-macro-not-volatile",
+      "file": "steps/Step_Playground/src/scroll.c",
+      "find": "#define PPU_ADDR      (*(volatile unsigned char*)0x2006)",
+      "replace": "#define PPU_ADDR      (*(unsigned char*)0x2006)",
+      "expect": [
+        "invariant - PPU register macros are volatile"
+      ],
+      "note": "Without volatile, cc65 elides repeated writes to the same address and the scroll stride silently stops updating. A mutation edits the working tree only, which the snapshot check cannot see (it compares git HEAD), so this produces no spurious snapshot failure."
     }
   ]
 }
