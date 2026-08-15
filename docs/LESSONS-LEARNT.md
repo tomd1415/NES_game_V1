@@ -11,8 +11,10 @@ is what recurs. Most of these cost between twenty minutes and a whole session.
 
 ## If you read nothing else
 
-This file is 800 lines and you are told to read it *before* debugging, which nobody
-does. So: four reflexes account for most of what it contains, and each costs seconds.
+This file is long — deliberately not saying how long, because the last hardcoded figure
+here went stale the same day someone added to it — and you are told to read it *before*
+debugging, which nobody does. So: five reflexes account for most of what it contains, and
+each costs seconds.
 
 1. **A search that finds nothing is a claim about your pattern, not about the code.**
    Print the raw region and look. Five separate times in one week this was the only
@@ -27,9 +29,23 @@ does. So: four reflexes account for most of what it contains, and each costs sec
 4. **A dated measurement and a live claim read identically in prose.** "114 suites"
    is true forever as a record and wrong the next time someone adds a file. Mark
    which you mean; it costs four words. (§3)
+5. **Before writing a guard's pattern, list every way the thing can be absent.**
+   Declaration-only, line comment, block comment, HTML comment, a different but
+   equally valid spelling. Then test the list in *both* directions. Applied to three
+   guards on 2026-08-15 it found a real hole in all three — including two written
+   hours earlier by someone who had just fixed the same fault elsewhere. Fixing the
+   case in front of you and leaving its neighbour is the default outcome, not a
+   lapse. (§1)
 
 Everything below is an instance of one of those, with the false theory that was held
 on the way.
+
+*One negative result belongs here too, so nobody re-runs it: on 2026-08-15 all seven
+pure-presence invariants in `run-all.mjs` were checked for whether comment text alone
+satisfies them — comparing match counts raw versus comment-stripped. None does. They
+remain vulnerable if someone later adds an explanatory comment quoting the pattern,
+which is exactly how the re-render guard was contaminated, but no guard is passing on
+prose today.*
 
 ---
 
