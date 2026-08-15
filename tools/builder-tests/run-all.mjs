@@ -798,9 +798,25 @@ check('invariant: scene enemy AI probes solids via bw_sprite_blocked', () => {
 // server silently drops those frames (JUMP_FRAME_COUNT 0 → jump plays walk).
 check('invariant: sprites.html warns on player-size animation frame mismatch', () => {
   const html = fs.readFileSync(path.join(WEB, 'sprites.html'), 'utf8');
-  if (!/animFrameSizeMismatch\s*\(/.test(html) || !/anim-assign-warn/.test(html)) {
-    throw new Error('sprites.html no longer computes the animation size-mismatch warning — ' +
-      'a wrong-size jump animation will silently play as walk (web-feedback bug 38)');
+  // Assert the warning is COMPUTED and DISPLAYED, not merely that the two names
+  // appear somewhere in the file.
+  //
+  // Until 2026-08-15 this tested `/animFrameSizeMismatch\s*\(/` and
+  // `/anim-assign-warn/` anywhere in the source. Both are far weaker than they
+  // look: the first is satisfied by the function's own declaration even if
+  // nothing ever calls it, and the second by either of the two CSS rules for
+  // `.anim-assign-warn` even if the element and the logic are both gone. Found
+  // by mutation — renaming the declaration left the call site matching, so the
+  // check stayed green with the guarded property half removed.
+  if (!/=\s*animFrameSizeMismatch\s*\(/.test(html)) {
+    throw new Error('sprites.html no longer CALLS animFrameSizeMismatch(...) — a wrong-size ' +
+      'jump animation will silently play as walk (web-feedback bug 38). The function may ' +
+      'still be declared; a declaration nothing calls is not a warning.');
+  }
+  if (!/id=["']anim-assign-warn["']/.test(html)) {
+    throw new Error('sprites.html has no element with id="anim-assign-warn" — the mismatch is ' +
+      'computed but has nowhere to appear, so the pupil still sees nothing. (The CSS rules for ' +
+      '.anim-assign-warn are not evidence the element exists.)');
   }
 }) || (anyFail = true);
 

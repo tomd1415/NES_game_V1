@@ -166,6 +166,36 @@
         "invariant - ladder climb checks target-cell behaviour in both templates"
       ],
       "note": "BEHAVIOUR_LADDER is 6 (collision.h), so this compiles and behaves identically — deliberate, because the golden ROM builds DO run under RUNALL_CHECKS_ONLY and an uncompilable template would redden those instead and say nothing about this guard. It probes that the guard is anchored on the real up_ladder expression; it is not a realistic regression. BOTH OPERANDS MUST CHANGE, and that is the point of the anchor's size: the first attempt changed only `up_l` and nothing went red. The guard's regex is `up_ladder\\s*=[^;]*BEHAVIOUR_LADDER` and `[^;]*` runs across the newline to the second operand, which still carried the constant — so the break was a no-op and 'nothing caught this' meant my break, not a hollow guard. The guard has been sound since it was tightened on 2026-08-12, when its `.*` dotall was letting it match across unrelated statements."
+    },
+    {
+      "id": "dialogue-glyph-set-drifts-from-server",
+      "file": "tools/tile_editor_web/index.html",
+      "find": "const DIALOGUE_GLYPH_CHARS = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?'-:\";",
+      "replace": "const DIALOGUE_GLYPH_CHARS = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?'-\";",
+      "expect": [
+        "invariant - dialogue font char set agrees across server, editor + validator"
+      ],
+      "note": "Three files must agree on which characters the dialogue font can draw: the server's _glyph() map, the editor's DIALOGUE_GLYPH_CHARS, and the validator's warning list. This drops the colon from ONE of the three. That is the whole failure mode — nothing crashes, the editor simply stops warning about a character the ROM cannot draw, and a pupil's colon renders as a blank. Exactly the 'two lists that must agree and nothing checks they do' shape, with three lists."
+    },
+    {
+      "id": "anim-frame-size-warning-removed",
+      "file": "tools/tile_editor_web/sprites.html",
+      "find": "      const bad = animFrameSizeMismatch(anim, player);",
+      "replace": "      const bad = null; // animFrameSizeMismatch(anim, player);",
+      "expect": [
+        "invariant - sprites.html warns on player-size animation frame mismatch"
+      ],
+      "note": "Assigning an animation whose frames differ in size from the player produces a garbled sprite with no error; the warning is the only thing that tells a pupil why. THE CHECK HAD TO BE TIGHTENED BEFORE THIS COULD BE PROVEN. It used to test for `animFrameSizeMismatch(` and `anim-assign-warn` ANYWHERE in the file — satisfied by the function's own declaration with nothing calling it, and by either of two CSS rules with the element gone. Renaming the declaration left the call site matching and the check stayed green. It now asserts the CALL (`= animFrameSizeMismatch(`) and the element id, so this break — stubbing the call out while leaving everything else in place — is what it detects."
+    },
+    {
+      "id": "anim-warning-element-removed",
+      "file": "tools/tile_editor_web/sprites.html",
+      "find": "<div id=\"anim-assign-warn\" class=\"anim-assign-warn\" style=\"display:none\" role=\"status\"></div>",
+      "replace": "<div class=\"anim-assign-warn\" style=\"display:none\" role=\"status\"></div>",
+      "expect": [
+        "invariant - sprites.html warns on player-size animation frame mismatch"
+      ],
+      "note": "The other half: the mismatch can be computed perfectly and still have nowhere to appear. Dropping only the id leaves both CSS rules and the class attribute in place, which is precisely what the old string-anywhere check could not distinguish from a working warning."
     }
   ]
 }
