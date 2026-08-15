@@ -106,6 +106,46 @@
         "invariant - PPU register macros are volatile"
       ],
       "note": "Without volatile, cc65 elides repeated writes to the same address and the scroll stride silently stops updating. A mutation edits the working tree only, which the snapshot check cannot see (it compares git HEAD), so this produces no spurious snapshot failure."
+    },
+    {
+      "id": "oam-dma-replaced-by-perbyte-writes",
+      "file": "steps/Step_Playground/src/main.c",
+      "find": "        OAM_DMA  = 0x02;",
+      "replace": "        OAM_DMA  = 0x03;",
+      "expect": [
+        "invariant - both templates use OAM DMA (not per-byte OAM_DATA writes)"
+      ],
+      "note": "Sprites must reach the PPU by one DMA from page 2, not 256 per-byte OAM_DATA writes — the per-byte form does not fit in vblank and drops sprites intermittently. Anchored in main.c, NOT platformer.c: the check requires the pattern once per template and platformer.c contains it TWICE, so breaking one site there leaves the other matching and proves nothing. main.c has exactly one. A guard that tests for existence can only be probed where the thing exists once."
+    },
+    {
+      "id": "native-launch-rom-path-changed",
+      "file": "tools/playground_server.py",
+      "find": "        latest_rom = STEP_DIR / \"_play_latest.nes\"",
+      "replace": "        latest_rom = STEP_DIR / \"_play_latestZZZ.nes\"",
+      "expect": [
+        "invariant - playground_server.py native launch uses _play_latest.nes"
+      ],
+      "note": "This guard was itself hollow until 2026-08-12 — it passed on the comment that named the file rather than on the assignment. Codified now so it cannot quietly return to that: the break edits the assignment, which is what the tightened check actually reads."
+    },
+    {
+      "id": "sprite-dup-stops-cloning-pixels",
+      "file": "tools/tile_editor_web/sprites.html",
+      "find": "const start = findFreeTileRun(w * h, state);",
+      "replace": "const start = findFreeTileRunZZZ(w * h, state);",
+      "expect": [
+        "invariant - btn-sprite-dup handler clones tile pixels (not just sprite struct)"
+      ],
+      "note": "Duplicating a sprite must allocate fresh tile slots and copy the pixels; without it the copy shares tiles with the original, so editing one silently changes the other. `findFreeTileRun(` alone appears 5 times in the file — this anchors on the call INSIDE the dup handler, which is the one the check reads (it slices the btn-sprite-dup listener out first). The sibling call passes `target`, not `state`, which is what makes this one unique."
+    },
+    {
+      "id": "perbyte-oam-write-sneaks-back",
+      "file": "steps/Step_Playground/src/main.c",
+      "find": "        OAM_DMA  = 0x02;",
+      "replace": "        OAM_DMA  = 0x02; OAM_DATA = oam_idx;",
+      "expect": [
+        "invariant - both templates use OAM DMA (not per-byte OAM_DATA writes)"
+      ],
+      "note": "The other half of the same invariant, and the half that actually protects. Its first two clauses are EXISTENCE checks — they detect the DMA being deleted outright, which would be obvious on screen anyway. This clause is the negative one: no `OAM_DATA = <identifier>` anywhere. That is what catches per-byte writes creeping back in beside a DMA that is still present, which is the realistic regression and the invisible one. Same anchor as the break above, different replacement — breaks are applied one at a time, so sharing an anchor is fine."
     }
   ]
 }
