@@ -342,6 +342,7 @@ this codebase is in better shape on these axes than the guard work suggested.
 | behaviour-type ids across `collision.h`, `studio-starter.js`, the harness | **exact agreement** on 0–6; the engine's extra `custom7` is the generic slot the editor fills per game type |
 | doc claims in `docs/guides/` | one real drift (the shared-port table), recorded separately |
 | pure-presence invariants satisfied by comment text | **none** |
+| editor AI types vs the four `ai_asm.s` routines | **sound, and deliberately so** — see below |
 
 **The one real finding came out of an audit that found nothing.** `/lessons/*` and
 `/snippets/*` looked unreferenced; they are not — the URLs are built as
@@ -354,6 +355,14 @@ them. Raised in `.mc-outbox.md`; it is a product decision, not a bug to fix unas
 
 - **Chase why a null result looks the way it does.** The audit's stated finding was
   nothing. Its by-product was a silent gap affecting the front-end pupils actually use.
+- **One of those clean results has a trap in it, so it is written down rather than just
+  ticked.** `ai_asm.s` dispatches on four codes and ends `jmp next` — an unknown code
+  makes it SKIP the entity, with no default case. That reads exactly like a missing
+  `else`, and "fixing" it to fall through to `walker` would be a real bug: the editor
+  emits `aiType = 0` for hopper, shooter, goomba and koopa **precisely so the ASM loop
+  skips them**, because per-instance C blocks own those. Falling through would move them
+  twice. The absent default is the design, and `builder-modules.js` says so in a comment
+  at the branch that sets it.
 - **And say "found nothing" plainly when that is the answer.** Four of six here. A
   sweep that reports nothing is worth writing down precisely because the next person
   will otherwise spend the same hour discovering the same absence.
