@@ -222,8 +222,10 @@ so reuse is free.
 
 **The point of writing this down is what it forbids.** An 8.5-minute suite is an
 obvious candidate for "just run these in parallel", and that change would collide
-19 ports the moment it landed — not in the suite you edited, but in whichever pair
-happened to overlap. Anyone doing it must give every suite a unique port *first*.
+**every shared port** the moment it landed — not in the suite you edited, but in
+whichever pair happened to overlap. (The count is deliberately not repeated here:
+the table above had it as 19 for three days after it became 20, because the table
+was corrected and this sentence was not. Regenerate it with the snippet above.) Anyone doing it must give every suite a unique port *first*.
 It would at least fail loudly rather than silently: since the 2026-08-07
 hardening, `startServer` pre-flights the port and throws if anything already
 answers there (see "How `startServer` proves it owns the port" above).
