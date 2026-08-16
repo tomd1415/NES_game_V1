@@ -24,8 +24,8 @@ work cold, and the file to refresh *last* before putting work down.
   are enumerated at runtime rather than hand-listed — the `.js` list used to name
   14 and silently skip 18, and the HTML list named 5 of 8, leaving `audio.html`
   and `gallery.html` unchecked.
-- **Studio E2E:** ✅ **164 passed, exit 0** (`npx playwright test`, re-run
-  2026-08-14 at v79) across 35 spec files. Was 147 on 2026-07-30 and 158 on
+- **Studio E2E:** ✅ **165 passed, exit 0** (`npx playwright test`, re-run
+  2026-08-15 at v79) across 35 spec files. Was 147 on 2026-07-30 and 158 on
   2026-08-13; the eleven before that are the silent-failure guards from the
   2026-08-09/12 maintenance, and the six since are the whole-level preview
   assertion in `world.spec.js` plus `starter-hook.spec.js`. Still confirms the
