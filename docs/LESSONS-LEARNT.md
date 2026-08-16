@@ -329,6 +329,35 @@ document written to be acted on.
   `chaser`/`flyer` test the sentinel, `walker`/`patrol` do not — is why the gate
   exists at all, and it is the thing the next engine change has to preserve.
 
+### Audits run 2026-08-15/16 — what they found, and what they did not
+
+Recorded so nobody re-runs them. Four of these found nothing, which is the useful part:
+this codebase is in better shape on these axes than the guard work suggested.
+
+| audit | result |
+|---|---|
+| TODO/FIXME debt | **none owned by this project** — all 16 are in vendored FamiStudio 4.5.0, which `sync.sh` would overwrite |
+| Studio mode test coverage | **no gaps** — all 8 modes in the `MODES` table have behavioural assertions, not just visibility. `pals`/`sound`/`style`/`code` are thin (2 specs each) but not presence-only |
+| server route references | **all 25 referenced** — the two that looked orphaned were my own false positive (see below) |
+| behaviour-type ids across `collision.h`, `studio-starter.js`, the harness | **exact agreement** on 0–6; the engine's extra `custom7` is the generic slot the editor fills per game type |
+| doc claims in `docs/guides/` | one real drift (the shared-port table), recorded separately |
+| pure-presence invariants satisfied by comment text | **none** |
+
+**The one real finding came out of an audit that found nothing.** `/lessons/*` and
+`/snippets/*` looked unreferenced; they are not — the URLs are built as
+`PLAYGROUND_LESSONS + '/' + encodeURIComponent(id)`, so the literal never appears in
+source. Sixth instance of searching the spelling rather than the behaviour. But asking
+*why* they looked orphaned turned up something real: `studio-code.js` carries its own
+hardcoded array of **6** snippets while `snippets/` on disk holds **24**, and only the
+legacy `code.html` fetches the 24. The Studio — the primary front-end — cannot see
+them. Raised in `.mc-outbox.md`; it is a product decision, not a bug to fix unasked.
+
+- **Chase why a null result looks the way it does.** The audit's stated finding was
+  nothing. Its by-product was a silent gap affecting the front-end pupils actually use.
+- **And say "found nothing" plainly when that is the answer.** Four of six here. A
+  sweep that reports nothing is worth writing down precisely because the next person
+  will otherwise spend the same hour discovering the same absence.
+
 ### Piping a long suite through `tail`
 
 `node tools/builder-tests/run-all.mjs | tail -40` on a failing run shows the
