@@ -383,10 +383,41 @@ end and every half of the item is shipped and covered:
 | #6 | Per-sprite / per-area fine-tuning (jump/gravity/walk presets are done) |
 | #10 | Vertical scroll still capped at 2 screens — a hard engine limit |
 | #13 | Chaser variants / homing |
-| #14 | Multi-screen rooms still fall back to the shared scene (v75 is v1) |
+| #14 | Multi-screen rooms: v79 admits wide rooms; **tall rooms still lose chaser/flyer AI — see below** |
 | #26 | Per-feature top-down parity sweeps |
 | #38 | Rendering a differently-sized jump pose in-engine |
 | #5 | Shipped (hand-written 6502 engine, v11→v54) but never formally marked done |
+
+### A chaser or flyer below y=238 in a TALL level never moves — measured 2026-08-21
+
+Not a per-room issue and not new, which is why it is called out separately: this
+hits an **ordinary single-room 1×2 level**, and it predates v79.
+
+Measured with a 1-screen-wide, 2-screen-tall project, one enemy, everything else
+identical and only the entity's `y` varying — reading `ss_x[0]` straight out of
+engine RAM, so neither the camera nor the viewport is in the question:
+
+| entity y | renders? | AI |
+| -------- | -------- | -- |
+| 200 | yes | **runs** — `ss_x` 218 → 60 over 180 frames |
+| 300 | yes | **never runs** — `ss_x` stays at 220 |
+
+**Both engines agree** (pure C via `PLAYGROUND_NO_ASM=1`, and the shipped ASM),
+so this is not an A/B divergence and `asm-ab`'s guarantee is intact.
+
+Cause: an entity's world `y` becomes u16 once any coordinate exceeds 255, while
+the AI skip guard is `ss_y[i] < 0xEF` — the parking sentinel. A legitimate y=300
+is indistinguishable from a parked actor. **Walker and patrol are unaffected**,
+because those routines never test the sentinel; only chaser and flyer do. So a
+pupil placing a walker low in a tall level sees it work and placing a chaser
+beside it sees it sit motionless, which is the confusing part.
+
+Rendering is fine — proven by driving the camera down to it — so the enemy is
+visible and simply inert.
+
+**#14 Step 3 is the fix** (replace the sentinel with an `ss_active[]` flag), and
+its plan now carries this as a verification case. Nothing should be patched
+around it in the meantime: the sentinel is the thing to remove, not to special-case.
 
 ### Verified-correct, no work needed
 

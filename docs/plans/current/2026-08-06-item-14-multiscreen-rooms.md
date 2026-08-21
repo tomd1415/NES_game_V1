@@ -266,6 +266,15 @@ moving and colliding while the draw loop correctly hides them. **Invisible
 enemies that can still hit you** — the worst shape of bug this project produces,
 because the screen looks right.
 
+**And it fixes a bug wider than this plan assumes.** Measured 2026-08-21: in an
+**ordinary single-room 1×2 level** — no per-room involved — a chaser or flyer placed
+below y=238 renders correctly and **never runs its AI**, because its u16 world `y`
+fails the `ss_y < 0xEF` sentinel guard exactly as a parked actor does. Walker and
+patrol are unaffected (they never test the sentinel), so a pupil sees one enemy work
+and the one beside it sit still. Both engines agree, so it is not an A/B divergence.
+Step 3 removes the sentinel and therefore removes this too — it should be verified,
+not left as a coincidence.
+
 **Verifiable when, in order:**
   a. sub-step 0's multi-room A/B fixture exists and passes BEFORE any change;
   b. `_rom-equiv.mjs` unchanged — safe by construction, its fixture has a single
@@ -274,7 +283,9 @@ because the screen looks right.
      *absent* from a single-room one;
   d. `perroom-wide-gate.mjs` extended with a 2-screen-TALL case (it covers wide
      today), asserting the room-1 entity is parked rather than merely off-screen;
-  e. the multi-room A/B fixture from (a) still passes — this is the one that
+  e. a chaser at y=300 in a plain 1×2 single-room level RUNS its AI — the
+     pre-existing bug above, which is the case a pupil actually hits;
+  f. the multi-room A/B fixture from (a) still passes — this is the one that
      catches sub-step 3 being skipped, and it is worthless unless (a) was
      watched passing first.
 
