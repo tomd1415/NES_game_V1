@@ -111,6 +111,41 @@ check('no builder-test suite chooses its own port', () => {
   if (r.status !== 0) throw new Error((r.stdout || '') + (r.stderr || ''));
 }) || (anyFail = true);
 
+// Playwright browser builds are keyed to the Playwright VERSION, and the dev
+// container bakes Chromium in at image-build time (cdn.playwright.dev is a
+// rotating CDN, so runtime allowlisting is unreliable -- see the Dockerfile).
+// If package-lock.json floats to a new Playwright and the image is not rebuilt,
+// `npx playwright test` dies with "Executable doesn't exist at
+// .../chromium_headless_shell-<N>" -- a confusing failure a long way from its
+// cause. Catch the drift here instead.
+//
+// Ported from `main`, with ONE deliberate difference: main's copy returns early
+// when .devcontainer/Dockerfile is absent, because there it could be. Here the
+// directory is tracked (it was untracked, and lost, on 2026-08-14), so a missing
+// Dockerfile is a deletion and must be loud rather than "not applicable" -- a
+// check that passes by not running is the failure shape this branch keeps finding.
+check('devcontainer Playwright pin matches package-lock.json', () => {
+  const dockerfile = path.join(ROOT, '.devcontainer', 'Dockerfile');
+  const lockPath = path.join(ROOT, 'package-lock.json');
+  if (!fs.existsSync(lockPath)) return;   // not applicable
+  if (!fs.existsSync(dockerfile)) {
+    throw new Error('.devcontainer/Dockerfile is missing — it is tracked on this branch, ' +
+      'so this is a deletion, not a project without a dev container.');
+  }
+  const df = fs.readFileSync(dockerfile, 'utf8');
+  const m = df.match(/^ARG\s+PLAYWRIGHT_VERSION=([0-9][^\s]*)/m);
+  if (!m) throw new Error('.devcontainer/Dockerfile: ARG PLAYWRIGHT_VERSION not found');
+  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+  const pkg = (lock.packages || {})['node_modules/@playwright/test'];
+  if (!pkg || !pkg.version) throw new Error('package-lock.json: @playwright/test not resolved');
+  if (pkg.version !== m[1]) {
+    throw new Error(
+      `Playwright drift: package-lock.json has ${pkg.version} but ` +
+      `.devcontainer/Dockerfile bakes browsers for ${m[1]}.\n` +
+      `  Fix: set ARG PLAYWRIGHT_VERSION=${pkg.version} and rebuild the dev container.`);
+  }
+}) || (anyFail = true);
+
 // Inline <script> bodies in the HTML pages.  Regex-extract, write to
 // a private temp directory, then node --check each one.  (These are the heavyweight scripts
 // that define the pages' entire behaviour.)
