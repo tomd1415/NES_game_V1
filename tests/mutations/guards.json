@@ -4,7 +4,7 @@
   "command": [
     "bash",
     "-c",
-    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree tests.unit.test_friendly_build_error tests.unit.test_registries_are_complete"
+    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree tests.unit.test_friendly_build_error tests.unit.test_registries_are_complete tests.unit.test_autosave"
   ],
   "breaks": [
     {
@@ -166,6 +166,26 @@
       "replace": "",
       "expect": [
         "test_the_starter_picker_offers_exactly_what_is_shipped"
+      ]
+    },
+    {
+      "id": "the-recovery-list-goes-back-to-being-index-driven",
+      "file": "native/src/nes_studio/persistence/autosave.py",
+      "find": "for project_path in sorted(self.snapshot_dir.glob(\"*.json\")):",
+      "replace": "for project_path in sorted(self.snapshot_dir.glob(\"*.meta.json\")):",
+      "count": 1,
+      "expect": [
+        "test_a_payload_whose_metadata_never_landed_is_still_offered"
+      ]
+    },
+    {
+      "id": "a-missing-meta-json-stops-being-caught",
+      "file": "native/src/nes_studio/persistence/autosave.py",
+      "find": "            except (OSError, TypeError, KeyError, json.JSONDecodeError):",
+      "replace": "            except (TypeError, KeyError, json.JSONDecodeError):",
+      "count": 1,
+      "expect": [
+        "test_a_payload_whose_metadata_never_landed_is_still_offered"
       ]
     }
   ]

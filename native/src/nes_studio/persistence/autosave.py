@@ -77,18 +77,46 @@ class AutosaveRepository:
         return RecoveryEntry(project_path, reason, created, digest)
 
     def entries(self) -> list[RecoveryEntry]:
+        """List the snapshots from the payloads on disk, never from the index.
+
+        `snapshot()` writes the pupil's project and then its `.meta.json`. Each write
+        is atomic on its own, but they are two writes, and a crash between them is the
+        exact condition this whole class exists for. Listing from `*.meta.json` made
+        such a payload **invisible** — recovery would not offer it and `_prune()`
+        could not remove it. Listing from the payload makes the worst case an
+        *unlabelled* snapshot instead: reason "unknown", timestamp from the file, hash
+        recomputed. The reverse case — metadata with no payload — simply never
+        appears, because nothing globs the metadata.
+        """
+
         if not self.snapshot_dir.exists():
             return []
         entries: list[RecoveryEntry] = []
-        for metadata_path in self.snapshot_dir.glob("*.meta.json"):
-            try:
-                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-                name = metadata_path.name.removesuffix(".meta.json") + ".json"
-                project_path = metadata_path.with_name(name)
-                if project_path.is_file():
-                    entries.append(RecoveryEntry(project_path, metadata["reason"], metadata["created_at"], metadata["sha256"]))
-            except (OSError, KeyError, json.JSONDecodeError):
+        for project_path in sorted(self.snapshot_dir.glob("*.json")):
+            if project_path.name.endswith(".meta.json"):
                 continue
+            try:
+                metadata = json.loads(
+                    project_path.with_suffix(".meta.json").read_text(encoding="utf-8")
+                )
+                entry = RecoveryEntry(
+                    project_path,
+                    metadata["reason"],
+                    metadata["created_at"],
+                    metadata["sha256"],
+                )
+            except (OSError, TypeError, KeyError, json.JSONDecodeError):
+                try:
+                    stamp = datetime.fromtimestamp(project_path.stat().st_mtime, UTC)
+                    entry = RecoveryEntry(
+                        project_path,
+                        "unknown",
+                        stamp.isoformat(timespec="seconds"),
+                        self._hash(project_path.read_bytes()),
+                    )
+                except OSError:
+                    continue
+            entries.append(entry)
         return sorted(entries, key=lambda entry: entry.path.name, reverse=True)
 
     def _prune(self) -> None:

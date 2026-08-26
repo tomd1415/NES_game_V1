@@ -855,7 +855,7 @@ the direction of the user, which is the same shape as F1.
 exercise the happy path; `grep -rn "meta.json" tests/` returns nothing, so no test ever
 constructs a payload without its metadata.
 
-**Fix (not applied — code).** Drive the listing from the payload, not the index, so a
+**Fix — APPLIED 2026-08-26** (was: not applied). Drive the listing from the payload, not the index, so a
 snapshot can be *unlabelled* but never *invisible*:
 
 ```python
@@ -878,6 +878,31 @@ in `entries()` — a test that fails against the current code and passes after.
 The existing `except (OSError, KeyError, json.JSONDecodeError): continue` is then still
 correct in spirit — it just stops meaning "hide this snapshot" and starts meaning
 "label it unknown".
+
+### Fixed 2026-08-26 — and one claim above is corrected
+
+`entries()` now globs the payloads and falls back to reason `"unknown"`, the file's
+mtime and a recomputed hash when the `.meta.json` is missing or unreadable. Three tests
+in `tests/unit/test_autosave.py::OrphanedSnapshotTests`, all three seen to fail first:
+the orphan is offered, it is *pruned* like any other snapshot (`_prune()` iterates the
+same list, so the old code leaked it past `SNAPSHOT_LIMIT` — 9 payloads for a limit of
+8), and the reverse case, metadata with no payload, is still absent. Kept proved by two
+breaks in `tests/mutations/guards.json` — `the-recovery-list-goes-back-to-being-index-driven`
+and `a-missing-meta-json-stops-being-caught` — both watched go red. The class is not in
+the engine snapshot, so no version bump. Written as `unittest.TestCase` rather than bare
+pytest functions because the guards spec drives them with `unittest -v`, which does not
+collect module-level functions.
+
+**The correction.** The paragraph above says *"a pupil whose session died opens recovery,
+is told there is nothing to recover"*. That is not reachable today: **`AutosaveRepository`
+has no caller in `src/`.** `grep -rn -i autosave src/` returns only
+`ProjectActions.flush_autosave` / `recover_autosave`, and both go to the SQLite
+`ProjectRepository` — `session.flush()` and `repository.snapshots(project_id)` — not to
+this class. The Time Machine reads the database too. So the bug was real in the code and
+the consequence was not: this is a component built and tested but never wired in, which
+is a different (and milder) thing than a live failure in front of a child, and the
+finding should have said so. The write-ordering hazard is worth fixing before it *is*
+wired in, but nobody has lost work to it.
 
 ## F19 is bounded: the *primary* save path does not share its shape
 
