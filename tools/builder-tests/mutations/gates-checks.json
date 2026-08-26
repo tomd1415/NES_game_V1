@@ -1,12 +1,72 @@
 {
   "name": "builder gates (check-level)",
-  "why": "The check-level half of the builder gates. Every break here is decided before the first suite spawns, so it runs with RUNALL_CHECKS_ONLY=1: 9 seconds instead of 11.4 minutes, which is what makes proving these affordable at all (measured 2026-08-14 — the full spec at 14 runs is 2.7 hours). Split from gates.json by a real property, not by taste: a break belongs here if its expected assertion is a check or invariant, and in gates.json if it needs a suite to run — `startserver-preflight-removed` is the current example of the latter. If you add a break whose expectation is a `suite X` line, it goes in gates.json or it will never be satisfied here.",
+  "why": "The check-level half of the builder gates: every break here is decided before the first suite spawns, so the spec runs with RUNALL_CHECKS_ONLY=1 — seconds instead of the ~11 minutes a full builder run costs. That gap is the whole point. A gate that is expensive to verify is a gate nobody verifies, and these exist precisely because prose decays; LESSONS.md is explicit that hand mutation is a tooling gap rather than a discipline one.\n\nTHE SPLIT ENFORCES ITSELF, which is why it is a real property and not a convention someone has to remember. This spec’s baseline holds only check and invariant names; gates.json runs with RUNALL_SUITES_ONLY=1 and its baseline holds only \"suite X\" names. mutate refuses a break whose `expect` names an assertion the baseline does not have, and it refuses it before editing anything — so a break filed into the wrong spec is rejected by name rather than quietly passing. Proved in both directions on 2026-08-26 before this was written down.\n\nRule of thumb, if you would rather not reason it out: expectation starts with \"suite \" → gates.json. Anything else → here.\n\nLabels reach a spec through mutate-report.sh, which rewrites \": \" to \" - \" because mutate’s FAIL regex stops at the first colon. That is why an expectation here reads \"invariant - X\" while run-all.mjs prints \"invariant: X\".",
   "command": [
     "bash",
     "-c",
     "RUNALL_CHECKS_ONLY=1 bash tools/builder-tests/mutate-report.sh"
   ],
   "breaks": [
+    {
+      "id": "e2e-port-reclaimed",
+      "file": "tools/builder-tests/asm-corpus.mjs",
+      "find": "const PORT_C = 18895, PORT_A = 18791;",
+      "replace": "const PORT_C = 18790, PORT_A = 18791;",
+      "expect": [
+        "no builder-test suite claims the Studio E2E port"
+      ],
+      "note": "A builder suite claiming the Studio E2E port fails SILENTLY: playground_server.py finds a working server already there, prints \"already running -- nothing to do\", exits 0, and the suite runs green against a server it never configured. The guard reads the port out of playwright.config.js rather than hardcoding it, so this stays honest if the E2E port moves."
+    },
+    {
+      "id": "engine-version-constants-desynced",
+      "file": "tools/tile_editor_web/engine-version.js",
+      "find": "global.NES_ENGINE_VERSION = ",
+      "replace": "global.NES_ENGINE_VERSION = 9",
+      "expect": [
+        "engine version constants agree"
+      ],
+      "note": "The two engine-version constants must agree; bumping one and not the other is the classic half-done ritual. VERSION-AGNOSTIC ON PURPOSE: the anchor stops before the digits and the break prefixes a 9, so 79 becomes 979 and the mismatch holds whatever the current version is. This break previously read `= 78;` literally and died the day v79 shipped, taking the whole spec with it — mutate rejects a spec whose anchor no longer matches."
+    },
+    {
+      "id": "engine-version-bumped-without-snapshot",
+      "file": "tools/engines/ENGINE_VERSION",
+      "find": "\n",
+      "replace": "9\n",
+      "expect": [
+        "engine version constants agree",
+        "engine snapshot matches live sources",
+        "invariant - mutation specs name the current engine snapshot"
+      ],
+      "note": "Bumping ENGINE_VERSION without running snapshot-engine.mjs leaves no frozen engine for the new version, so a game authored against it can never be rebuilt with the engine it was authored for. Also version-agnostic: the file holds only the number and a newline, so appending a digit to it is the whole edit. It trips three assertions rather than two because the third derives its expected version from this same file — that is the guard doing its job, not noise."
+    },
+    {
+      "id": "snapshot-manifest-sha-corrupted",
+      "file": "tools/engines/v79/manifest.json",
+      "find": "d0ee844f61eff7075950fa32daff3251ad375452",
+      "replace": "0000000000000000000000000000000000000000",
+      "expect": [
+        "engine snapshot matches live sources"
+      ],
+      "note": "A frozen snapshot whose manifest disagrees with the committed sources is worse than no snapshot: it claims to be a faithful freeze of an engine it is not. THIS IS THE ONE BREAK THAT CANNOT BE MADE VERSION-AGNOSTIC — snapshot-engine.mjs --check derives its directory from ENGINE_VERSION, so a manifest under any other version is not the file it reads. `invariant: mutation specs name the current engine snapshot` exists to catch this path going stale on the next bump."
+    },
+    {
+      "id": "shipped-js-syntax-broken",
+      "file": "tools/tile_editor_web/studio-world.js",
+      "find": "function countAttrConflicts(bg, ctx) {",
+      "replace": "function countAttrConflicts(bg, ctx) { (((",
+      "expect": [
+        "syntax studio-world.js"
+      ],
+      "note": "Every non-vendored .js under tools/tile_editor_web is node --check'd, enumerated from disk rather than hand-listed. studio-world.js is the probe because it is a Studio mode module — the half of the tree that was silently unchecked until 2026-08-07."
+    },
+    {
+      "id": "frozen-snapshot-copy-edited",
+      "file": "tools/engines/v79/tools/tile_editor_web/builder-modules.js",
+      "find": " * Builder module catalogue — chunk 1.",
+      "replace": " * Builder module catalogue — chunk 1. MUTATION",
+      "expect": [],
+      "expect_none_because": "--check compares git HEAD against manifest.json, so an edit to the frozen snapshot COPY under the current tools/engines/v<N>/ is invisible to it by design. This is the one limitation found when these gates were mutated by hand on 2026-08-06, and it is recorded here as a declared-uncaught break so it cannot be quietly forgotten or mistaken for a gap nobody noticed. The same property is why a green snapshot check does NOT mean the working tree is clean."
+    },
     {
       "id": "builder-guide-coverage-desynced",
       "file": "docs/guides/BUILDER_GUIDE.md",

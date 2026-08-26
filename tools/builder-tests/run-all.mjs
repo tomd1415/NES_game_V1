@@ -47,8 +47,42 @@ const WEB  = path.join(ROOT, 'tools', 'tile_editor_web');
 const STEP = path.join(ROOT, 'steps', 'Step_Playground');
 const TEMPLATE = path.join(WEB, 'builder-templates', 'platformer.c');
 
+// The two half-run modes. Each exists to make a mutation spec affordable, and
+// each is a silent-success hazard handled the same loud way (announced on
+// entry, never the plain green headline, a closing line stating what did NOT
+// run). See the CHECKS_ONLY block near the suite loop for the full reasoning.
+//
+// SUITES_ONLY is the mirror of CHECKS_ONLY and its purpose is narrower than it
+// looks: it is what makes the gates.json / gates-checks.json split enforce
+// ITSELF. mutate refuses a break whose `expect` names an assertion the baseline
+// does not contain. Under SUITES_ONLY the baseline holds only `suite X` names,
+// under CHECKS_ONLY only check and invariant names — so a break filed into the
+// wrong spec is rejected by name before anything is edited, instead of quietly
+// passing. Without this mode the full run prints both kinds and the split would
+// be enforced by nothing but a sentence in a README.
+const CHECKS_ONLY = process.env.RUNALL_CHECKS_ONLY === '1';
+const SUITES_ONLY = process.env.RUNALL_SUITES_ONLY === '1';
+if (CHECKS_ONLY && SUITES_ONLY) {
+  console.error('RUNALL_CHECKS_ONLY=1 and RUNALL_SUITES_ONLY=1 together would run ' +
+    'nothing at all and exit 0 — the exact shape both flags are written to avoid. ' +
+    'Set one or neither.');
+  process.exit(2);
+}
+
+let checksSkipped = 0;
+if (SUITES_ONLY) {
+  console.log('⚠️  RUNALL_SUITES_ONLY=1 — skipping every check and invariant. ' +
+    'This is NOT a full run and must not be reported as one.');
+}
+
 // --- Step 1: JS syntax check -------------------------------------------
 function check(label, fn) {
+  // Skipped checks print NOTHING, deliberately: a "SKIP" line would put the
+  // assertion's name back into the output, and mutate's name-based rejection —
+  // the whole point of the mode — keys off names being absent. They are counted
+  // instead, so the closing line can say how many did not run without anyone
+  // maintaining that number by hand.
+  if (SUITES_ONLY) { checksSkipped++; return true; }
   process.stdout.write(label + ' ... ');
   try {
     fn();
@@ -113,6 +147,47 @@ check('engine version constants agree', () => {
 check('engine snapshot matches live sources', () => {
   const r = spawnSync('node', [path.join(ROOT, 'scripts', 'snapshot-engine.mjs'), '--check'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || '').trim());
+}) || (anyFail = true);
+
+// A mutation spec that names a frozen snapshot directory pins the engine
+// version into a file nobody rereads on a bump — and mutate refuses to run a
+// spec whose anchor has stopped matching, so the whole spec dies rather than
+// one break. That is exactly what happened here: v79 shipped on 2026-08-20 and
+// gates.json kept pointing at tools/engines/v78/, so from that moment the
+// builder gates could not be proved at all and nothing said so until someone
+// tried. Two of the three stale breaks were rewritten to be version-agnostic;
+// this covers the one that cannot be, because --check derives its directory
+// from ENGINE_VERSION and so the path must name the current version to mean
+// anything.
+//
+// Enumerated from disk, not from a list of spec filenames: a spec added later
+// is covered the day it lands.
+check('invariant: mutation specs name the current engine snapshot', () => {
+  const dir = path.join(__dirname, 'mutations');
+  const specs = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort();
+  if (specs.length === 0) {
+    throw new Error(`no .json specs under ${dir} — wrong path, or the glob broke`);
+  }
+  const cur = fs.readFileSync(path.join(ROOT, 'tools', 'engines', 'ENGINE_VERSION'), 'utf8').trim();
+  const bad = [];
+  for (const f of specs) {
+    // Only `breaks[].file` — the paths mutate actually opens. Scanning the raw
+    // text would trip on prose that mentions an old version for a historical
+    // reason, and a guard that fires when nothing is wrong gets called flaky
+    // and then deleted, taking the coverage with it.
+    const spec = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    for (const b of spec.breaks || []) {
+      const m = /^tools\/engines\/v(\d+)\//.exec(b.file || '');
+      if (m && m[1] !== cur) {
+        bad.push(`${f} break "${b.id}": ${b.file} names v${m[1]}, current engine is v${cur}`);
+      }
+    }
+  }
+  if (bad.length) {
+    throw new Error(bad.join('\n  ') +
+      '\n  Repoint the anchor at the current snapshot, or make the break ' +
+      'version-agnostic. Until then `mutate` rejects the whole spec, not one break.');
+  }
 }) || (anyFail = true);
 
 // Port hygiene: the Studio E2E server and the builder suites draw from the same
@@ -1085,7 +1160,6 @@ check('builder-test suites found', () => {
 // it. So the mode is loud in three places: it says so when it starts, it never
 // prints the green line, and its headline states that ZERO suites ran. Anything
 // consuming the output for a pass/fail verdict sees a different sentence.
-const CHECKS_ONLY = process.env.RUNALL_CHECKS_ONLY === '1';
 if (CHECKS_ONLY) {
   console.log('');
   console.log('⚠️  RUNALL_CHECKS_ONLY=1 — skipping all ' + suites.length +
@@ -1120,6 +1194,12 @@ if (anyFail) {
   // familiar headline can mistake this for a full pass.
   console.log('⚠️  Checks and invariants pass — but 0 of ' + suites.length +
     ' suites ran (RUNALL_CHECKS_ONLY=1). NOT a full regression pass.');
+} else if (SUITES_ONLY) {
+  // Same treatment in the mirror direction, and the count is the number of
+  // check() calls actually reached rather than a figure written here — the last
+  // hardcoded total in this project's docs went stale inside a week.
+  console.log('⚠️  Suites pass — but 0 of ' + checksSkipped +
+    ' checks and invariants ran (RUNALL_SUITES_ONLY=1). NOT a full regression pass.');
 } else {
   console.log('✅ All Builder regression checks pass.');
 }

@@ -270,8 +270,8 @@ by what it expects, not by taste**:
 # i.e. decided before the first suite spawns. Runs with RUNALL_CHECKS_ONLY=1.
 mutate tools/builder-tests/mutations/gates-checks.json
 
-# slow (~11 min per break): breaks whose expected assertion is a `suite X` line
-# and therefore need the suites to actually run.
+# slow (~11 min per run): breaks whose expected assertion is a `suite X` line
+# and therefore need the suites to actually run. Runs with RUNALL_SUITES_ONLY=1.
 mutate tools/builder-tests/mutations/gates.json
 
 # the two golden ROM hashes (real cc65 builds).
@@ -288,14 +288,26 @@ Counts are deliberately not written here. They were, and went stale the same wee
 
 **Why the builder specs are split.** A full `run-all.mjs` is ~11 minutes, so proving
 a dozen check-level gates through it costs an afternoon, and a gate that expensive to
-verify does not get verified. `RUNALL_CHECKS_ONLY=1` skips the suites — 9 seconds —
-and every gate decided before the first suite spawns can be proved that way. File a
-break in the wrong half and it fails loudly with *"names an assertion the suite does
-not have"* rather than passing quietly, which is what keeps the split honest.
+verify does not get verified. `RUNALL_CHECKS_ONLY=1` skips the suites — seconds
+instead of minutes — and every gate decided before the first suite spawns can be
+proved that way. Measured before the split: the seven breaks then in `gates.json`
+cost about 80 minutes, and the six of them that were check-level now cost about four.
 
-That mode is a silent-success hazard and is built as one: it announces itself, never
-prints the green headline, and its closing line states that **0 of N suites ran**. If
-you ever see that sentence in something reported as a full pass, it is not one.
+**The split enforces itself, in both directions.** `gates-checks.json` runs under
+`RUNALL_CHECKS_ONLY=1`, so its baseline holds only check and invariant names;
+`gates.json` runs under `RUNALL_SUITES_ONLY=1`, so its baseline holds only `suite X`
+names. `mutate` refuses a break whose `expect` names an assertion the baseline does
+not have — and refuses it *before* editing anything — so a break filed into the wrong
+spec fails loudly with *"names an assertion the suite does not have"* instead of
+passing quietly. That is why `RUNALL_SUITES_ONLY` exists: without it the full run
+prints both kinds of name, and the split would be enforced by nothing but this
+paragraph. Proved in both directions on 2026-08-26 rather than assumed.
+
+Both modes are silent-success hazards and are built as such: each announces itself,
+neither prints the green headline, and each closing line states what did **not** run
+(*0 of N suites*, or *0 of N checks and invariants*). If you ever see one of those
+sentences in something reported as a full pass, it is not one. Setting both at once
+runs nothing at all, so `run-all.mjs` refuses it and exits 2.
 
 Run them **alone** — they edit source in place, so anything else reading the tree at
 the same time is reading deliberately broken code — and restart the dev server on
@@ -303,8 +315,19 @@ the same time is reading deliberately broken code — and restart the dev server
 
 ### Writing a break that actually proves something
 
-Four traps, each of which produced a wrong conclusion here before it was understood:
+Five traps, each of which produced a wrong conclusion here before it was understood:
 
+- **An anchor that quotes a version number dies at the next bump — and takes the
+  whole spec with it.** mutate refuses a spec whose anchor no longer matches, so one
+  stale break disables every break beside it. Three of `gates.json`'s seven quoted
+  `78`; v79 shipped on 2026-08-20 and from that moment the builder gates could not be
+  proved at all, with nothing saying so until someone tried on the 26th. Two were
+  rewritten to be version-agnostic — anchor on `global.NES_ENGINE_VERSION = ` and
+  prefix a digit, rather than quoting the digits. The third cannot be: the snapshot
+  check derives its directory from `ENGINE_VERSION`, so the manifest path must name
+  the current version to mean anything, and `invariant: mutation specs name the
+  current engine snapshot` now enumerates every spec's `breaks[].file` and fails the
+  9-second run if one has fallen behind.
 - **The anchor must match exactly once.** mutate refuses zero or many, because a
   break landing in more places than it claims makes a red assertion evidence about
   something other than the guard named. Check with `grep -Fc` *on the exact string
@@ -329,8 +352,8 @@ Each break names the assertion it expects to turn red, and the run fails if that
 assertion stays green, if nothing anywhere goes red, if the anchor matched zero times
 or more than once, if the baseline was not green first, or if a file does not come
 back byte-identical. A break that genuinely should not be caught is allowed but must
-carry `expect_none_because` — `gates.json` uses that for the one real limitation, the
-snapshot check's blindness to edits of its own frozen copies.
+carry `expect_none_because` — `gates-checks.json` uses that for the one real
+limitation, the snapshot check's blindness to edits of its own frozen copies.
 
 **`mutate-report.sh` is why this works at all.** `mutate` parses unittest output and
 bash `PASS name` / `FAIL name`; `run-all.mjs` prints `<label> ... OK`, and **not one

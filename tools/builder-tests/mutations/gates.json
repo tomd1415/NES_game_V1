@@ -1,60 +1,15 @@
 {
-  "name": "builder gates",
-  "why": "Six guards were proved by hand on 2026-08-06/07 and the results written up as prose in tools/builder-tests/README.md. Prose decays, and it cannot detect a guard that stops working later. LESSONS.md §5 is explicit that hand mutation is a tooling gap rather than a discipline one: six steps to perform correctly every time, with no feedback when one is skipped. This is that record made executable.",
-  "command": ["bash", "tools/builder-tests/mutate-report.sh"],
+  "name": "builder gates (suite-level)",
+  "why": "The suite-level half of the builder gates. A break belongs here if the assertion it expects to turn red is a `suite X` line — something only a spawned suite can produce. Everything decided before the first suite spawns lives in gates-checks.json, which runs in seconds; this half runs the real suites and costs about 11 minutes per run, so it stays small on purpose.\n\nThe split is not a convention anyone has to remember. This spec runs with RUNALL_SUITES_ONLY=1, so its baseline contains only `suite X` names; gates-checks.json runs with RUNALL_CHECKS_ONLY=1, so its baseline contains only check and invariant names. mutate refuses a break whose `expect` names an assertion the baseline does not have, and it refuses it BEFORE editing anything. A break filed into the wrong spec therefore fails loudly and instantly instead of quietly passing.\n\nWhy that mattered enough to build: before the split every break here ran the full builder suite, so proving the seven gates cost about 80 minutes. A gate that is expensive to verify is a gate nobody verifies, and these exist precisely because prose decays.",
+  "command": ["bash", "-c", "RUNALL_SUITES_ONLY=1 bash tools/builder-tests/mutate-report.sh"],
   "breaks": [
-    {
-      "id": "e2e-port-reclaimed",
-      "file": "tools/builder-tests/asm-corpus.mjs",
-      "find": "const PORT_C = 18895, PORT_A = 18791;",
-      "replace": "const PORT_C = 18790, PORT_A = 18791;",
-      "expect": ["no builder-test suite claims the Studio E2E port"]
-    },
-    {
-      "id": "engine-version-constants-desynced",
-      "file": "tools/tile_editor_web/engine-version.js",
-      "find": "global.NES_ENGINE_VERSION = 78;",
-      "replace": "global.NES_ENGINE_VERSION = 79;",
-      "expect": ["engine version constants agree"]
-    },
-    {
-      "id": "engine-version-bumped-without-snapshot",
-      "file": "tools/engines/ENGINE_VERSION",
-      "find": "78",
-      "replace": "79",
-      "expect": [
-        "engine version constants agree",
-        "engine snapshot matches live sources"
-      ]
-    },
-    {
-      "id": "snapshot-manifest-sha-corrupted",
-      "file": "tools/engines/v78/manifest.json",
-      "find": "dca93d97f6ec4b6a29d887215e76baf059cfc79f",
-      "replace": "0000000000000000000000000000000000000000",
-      "expect": ["engine snapshot matches live sources"]
-    },
     {
       "id": "startserver-preflight-removed",
       "file": "tools/builder-tests/lib/render-harness.mjs",
       "find": "  if (await healthOk(port)) {",
       "replace": "  if (false && await healthOk(port)) {",
-      "expect": ["suite harness-startserver.mjs"]
-    },
-    {
-      "id": "shipped-js-syntax-broken",
-      "file": "tools/tile_editor_web/studio-world.js",
-      "find": "function countAttrConflicts(bg, ctx) {",
-      "replace": "function countAttrConflicts(bg, ctx) { (((",
-      "expect": ["syntax studio-world.js"]
-    },
-    {
-      "id": "frozen-snapshot-copy-edited",
-      "file": "tools/engines/v78/tools/tile_editor_web/builder-modules.js",
-      "find": " * Builder module catalogue — chunk 1.",
-      "replace": " * Builder module catalogue — chunk 1. MUTATION",
-      "expect": [],
-      "expect_none_because": "--check compares git HEAD against manifest.json, so an edit to the frozen snapshot COPY under tools/engines/v78/ is invisible to it by design. This is the one limitation found when these gates were mutated by hand on 2026-08-06, and it is recorded here as a declared-uncaught break so it cannot be quietly forgotten or mistaken for a gap nobody noticed. The same property is why a green snapshot check does NOT mean the working tree is clean."
+      "expect": ["suite harness-startserver.mjs"],
+      "note": "startServer() refuses to reuse a server it did not configure: it health-checks the port first and fails rather than silently running the suite against someone else's process. Disabling the preflight is invisible to every check — only harness-startserver.mjs actually exercises it, which is why this break is the one that needs a suite to run."
     }
   ]
 }
