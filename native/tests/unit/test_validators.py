@@ -5,9 +5,11 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from nes_studio.core import validators as validators_module  # noqa: E402
 from nes_studio.core.validators import (  # noqa: E402
     has_errors,
     scanline_load,
@@ -269,3 +271,47 @@ class ScanlineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BrokenValidatorTests(unittest.TestCase):
+    """`validate()` swallows a throwing check. It must not swallow it *silently*.
+
+    Skipping is right: one broken check must never stop a child building their game,
+    and the parity contract catches a validator that throws on the corpus states. What
+    was uncovered is a validator that throws only on a real project — the pupil quietly
+    loses a warning and nobody, including us, ever hears about it.
+    """
+
+    LOGGER = "nes_studio.core.validators"
+
+    @staticmethod
+    def _exploding(_state: dict) -> None:
+        raise ZeroDivisionError("this check is broken")
+
+    def test_a_throwing_check_is_skipped_but_the_failure_is_logged(self) -> None:
+        broken = (*validators_module.VALIDATORS, self._exploding)
+        with mock.patch.object(validators_module, "VALIDATORS", broken):
+            with self.assertLogs(self.LOGGER, level="WARNING") as captured:
+                problems = validate(
+                    state(builder={"modules": {"players": {"submodules": {"player1": {"enabled": True}}}}})
+                )
+        self.assertIn(
+            "no-player-role",
+            [problem.id for problem in problems],
+            "the other checks must still run — skipping is the point",
+        )
+        logged = "\n".join(captured.output)
+        self.assertIn("_exploding", logged, "the log must name the check that failed")
+        self.assertIn("ZeroDivisionError", logged, "and carry the traceback")
+
+    def test_a_throwing_scanline_check_is_logged_too(self) -> None:
+        with mock.patch.object(validators_module, "scanline_problem", self._exploding):
+            with self.assertLogs(self.LOGGER, level="WARNING") as captured:
+                problems = validate(state())
+        self.assertEqual(problems, [])
+        self.assertIn("scanline", "\n".join(captured.output))
+
+    def test_nothing_is_logged_when_every_check_behaves(self) -> None:
+        with self.assertNoLogs(self.LOGGER, level="WARNING"):
+            validate(state())
+

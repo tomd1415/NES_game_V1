@@ -12,6 +12,11 @@ mutate tests/mutations/guards.json --only snapshot-include-list-removed
 Run from the repository root (the tool mutates paths relative to `$MUTATE_ROOT`, which
 defaults to the working directory).
 
+**`guards.json` takes about two minutes** (22 breaks, ~5s each: every break re-runs the
+whole guard command). Measured 2026-08-26. It is not hung — it prints each break as it
+finishes. A 2-minute shell timeout will kill it mid-break; the tool restores files in a
+`finally`, but check `git status` if you do interrupt it.
+
 ## Why this is a tool and not a checklist
 
 Every guard on this branch was originally proved red by hand: edit a file, clear the

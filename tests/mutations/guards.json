@@ -4,7 +4,7 @@
   "command": [
     "bash",
     "-c",
-    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree tests.unit.test_friendly_build_error tests.unit.test_registries_are_complete tests.unit.test_autosave"
+    "cd native && PYTHONPATH=src QT_QPA_PLATFORM=offscreen /root/.local/pipx/venvs/pytest/bin/python -m unittest -v tests.contract.test_phase0_starter_fixtures tests.unit.test_fixtures_are_tracked tests.contract.test_codegen_stays_snapshottable tests.unit.test_pyside_import_guards tests.contract.test_validator_parity tests.unit.test_icons tests.contract.test_baseline_manifest tests.contract.test_duplicated_helpers_agree tests.unit.test_friendly_build_error tests.unit.test_registries_are_complete tests.unit.test_autosave tests.unit.test_validators"
   ],
   "breaks": [
     {
@@ -186,6 +186,27 @@
       "count": 1,
       "expect": [
         "test_a_payload_whose_metadata_never_landed_is_still_offered"
+      ]
+    },
+    {
+      "id": "a-swallowed-validator-goes-quiet-again",
+      "file": "native/src/nes_studio/core/validators.py",
+      "find": "            _log_broken_check(check)\n",
+      "replace": "",
+      "count": 1,
+      "expect": [
+        "test_a_throwing_check_is_skipped_but_the_failure_is_logged"
+      ]
+    },
+    {
+      "id": "the-broken-check-log-drops-below-warning",
+      "file": "native/src/nes_studio/core/validators.py",
+      "find": "_LOG.warning(\"validator %s raised and was skipped\"",
+      "replace": "_LOG.debug(\"validator %s raised and was skipped\"",
+      "count": 1,
+      "expect": [
+        "test_a_throwing_check_is_skipped_but_the_failure_is_logged",
+        "test_a_throwing_scanline_check_is_logged_too"
       ]
     }
   ]

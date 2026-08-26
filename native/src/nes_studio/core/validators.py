@@ -22,6 +22,8 @@ dedup, no grouping — the parity test compares lists.
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -68,6 +70,9 @@ _JUMP_TO_MODE: tuple[tuple[str, str], ...] = (
     ("palette", "PALS"),
     ("pal", "PALS"),
 )
+
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -1208,6 +1213,24 @@ def scanline_problem(state: dict) -> Problem | None:
 # ---- the entry point -----------------------------------------------------
 
 
+def _log_broken_check(check: object, described: str = "") -> None:
+    """Say that a check was skipped, because skipping it is otherwise undetectable.
+
+    `validate()` swallows anything a check raises, and that is deliberate: one broken
+    validator must never stop a child building their game. But swallowing it *silently*
+    means a validator that throws only on real project states costs the pupil a warning
+    that nobody — including us — ever hears about. The parity contract only exercises
+    the corpus states, so it cannot see that class of failure.
+
+    `logging` and not a `Problem`: the pupil is not the audience for "our code broke",
+    and an extra `Problem` would put the native validators out of parity with the web's,
+    which emits nothing here.
+    """
+
+    name = described or getattr(check, "__name__", None) or repr(check)
+    _LOG.warning("validator %s raised and was skipped", name, exc_info=True)
+
+
 def validate(state: dict) -> list[Problem]:
     """Every problem with the project, in the web's order.
 
@@ -1220,6 +1243,7 @@ def validate(state: dict) -> list[Problem]:
         try:
             problem = check(state)
         except Exception:  # noqa: BLE001 - a broken check must not break the app
+            _log_broken_check(check)
             continue
         if problem is not None:
             problems.append(problem)
@@ -1227,6 +1251,7 @@ def validate(state: dict) -> list[Problem]:
     try:
         scanline = scanline_problem(state)
     except Exception:  # noqa: BLE001
+        _log_broken_check(scanline_problem, "the scanline check")
         scanline = None
     if scanline is not None:
         problems.append(scanline)
