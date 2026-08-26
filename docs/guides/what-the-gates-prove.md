@@ -118,4 +118,4 @@ next thing worth doing.
 
 Findings F*n* are in
 [`../handoffs/2026-08-06-overnight-review-findings.md`](../handoffs/2026-08-06-overnight-review-findings.md);
-the reasoning behind the mistakes is in [`LESSONS_LEARNT.md`](LESSONS_LEARNT.md).
+the reasoning behind the mistakes is in [`../LESSONS-LEARNT.md`](../LESSONS-LEARNT.md).

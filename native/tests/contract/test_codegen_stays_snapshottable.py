@@ -9,7 +9,7 @@ itself.
 Nothing enforced that. If someone inlines a delegation back into the server for
 convenience, the snapshot gate silently narrows: the inlined code changes ROM
 output and no gate goes red, which is exactly the F7 blind spot the v76 bump
-closed. LESSONS_LEARNT already records the general form of this trap --
+closed. LESSONS-LEARNT already records the general form of this trap --
 
     "the contract holds by construction, because both targets delegate to the
     same function." That may be true today, and it is not a test.

@@ -17,7 +17,7 @@ rewrite history ([decided]).
   `python3 -m pytest` fails here by design — pipx exposes only the console script —
   and that failure was read as "not installed". Nine days of native verification
   were skipped on the strength of it. Use `command -v <tool>`, not `python3 -m`.
-  Written up in [`docs/guides/LESSONS_LEARNT.md`](../guides/LESSONS_LEARNT.md).
+  Written up in [`docs/LESSONS-LEARNT.md`](../LESSONS-LEARNT.md).
 
 ## Established (fact ← evidence)
 - **The v64–v75 codegen port is complete.** All 20 hunks of

@@ -190,7 +190,7 @@ whereas any amount of scanning covers whatever you remembered to scan.
 Related: [`2026-08-06-overnight-review-findings.md`](2026-08-06-overnight-review-findings.md)
 (F11 and the gate findings), the close-out plan's merge steps in
 [`../plans/current/2026-08-06-close-out-native-branch.md`](../plans/current/2026-08-06-close-out-native-branch.md),
-and [`../guides/LESSONS_LEARNT.md`](../guides/LESSONS_LEARNT.md).
+and [`../LESSONS-LEARNT.md`](../LESSONS-LEARNT.md).
 
 ---
 
@@ -341,6 +341,7 @@ Take `main`'s wording on the conflicted hunk when merging.
 ```
 main:        docs/LESSONS-LEARNT.md        249 lines, created by 6f7b079
 this branch: docs/guides/LESSONS_LEARNT.md 600+ lines, created by 6ba5496
+             (merged into main's file and deleted on 2026-08-27 — see below)
 ```
 
 Different directory, different separator (`-` vs `_`), created independently within

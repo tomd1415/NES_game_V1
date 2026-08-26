@@ -82,7 +82,7 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
   `$PATH`: `cd native && QT_QPA_PLATFORM=offscreen pytest -q`. It is a pipx install,
   so `python3 -m pytest` will *never* work here and says nothing about availability;
   that exact confusion once had this suite declared unrunnable for nine days
-  (`docs/guides/LESSONS_LEARNT.md`, first entry).
+  (`docs/LESSONS-LEARNT.md` §1, *"The tool is not installed" is a claim*).
 
   Count: **204 passed, 161 skipped** here (no Qt). The often-quoted "404 tests, ~5
   min" was measured with the full venv and is unconfirmed since — see
@@ -157,7 +157,7 @@ Start at [`docs/plans/current/2026-07-14-native-build-plan.md`](docs/plans/curre
   whether that was intended is an owner question. Studio E2E still unrun (no
   Chromium). See
   [`docs/handoffs/2026-07-28-native-main-integration.md`](docs/handoffs/2026-07-28-native-main-integration.md)
-  and [`docs/guides/LESSONS_LEARNT.md`](docs/guides/LESSONS_LEARNT.md). The
+  and [`docs/LESSONS-LEARNT.md`](docs/LESSONS-LEARNT.md). The
   ordered route from here to a defensible merge, with acceptance checks and the
   two owner decisions marked, is
   [`docs/plans/current/2026-08-06-close-out-native-branch.md`](docs/plans/current/2026-08-06-close-out-native-branch.md).

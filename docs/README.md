@@ -32,7 +32,7 @@ Repository-wide contribution, ownership and cross-team review rules live in
   actually been watched go red. On this branch four separate gates were green for the
   wrong reason.
 - **About to trust a claim in one of these docs?** Read
-  [`guides/LESSONS_LEARNT.md`](guides/LESSONS_LEARNT.md) first. It records the
+  [`LESSONS-LEARNT.md`](LESSONS-LEARNT.md) first. It records the
   things this project has already believed and been wrong about — a tool reported
   absent that was installed all along, a contract test whose assertion had never
   executed — and the one check that would have settled each one.

@@ -4,7 +4,7 @@ Self-directed pass, 01:00–03:00 BST, no decisions available. Documentation-onl
 changes were committed (`6ba5496`, `8eb535b`); **everything below that touches code
 is described, not done.**
 
-Companion documents: [`../guides/LESSONS_LEARNT.md`](../guides/LESSONS_LEARNT.md)
+Companion documents: [`../LESSONS-LEARNT.md`](../LESSONS-LEARNT.md)
 (why these happened), [`2026-07-28-native-main-integration.md`](2026-07-28-native-main-integration.md)
 (the thread this came out of).
 
@@ -1764,7 +1764,7 @@ The tell was already in the project's own instructions:
 
 > **Adding a native mode** = a new class in `ui/modes/`, added to `MODE_CLASSES`.
 
-A documented manual step with no gate is the exact shape `LESSONS_LEARNT` keeps
+A documented manual step with no gate is the exact shape `LESSONS-LEARNT` keeps
 recording. It has not bitten yet because the modes were all added in one push.
 
 **Test to add** (not applied — code, and the standing rule for unattended work is

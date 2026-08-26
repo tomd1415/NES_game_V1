@@ -38,7 +38,7 @@ were authored for.
 > * **An uncommitted engine edit cannot make `--check` go red.** Run it after
 >   committing, not before, or it blesses work it never looked at. (Verified by
 >   deliberately breaking it three ways on 2026-08-06 — see
->   [`docs/guides/LESSONS_LEARNT.md`](../../docs/guides/LESSONS_LEARNT.md).)
+>   [`docs/LESSONS-LEARNT.md`](../../docs/LESSONS-LEARNT.md).)
 >
 > **⚠ What a snapshot covers changed at v76 — two eras, not comparable.**
 >
