@@ -170,6 +170,7 @@ references the old name, this is your lookup table.
 | -------- | -------------- |
 | `docs/plans/current/2026-04-26-fixes-and-features.md` | The post-Phase-4 plan: fixes the 27 outstanding pupil-reported items in tiered order. |
 | `docs/plans/current/2026-07-05-studio-redesign.md` | The UI/UX redesign execution tracker — what has landed (Phases 0–3) and the remaining backlog, cross-linked to `docs/design/`. |
+| `docs/plans/current/2026-08-27-port-forward-main-engine.md` | How this branch takes `main`'s four engine advances (v76–v79) one version at a time, and why that is not a merge. Names the two decisions the owner has to make. |
 
 ### Feedback / changelog (now in `docs/feedback/` and `docs/changelog/`)
 

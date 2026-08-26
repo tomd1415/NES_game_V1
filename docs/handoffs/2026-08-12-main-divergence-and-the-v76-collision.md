@@ -612,10 +612,20 @@ and has since added:
 
 | `main`'s addition | in `nes_studio_core`? |
 | --- | --- |
-| `_scene_is_perroom` fallbacks (v75 per-room scene instances) | **no** |
 | `_pd_oam_fits` / the item **#37** OAM-cursor guard (v76) | **no** |
-| `nes_asm_pdraw` gating | **no** |
-| `BW_P1_OAM_FITS` | **no** |
+| `BW_P1_OAM_FITS` (the template's half of #37) | **no** |
+| `_scene_is_perroom`'s **v79** restriction (y ≤ 238, x ignored) | **no** — ours is the v75 form |
+| per-room fallbacks themselves (v75) | yes — `scene.scene_is_perroom` |
+| `nes_asm_pdraw` gating | yes — `AsmFeatures.player_draw` |
+
+> **Two rows of this table were wrong when it was published on 2026-08-14, and are
+> corrected above (2026-08-27).** I searched `nes_studio_core` for the server's spelling,
+> `_scene_is_perroom`, against a port whose entire purpose was renaming things as they
+> moved — §1's *"a search pattern narrower than the thing it searches for"*, committed
+> while writing up a merge abort. The conclusion below is unaffected and still holds; the
+> work it implies is smaller than the table made it look. The version-by-version
+> inventory is in
+> [`../plans/current/2026-08-27-port-forward-main-engine.md`](../plans/current/2026-08-27-port-forward-main-engine.md).
 
 Taking "ours" — the obvious resolution for an empty side — **silently drops `main`'s #37
 fix**, which is the shipped remedy for *"random mess on screen / the emulator froze for no
