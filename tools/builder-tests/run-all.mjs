@@ -104,6 +104,16 @@ check('engine snapshot matches live sources', () => {
   if (r.status !== 0) throw new Error((r.stderr || r.stdout || '').trim());
 }) || (anyFail = true);
 
+// Two branches must not publish DIFFERENT engines under the SAME version number.
+// Snapshots are immutable, so a collision cannot be repaired afterwards -- a project
+// stamped `engineVersion: 76` is then ambiguous about which engine built it. This
+// branch and `main` have collided three times; the checker asserts the colliding set is
+// EXACTLY the three recorded, so a fourth reddens and so does a resolved one.
+check('engine snapshot numbers do not collide with main', () => {
+  const r = spawnSync('node', [path.join(__dirname, 'lib', 'snapshot-collisions.mjs')], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error((r.stdout || '') + (r.stderr || ''));
+}) || (anyFail = true);
+
 // No suite may choose its own port; the runner assigns them (see Step 4). A doc note is
 // not a check -- this exact clash was described in prose for weeks and drifted anyway.
 check('no builder-test suite chooses its own port', () => {

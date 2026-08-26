@@ -67,6 +67,16 @@ were authored for.
 > versions — see
 > [`docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](../../docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md).
 
+> **That collision is now checked, not just described.** `main-manifests.json` records
+> the sha1 of every `vN/manifest.json` on `main` at a named commit, and
+> `tools/builder-tests/lib/snapshot-collisions.mjs` (run by `run-all.mjs` as *engine
+> snapshot numbers do not collide with main*) asserts the colliding set is **exactly**
+> `v76, v77, v78` — measured, not assumed: v1–v75 are byte-identical across the two
+> branches. A **fourth** collision reddens it, and so does a collision that has been
+> *resolved* without updating the record, so the list cannot quietly go stale after the
+> port-forward renumbers ours. Refresh with `--update` after fetching `main`, and read
+> the diff: a version moving from identical to colliding is an event.
+
 > Up to v75 the codegen that emits most of the ROM was **outside** the snapshot,
 > so two matching snapshots in that range say nothing about whether it changed.
 > Treat v1–v75 as records of the templates and cc65 project, not as full records

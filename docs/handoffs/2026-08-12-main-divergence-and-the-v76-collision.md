@@ -52,6 +52,24 @@ for r in origin/main HEAD; do
 done            # main -> 30, HEAD -> 41
 ```
 
+### It is a check now, and the number was three (2026-08-27)
+
+The paragraphs above were prose, and a note in a document is not a check. The colliding
+set is now **measured**: every `vN/manifest.json` on `main` at `538a3b9` is digested
+into `tools/engines/main-manifests.json`, and
+`tools/builder-tests/lib/snapshot-collisions.mjs` — wired into `run-all.mjs` as *engine
+snapshot numbers do not collide with main* — asserts the colliding set is exactly
+`v76, v77, v78`. **78 versions compared, 75 byte-identical.** So the fork really is at
+v75 and the damage really is three versions wide; both were previously asserted from
+memory of what each side had bumped.
+
+It is an exact list, both directions: a **fourth** collision fails it, and a collision
+that has been *resolved* fails it too, so the list cannot shrink silently once the
+port-forward renumbers ours. Seen to fail all four ways it can (new collision, resolved
+collision, a local version `main` has never published, and a record that shares no
+version numbers at all — that last exits **2**, because a scan that compared nothing
+must not look like a scan that found nothing wrong).
+
 ## What I would do about it
 
 **Renumber this branch's bump to `v79`, not `main`'s to anything.** The reasoning, in
