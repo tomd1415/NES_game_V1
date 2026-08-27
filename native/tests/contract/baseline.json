@@ -3,8 +3,8 @@
   "what_a_pass_means": "This manifest records what was verified, when, and by which command. A passing test_baseline_manifest means the RECORD is well-formed and tracks the live engine version. It does not re-run any of the evidence below, and it does not mean the product is correct.",
   "renamed_from": "baseline-v63.json",
   "rename_reason": "The old name asserted that the contents described engine v63. They no longer did: the file sat at engine_version 63 while the live engine reached 75, so test_manifest_tracks_the_live_engine_baseline failed for twelve versions (F6). A baseline that has to be renamed every engine bump will not be, so it is now version-neutral and carries the version as data.",
-  "engine_version": 80,
-  "repository_commit": "49ea483b413c81f6e9385124f26a626bacd1896f",
+  "engine_version": 82,
+  "repository_commit": "470707f052cdcd3a86c196f92c39b1d153ff943d",
   "captured_on": "2026-08-27",
   "scope": "studio_plus_legacy_union",
   "toolchain": {
@@ -20,19 +20,19 @@
       "status": "pass",
       "command": "node tools/builder-tests/run-all.mjs",
       "verified_on": "2026-08-27",
-      "notes": "111 suites, 0 failures, exit 0 (157 '... OK' lines in total: 111 suites plus the invariant checks) — re-run in full at v80, 7m25s. The 111th is render-p1-oam-cursor.mjs, ported from main with #37. No listener survived anywhere in the allocated range 18800-19132 afterwards and `git status` was empty. Run at v78 the same day was 110 suites in 8m26s, likewise clean; the earlier '154 invariant checks' figure is not restated here because it does not reconcile with the log and was not re-measured."
+      "notes": "113 suites, 0 failures, exit 0 — re-run in full at v82, 7m51s. The three suites beyond v78's 110 arrived with the port-forward: render-p1-oam-cursor.mjs (#37, v80), enemy-bump.mjs (#30, v81) and render-dialogue-noflash.mjs (#31, v82). No listener survived anywhere in the allocated range 18800-19138 afterwards and `git status` was empty. Earlier the same day: 110 suites at v78 in 8m26s and 111 at v80 in 7m25s, both clean."
     },
     "engine_snapshot": {
       "status": "pass",
       "command": "node scripts/snapshot-engine.mjs --check",
       "verified_on": "2026-08-27",
-      "notes": "Confirms the v80 snapshot matches HEAD, 41 of 41 files read back FROM HEAD (not merely present on disk — that is direction 3, added after F21). From v76 the snapshot includes tools/nes_studio_core (the ROM codegen); v1-v75 were taken without any Python and are not comparable. v80 is this branch's port of main's v76 (#37) — the numbers diverge, and tools/builder-tests/lib/snapshot-collisions.mjs asserts exactly which."
+      "notes": "Confirms the v82 snapshot matches HEAD, 41 of 41 files read back FROM HEAD (not merely present on disk — direction 3, added after F21). v80/v81/v82 are this branch's ports of main's v76/v77/v78; the numbers diverge and tools/builder-tests/lib/snapshot-collisions.mjs asserts exactly which, including that 80-82 are local-only and main may still claim them."
     },
     "native_unittest": {
       "status": "partial",
       "command": "cd native && QT_QPA_PLATFORM=offscreen pytest -q",
       "verified_on": "2026-08-27",
-      "notes": "Re-run at v80: 224 passed, 161 skipped, 195 subtests passed, 0 failures and 0 errors. PySide6 is absent in this container, so the Qt UI layer is untested here, NOT passing — do not read the pass count as coverage.",
+      "notes": "Re-run at v82: 224 passed, 161 skipped, 195 subtests passed, 0 failures and 0 errors. PySide6 is absent in this container, so the Qt UI layer is untested here, NOT passing — do not read the pass count as coverage.",
       "known_gaps": [
         "F3 is fixed: no collection errors and no absent-dependency failures remain; the modules that need Qt now skip. The 161 skips are the UI layer standing down.",
         "The Qt UI suite has never been run anywhere, because no dev-container image in this repository's history installs Qt. See .devcontainer/README.md."
@@ -40,10 +40,10 @@
     }
   },
   "golden_rom_sha1": {
-    "note": "Not a stale copy. These same three values are asserted live by tools/builder-tests/run-all.mjs (GOLDEN_STOCK, GOLDEN_TEMPLATE) and tools/builder-tests/_rom-equiv.mjs (EXPECT), which run in the builder suite recorded above. They therefore hold at engine v80. everything_on moved at v80 (#37): the HUD heart blocks' full-buffer test moved into all three loop conditions, so any HP-HUD project emits different code. It is the value main measured independently for the same change, which is itself a check on the port. It was 0aed6e95684bc3bbd665353759f2a003dad45bf6 from engine v50 (2-player ASM physics) up to v79. That history lives in this note and not in a key of its own: test_golden_hashes_are_explicit requires every value here to be a bare sha1, and it caught the attempt.",
+    "note": "Not a stale copy. These same three values are asserted live by tools/builder-tests/run-all.mjs (GOLDEN_STOCK, GOLDEN_TEMPLATE) and tools/builder-tests/_rom-equiv.mjs (EXPECT), which run in the builder suite recorded above. They therefore hold at engine v82. stock and no_modules_template have not moved through the port-forward at all — projects without an HP HUD or dialogue still build byte-for-byte. everything_on moved twice: 0aed6e95 -> 972cb215 at v80 (#37's heart-loop change) and -> e86a91b8 at v82 (#31's dialogue banner writer). Both are the values main measured independently for the same changes, which is a check on the ports rather than a restatement of them. That history lives in this note and not in keys of its own: test_golden_hashes_are_explicit requires every value here to be a bare sha1, and it caught the attempt.",
     "stock": "1730448eca6d4857d3468407b33e41de7806bf99",
     "no_modules_template": "1730448eca6d4857d3468407b33e41de7806bf99",
-    "everything_on": "972cb2158ee736f027b069242958c3f2d723a5ee"
+    "everything_on": "e86a91b83df18e498df4cafd15069c8d57615251"
   },
   "manual_fceux_v63": {
     "applies_to_engine_version": 63,
