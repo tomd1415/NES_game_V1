@@ -9,6 +9,91 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v82 — 2026-08-27 — The dialogue box no longer flashes the screen (#31, ported from `main`'s v78)
+
+### Ported
+
+`main`'s **v78**, taken whole — its `builder-modules.js` patch applied cleanly on top of
+v81's, and both suites came with it. It is **v82** here because 78-81 already name
+different engines on this branch. Unlike #30 there is no `targetEngine` gate to move: this
+is a fix to how the banner is written, not an opt-in feature, so nothing degrades by
+version.
+
+*The coupling checked rather than assumed:* `nes_studio_core/graphics.py` pins
+`DIALOGUE_BG_PALETTE = 3` to `BW_DIALOG_PALETTE` in `builder-modules.js`. A 399-line
+change to that file is exactly where such a pin comes loose and nothing checks it. It is
+still 3 on both sides.
+
+**Watched go red here:** with only `builder-modules.js` reverted to the pre-#31 writer,
+`render-dialogue-noflash.mjs` reports a fully blanked frame — 0 lit pixels of 7680 — at
+both open and close. That is the flash itself, at the emulator, and it is what the suite
+exists to see.
+
+### Changed (dialogue projects only; goldens UNCHANGED)
+The last open slice of feedback **#31** ("NPC dialogue glitches the stage,
+especially on gallery projects"). The garbage-glyph half was fixed 2026-06-18
+by the built-in font, and the scrolled-off-screen half the same day by anchoring
+the box to the camera; what was left — and deferred to the codegen plan's
+Sprint 5 — was the **forced-blank flash when the box opens or closes**.
+
+- **Cause.** The banner is a full-width band four tile rows tall (eight when a
+  vertical scroll leaves it straddling two attribute rows). Writing it took
+  128–256 `$2007` pokes in a single vblank, far past the ~2273-cycle window, so
+  the writer set `PPU_MASK = 0` for the burst and restored it after. With
+  rendering off the burst runs long past vblank into the visible frame, so the
+  top of the screen paints as flat backdrop for a frame: the "split-second
+  stage glitch" pupils reported.
+- **Fix — one row per frame, prepared outside vblank.** `per_frame` now builds
+  a single 32-byte row into `bw_dlg_buf[]` while rendering is on (~27000 cycles
+  going spare there), and the vblank slot only pushes those bytes. On the
+  non-scroll path the push is **unrolled** — `lda bw_dlg_buf+N / sta $2007`, 8
+  cycles a byte, ~260 for the row — so it fits inside vblank with rendering left
+  **on**. This is the same prepare-then-burst shape `scroll_stream()` already
+  uses for its column bursts, and it is the bound the codegen plan's Sprint 5(b)
+  asked for ("cap to one row + a per-frame byte budget").
+- **Cost.** A box takes 5 frames to appear instead of 1 (4 tile rows + one
+  attribute step), i.e. under a tenth of a second. The part-drawn band is not
+  visible: a blank box cell (0x20) is colour 0 = the shared `universal_bg` in
+  every palette, so only the glyph cells read as "box".
+- **Attribute ordering.** The attribute bytes are written **first** on open, so
+  glyphs never appear for a frame in the scenery's palette, and **last** on
+  close, so scenery never appears for a frame in the box palette.
+- **Geometry is snapshotted** when the job starts, so a camera that moves
+  mid-animation cannot tear the band across two positions; and **B is swallowed
+  while a job is in flight** (the auto-close timer holds too), so a mashed
+  button cannot queue a clear on top of a half-drawn box and stamp the band into
+  the background.
+- **Scroll builds** already hold `PPU_MASK` at 0 across their whole vblank
+  window — that is the template's own scroll-burst guard, not the dialogue's —
+  so this path could not stop disabling rendering. Bounding it to one row still
+  shrinks that window from roughly half a screen to a few scanlines, so the
+  visible artefact goes from a flash to the thin band scroll builds already have.
+
+### Byte-identity
+Goldens unchanged: the whole change lives inside the dialogue module's injected
+code, and the goldens (`GOLDEN_STOCK` / `GOLDEN_TEMPLATE`) are no-module builds.
+A project **with** dialogue ticked does get different ROM bytes — that is the
+point of the bump. `draw_text` / `clear_text_row` in the template are untouched;
+they have been off the dialogue path since Arc B and stay as the stock `main.c`
+twins the byte-identity invariant compares against.
+
+### Tests
+- `tools/builder-tests/render-dialogue-noflash.mjs` (new) — drives a real ROM in
+  jsnes frame by frame through an open and a close and asserts no frame blanks.
+  Measured on v77 the open frame collapses a busy 40-scanline band from 7680 lit
+  pixels to **0**; on v78 it stays at 7680 throughout. Also checks the box still
+  finishes drawing, still round-trips on close, and that mashing B leaves it
+  fully open or fully closed rather than stranded half-drawn.
+- `round2-dialogue.mjs` — B6f/B6f2/B6g re-pointed at the new prepare-step shape
+  (same intent: the writer must cover the banner's world rows and bound the text
+  span by the row count), plus two new guards: **B6i** fails if any `PPU_MASK`
+  write reappears in the dialogue vblank block, **B6j** fails if the non-scroll
+  row burst stops being unrolled. Both mutation-tested.
+- `render-dialogue-box.mjs`, `render-dialogue-visible.mjs`, `dialogue-scroll.mjs`
+  and `dialogue-font.mjs` pass **unchanged** — including the close round-trip and
+  the 2×1 scroll build — so the visible behaviour is the same apart from the
+  flash.
+
 ## v81 — 2026-08-27 — Enemies can no longer stand inside each other (#30, ported from `main`'s v77)
 
 ### Ported, and the gate moved with it

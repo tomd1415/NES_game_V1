@@ -21,7 +21,15 @@ import { testPort } from './lib/test-port.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
-//   972cb215… is the value from engine v80 (item #37, ported from `main`'s v76). The
+//   e86a91b8… is the value from engine v82 (item #31, ported from `main`'s v78). The
+//     dialogue banner writer stopped force-blanking: it now prepares one 32-byte row
+//     per frame in per_frame and blits it from an unrolled burst in vblank, so the
+//     emitted dialogue block legitimately changes. Deliberate: this fixture has
+//     dialogue on. The no-modules goldens (GOLDEN_STOCK / GOLDEN_TEMPLATE in
+//     run-all.mjs) are unchanged, so projects without dialogue still build
+//     byte-for-byte, and ROM size is unchanged at 49168 bytes. It is also the exact
+//     value `main` measured for the same change, which is a check on the port.
+//   972cb215… was the value from engine v80 (item #37, ported from `main`'s v76). The
 //     HUD heart blocks moved their `oam_idx > 252` test out of the innermost of three
 //     nested loops and into all three loop conditions, so a full OAM buffer now stops
 //     the heart and row loops too instead of letting them spin and re-enter.
@@ -41,7 +49,7 @@ import { testPort } from './lib/test-port.mjs';
 //     AI still in cc65 C; set PLAYGROUND_NO_ASM=1 to rebuild the pure-C engine).
 //   8172e353… was engine v19 (NES_ASM_LEAF always + NES_ASM_SCROLL for scroll).
 //   42a45ca8… was the pure-C -Os value; ce62ec47… the no-opt value.
-const EXPECT = '972cb2158ee736f027b069242958c3f2d723a5ee';
+const EXPECT = 'e86a91b83df18e498df4cafd15069c8d57615251';
 
 const PORT = testPort(18834);
 

@@ -239,18 +239,57 @@ function assembleWithDialog(overrides) {
   if (!/static const unsigned char bw_dialogue_text_1\[\]/.test(out2)) {
     console.error('FAIL B6e: two-line config should emit bw_dialogue_text_1[]'); process.exit(1);
   }
-  // The vblank loop must iterate the banner's world rows (Arc B replaced the
+  // The writer must still cover the banner's world rows (Arc B replaced the
   // per-text-row draw with a full-width banner spanning the text's attribute
-  // rows), and the text-row span is still bounded by dlg_total (so single-row
-  // per-NPC overrides and multi-line both work).
-  if (!/for \(dlg_wr = \(unsigned char\)0\b|for \(dlg_wr = \(unsigned int\)dlg_alo/.test(out2)) {
-    console.error('FAIL B6f: vblank loop should iterate the banner world rows (dlg_wr/dlg_alo)'); process.exit(1);
+  // rows), and the text-row span is still bounded by the row count (so
+  // single-row per-NPC overrides and multi-line both work).
+  //
+  // Engine v78 (#31) turned the single unbounded vblank burst into one row per
+  // frame, so the row walk now lives in per_frame's prepare step as an
+  // alo-anchored row index rather than a `for (dlg_wr = …)` loop in vblank.
+  // Same coverage, different shape — these check the new one.
+  if (!/dlg_wr = \(\(unsigned int\)bw_dlg_alo << 2\) \+ dlg_ri/.test(out2)) {
+    console.error('FAIL B6f: prepare step should address the banner world rows from bw_dlg_alo'); process.exit(1);
   }
-  if (!/dlg_wr < dlg_twr0 \+ dlg_total/.test(out2)) {
-    console.error('FAIL B6f2: banner text-row span should be bounded by dlg_total'); process.exit(1);
+  if (!/dlg_wr < bw_dlg_twr0 \+ bw_dlg_total/.test(out2)) {
+    console.error('FAIL B6f2: banner text-row span should be bounded by bw_dlg_total'); process.exit(1);
   }
-  if (!/dlg_draw_rows = BW_DIALOG_ROW_COUNT/.test(out2)) {
-    console.error('FAIL B6g: vblank should default dlg_draw_rows to BW_DIALOG_ROW_COUNT'); process.exit(1);
+  if (!/dlg_total = BW_DIALOG_ROW_COUNT/.test(out2)) {
+    console.error('FAIL B6g: prepare should default dlg_total to BW_DIALOG_ROW_COUNT'); process.exit(1);
+  }
+  // v78 (#31): the banner must NEVER force-blank the screen to get its bytes
+  // out.  A `PPU_MASK = 0` anywhere in the dialogue block means the unbounded
+  // burst is back and the "stage glitches for a split second" bug with it.
+  // The block is inserted into both vblank_writes slots (plain loop + SMB HUD
+  // path), so check every copy.  Each one runs from the marker to the second
+  // (and last) step-advance line it contains.
+  {
+    const MARK = '[builder] dialogue — PPU writes (in vblank)';
+    const TAIL = 'if (bw_dlg_step > bw_dlg_rows) bw_dlg_job = 0;';
+    let i = out2.indexOf(MARK), seen = 0;
+    if (i < 0) { console.error('FAIL B6i: dialogue vblank marker missing'); process.exit(1); }
+    while (i >= 0) {
+      const t1 = out2.indexOf(TAIL, i);
+      const t2 = t1 < 0 ? -1 : out2.indexOf(TAIL, t1 + 1);
+      if (t2 < 0) { console.error('FAIL B6i: dialogue vblank block is not step-bounded'); process.exit(1); }
+      // Strip comments first — the block *explains* the old force-blank, so a
+      // bare /PPU_MASK/ would match its own prose.
+      const code = out2.slice(i, t2 + TAIL.length)
+        .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+      if (/PPU_MASK/.test(code)) {
+        console.error('FAIL B6i: dialogue vblank writer force-blanks again (PPU_MASK) — #31 regressed');
+        process.exit(1);
+      }
+      seen++;
+      i = out2.indexOf(MARK, t2);
+    }
+    if (seen < 1) { console.error('FAIL B6i: no dialogue vblank block checked'); process.exit(1); }
+  }
+  // …and the row burst must stay unrolled on the non-scroll path: a plain
+  // indexed loop costs 50-65 cycles a byte in no-opt cc65 and its tail spills
+  // out of vblank, which is the same visible fault by another route.
+  if (!/PPU_DATA = bw_dlg_buf\[0\];[\s\S]{0,2000}PPU_DATA = bw_dlg_buf\[31\];/.test(out2)) {
+    console.error('FAIL B6j: non-scroll banner row should be an unrolled bw_dlg_buf[0..31] burst'); process.exit(1);
   }
   // Arc B: the banner recolours its attribute rows to the reserved palette so
   // the text colour is fixed (white) regardless of the scenery palette.
