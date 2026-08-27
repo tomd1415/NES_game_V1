@@ -17,8 +17,17 @@ work cold, and the file to refresh *last* before putting work down.
   and with it a fix for entities on rows 239-255 being silently swallowed)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  **117 suites, exit 0, re-run 2026-08-14 at v79**) — plus 22 invariants and 40
-  syntax checks. The 40 are 32 shipped `.js` modules, 7 inline HTML script bodies
+  **117 suites, exit 0, re-run 2026-08-14 at v79**) — plus **24 invariants and 40
+  syntax checks, counted 2026-08-27**. Do not hand-maintain those two numbers; the
+  invariant count said 22 while the file held 23, having gone stale unnoticed. Ask
+  the runner, which takes seconds:
+
+  ```bash
+  RUNALL_CHECKS_ONLY=1 node tools/builder-tests/run-all.mjs 2>&1 \
+    | grep -c '^invariant: .* \.\.\. '     # and '^syntax .* \.\.\. ' for the other
+  ```
+
+  The 40 are 32 shipped `.js` modules, 7 inline HTML script bodies
   and `playground_server.py`; the 32 match the 32 non-vendored `.js` files on disk
   exactly, and the 7 cover every HTML page carrying a bare `<script>`. Both sets
   are enumerated at runtime rather than hand-listed — the `.js` list used to name
@@ -122,6 +131,34 @@ No engine change, so **still v78**. The 2026-08-06 commits are on `origin/main`
 - ~~**Dead code found, not removed**: eight unreferenced path constants in
   `playground_server.py`.~~ **Removed 2026-08-13** (`4c108ec`).
   `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them were live and stayed.
+
+## 2026-08-27 — the builder gates, split and made cheap to re-prove
+
+- **`mutations/gates.json` had been dead for six days and nothing said so.** Three of
+  its seven breaks quoted the engine version literally; v79 shipped on the 20th, and
+  `mutate` refuses a spec whose anchor no longer matches — per *spec*, not per break,
+  so one stale anchor disabled the other six. See LESSONS-LEARNT §2 for the shape and
+  for the guard that now catches it.
+- **Split by what a break needs, not by taste.** Six of the seven were decided before
+  the first suite spawned and now live in `gates-checks.json` under
+  `RUNALL_CHECKS_ONLY=1`: **30 caught / 0 not, 4m05s** — against about 80 minutes for
+  those six through the full suite. `gates.json` keeps the one break that genuinely
+  needs a suite: **1 caught, baseline 117 assertions in 414s**.
+- **The split enforces itself, and was watched doing so in both directions.** A new
+  `RUNALL_SUITES_ONLY=1` mirrors the checks-only mode, so `gates.json`'s baseline holds
+  only `suite X` names and `gates-checks.json`'s only check and invariant names.
+  `mutate` rejects a break whose `expect` names an assertion the baseline does not
+  have, *before* editing anything. Misfiling one each way gave
+  *"names an assertion the suite does not have"* both times, in 0 seconds.
+- **`frozen-snapshot-copy-edited` still reports as declared-uncaught**, with its reason
+  printed on its own line — the snapshot check compares git HEAD against the manifest,
+  so an edit to the frozen *copy* is invisible to it by design.
+- **`mutate` caps any one suite run at 900 s, hardcoded.** The first attempt at the
+  suite-level half was killed mid-baseline at host load ~30 and reported
+  *"baseline produced no recognisable test results"*, which names the adapter rather
+  than the clock. Re-run at load ~2 the same baseline took 414 s. Run expensive specs
+  on a quiet box, and check `uptime` before believing a verdict. LESSONS-LEARNT §5.
+- Counts are deliberately not repeated elsewhere; `mutate <spec> --list` prints them.
 
 ## 2026-08-13 — an accepted work-list, worked to completion
 
