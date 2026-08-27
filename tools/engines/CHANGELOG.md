@@ -9,6 +9,82 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v81 — 2026-08-27 — Enemies can no longer stand inside each other (#30, ported from `main`'s v77)
+
+### Ported, and the gate moved with it
+
+This is `main`'s **v77**, taken whole — `builder-modules.js` and `studio-style.js` were
+byte-identical to its parent here, so they applied unchanged. It ships as **v81** because
+77, 78, 79 and 80 already name different engines on this branch (see
+[`docs/plans/current/2026-08-27-port-forward-main-engine.md`](../../docs/plans/current/2026-08-27-port-forward-main-engine.md)),
+and **the `targetEngine >=` gate had to move with the number**. Left at 77 it would emit
+this feature into a project stamped 78, 79 or 80 — engines whose snapshots do not contain
+it. Proved rather than reasoned: with the gate restored to 77, `enemy-bump.mjs`'s degrade
+case fails with *"v80 target still emitted bw_bump*"*. Its ROM cases and
+`tools/studio-tests/enemy-bump.spec.js` (2 passed) both run green here.
+
+### Added (off by default; goldens UNCHANGED)
+The last open slice of feedback **#30** ("enemy sprites pass through solids *and
+through each other*; jitter one to the side"). The solids half shipped
+2026-06-17 via `bw_sprite_blocked()`; this is the enemy-vs-enemy AABB pass that
+entry left as a follow-up.
+
+- **New Globals toggle — "Enemies bump into each other"** (`globals.enemyBump`,
+  default **off**). Chosen over a Scene-module setting because Scene is
+  `customRender: true` with an empty schema, so it has no generic settings UI,
+  while Globals already renders bools (`bobWhenWalking`) in both front-ends.
+  The code is still *emitted* by the Scene module, which owns the `ss_*` indices.
+- **The pass** runs once per frame in `per_frame`, appended **after** every
+  per-instance AI block, so it only ever corrects finished positions. For each
+  pair of live participants whose boxes overlap it pushes them 1px apart along
+  the **shallower** axis — a head-on pair separates sideways, a landed-on-top
+  pair vertically. Participants are placed enemies with a movement AI; `static`
+  and `shooter` (a fixed turret) are excluded.
+- **Walkers, patrols and hoppers turn around** rather than grinding together.
+  The pass cannot reach their direction variables (block-scope statics), so it
+  sets a `bw_bumped[]` flag that each AI consumes and clears on its next frame.
+  Push-apart *alone* would have recreated the 1px vibration #30 also complains
+  about: A steps right, gets pushed left, steps right again, forever.
+- **Chasers and flyers are push-apart only** — they steer by the player's
+  position and have no direction to reverse. In practice a pair stalls
+  shoulder-to-shoulder, which is the intended "cannot overlap".
+- Every push is filtered through `bw_sprite_blocked`, so separation cannot shove
+  an enemy into solid ground or off the screen edge. That helper's `dir == 2`
+  bound (`sy + hpx >= 240`) also means a downward push can never reach the
+  `0xFF` row that marks an actor **defeated** — a nudge must not kill an enemy.
+
+### Byte-identity
+Goldens unchanged. With the box unticked nothing is emitted — no tables, no
+flags, no pass, and no change to any AI block — so every existing project builds
+byte-for-byte as it did under v80. A design authored with the box ticked also
+degrades cleanly on a pre-v81 target (`targetEngine >= 81` gate), matching how
+the v71 hopper and v72 shooter degrade to a plain walker.
+
+### Both build paths, no new 6502
+Under `NES_ASM_AI` the walker/patrol C blocks are preprocessed out, so nothing
+would consume `bw_bumped[]`. Rather than hand-write a 6502 twin, the pass flips
+`ss_ai_state[]` — the same mutable direction byte `ai_update` itself reads — for
+`ss_ai_type` 1 (walker) and 4 (patrol). That sub-block is emitted only when
+`asmAiHandled > 0`, since the `ss_ai_*` tables don't exist otherwise. Hoppers
+keep the flag in both paths (their C block runs in both by design).
+
+### Known limits
+- O(k²) pairs with a `bw_sprite_blocked` call per push. Fine for the handful of
+  enemies a pupil places, and it costs nothing when the box is unticked, but it
+  is not a broadphase — a level with dozens of participating enemies would feel
+  it. Revisit with a grid if that ever shows up.
+- The `ss_y >= 0xEF` liveness test follows the convention the existing AI blocks
+  use. In a **wide** (16-bit `ss_y`) build a legitimately low enemy can exceed
+  that, so it would be skipped by the pass — a pre-existing wart shared with the
+  chaser/flyer/hopper guards, not introduced here.
+- Separation is 1px per frame per pair, so a deep overlap (two enemies placed on
+  top of each other in the editor) unpicks over several frames rather than
+  snapping apart.
+
+Covered by [`tools/builder-tests/enemy-bump.mjs`](../builder-tests/enemy-bump.mjs)
+— codegen gating both ways plus a real ROM where two walkers set on a collision
+course never overlap and are seen to turn.
+
 ## v80 — 2026-08-27 — Player 1's OAM cursor can no longer wrap or overrun (#37, ported from `main`'s v76)
 
 ### Fixed — two silent OAM-corruption bugs on the Player 1 draw.
