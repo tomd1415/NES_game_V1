@@ -1,5 +1,5 @@
 {
-  "_comment": "Digests of origin/main`s engine-snapshot manifests. See tools/builder-tests/lib/snapshot-collisions.mjs.",
+  "_comment": "Digests of origin/main’s engine-snapshot manifests. See tools/builder-tests/lib/snapshot-collisions.mjs.",
   "generated_from": "origin/main @ 538a3b9",
   "generated_on": "2026-08-27",
   "digests": {
@@ -88,5 +88,7 @@
     "v77",
     "v78"
   ],
-  "local_only": []
+  "local_only": [
+    "v80"
+  ]
 }
