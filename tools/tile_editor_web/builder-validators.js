@@ -657,18 +657,34 @@
       let total = cells(players[0]);
       const p2On = moduleEnabled(state, 'players.player2') && players.length >= 2;
       if (p2On) total += cells(players[1]);
+      // Item #37: the background status bar (HUD → "background", engine v58+)
+      // parks a sprite-0 split marker in OAM slot 0 to trigger the mid-frame
+      // scroll split, so the players start from slot 1 and only 63 remain.
+      // Leaving it out of the budget let an 8x8 player through at exactly 64,
+      // which then needed 65 slots — the engine's guard now drops the last
+      // cell rather than corrupting memory, but the pupil still loses part of
+      // their player, so say so up front.
+      const smbhud = moduleNode(state, 'smbhud');
+      const splitMarker = (moduleEnabled(state, 'smbhud') &&
+                           smbhud && smbhud.config && smbhud.config.background) ? 1 : 0;
+      total += splitMarker;
       if (total <= 64) return null;
       return {
         id: 'player-oam-overflow',
         severity: 'error',
-        message: 'Player 1' + (p2On ? ' + Player 2' : '') + ' need ' + total +
-          ' hardware sprites, but the NES only has 64.',
+        message: 'Player 1' + (p2On ? ' + Player 2' : '') +
+          (splitMarker ? ' + the status bar\'s split marker' : '') + ' need ' +
+          total + ' hardware sprites, but the NES only has 64.',
         fix: p2On
           ? 'Make the two Player sprites smaller on the Sprites page so ' +
             'their tile cells add up to 64 or fewer (for example two 5x6 ' +
             'players, or one 8x8 and one tiny P2).'
-          : 'Make the Player sprite smaller on the Sprites page — at most ' +
-            '64 tile cells (e.g. 8x8).',
+          : splitMarker
+            ? 'Make the Player sprite smaller on the Sprites page — with the ' +
+              'background status bar on, at most 63 tile cells (e.g. 7x9) — ' +
+              'or switch the HUD back to sprite mode.'
+            : 'Make the Player sprite smaller on the Sprites page — at most ' +
+              '64 tile cells (e.g. 8x8).',
         jumpTo: 'sprites.html',
       };
     },

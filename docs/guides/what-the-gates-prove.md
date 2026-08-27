@@ -109,7 +109,7 @@ next thing worth doing.
 
 * **`ppid=1` on a `playground_server.py`** does not mean a leaked server. The
   container's own dev server on 8765 is started by `start.sh` at boot and is orphaned
-  to init permanently. Check the port range — the runner allocates **18800–19129** — not the parent.
+  to init permanently. Check the port range — the runner allocates **18800–19132** (111 suites × a block of 3) — not the parent.
 * **`git check-ignore` reporting nothing** does not mean a path is un-ignored. It is
   index-aware and never reports a tracked file, so it cannot be used to prove an
   ignore rule is harmless. Probe with an untracked file instead.

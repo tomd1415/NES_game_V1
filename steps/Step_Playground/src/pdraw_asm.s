@@ -27,9 +27,21 @@
 ; The template always `#define SCROLL_BUILD`, so world_to_screen_x/y always
 ; exist; px/py positions are widened to 16-bit before the call (PX_WIDE picks
 ; u8 vs u16 storage), matching the C `(unsigned int)` cast.  The P1 sprite is
-; the first thing drawn (oam_idx starts at 0 and stays < 256 for any player
-; size the Builder allows), so no OAM-overflow guard is needed — matching the C,
-; which likewise has none for the player.  The C call site excludes the bob
+; the first thing drawn, so no OAM-overflow guard is needed here — but that
+; rests on an invariant the CALLER must uphold (item #37): the OAM cursor below
+; lives in Y (`ldy _oam_idx` ... `sty _oam_idx`), which is 8-bit, so the
+; player's span must end strictly INSIDE one 256-byte page.  The boundary is
+; `< 256`, not `<= 256`: at exactly 256 the writes are still fine, but the
+; closing `sty` stores 256 mod 256 = 0, so oam_idx comes back as 0 and every
+; later writer (P2, scene, spawn, HUD) treats the full buffer as empty and
+; draws over the player.  With the background status bar on (BW_SMB_HUD_BG
+; parks a sprite-0 split marker in slot 0 and starts the player at byte 4) a
+; 64-cell player also wraps its own last cells onto oam_buf[0..3] and wipes
+; that marker.  playground_server.py therefore does NOT pass NES_ASM_PDRAW
+; unless `oam_base + PLAYER_W*PLAYER_H*4 < 256`; those builds use the C loop,
+; whose BW_P1_OAM_FITS guard bounds it properly.  Keep the two conditions in
+; step if either ever changes.
+; The C call site excludes the bob
 ; case (BW_BOB_WHEN_WALKING) so this loop need not add the walk-bob offset.
 ; P2 + everything after continue in C from the oam_idx this leaves behind.
 

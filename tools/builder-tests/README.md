@@ -44,7 +44,7 @@ Each suite spawns its own throwaway Playground Server and exits 0 on success,
 non-zero on first failed assertion.
 
 **Suites do not choose their port — `run-all.mjs` assigns one.** Each gets a
-reserved block of 3 starting at 18800 (so 110 suites reach 19129), passed as
+reserved block of 3 starting at 18800 (so 111 suites reach 19132), passed as
 `BUILDER_TEST_PORT`, and asks for it via `lib/test-port.mjs`:
 
 ```js

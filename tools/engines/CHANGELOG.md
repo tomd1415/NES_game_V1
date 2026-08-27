@@ -9,6 +9,70 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v80 — 2026-08-27 — Player 1's OAM cursor can no longer wrap or overrun (#37, ported from `main`'s v76)
+
+### Fixed — two silent OAM-corruption bugs on the Player 1 draw.
+
+Ported from `main`'s **v76** (`fa79846`). It is **v80** here, not v76: `main` and this
+branch each published a different v76, v77 and v78 while diverged, and `main` has since
+taken v79 as well. Snapshot directories are immutable, so the numbers cannot be
+reconciled after the fact — the collision is asserted by
+`tools/builder-tests/lib/snapshot-collisions.mjs`, and the remaining ports are sequenced
+in [`docs/plans/current/2026-08-27-port-forward-main-engine.md`](../../docs/plans/current/2026-08-27-port-forward-main-engine.md).
+
+Neither bug crashed. They quietly scribbled over memory or over other sprites, which is
+why pupil feedback #37 — *"random mess on screen / froze for no reason"* — never produced
+a clean repro.
+
+**ASM draw** (`pdraw_asm.s`, the default for scroll builds). `draw_player` tracks the OAM
+cursor in Y, which is 8 bits. A 64-cell (8×8) player spans exactly 256 bytes, so the
+closing `sty _oam_idx` stored 256 mod 256 = 0. The player's pixels landed correctly but
+the cursor came back at 0, so P2, scene, spawn and HUD all read an "empty" buffer and drew
+over the player, and their `oam_idx > 252` guards never tripped. With the background
+status bar on (`BW_SMB_HUD_BG` starts the player at byte 4) the player's last cells also
+wrapped onto `oam_buf[0..3]` and wiped the sprite-0 split marker. **Fix:** the ASM draw is
+no longer selected unless the span ends strictly inside the page — `base + W*H*4 < 256`.
+The strict `<` matters: the writes are fine at exactly 256, the cursor store is not.
+
+On this branch that decision lives in `tools/nes_studio_core/preparation.py`
+(`select_asm_features`), not in `playground_server.py` where `main` made it — the codegen
+was extracted out of the server here.
+
+**C draw** (character bob, or `PLAYGROUND_NO_PDRAW`). `oam_idx` is a real `unsigned int`
+and the P1 loop had no bound at all, so 8×8 plus the background status bar drove it to
+260 — a genuine out-of-bounds write past `oam_buf[255]` into $0300. **Fix:**
+`BW_OAM_P1_BASE` / `BW_P1_OAM_FITS` plus an `oam_idx > 252` bound in both loops, matching
+the P2/scene/spawn writers.
+
+Also: the HUD heart blocks tested for a full buffer only in the innermost of three nested
+loops, so the row and heart loops kept spinning and re-entering it (~36 wasted
+iterations/frame at 9 HP, inside the pre-vblank window). The test now sits in all three
+loop conditions. And the Builder warns first: `player-oam-overflow` (V11) did not count
+the status bar's sprite-0 split marker, so an 8×8 player passed at exactly 64 and then
+needed 65 slots.
+
+### Migration
+
+None. Existing projects rebuild unchanged unless the player is large enough to overrun,
+in which case they lose the ASM draw's speed and keep correct output.
+
+### Byte-identity
+
+Both goldens unchanged. The OAM-cursor fixes are byte-preserving — `BW_P1_OAM_FITS`
+compiles out entirely whenever the player fits. The heart-loop change is not, deliberately:
+any HP-HUD project emits different code, so `_rom-equiv` is re-pinned
+`0aed6e95` → `972cb215`, the same value `main` measured, which is itself a check that the
+port is faithful.
+
+### Proved
+
+`tools/builder-tests/render-p1-oam-cursor.mjs` (`main`'s suite, re-pointed at this
+branch's assigned-port scheme) covers both draw paths and the validator. **Watched go red
+here:** with the new term removed, the two ASM cases report `oam_idx=0` and `oam_idx=4`
+instead of 256 — the wrap itself, at the emulator. `test_build_preparation.py` asserts the
+selection directly, including the boundary pair where the status bar is the only
+difference (7×9 fits without it, not with it), and was seen to fail first.
+
 ## v78 — 2026-08-14 — Two same-named helpers get different names (F12 follow-on)
 
 ### Changed — names only. **No ROM output changes.**

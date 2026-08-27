@@ -147,6 +147,37 @@ def select_asm_features(
         and parameters.player_index_2 < len(sprites)
     )
     has_custom_c = custom_c is not None
+    # ITEM #37 — a big player must NOT take the ASM draw. `draw_player` in
+    # pdraw_asm.s tracks the OAM cursor in Y (`ldy _oam_idx` ... `sty _oam_idx`),
+    # which is 8-bit, so the player's span has to end strictly INSIDE one 256-byte
+    # page. The boundary is `< 256`, not `<= 256`: the individual writes are fine at
+    # exactly 256, but the closing `sty` then stores 256 mod 256 = 0, leaving the
+    # cursor at 0 (or 4) instead of 256. Two distinct ways that corrupts:
+    #
+    #   * every later writer (P2, scene, spawn, HUD) reads that cursor, decides the
+    #     buffer is empty and draws over the player from slot 0 — and their own
+    #     `oam_idx > 252` guards never trip;
+    #   * with the background status bar on (BW_SMB_HUD_BG starts the player at byte
+    #     4) the player's own last cells wrap onto oam_buf[0..3] and wipe the
+    #     sprite-0 split marker, breaking the mid-frame scroll split.
+    #
+    # Silent corruption, no crash — the "random mess on screen / froze for no reason"
+    # class in feedback item 37. A 64-cell player is reachable: the Builder allows 8x8.
+    # The C loop handles all of this correctly (oam_idx is `unsigned int`, and the
+    # template's BW_P1_OAM_FITS guard bounds it), so the fix is to leave the ASM draw
+    # out for those configs and let the C run. It costs those rare projects the ASM
+    # draw's speed; everything that fits keeps the ASM path and stays byte-identical.
+    player_width = player_height = 2
+    if 0 <= parameters.player_index < len(sprites):
+        player_sprite = sprites[parameters.player_index] or {}
+        try:
+            player_width = int(player_sprite.get("width") or 2)
+            player_height = int(player_sprite.get("height") or 2)
+        except (TypeError, ValueError):
+            player_width = player_height = 2
+    # Mirrors the template's BW_OAM_P1_BASE.
+    oam_base = 4 if (scroll and "#define BW_SMB_HUD_BG 1" in source) else 0
+    oam_fits = (oam_base + player_width * player_height * 4) < 256
     return AsmFeatures(
         leaf=asm_ready,
         scroll=scroll and asm_ready,
@@ -165,7 +196,11 @@ def select_asm_features(
         and has_custom_c
         and player2_enabled
         and (topdown or racer_style or platformer),
-        player_draw=asm_ready and has_custom_c and scroll and not disable_player_draw,
+        player_draw=asm_ready
+        and has_custom_c
+        and scroll
+        and oam_fits  # item #37: the 8-bit Y cursor must not wrap
+        and not disable_player_draw,
     )
 
 
