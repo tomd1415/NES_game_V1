@@ -53,6 +53,40 @@ needed.
 | `project-file.spec.js` | Whole-project JSON round-trip (export → import lossless; before_import snapshot). |
 | `screenshot.spec.js` | Not assertions — captures `test-results/studio-*.png` for visual review. |
 
+## Per-test timeouts, and when to reach for `test.slow()`
+
+The committed limit is **30 s** and it stays there. Two tests carry `test.slow()`
+(90 s): `tutorial.spec.js`'s `every game style` and `the long from-scratch
+tutorial`. Nothing else does, and adding a third should need the same evidence.
+
+**Measure before you size anything.** Run the suite with a timeout generous enough
+that nothing hits it, so the numbers are the work rather than the limit:
+
+```bash
+npx playwright test --reporter=json --timeout=180000 > /tmp/e2e.json
+# then read result.duration per test; and record `uptime` — a duration
+# without a load figure is not a measurement on this box
+```
+
+Two things that are easy to get wrong here, both paid for on 2026-08-27:
+
+- **The load penalty is additive, not proportional.** At load ~26, two tests whose
+  quiet times were 2.9 s and 2.5 s took 26.4 s and 25.6 s — about **+23 s each**,
+  independent of how long they take on a quiet box. So "this test has 10× headroom"
+  is not a safe argument; what matters is quiet-duration **plus** the penalty at the
+  load you want to survive.
+- **Prefer `test.slow()` to raising the global timeout.** The global guards 163
+  well-behaved tests against a genuine hang; tripling it to rescue two would weaken
+  all of them. And prefer it to splitting a test that is sequential by nature — half
+  a tutorial walk proves half a thing.
+
+The cost of `test.slow()`, stated: a real hang in one of those two now takes 90 s to
+surface rather than 30. That is the right trade for a test whose true work is 14 s.
+
+**Do not fix a slow test by passing `--timeout` to your own run.** That was done in
+`mutate-report.sh` and it hid the problem from every ordinary `npx playwright test`
+while the suite acquired a reputation for flakiness it did not deserve.
+
 ## Notes
 
 - Each test runs in a fresh browser context, so `localStorage` starts

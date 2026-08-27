@@ -1042,6 +1042,52 @@ from inside.
   failures do not touch your diff, suspect the environment before the code.
   Re-running with `--timeout=120000` turned 147 tests green and settled it.
 
+### …but "the box was busy" became an excuse for two tests that were genuinely wrong
+
+The entry above is right and was over-applied. For weeks two `tutorial.spec.js`
+tests reddened under load and were waved through as weather, with a `--timeout`
+override wired into the mutation adapter so they would stop reddening *there*.
+Measuring them (2026-08-27) settled it in one run: at a quiet box they take
+**13.8 s and 9.8 s** while the next slowest test in the whole suite takes 3.6 s and
+the median is ~1 s. A uniform 30 s limit gave 163 tests 8×–30× headroom and those
+two 2.2× and 3.1×. They were not flaky; they were under-budgeted.
+
+- **The tell was available all along:** it was always the *same two* tests. Genuine
+  environment noise moves around; a fixed cast is a property of those tests.
+- **The load penalty is ADDITIVE, not proportional**, which broke the model I sized
+  the fix with at first. At load ~26 two tests that did not fail went 2.9 s → 26.4 s
+  and 2.5 s → 25.6 s — about **+23 s each**, independent of quiet duration. So
+  reasoning in ratios ("it has 10× headroom") is wrong; the penalty is a per-test
+  fixed cost that contention inflates.
+- **Fixing it inside the mutation adapter was the wrong place** and is the part
+  worth generalising. It made the symptom disappear where I was looking and left it
+  for everyone running the suite normally — which is how a suite earns a reputation
+  for flakiness and then stops being believed. If a workaround is invisible from the
+  ordinary path, it is hiding the problem, not solving it.
+
+### A summary line that asserts a condition nothing measured
+
+Proving the fix needed "five consecutive runs at load ≥ 15". The driver I wrote for
+it printed:
+
+> ════ 5 of 5 runs green at load >= 15, no per-run override
+
+and it had **never looked at the load**. It counted green runs; the load figure in
+that sentence was decoration. Two of the five were actually below the bar (13.95 and
+12.29) because ambient load fell away mid-series.
+
+This is §1's silent success wearing a summary line, and it is worth its own entry
+because the tempting fix — printing the load — is not enough either. The next
+version printed load at the two *endpoints*, and a run that started at 18.5 and
+ended at 14.9 still read as qualifying. Only sampling throughout and judging on the
+**minimum** actually tests the claim.
+
+- **Rule:** a headline may only name conditions the code evaluated. If a sentence
+  says "green AND at load ≥ 15", something must be able to print `NO`.
+- **Second-order:** `/proc/loadavg` is a 1-minute EWMA, so a fixed `sleep` before a
+  run does not mean the load is up yet — the first strict run disqualified itself at
+  13.33 for exactly that. Wait for the value, do not assume a sleep reached it.
+
 ---
 
 ## 4. Assuming an outcome instead of measuring it

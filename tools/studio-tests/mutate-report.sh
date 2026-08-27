@@ -43,20 +43,35 @@ json="$(mktemp)"
 trap 'rm -f "$json"' EXIT
 
 cd "$root" || exit 1
-# TIMEOUT. The committed config uses 30 s, which is right for a normal run and
-# wrong here. This box carries ten containers; measured at load 19.0 on
-# 2026-08-14, `tutorial.spec.js`'s two long tests time out, and re-running that
-# spec alone passes. STATUS.md already records that test as the only one ever to
-# exceed the committed timeout.
+# TIMEOUT — no override by default, deliberately. This used to force 120 s here.
 #
-# For mutation testing that flakiness is not merely noise, it inverts the result:
-# a test that goes red because the box was busy is indistinguishable from one that
-# went red because the break was caught, so a slow test manufactures FALSE
-# "caught" verdicts — the opposite of the error mutation testing exists to find.
-# A generous timeout weakens no assertion; every test still asserts exactly what
-# it did. Override with E2E_MUTATE_TIMEOUT if a run still trips it.
-timeout_ms="${E2E_MUTATE_TIMEOUT:-120000}"
-PLAYWRIGHT_JSON_OUTPUT_NAME="$json" npx playwright test --reporter=json --timeout="$timeout_ms" >/dev/null 2>&1
+# The reason it did is still true and still worth stating: for mutation testing a
+# load-induced red is not merely noise, it INVERTS the result. A test that reddens
+# because the box was busy is indistinguishable from one that reddened because the
+# break was caught, so a slow test manufactures false "caught" verdicts — the
+# opposite of the error mutation testing exists to find.
+#
+# But forcing it here was the wrong place, and hid the problem rather than fixing
+# it: an ordinary `npx playwright test` on a busy box still produced two red tests
+# that meant nothing, which is how a suite gets a reputation for being flaky and
+# then stops being believed. The cause was in the suite and is now fixed there —
+# `tutorial.spec.js`'s two long tests carry `test.slow()`, sized from measurement.
+# See the note above `every game style` for the numbers.
+#
+# So this now runs with the committed config, exactly as a developer would. That
+# is the point: if a mutation run reddens on load, the ordinary run would too, and
+# the fix belongs in the suite again rather than behind this variable.
+# Verified 2026-08-27: five consecutive full runs, all 165 green, host load held
+# between 15.3 and 20.9 throughout, no override.
+#
+# E2E_MUTATE_TIMEOUT remains as an escape hatch for a box far busier than that —
+# set it, and say in the commit why the committed config was not enough.
+if [ -n "${E2E_MUTATE_TIMEOUT:-}" ]; then
+  echo "| NOTE: overriding the committed per-test timeout with ${E2E_MUTATE_TIMEOUT}ms" >&2
+  PLAYWRIGHT_JSON_OUTPUT_NAME="$json" npx playwright test --reporter=json --timeout="$E2E_MUTATE_TIMEOUT" >/dev/null 2>&1
+else
+  PLAYWRIGHT_JSON_OUTPUT_NAME="$json" npx playwright test --reporter=json >/dev/null 2>&1
+fi
 rc=$?
 
 if [ ! -s "$json" ]; then

@@ -42,11 +42,14 @@ work cold, and the file to refresh *last* before putting work down.
   - **The suite is now mutation-tested as a body**, which it never had been:
     `tools/studio-tests/mutations-e2e.json`, 3 breaks in 3 different spec files,
     all 3 caught. Run it with `mutate tools/studio-tests/mutations-e2e.json`.
-    Note it deliberately runs with a longer timeout than the committed config —
-    a test that reddens because the box was busy is indistinguishable from one
-    that reddened because the break was caught, so a slow test manufactures false
-    "caught" verdicts. Measured at load 19 the two `tutorial.spec.js` long tests
-    do exactly that.
+    It now runs with the **committed** config, exactly as a developer would —
+    the 120 s override it used to force was removed on 2026-08-27 once the cause
+    was fixed in the suite. The reason for the override still holds and is why the
+    fix mattered: a test that reddens because the box was busy is indistinguishable
+    from one that reddened because the break was caught, so a slow test manufactures
+    false "caught" verdicts. Forcing a longer timeout *here* hid that from every
+    ordinary `npx playwright test`, which is the wrong place to fix it.
+    `E2E_MUTATE_TIMEOUT` remains as an opt-in escape hatch and announces itself.
   - Per-spec counts are deliberately *not* listed. They were, earlier the same
     day, and were stale within hours of being written — one more test in one spec
     and three numbers were wrong at once. The total is a dated measurement, not a
@@ -55,21 +58,36 @@ work cold, and the file to refresh *last* before putting work down.
   - Wall-clock is not a constant and is not recorded here: the same 158 tests took
     **7.1 min** at host load ~14.5 and **3.8 min** at load ~1 on the same day. Use
     it to judge the box, never to judge a change.
-  - **The committed 30 s per-test limit is adequate to at least host load ~15.**
-    Measured, not estimated. The full suite is green at the committed timeout with
-    no override at load ~1 *and* at load ~14.5 (both 2026-08-12), and the two tests
-    that once blew it — `project-file` NAM round-trip and `budget` CHR — took
-    59.1 s and 41.6 s at load ~30 but **2.0 s and 2.5 s** at load ~1.8 (2026-08-08).
-    Only one test has exceeded it since: `tutorial › every game style`, 46.6 s at
-    load **39** (2026-08-09).
-    - **So the rule is about the box, not the suite.** A red test named above,
-      *with the load average high*, is an environment result — confirm with
-      `--timeout=120000`. A red test on a quiet box is a real failure, and
-      reaching for the override there hides a regression.
-    - This replaces an earlier blanket warning that the limit "is not enough under
-      load", which was true of a loaded box in July and had become a reason to
-      distrust a suite that is fine. It is gone rather than annotated: a
-      correction printed under the claim it corrects gets read as the claim.
+  - **Per-test timeouts: 30 s for 163 tests, 90 s for two — sized from measurement,
+    2026-08-27.** The two long `tutorial.spec.js` walks carry `test.slow()`.
+    Everything else keeps the committed 30 s.
+    - **Why they are different.** At host load ~2, with a timeout generous enough
+      that nothing hit it: `every game style` **13.8 s**, `the long from-scratch
+      tutorial` **9.8 s**, next slowest test in the suite **3.6 s**, median ~1 s.
+      A uniform limit over non-uniform work left 163 tests with 8×–30× headroom and
+      those two with 2.2× and 3.1×. That is the whole reason only ever those two
+      reddened on a busy box.
+    - **The load penalty is roughly ADDITIVE, not proportional** — worth knowing
+      before sizing anything here. At load ~26 the two tests that did *not* fail had
+      gone 2.9 s → 26.4 s and 2.5 s → 25.6 s: about **+23 s each**, regardless of
+      their quiet duration. Ratio-based reasoning about headroom is therefore wrong;
+      the cost is a per-test fixed penalty (browser context, page load, Studio boot)
+      that contention inflates.
+    - **Accepted against its check:** five consecutive full runs, all **165 green**,
+      host load sampled every 30 s and held between **15.3 and 20.9** throughout, no
+      per-run override. Seen to fail first: with `test.slow()` removed and the load
+      driven to ~26, **exactly those two tests failed** (43.5 s and 45.2 s) and
+      nothing else did.
+    - **Where this stops being true, stated rather than discovered later.** At load
+      ~15–21 the worst non-slow test used 45–61% of its 30 s. At load ~26 it was
+      **88%**. So the suite is sound to about load 20 and gets thin beyond it; if
+      tests other than those two start reddening, that is the box passing ~25, not a
+      regression — and the answer is a quiet box, not an override.
+    - This replaces "the committed 30 s per-test limit is adequate to at least host
+      load ~15", which was **wrong** and is why this read as flakiness for weeks:
+      `every game style` exceeds 30 s at load as low as ~14. The old claim is gone
+      rather than annotated — a correction printed under the claim it corrects gets
+      read as the claim.
 - **Playtest ROMs:** ✅ **re-verified 2026-08-13** — `node scripts/make-playtest-roms.mjs`
   run again at v78 produced output **byte-identical** to the files on disk from
   2026-07-28 (all three sha1s unchanged: `5945fb3d…`, `cc2943e3…`, `c6a71980…`).
@@ -131,6 +149,29 @@ No engine change, so **still v78**. The 2026-08-06 commits are on `origin/main`
 - ~~**Dead code found, not removed**: eight unreferenced path constants in
   `playground_server.py`.~~ **Removed 2026-08-13** (`4c108ec`).
   `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them were live and stayed.
+
+## 2026-08-27 — the E2E suite was not flaky, two tests were under-budgeted
+
+- **Diagnosed by measuring rather than re-running.** It was always the *same two*
+  tests, which is the tell: genuine environment noise moves around, a fixed cast is
+  a property of those tests. At a quiet box `tutorial › every game style` takes
+  13.8 s and `the long from-scratch tutorial` 9.8 s, against a next-slowest of 3.6 s
+  and a median of ~1 s. The committed 30 s was uniform; the work was not.
+- **Fixed with `test.slow()` on those two (90 s), not by raising the global.**
+  Raising it would have weakened the hang guard on 163 well-behaved tests to rescue
+  two. Splitting them was rejected as dishonest — a tutorial walk is sequential and
+  half a walk proves half a thing.
+- **The 120 s override in `tools/studio-tests/mutate-report.sh` is gone.** It made
+  the symptom vanish where I happened to be looking and left it for everyone running
+  the suite normally. `E2E_MUTATE_TIMEOUT` survives as an opt-in that announces
+  itself.
+- **Seen to fail first:** `test.slow()` removed and load driven to ~26 — exactly
+  those two failed, at 43.5 s and 45.2 s, and nothing else did.
+- **Then five consecutive runs, 165 green each, load sampled every 30 s and held
+  between 15.3 and 20.9 throughout, no override.**
+- Two lessons recorded in LESSONS-LEARNT §3: "the box was busy" had become an excuse
+  for a real defect, and my own acceptance driver printed *"5 of 5 runs green at load
+  >= 15"* while never having looked at the load.
 
 ## 2026-08-27 — the builder gates, split and made cheap to re-prove
 
