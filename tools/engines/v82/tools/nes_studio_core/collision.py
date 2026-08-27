@@ -1,0 +1,266 @@
+"""Pure collision source generation for NES Studio projects."""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from .graphics import SCREEN_COLS, SCREEN_ROWS
+
+BUILTIN_BEHAVIOUR_NAMES = {
+    0: "NONE",
+    1: "SOLID_GROUND",
+    2: "WALL",
+    3: "PLATFORM",
+    4: "DOOR",
+    5: "TRIGGER",
+    6: "LADDER",
+}
+
+REACTION_VERB_IDS = {
+    "ignore": 0,
+    "block": 1,
+    "land": 2,
+    "land_top": 3,
+    "bounce": 4,
+    "exit": 5,
+    "call_handler": 6,
+}
+
+
+def sanitise_behaviour_name(name: Any, slot_id: int) -> str:
+    if slot_id in BUILTIN_BEHAVIOUR_NAMES:
+        return BUILTIN_BEHAVIOUR_NAMES[slot_id]
+    raw = str(name or "").upper()
+    cleaned = re.sub(r"[^A-Z0-9_]+", "_", raw).strip("_")
+    cleaned = re.sub(r"_+", "_", cleaned)
+    if not cleaned or cleaned[0].isdigit():
+        return f"CUSTOM{slot_id}"
+    return cleaned
+
+
+def collect_behaviour_names(state: dict[str, Any]) -> dict[int, str]:
+    names: dict[int, str] = {}
+    seen: set[str] = set()
+    by_id: dict[int, dict[str, Any]] = {}
+    for entry in state.get("behaviour_types") or []:
+        if isinstance(entry, dict) and "id" in entry:
+            try:
+                by_id[int(entry["id"])] = entry
+            except (TypeError, ValueError):
+                continue
+    for slot_id in range(8):
+        entry = by_id.get(slot_id) or {}
+        base = sanitise_behaviour_name(entry.get("name"), slot_id)
+        name = base
+        suffix = 2
+        while name in seen:
+            name = f"{base}_{suffix}"
+            suffix += 1
+        seen.add(name)
+        names[slot_id] = name
+    return names
+
+
+def behaviour_world_dims(state: dict[str, Any]) -> tuple[int, int]:
+    backgrounds = state.get("backgrounds")
+    background: dict[str, Any] = {}
+    if isinstance(backgrounds, list) and backgrounds:
+        index = state.get("selectedBgIdx", 0) or 0
+        if not isinstance(index, int) or not 0 <= index < len(backgrounds):
+            index = 0
+        candidate = backgrounds[index]
+        if isinstance(candidate, dict):
+            background = candidate
+    dimensions = background.get("dimensions") or {}
+    screens_x = max(1, int(dimensions.get("screens_x") or 1))
+    screens_y = max(1, int(dimensions.get("screens_y") or 1))
+    return SCREEN_COLS * screens_x, SCREEN_ROWS * screens_y
+
+
+def behaviour_map_for_background(
+    background: dict[str, Any] | None, columns: int, rows: int
+) -> bytes:
+    output = bytearray(columns * rows)
+    grid = (background or {}).get("behaviour") or []
+    for row_index in range(rows):
+        row = grid[row_index] if row_index < len(grid) else []
+        base = row_index * columns
+        for column in range(columns):
+            try:
+                value = int(row[column]) if column < len(row) else 0
+            except (TypeError, ValueError):
+                value = 0
+            output[base + column] = value & 0x07
+    return bytes(output)
+
+
+def sprite_reaction_table(state: dict[str, Any]) -> tuple[bytes, int]:
+    sprites = state.get("sprites") or []
+    reactions = state.get("behaviour_reactions") or []
+    count = len(sprites)
+    output = bytearray(count * 8)
+    for sprite_index in range(count):
+        reaction_map = reactions[sprite_index] if sprite_index < len(reactions) else {}
+        if not isinstance(reaction_map, dict):
+            reaction_map = {}
+        for behaviour_id in range(8):
+            verb = (
+                reaction_map.get(str(behaviour_id))
+                or reaction_map.get(behaviour_id)
+                or "ignore"
+            )
+            output[sprite_index * 8 + behaviour_id] = REACTION_VERB_IDS.get(
+                str(verb), 0
+            )
+    return bytes(output), count
+
+
+def selected_background_index(state: dict[str, Any]) -> int:
+    backgrounds = state.get("backgrounds")
+    if not isinstance(backgrounds, list) or not backgrounds:
+        return 0
+    index = state.get("selectedBgIdx", 0) or 0
+    if not isinstance(index, int) or not 0 <= index < len(backgrounds):
+        return 0
+    return index
+
+
+def _hex_table_sized(
+    name: str,
+    data: bytes,
+    columns_per_line: int = 16,
+    qualifier: str = "const",
+) -> list[str]:
+    if not data:
+        return [f"{qualifier} unsigned char {name}[1] = {{ 0 }}; /* empty */"]
+    output = [f"{qualifier} unsigned char {name}[{len(data)}] = {{"]
+    for index in range(0, len(data), columns_per_line):
+        chunk = data[index : index + columns_per_line]
+        output.append("  " + ", ".join(f"0x{value:02X}" for value in chunk) + ",")
+    output.append("};")
+    return output
+
+
+def build_behaviour_c(state: dict[str, Any]) -> str:
+    columns, rows = behaviour_world_dims(state)
+    reaction_bytes, num_sprites = sprite_reaction_table(state)
+    backgrounds = state.get("backgrounds")
+    background_list = backgrounds if isinstance(backgrounds, list) else []
+    selected = selected_background_index(state)
+    backgrounds_to_emit = background_list if background_list else [None]
+
+    lines = [
+        "/* Auto-generated by playground_server.py — do not edit by hand. */",
+        "/* Source: the Behaviour page of the tile editor.                */",
+        '#include "collision.h"',
+        "",
+        f"/* World behaviour map: {columns} cols x {rows} rows, row-major. */",
+    ]
+    for index, background in enumerate(backgrounds_to_emit):
+        map_bytes = behaviour_map_for_background(background, columns, rows)
+        lines.append(f"/* Behaviour map for background {index}. */")
+        lines += _hex_table_sized(f"behaviour_map_{index}", map_bytes)
+        lines.append("")
+
+    initial_index = selected if background_list else 0
+    lines += [
+        f"/* Active map pointer — initialised to the selected bg ({initial_index}). */",
+        f"const unsigned char *active_behaviour_map = behaviour_map_{initial_index};",
+        "",
+        "void behaviour_set_active_bg(unsigned char n) {",
+        "  switch (n) {",
+    ]
+    for index in range(len(backgrounds_to_emit)):
+        lines.append(
+            f"    case {index}: active_behaviour_map = behaviour_map_{index}; break;"
+        )
+    lines += [
+        "    default: /* leave the current map in place */ break;",
+        "  }",
+        "}",
+        "",
+        "/* Sprite x behaviour reaction table.",
+        "   Row i (8 bytes) = sprite i's verb for behaviour ids 0..7. */",
+    ]
+    if num_sprites == 0:
+        lines += [
+            "/* No sprites defined yet — stub table so the build still links. */",
+            "const unsigned char sprite_reactions[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };",
+        ]
+    else:
+        lines += _hex_table_sized("sprite_reactions", reaction_bytes, columns_per_line=8)
+    lines += [
+        "",
+        "/* behaviour_at + reaction_for have hand-written 6502 twins in",
+        "   behaviour_asm.s (Phase 1: generalised via project.inc). NES_ASM_LEAF",
+        "   gates the C bodies out so exactly one definition links; flag off",
+        "   (default) = pure C = byte-identical. Prototypes stay in collision.h. */",
+        "#ifndef NES_ASM_LEAF",
+        "unsigned char behaviour_at(unsigned int world_col, unsigned int world_row) {",
+        "  if (world_col >= WORLD_COLS) return BEHAVIOUR_NONE;",
+        "  if (world_row >= WORLD_ROWS) return BEHAVIOUR_NONE;",
+        "  return active_behaviour_map[world_row * WORLD_COLS + world_col];",
+        "}",
+        "",
+        "unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id) {",
+        "  if (behaviour_id >= 8) return REACT_IGNORE;",
+        f"  if (sprite_idx >= {max(num_sprites, 1)}) return REACT_IGNORE;",
+        "  return sprite_reactions[((unsigned int)sprite_idx << 3) | behaviour_id];",
+        "}",
+        "#endif",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def build_collision_h(state: dict[str, Any]) -> str:
+    names = collect_behaviour_names(state)
+    columns, rows = behaviour_world_dims(state)
+    num_sprites = len(state.get("sprites") or [])
+    lines = [
+        "/* Auto-generated by playground_server.py — do not edit by hand. */",
+        "/* Source: the Behaviour page of the tile editor.                */",
+        "#ifndef COLLISION_H",
+        "#define COLLISION_H",
+        "",
+        "/* Behaviour type ids (0..7). Slot 7 is custom — if the pupil",
+        "   named it, their chosen name appears here. */",
+    ]
+    for slot_id in range(8):
+        lines.append(f"#define BEHAVIOUR_{names[slot_id]:<16} {slot_id}")
+    lines += [
+        "",
+        "/* Reaction verbs a sprite can have towards a behaviour id. */",
+        "#define REACT_IGNORE       0",
+        "#define REACT_BLOCK        1",
+        "#define REACT_LAND         2",
+        "#define REACT_LAND_TOP     3",
+        "#define REACT_BOUNCE       4",
+        "#define REACT_EXIT         5",
+        "#define REACT_CALL_HANDLER 6",
+        "",
+        "/* World size in 8x8 tiles. Covers the full screens_x × screens_y",
+        "   grid so the same data works when scrolling is added later. */",
+        f"#define WORLD_COLS   {columns}",
+        f"#define WORLD_ROWS   {rows}",
+        f"#define NUM_BEHAVIOUR_SPRITES {num_sprites}",
+        "",
+        "/* Look up the behaviour id at a given world tile (8x8 grid).",
+        "   Returns BEHAVIOUR_NONE (0) for out-of-range coordinates. */",
+        "unsigned char behaviour_at(unsigned int world_col, unsigned int world_row);",
+        "",
+        "/* Look up the reaction verb a sprite has for a behaviour id.",
+        "   Returns REACT_IGNORE (0) for out-of-range sprite or id. */",
+        "unsigned char reaction_for(unsigned char sprite_idx, unsigned char behaviour_id);",
+        "",
+        "/* T2.2 — multi-bg behaviour swap.  Doors module's emitted code",
+        "   calls this after a teleport so behaviour_at queries the new",
+        "   room's collision data.  Out-of-range n leaves the current",
+        "   map in place. */",
+        "void behaviour_set_active_bg(unsigned char n);",
+        "",
+        "#endif",
+        "",
+    ]
+    return "\n".join(lines)
