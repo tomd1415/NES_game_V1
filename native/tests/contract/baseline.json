@@ -3,9 +3,9 @@
   "what_a_pass_means": "This manifest records what was verified, when, and by which command. A passing test_baseline_manifest means the RECORD is well-formed and tracks the live engine version. It does not re-run any of the evidence below, and it does not mean the product is correct.",
   "renamed_from": "baseline-v63.json",
   "rename_reason": "The old name asserted that the contents described engine v63. They no longer did: the file sat at engine_version 63 while the live engine reached 75, so test_manifest_tracks_the_live_engine_baseline failed for twelve versions (F6). A baseline that has to be renamed every engine bump will not be, so it is now version-neutral and carries the version as data.",
-  "engine_version": 78,
-  "repository_commit": "32a7c4b359ccc4f5929470abe5084efa64f6dfbe",
-  "captured_on": "2026-08-06",
+  "engine_version": 80,
+  "repository_commit": "49ea483b413c81f6e9385124f26a626bacd1896f",
+  "captured_on": "2026-08-27",
   "scope": "studio_plus_legacy_union",
   "toolchain": {
     "note": "Measured in the nesnative dev container on 2026-08-06. These differ from the 2026-07-10 capture, which ran on a different host (python 3.13.5, node 20.19.2, npm 9.2.0) -- recorded so a future mismatch is read as 'different machine', not 'regression'.",
@@ -19,31 +19,31 @@
     "builder_regression": {
       "status": "pass",
       "command": "node tools/builder-tests/run-all.mjs",
-      "verified_on": "2026-08-14",
-      "notes": "110 suites, 0 failures, 154 invariant checks, exit 0 \u2014 re-run in full at v77 (11m23s). First end-to-end run since the runner began assigning each suite's port and reaping its process group: no listener survived anywhere in the allocated range 18800-19129 afterwards, and `git status` was empty, which also confirms across 110 real builds what F18 established from one \u2014 a /play no longer dirties the working tree. Re-run at v77; v78 is a rename with no ROM movement, confirmed by both golden hashes."
+      "verified_on": "2026-08-27",
+      "notes": "111 suites, 0 failures, exit 0 (157 '... OK' lines in total: 111 suites plus the invariant checks) — re-run in full at v80, 7m25s. The 111th is render-p1-oam-cursor.mjs, ported from main with #37. No listener survived anywhere in the allocated range 18800-19132 afterwards and `git status` was empty. Run at v78 the same day was 110 suites in 8m26s, likewise clean; the earlier '154 invariant checks' figure is not restated here because it does not reconcile with the log and was not re-measured."
     },
     "engine_snapshot": {
       "status": "pass",
       "command": "node scripts/snapshot-engine.mjs --check",
-      "verified_on": "2026-08-13",
-      "notes": "Confirms the v77 snapshot matches HEAD. From v76 this includes tools/nes_studio_core (the server's ROM codegen); v1-v75 snapshots were taken without any Python and are not comparable (F7, closed by the v76 bump)."
+      "verified_on": "2026-08-27",
+      "notes": "Confirms the v80 snapshot matches HEAD, 41 of 41 files read back FROM HEAD (not merely present on disk — that is direction 3, added after F21). From v76 the snapshot includes tools/nes_studio_core (the ROM codegen); v1-v75 were taken without any Python and are not comparable. v80 is this branch's port of main's v76 (#37) — the numbers diverge, and tools/builder-tests/lib/snapshot-collisions.mjs asserts exactly which."
     },
     "native_unittest": {
       "status": "partial",
-      "command": "cd native && QT_QPA_PLATFORM=offscreen pytest -q --continue-on-collection-errors",
-      "verified_on": "2026-08-13",
-      "notes": "PySide6 is absent in this container, so the Qt UI layer is untested here, not passing. Do not read the pass count as coverage. Re-run at v77: 208 passed, 161 skipped.",
+      "command": "cd native && QT_QPA_PLATFORM=offscreen pytest -q",
+      "verified_on": "2026-08-27",
+      "notes": "Re-run at v80: 224 passed, 161 skipped, 195 subtests passed, 0 failures and 0 errors. PySide6 is absent in this container, so the Qt UI layer is untested here, NOT passing — do not read the pass count as coverage.",
       "known_gaps": [
-        "12 modules import PySide6 at module scope and report as collection ERRORS instead of skips; 3 more import it inside the test body and report as plain FAILURES (F3). Both are absent-dependency, not defects.",
-        "The Qt UI suite has never been run anywhere. Step 1-2 of the close-out plan covers it."
+        "F3 is fixed: no collection errors and no absent-dependency failures remain; the modules that need Qt now skip. The 161 skips are the UI layer standing down.",
+        "The Qt UI suite has never been run anywhere, because no dev-container image in this repository's history installs Qt. See .devcontainer/README.md."
       ]
     }
   },
   "golden_rom_sha1": {
-    "note": "Not a stale copy. These same three values are asserted live by tools/builder-tests/run-all.mjs (GOLDEN_STOCK, GOLDEN_TEMPLATE) and tools/builder-tests/_rom-equiv.mjs (EXPECT), which run in the builder suite recorded above. They therefore still hold at engine v75.",
+    "note": "Not a stale copy. These same three values are asserted live by tools/builder-tests/run-all.mjs (GOLDEN_STOCK, GOLDEN_TEMPLATE) and tools/builder-tests/_rom-equiv.mjs (EXPECT), which run in the builder suite recorded above. They therefore hold at engine v80. everything_on moved at v80 (#37): the HUD heart blocks' full-buffer test moved into all three loop conditions, so any HP-HUD project emits different code. It is the value main measured independently for the same change, which is itself a check on the port. It was 0aed6e95684bc3bbd665353759f2a003dad45bf6 from engine v50 (2-player ASM physics) up to v79. That history lives in this note and not in a key of its own: test_golden_hashes_are_explicit requires every value here to be a bare sha1, and it caught the attempt.",
     "stock": "1730448eca6d4857d3468407b33e41de7806bf99",
     "no_modules_template": "1730448eca6d4857d3468407b33e41de7806bf99",
-    "everything_on": "0aed6e95684bc3bbd665353759f2a003dad45bf6"
+    "everything_on": "972cb2158ee736f027b069242958c3f2d723a5ee"
   },
   "manual_fceux_v63": {
     "applies_to_engine_version": 63,
