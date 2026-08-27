@@ -493,6 +493,48 @@ beside it sees it sit motionless, which is the confusing part.
 Rendering is fine — proven by driving the camera down to it — so the enemy is
 visible and simply inert.
 
+### …and from y=240 down it cannot hurt the player either — measured 2026-08-27
+
+The same shape, a different guard, and together they mean **the lower half of a
+1×2 level is decorative**: enemies there neither move nor damage, while looking
+entirely correct.
+
+Fixture: 1×2 tall topdown level, player 2×2 with `maxHp` 5, damage module on, one
+1×1 `static` enemy directly below the player, and the player **driven down with the
+D-pad** rather than spawned in place. Only the enemy's `y` varies.
+
+| enemy y | player reached it | hp 5 → |
+| ------- | ----------------- | ------ |
+| 150 | yes (py → 464) | **4** — damaged |
+| 238 | yes | **4** — damaged |
+| 239 | yes | **4** — damaged |
+| 240 | yes | **5** — no damage |
+
+Cause: the damage loop's `if (ss_y[i] >= 240) continue;`
+(`builder-modules.js:1522`). It exists to skip the `0xFF` "defeated" sentinel and
+cannot tell that from a legitimate world `y`. The pickup and fireball loops carry
+the same test.
+
+**Two corrections that came out of measuring it, both worth more than the finding.**
+
+- **I predicted the wrong bug.** From reading, I expected y=239 to be *invisible and
+  still damaging* — the draw loops guard on `>= 0xEF` (239) and the damage loop on
+  `>= 240`, so a legitimate 239 looked like it fell between them. It is wrong in
+  both halves: the enemy **is** drawn at 239, because both draw guards sit inside
+  `#ifdef BW_SCENE_PERROOM` and a single-room build has no draw guard at all, and it
+  **does** damage there. Checking that a guard exists is not checking it is compiled
+  in — the same mistake as the earlier `ai_asm.s` claim, made twice.
+- **Two fixtures produced confident nonsense before this one.** The first left the
+  player at the module default `x=60` while placing the enemy at `x=40`, so they
+  never overlapped; only the "a visible enemy damages" control caught it. The second
+  found that **the player's spawn `y` is clamped to 200** however high
+  `player1.config.startY` is set, so asking for a player at 239 silently produced
+  one at 200. Reading `px`/`py`/`ss_x`/`ss_y` out of RAM is what showed it.
+  That clamp is unexplained and possibly a separate bug — recorded, not chased.
+
+Both are fixed by #14 Step 3, which is what removes the sentinel. Step 3 is blocked
+on an owner decision — see the plan's question 2.
+
 **#14 Step 3 is the fix** (replace the sentinel with an `ss_active[]` flag), and
 its plan now carries this as a verification case. Nothing should be patched
 around it in the meantime: the sentinel is the thing to remove, not to special-case.
