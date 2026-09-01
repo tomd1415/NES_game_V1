@@ -4,8 +4,9 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-08-13 (unattended maintenance — an eleven-item accepted
-  work-list worked to completion; no engine change).
+- **Last updated:** 2026-09-01 (unattended maintenance — a three-item accepted
+  work-list; two done, the third's harness landed and its code is blocked on an
+  owner decision. No engine change).
   ✅ **Everything below is pushed.** `main` and `origin/main` agree; the four-day
   divergence that earlier versions of this line warned about is closed.
   Do not restate a commit count here — ask git:
@@ -17,7 +18,7 @@ work cold, and the file to refresh *last* before putting work down.
   and with it a fix for entities on rows 239-255 being silently swallowed)
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
-  **117 suites, exit 0, re-run 2026-08-14 at v79**) — plus **24 invariants and 40
+  **118 suites, exit 0, re-run 2026-09-01 at v79**) — plus **24 invariants and 40
   syntax checks, counted 2026-08-27**. Do not hand-maintain those two numbers; the
   invariant count said 22 while the file held 23, having gone stale unnoticed. Ask
   the runner, which takes seconds:
@@ -149,6 +150,34 @@ No engine change, so **still v78**. The 2026-08-06 commits are on `origin/main`
 - ~~**Dead code found, not removed**: eight unreferenced path constants in
   `playground_server.py`.~~ **Removed 2026-08-13** (`4c108ec`).
   `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them were live and stayed.
+
+## 2026-09-01 — the tall-level holes are now a suite, written before the fix
+
+`tools/builder-tests/tall-level-entities.mjs` (port 18898, ~27 s) records what an
+entity in the lower half of an ordinary single-room 1×2 level actually does:
+
+| y | damage | AI |
+| - | ------ | -- |
+| 150 | works | works | ← the control |
+| 238 | works | works |
+| 239 | works | **BROKEN** | AI guard is `ss_y[i] < 0xEF` |
+| 240 | **BROKEN** | **BROKEN** | damage guard is `ss_y[i] >= 240` |
+| 400 | **BROKEN** | **BROKEN** |
+
+- **It asserts the bugs, not their absence** — an exact `KNOWN_HOLES` list, so a
+  new hole fails it *and* a listed hole that starts working fails it too. When #14
+  Step 3 lands this suite goes red until the list is emptied; that is how we find
+  out the fix worked. A third check fails an entry the run never scores.
+- **Watched failing in all four directions** on the suite as it ships, not an
+  earlier draft: `NEW HOLE`, `STALE ENTRY`, the control failure, and the
+  unreachable-entry error.
+- **The meta-test paid for itself immediately.** The first version put both probes
+  in one build; widening the damage guard left y=238 still "damaging", which turned
+  out to be the *chaser* reaching the player rather than the static enemy. One probe
+  per build now.
+- Step 3's code is still **blocked** on the byte-flag-vs-16-bit-sentinel decision
+  (plan question 2, `.mc-outbox.md` item 1). The harness needed no decision, which
+  is why it went first.
 
 ## 2026-08-27 — the E2E suite was not flaky, two tests were under-budgeted
 
