@@ -41,7 +41,7 @@
     },
     {
       "id": "snapshot-manifest-sha-corrupted",
-      "file": "tools/engines/v83/manifest.json",
+      "file": "tools/engines/v84/manifest.json",
       "find": "d0ee844f61eff7075950fa32daff3251ad375452",
       "replace": "0000000000000000000000000000000000000000",
       "expect": [
@@ -61,7 +61,7 @@
     },
     {
       "id": "frozen-snapshot-copy-edited",
-      "file": "tools/engines/v83/tools/tile_editor_web/builder-modules.js",
+      "file": "tools/engines/v84/tools/tile_editor_web/builder-modules.js",
       "find": " * Builder module catalogue — chunk 1.",
       "replace": " * Builder module catalogue — chunk 1. MUTATION",
       "expect": [],
