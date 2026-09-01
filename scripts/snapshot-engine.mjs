@@ -8,11 +8,22 @@
  * authored for (rollback / compatibility fallback). Snapshots are immutable
  * once written — a fix goes into a new version.
  *
- * Content is read from **git HEAD**, not the working tree, because the build
- * server regenerates several src/ files per-compile (behaviour.c, bg_world.*,
- * scene.inc, main.c, level.nam …). Reading from HEAD makes both snapshotting
- * and --check deterministic regardless of a dirty working tree. Therefore all
- * engine files must be committed before snapshotting a version.
+ * Content is read from **git HEAD**, not the working tree, so that both
+ * snapshotting and --check are deterministic regardless of a dirty tree.
+ * Therefore all engine files must be committed before snapshotting a version.
+ *
+ * That is still the right behaviour, but the reason originally given for it has
+ * expired and is corrected here rather than left to mislead: it said the build
+ * server "regenerates several src/ files per-compile (behaviour.c, bg_world.*,
+ * scene.inc, main.c, level.nam …)", i.e. that the working tree could not be
+ * trusted. `_build_rom()` now builds inside a `tempfile.TemporaryDirectory` on
+ * both the C and the ASM path, so a /play leaves the tree clean. Determinism is
+ * the reason to read from HEAD; a self-dirtying build is no longer one.
+ *
+ * The consequence to keep in mind is unchanged and is the thing people trip on:
+ * --check compares HEAD against the manifest, so a green result says nothing
+ * about uncommitted work. See "The limitation, stated plainly" in
+ * tools/builder-tests/README.md.
  *
  * Usage:
  *   node scripts/snapshot-engine.mjs            # snapshot the current version
@@ -105,6 +116,9 @@ function main() {
       const buf = headBytes(rel);
       if (buf === null) continue; // uncommitted new file — ignore until committed
       compared++;
+      // A committed file absent from the manifest lands here too: bySha[rel] is
+      // undefined and never equals a real hash, so additions are caught. (`main`'s
+      // note, kept — this branch had the behaviour and not the sentence.)
       if (bySha[rel] !== sha1(buf)) { console.error('DRIFT (vs HEAD): ' + rel); drift++; }
     }
 

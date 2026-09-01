@@ -61,9 +61,14 @@ project's standing rule — see item 16's "don't fix blind" note).
 > across the sprite body via a shared `bw_sprite_blocked()` helper (emitted
 > into the `declarations` slot), reversing/stopping at SOLID_GROUND / WALL
 > and the screen edge.  Kept the literal `255` clamp (`ss_x` is a u8
-> single-screen coord — `WORLD_W_PX` would overflow it).  Enemy-vs-enemy
-> overlap is the remaining follow-up.  `run-all.mjs` guard added; suite
-> green incl. byte-identical.
+> single-screen coord — `WORLD_W_PX` would overflow it).  `run-all.mjs` guard
+> added; suite green incl. byte-identical.
+>
+> **The enemy-vs-enemy follow-up shipped 2026-07-27 as engine v77** — an AABB
+> separation pass behind a new off-by-default Globals toggle ("Enemies bump into
+> each other"), with walkers/patrols/hoppers turning around rather than grinding
+> together.  Bug item 30 is now fully closed; detail in
+> [`tools/engines/CHANGELOG.md`](../../../tools/engines/CHANGELOG.md) under v77.
 
 - **Feedback:** F1a + F10 (K).  **Bug item:** 30.  **Status:** OPEN, high
   confidence.  Two pupil reports → one root cause.
@@ -229,8 +234,26 @@ project's standing rule — see item 16's "don't fix blind" note).
 
 ### B-10 — "Game keeps crashing" / "emulator froze for no reason"
 
-- **Feedback:** F2, F11, F13 (D, A).  **Bug item:** 37.  **Status:** NEEDS
-  REPRO + opportunistic hardening.
+> ⚠️ **Superseded 2026-07-26 — the finding below is partly WRONG.**  The
+> hardening shipped (engine **v76** + the emulator watchdog), but two of the
+> three claims in "Finding" did not survive contact with the code:
+>
+> - The **P2** loops were already guarded — BR-03 did that, leaving **P1** as
+>   the only unguarded one.  The `≈999` / `≈1099` line numbers are long stale.
+> - The P1 bug was **not** "only a risk with a huge player".  It was reachable
+>   at the Builder's own maximum, and the real mechanism was different again:
+>   the ASM `draw_player` (the *default* for scroll builds) tracks the OAM
+>   cursor in **Y — 8-bit** — so a 64-cell player wrapped it to 0 and every
+>   later writer painted over the player.
+>
+> The jsnes-watchdog half was right.  **For the accurate record read item 37 in
+> [`recently-observed-bugs.md`](../../feedback/recently-observed-bugs.md)** and
+> the v76 entry in [`tools/engines/CHANGELOG.md`](../../../tools/engines/CHANGELOG.md);
+> treat the "Finding" and "Fix" below as the 2026-06-17 hypothesis, not fact.
+
+- **Feedback:** F2, F11, F13 (D, A).  **Bug item:** 37.  **Status:** ~~NEEDS
+  REPRO + opportunistic hardening~~ → **hardening DONE (v76)**, repro still
+  wanted.
 - **Finding:** OAM-overflow guards from June cover the scene-sprite + HUD
   loops, but the **player / P2 OAM loops** (`platformer.c` ≈999, ≈1099) are
   unguarded (bounded by sprite size, so only a risk with a huge player), and

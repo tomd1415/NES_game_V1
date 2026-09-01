@@ -554,11 +554,18 @@
       const glob = (state && state.builder && state.builder.modules &&
         state.builder.modules.globals) || null;
       const enemyBump = !!(glob && glob.enabled && glob.config &&
-        glob.config.enemyBump) && targetEngine >= 81;
-      // 81, not 77: this is `main`'s v77 ported onto this branch, where 77-80 are
-      // already taken by different engines. A project stamped 77, 78, 79 or 80 here
-      // must NOT get this code — its snapshot does not contain it. See
-      // docs/plans/current/2026-08-27-port-forward-main-engine.md.
+        glob.config.enemyBump) && targetEngine >= 77 && targetEngine !== 80;
+      // Not a simple `>= N`, and the ugliness is the point: after the 2026-09-02
+      // merge the version line is no longer one line. 76-79 are `main`'s engines and
+      // 77 is where IT added this feature; 80-83 are this branch's ports of 76-79,
+      // and ours added it at 81. So v80 — our port of main's v76 — is a hole: its
+      // frozen snapshot does not contain this code, while the versions either side
+      // of it do. `>= 81` would silently deny the feature to a project authored on
+      // main at 77-79; `>= 77` would silently emit it for a v80 project whose engine
+      // cannot have produced it. Both are wrong in the quiet direction, so the gate
+      // states the real shape instead. See
+      // docs/plans/current/2026-08-27-port-forward-main-engine.md and the collision
+      // record in tools/engines/main-manifests.json.
       const bumpIdx = [];   // instance indices that take part (movement AI only)
       const BUMP_AIS = ['walker', 'chaser', 'flyer', 'patrol', 'hopper', 'goomba', 'koopa'];
       const parts = [

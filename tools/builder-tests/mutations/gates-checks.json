@@ -1,0 +1,312 @@
+{
+  "name": "builder gates (check-level)",
+  "why": "The check-level half of the builder gates: every break here is decided before the first suite spawns, so the spec runs with RUNALL_CHECKS_ONLY=1 — seconds instead of the ~11 minutes a full builder run costs. That gap is the whole point. A gate that is expensive to verify is a gate nobody verifies, and these exist precisely because prose decays; LESSONS.md is explicit that hand mutation is a tooling gap rather than a discipline one.\n\nTHE SPLIT ENFORCES ITSELF, which is why it is a real property and not a convention someone has to remember. This spec’s baseline holds only check and invariant names; gates.json runs with RUNALL_SUITES_ONLY=1 and its baseline holds only \"suite X\" names. mutate refuses a break whose `expect` names an assertion the baseline does not have, and it refuses it before editing anything — so a break filed into the wrong spec is rejected by name rather than quietly passing. Proved in both directions on 2026-08-26 before this was written down.\n\nRule of thumb, if you would rather not reason it out: expectation starts with \"suite \" → gates.json. Anything else → here.\n\nLabels reach a spec through mutate-report.sh, which rewrites \": \" to \" - \" because mutate’s FAIL regex stops at the first colon. That is why an expectation here reads \"invariant - X\" while run-all.mjs prints \"invariant: X\".",
+  "command": [
+    "bash",
+    "-c",
+    "RUNALL_CHECKS_ONLY=1 bash tools/builder-tests/mutate-report.sh"
+  ],
+  "breaks": [
+    {
+      "id": "e2e-port-reclaimed",
+      "file": "tools/builder-tests/asm-corpus.mjs",
+      "find": "const PORT_C = 18895, PORT_A = 18791;",
+      "replace": "const PORT_C = 18790, PORT_A = 18791;",
+      "expect": [
+        "no builder-test suite claims the Studio E2E port"
+      ],
+      "note": "A builder suite claiming the Studio E2E port fails SILENTLY: playground_server.py finds a working server already there, prints \"already running -- nothing to do\", exits 0, and the suite runs green against a server it never configured. The guard reads the port out of playwright.config.js rather than hardcoding it, so this stays honest if the E2E port moves."
+    },
+    {
+      "id": "engine-version-constants-desynced",
+      "file": "tools/tile_editor_web/engine-version.js",
+      "find": "global.NES_ENGINE_VERSION = ",
+      "replace": "global.NES_ENGINE_VERSION = 9",
+      "expect": [
+        "engine version constants agree"
+      ],
+      "note": "The two engine-version constants must agree; bumping one and not the other is the classic half-done ritual. VERSION-AGNOSTIC ON PURPOSE: the anchor stops before the digits and the break prefixes a 9, so 79 becomes 979 and the mismatch holds whatever the current version is. This break previously read `= 78;` literally and died the day v79 shipped, taking the whole spec with it — mutate rejects a spec whose anchor no longer matches."
+    },
+    {
+      "id": "engine-version-bumped-without-snapshot",
+      "file": "tools/engines/ENGINE_VERSION",
+      "find": "\n",
+      "replace": "9\n",
+      "expect": [
+        "engine version constants agree",
+        "engine snapshot matches live sources",
+        "invariant - mutation specs name the current engine snapshot"
+      ],
+      "note": "Bumping ENGINE_VERSION without running snapshot-engine.mjs leaves no frozen engine for the new version, so a game authored against it can never be rebuilt with the engine it was authored for. Also version-agnostic: the file holds only the number and a newline, so appending a digit to it is the whole edit. It trips three assertions rather than two because the third derives its expected version from this same file — that is the guard doing its job, not noise."
+    },
+    {
+      "id": "snapshot-manifest-sha-corrupted",
+      "file": "tools/engines/v83/manifest.json",
+      "find": "d0ee844f61eff7075950fa32daff3251ad375452",
+      "replace": "0000000000000000000000000000000000000000",
+      "expect": [
+        "engine snapshot matches live sources"
+      ],
+      "note": "A frozen snapshot whose manifest disagrees with the committed sources is worse than no snapshot: it claims to be a faithful freeze of an engine it is not. THIS IS THE ONE BREAK THAT CANNOT BE MADE VERSION-AGNOSTIC — snapshot-engine.mjs --check derives its directory from ENGINE_VERSION, so a manifest under any other version is not the file it reads. `invariant: mutation specs name the current engine snapshot` exists to catch this path going stale on the next bump. Repointed v79 -> v83 in the 2026-09-02 merge: `main`'s engine numbering and this branch's diverged, and this anchor must name the CURRENT snapshot because --check derives its directory from ENGINE_VERSION. main's own 'mutation specs name the current engine snapshot' invariant caught it the moment the merge landed."
+    },
+    {
+      "id": "shipped-js-syntax-broken",
+      "file": "tools/tile_editor_web/studio-world.js",
+      "find": "function countAttrConflicts(bg, ctx) {",
+      "replace": "function countAttrConflicts(bg, ctx) { (((",
+      "expect": [
+        "syntax studio-world.js"
+      ],
+      "note": "Every non-vendored .js under tools/tile_editor_web is node --check'd, enumerated from disk rather than hand-listed. studio-world.js is the probe because it is a Studio mode module — the half of the tree that was silently unchecked until 2026-08-07."
+    },
+    {
+      "id": "frozen-snapshot-copy-edited",
+      "file": "tools/engines/v83/tools/tile_editor_web/builder-modules.js",
+      "find": " * Builder module catalogue — chunk 1.",
+      "replace": " * Builder module catalogue — chunk 1. MUTATION",
+      "expect": [],
+      "expect_none_because": "--check compares git HEAD against manifest.json, so an edit to the frozen snapshot COPY under the current tools/engines/v<N>/ is invisible to it by design. This is the one limitation found when these gates were mutated by hand on 2026-08-06, and it is recorded here as a declared-uncaught break so it cannot be quietly forgotten or mistaken for a gap nobody noticed. The same property is why a green snapshot check does NOT mean the working tree is clean.",
+      "note": "Repointed v79 -> v83 in the 2026-09-02 merge: `main`'s engine numbering and this branch's diverged, and this anchor must name the CURRENT snapshot because --check derives its directory from ENGINE_VERSION. main's own 'mutation specs name the current engine snapshot' invariant caught it the moment the merge landed."
+    },
+    {
+      "id": "builder-guide-coverage-desynced",
+      "file": "docs/guides/BUILDER_GUIDE.md",
+      "find": "**This reference documents 10 of the 18 modules that exist.**",
+      "replace": "**This reference documents 10 of the 19 modules that exist.**",
+      "expect": [
+        "invariant - BUILDER_GUIDE module coverage matches builder-modules.js"
+      ],
+      "note": "The guide's claimed module total must match what builder-modules.js actually registers at runtime. 19 is a lie about a file the gate enumerates, so the gate must catch it."
+    },
+    {
+      "id": "shipped-js-enumeration-empty",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": ".filter(f => f.endsWith('.js') && !f.endsWith('.min.js'))",
+      "replace": ".filter(f => f.endsWith('.zzz') && !f.endsWith('.min.js'))",
+      "expect": [
+        "shipped JS modules found"
+      ],
+      "note": "Breaks the glob, not the guard — it is the empty RESULT that must be caught. Enumerating zero shipped modules must not read as 'all 32 syntax checks passed'."
+    },
+    {
+      "id": "html-page-enumeration-empty",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();\n// A page with no bare <script> is legitimate (studio.html), so an empty CHUNK",
+      "replace": "const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.zzz')).sort();\n// A page with no bare <script> is legitimate (studio.html), so an empty CHUNK",
+      "expect": [
+        "HTML pages found"
+      ],
+      "note": "Two-line anchor on purpose: this filter line appears three times in run-all.mjs and a one-line anchor would be ambiguous. Only the first occurrence guards the page enumeration."
+    },
+    {
+      "id": "suite-list-enumeration-empty",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": ".filter(f => f.endsWith('.mjs') && f !== path.basename(__filename))",
+      "replace": ".filter(f => f.endsWith('.zzz') && f !== path.basename(__filename))",
+      "expect": [
+        "builder-test suites found"
+      ],
+      "note": "The most valuable of the three. Measured 2026-08-12: without this guard zero suites ran and the runner still printed the green headline, golden ROM hashes included."
+    },
+    {
+      "id": "storage-trigger-never-matches",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "if (!/<script\\s+src=[\"']storage\\.js[\"']/i.test(html)) continue;",
+      "replace": "if (!/<script\\s+src=[\"']storageZZZ\\.js[\"']/i.test(html)) continue;",
+      "expect": [
+        "invariant - every page that loads storage.js calls createTileEditorStorage"
+      ],
+      "note": "Breaks the TRIGGER, not a page. Every page is then skipped and the guard checks nothing — which without its hit-count assertion prints OK."
+    },
+    {
+      "id": "loadrom-trigger-never-matches",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "if (!/\\.loadROM\\s*\\(/.test(html)) continue;",
+      "replace": "if (!/\\.loadROMZZZ\\s*\\(/.test(html)) continue;",
+      "expect": [
+        "invariant - private-emulator pages convert ROM bytes to a binary string for jsnes"
+      ],
+      "note": "Same shape as the storage trigger, listed separately because they are two independent selectors and one can rot without the other."
+    },
+    {
+      "id": "render-failure-swallowed-again",
+      "file": "tools/tile_editor_web/studio.js",
+      "find": "    try { renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); }",
+      "replace": "    try { renderProjectsMenu(); } catch (e) {}",
+      "expect": [
+        "invariant - no best-effort re-render in studio.js swallows its error"
+      ],
+      "note": "Third time this class has been fixed in studio.js; the first two fixes did not stop the next one appearing, which is why it is guarded rather than merely corrected. The guard strips comments first — without that it matches the comment explaining itself (measured: raw 1 offender, stripped 0)."
+    },
+    {
+      "id": "goldens-disagree",
+      "file": "tools/builder-tests/run-all.mjs",
+      "find": "const GOLDEN_TEMPLATE = '1730448eca6d4857d3468407b33e41de7806bf99';",
+      "replace": "const GOLDEN_TEMPLATE = '0000000000000000000000000000000000000000';",
+      "expect": [
+        "invariant - goldens equal (template adds nothing at no-modules)"
+      ],
+      "note": "The cross-file guarantee that the template at no-modules compiles to the same bytes as stock. Expect the template-hash invariant to go red alongside it — that is the same pin seen from the other side, not a second fault."
+    },
+    {
+      "id": "docs-route-removed",
+      "file": "tools/playground_server.py",
+      "find": "if parsed.path.startswith(\"/docs/\"):",
+      "replace": "if parsed.path.startswith(\"/docsZZZ/\"):",
+      "expect": [
+        "invariant - playground_server.py exposes /docs/ route for editor doc links"
+      ],
+      "note": "audio.html links straight at /docs/guides/AUDIO_GUIDE.md. Losing the route 404s a link a pupil follows, and nothing in the build would notice."
+    },
+    {
+      "id": "ppu-macro-not-volatile",
+      "file": "steps/Step_Playground/src/scroll.c",
+      "find": "#define PPU_ADDR      (*(volatile unsigned char*)0x2006)",
+      "replace": "#define PPU_ADDR      (*(unsigned char*)0x2006)",
+      "expect": [
+        "invariant - PPU register macros are volatile"
+      ],
+      "note": "Without volatile, cc65 elides repeated writes to the same address and the scroll stride silently stops updating. A mutation edits the working tree only, which the snapshot check cannot see (it compares git HEAD), so this produces no spurious snapshot failure."
+    },
+    {
+      "id": "oam-dma-replaced-by-perbyte-writes",
+      "file": "steps/Step_Playground/src/main.c",
+      "find": "        OAM_DMA  = 0x02;",
+      "replace": "        OAM_DMA  = 0x03;",
+      "expect": [
+        "invariant - both templates use OAM DMA (not per-byte OAM_DATA writes)"
+      ],
+      "note": "Sprites must reach the PPU by one DMA from page 2, not 256 per-byte OAM_DATA writes — the per-byte form does not fit in vblank and drops sprites intermittently. Anchored in main.c, NOT platformer.c: the check requires the pattern once per template and platformer.c contains it TWICE, so breaking one site there leaves the other matching and proves nothing. main.c has exactly one. A guard that tests for existence can only be probed where the thing exists once."
+    },
+    {
+      "id": "native-launch-rom-path-changed",
+      "file": "tools/playground_server.py",
+      "find": "        latest_rom = STEP_DIR / \"_play_latest.nes\"",
+      "replace": "        latest_rom = STEP_DIR / \"_play_latestZZZ.nes\"",
+      "expect": [
+        "invariant - playground_server.py native launch uses _play_latest.nes"
+      ],
+      "note": "This guard was itself hollow until 2026-08-12 — it passed on the comment that named the file rather than on the assignment. Codified now so it cannot quietly return to that: the break edits the assignment, which is what the tightened check actually reads."
+    },
+    {
+      "id": "sprite-dup-stops-cloning-pixels",
+      "file": "tools/tile_editor_web/sprites.html",
+      "find": "const start = findFreeTileRun(w * h, state);",
+      "replace": "const start = findFreeTileRunZZZ(w * h, state);",
+      "expect": [
+        "invariant - btn-sprite-dup handler clones tile pixels (not just sprite struct)"
+      ],
+      "note": "Duplicating a sprite must allocate fresh tile slots and copy the pixels; without it the copy shares tiles with the original, so editing one silently changes the other. `findFreeTileRun(` alone appears 5 times in the file — this anchors on the call INSIDE the dup handler, which is the one the check reads (it slices the btn-sprite-dup listener out first). The sibling call passes `target`, not `state`, which is what makes this one unique."
+    },
+    {
+      "id": "perbyte-oam-write-sneaks-back",
+      "file": "steps/Step_Playground/src/main.c",
+      "find": "        OAM_DMA  = 0x02;",
+      "replace": "        OAM_DMA  = 0x02; OAM_DATA = oam_idx;",
+      "expect": [
+        "invariant - both templates use OAM DMA (not per-byte OAM_DATA writes)"
+      ],
+      "note": "The other half of the same invariant, and the half that actually protects. Its first two clauses are EXISTENCE checks — they detect the DMA being deleted outright, which would be obvious on screen anyway. This clause is the negative one: no `OAM_DATA = <identifier>` anywhere. That is what catches per-byte writes creeping back in beside a DMA that is still present, which is the realistic regression and the invisible one. Same anchor as the break above, different replacement — breaks are applied one at a time, so sharing an anchor is fine."
+    },
+    {
+      "id": "scene-ai-stops-probing-solids",
+      "file": "tools/tile_editor_web/builder-modules.js",
+      "find": "static unsigned char bw_sprite_blocked(",
+      "replace": "static unsigned char bw_sprite_blockedZZZ(",
+      "expect": [
+        "invariant - scene enemy AI probes solids via bw_sprite_blocked"
+      ],
+      "note": "Scene enemies must test the solid map before moving, or they walk through walls and off ledges. The check scans builder-modules.js as TEXT (it is the emitter, not the emitted), so renaming the declaration is a source-level probe and does not reach any compile step in the checks-only run."
+    },
+    {
+      "id": "ladder-check-loses-its-named-constant",
+      "file": "tools/tile_editor_web/builder-templates/platformer.c",
+      "find": "                unsigned char up_ladder = (up_l == BEHAVIOUR_LADDER) ||\n                                          (up_r == BEHAVIOUR_LADDER);",
+      "replace": "                unsigned char up_ladder = (up_l == 6) ||\n                                          (up_r == 6);",
+      "expect": [
+        "invariant - ladder climb checks target-cell behaviour in both templates"
+      ],
+      "note": "BEHAVIOUR_LADDER is 6 (collision.h), so this compiles and behaves identically — deliberate, because the golden ROM builds DO run under RUNALL_CHECKS_ONLY and an uncompilable template would redden those instead and say nothing about this guard. It probes that the guard is anchored on the real up_ladder expression; it is not a realistic regression. BOTH OPERANDS MUST CHANGE, and that is the point of the anchor's size: the first attempt changed only `up_l` and nothing went red. The guard's regex is `up_ladder\\s*=[^;]*BEHAVIOUR_LADDER` and `[^;]*` runs across the newline to the second operand, which still carried the constant — so the break was a no-op and 'nothing caught this' meant my break, not a hollow guard. The guard has been sound since it was tightened on 2026-08-12, when its `.*` dotall was letting it match across unrelated statements."
+    },
+    {
+      "id": "dialogue-glyph-set-drifts-from-server",
+      "file": "tools/tile_editor_web/index.html",
+      "find": "const DIALOGUE_GLYPH_CHARS = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?'-:\";",
+      "replace": "const DIALOGUE_GLYPH_CHARS = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?'-\";",
+      "expect": [
+        "invariant - dialogue font char set agrees across server, editor + validator"
+      ],
+      "note": "Three files must agree on which characters the dialogue font can draw: the server's _glyph() map, the editor's DIALOGUE_GLYPH_CHARS, and the validator's warning list. This drops the colon from ONE of the three. That is the whole failure mode — nothing crashes, the editor simply stops warning about a character the ROM cannot draw, and a pupil's colon renders as a blank. Exactly the 'two lists that must agree and nothing checks they do' shape, with three lists."
+    },
+    {
+      "id": "anim-frame-size-warning-removed",
+      "file": "tools/tile_editor_web/sprites.html",
+      "find": "      const bad = animFrameSizeMismatch(anim, player);",
+      "replace": "      const bad = null; // animFrameSizeMismatch(anim, player);",
+      "expect": [
+        "invariant - sprites.html warns on player-size animation frame mismatch"
+      ],
+      "note": "Assigning an animation whose frames differ in size from the player produces a garbled sprite with no error; the warning is the only thing that tells a pupil why. THE CHECK HAD TO BE TIGHTENED BEFORE THIS COULD BE PROVEN. It used to test for `animFrameSizeMismatch(` and `anim-assign-warn` ANYWHERE in the file — satisfied by the function's own declaration with nothing calling it, and by either of two CSS rules with the element gone. Renaming the declaration left the call site matching and the check stayed green. It now asserts the CALL (`= animFrameSizeMismatch(`) and the element id, so this break — stubbing the call out while leaving everything else in place — is what it detects."
+    },
+    {
+      "id": "anim-warning-element-removed",
+      "file": "tools/tile_editor_web/sprites.html",
+      "find": "<div id=\"anim-assign-warn\" class=\"anim-assign-warn\" style=\"display:none\" role=\"status\"></div>",
+      "replace": "<div class=\"anim-assign-warn\" style=\"display:none\" role=\"status\"></div>",
+      "expect": [
+        "invariant - sprites.html warns on player-size animation frame mismatch"
+      ],
+      "note": "The other half: the mismatch can be computed perfectly and still have nowhere to appear. Dropping only the id leaves both CSS rules and the class attribute in place, which is precisely what the old string-anywhere check could not distinguish from a working warning."
+    },
+    {
+      "id": "role-table-renamed",
+      "file": "tools/playground_server.py",
+      "find": "ROLE_TABLE = [",
+      "replace": "ROLE_TABLEZZZ = [",
+      "expect": [
+        "invariant - asm + C scene emitters share role codes + ss_* identifiers"
+      ],
+      "note": "The ASM and C scene emitters must agree on role codes and ss_* names, or an enemy built with the ASM engine behaves as a different role from the same project built with C — a divergence that shows up as wrong behaviour in a ROM, never as an error. Renaming keeps the file valid Python, so the syntax check stays green and only the named invariant reddens."
+    },
+    {
+      "id": "dialogue-font-never-seeded",
+      "file": "tools/playground_server.py",
+      "find": "    _seed_dialogue_font(state)",
+      "replace": "    pass  # _seed_dialogue_font(state)",
+      "expect": [
+        "invariant - dialogue ships a built-in font + uppercases + warns on unsupported chars"
+      ],
+      "note": "Dialogue needs a font seeded into CHR or the text renders as whatever tiles happen to occupy those slots — garbage, not a blank. THE CHECK HAD TO BE TIGHTENED FIRST. It tested for `_seed_dialogue_font(` anywhere, which the `def` line satisfies on its own, so dropping the CALL left it green. Found the long way round: renaming the def proved nothing because the call still matched, and the mirror of that is that removing the call proves nothing because the def matches. A name appearing in both a definition and its call site cannot tell you which one survives. The check now requires a call at the start of a line, and this break removes exactly that."
+    },
+    {
+      "id": "tint-string-emitted-again",
+      "file": "tools/tile_editor_web/builder-modules.js",
+      "find": "static unsigned char bw_sprite_blocked(",
+      "replace": "PPU_MASK = 0x1E | 0x20; static unsigned char bw_sprite_blocked(",
+      "expect": [
+        "invariant - game-over tint is engine-owned and uses 0x1E (no greyscale bit)"
+      ],
+      "note": "This breaks the NEGATIVE half of that invariant — builder-modules.js must NOT string-emit a PPU_MASK tint, because the win/death tint moved into the engine where it is compiled rather than typed into a string. The POSITIVE half cannot be probed this way: it requires `0x1E | 0x20` and `0x1E | 0x80` to appear in the template, and they appear 2 and 3 times respectively, so breaking one site leaves the others matching. Same limitation as the OAM DMA check — an existence clause is only probeable where the thing exists once."
+    },
+    {
+      "id": "bare-continue-back-in-scroll-streaming",
+      "file": "steps/Step_Playground/src/scroll.c",
+      "find": "            for (rr = 0; rr < 30; rr++) {\n                col_buf[rr] = bg_world_tiles[(unsigned int)rr *\n                                             BG_WORLD_COLS + col];\n            }",
+      "replace": "            for (rr = 0; rr < 30; rr++) {\n                col_buf[rr] = bg_world_tiles[(unsigned int)rr *\n                                             BG_WORLD_COLS + col];\n                continue;\n            }",
+      "expect": [
+        "invariant - scroll.c has no bare `continue` in streaming blocks"
+      ],
+      "note": "A `continue` at the top level of the column/row streaming blocks skipped the PPU writes that must happen every frame, and the symptom was torn scrolling with no error. THE BREAK IS A SEMANTIC NO-OP ON PURPOSE — `continue` as the last statement of a loop body does nothing — because the golden ROM builds compile scroll.c during the checks-only run. A bare `continue` outside a loop would not compile and would redden the goldens instead, telling me nothing about this guard; anything that changed behaviour would move the golden hash and bury the signal in noise. The guard treats ANY occurrence as a regression, which is what makes a no-op sufficient to prove it."
+    },
+    {
+      "id": "scene-preview-gated-on-placeables-again",
+      "file": "tools/tile_editor_web/builder.html",
+      "find": "preview = document.createElement('div')",
+      "replace": "preview = placeable.length > 0 && document.createElement('div')",
+      "expect": [
+        "invariant - Builder scene preview renders with only a Player sprite"
+      ],
+      "note": "Reported from production 2026-06-21: the whole scene preview was wrapped in `if (placeable.length > 0)`, so a project with only a Player sprite lost the background AND the player start marker — dragging Player 1/2 is useful before any enemy exists. The check slices the renderSceneInstances body out and looks for the canvas being created unconditionally, so this re-gates it in place."
+    }
+  ]
+}

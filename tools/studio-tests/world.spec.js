@@ -222,6 +222,30 @@ test('full-screen preview opens a modal with a canvas', async ({ page }) => {
   await expect(dlg).toHaveCount(0);
 });
 
+// The test above is satisfied by ANY canvas, which is why it sat green through
+// the whole life of the bug this one covers: until 2026-08-14 the preview
+// rendered screen 0 only, so on a multi-screen level it showed the top-left
+// screen whatever the pupil was looking at. Asserting the canvas is as wide as
+// the LEVEL is what makes the difference visible — 2 screens is 64 columns, so
+// 64 * 8 * 2 = 1024 device pixels, against 512 for the old single-screen render.
+test('full-screen preview covers the whole level, not just screen 0', async ({ page }) => {
+  await page.evaluate(() => {
+    const bg = window.Studio.getState().backgrounds[0];
+    bg.dimensions = { screens_x: 2, screens_y: 1 };
+    for (let r = 0; r < 30; r++) {
+      while (bg.nametable[r].length < 64) bg.nametable[r].push({ tile: 0, palette: 0 });
+    }
+  });
+  await page.locator('.btn', { hasText: 'Full-screen preview' }).click();
+  const dlg = page.locator('.modal-backdrop.open');
+  await expect(dlg).toBeVisible();
+  const w = await dlg.locator('canvas').evaluate((c) => c.width);
+  expect(w).toBe(64 * 8 * 2);
+  // And it says so, so a pupil knows they are looking at the whole thing.
+  await expect(dlg).toContainText('the whole level');
+  await dlg.locator('.btn', { hasText: 'Close' }).click();
+});
+
 test('tile-type slots are named for the game type (3.4)', async ({ page }) => {
   await page.locator('#level-select').selectOption('maker');
   // Target the Tile-type section by its title (a "Show tile types" toggle

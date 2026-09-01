@@ -24,8 +24,8 @@ Effort key: **S** ≈ under a day, **M** ≈ 1–3 days, **L** ≈ a week.
 - **Data safety is non-negotiable** — pupils have weeks of work in
   `localStorage`. Any storage-schema change ships with a one-shot
   migration and a pre-migration JSON export dumped to disk.
-- **Shared state lives in `localStorage`**: [index.html:1304-1308](tools/tile_editor_web/index.html#L1304-L1308)
-  and [sprites.html:1725-1729](tools/tile_editor_web/sprites.html#L1725-L1729)
+- **Shared state lives in `localStorage`**: [index.html:1304-1308](../../../tools/tile_editor_web/index.html#L1304-L1308)
+  and [sprites.html:1725-1729](../../../tools/tile_editor_web/sprites.html#L1725-L1729)
   duplicate the same keys. The Storage object is currently copied across
   files; Sprint 2 extracts it to a shared module.
 - **Reuse before building**: `validateState`, `tileToChrBytes`,
@@ -41,7 +41,7 @@ The pupils' three biggest "broke my work by accident" moments.
 
 ### 1.1 Clear-tile button + `Del` shortcut (S)
 
-- Add **Clear tile** to the tile editor toolbar on [tools/tile_editor_web/index.html](tools/tile_editor_web/index.html).
+- Add **Clear tile** to the tile editor toolbar on [tools/tile_editor_web/index.html](../../../tools/tile_editor_web/index.html).
 - Calls the existing `emptyTile()` factory and writes back to
   `state.tiles[idx].pixels`.
 - Bind `Del` when the tile editor canvas has focus.
@@ -122,8 +122,8 @@ On editor boot, if `nes_tile_editor.projects.v1` is missing **and**
 ### 2.3 Shared storage module
 
 Extract the duplicated Storage object from
-[index.html:1304-1770](tools/tile_editor_web/index.html#L1304) and
-[sprites.html:1725-1770](tools/tile_editor_web/sprites.html#L1725)
+[index.html:1304-1770](../../../tools/tile_editor_web/index.html#L1304) and
+[sprites.html:1725-1770](../../../tools/tile_editor_web/sprites.html#L1725)
 into a new `tools/tile_editor_web/storage.js`. Both pages `<script
 src>` it. This pays down an existing debt and gives the named-projects
 logic a single implementation.
@@ -150,7 +150,7 @@ logic a single implementation.
 
 ## Sprint 3 — Sprite workshop polish (effort: M)
 
-Addresses six feedback items that all live on [sprites.html](tools/tile_editor_web/sprites.html).
+Addresses six feedback items that all live on [sprites.html](../../../tools/tile_editor_web/sprites.html).
 
 ### 3.1 Use-count overlay on the tileset grid (M)
 

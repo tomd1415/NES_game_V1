@@ -180,6 +180,42 @@
     var c = window.NesRender.NES_PALETTE_RGB[idx & 0x3F];
     return (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0]; // ABGR little-endian
   }
+  // Report a mode hook that threw — ONCE per mode+hook, never per frame.
+  //
+  // renderLive() runs on every interaction, so a bare console.error here would
+  // reproduce the #37 complaint exactly: a fault re-thrown into a console no
+  // pupil reads, 60x a second, while the screen sits there looking fine. But
+  // swallowing it outright — which both onRenderOverlay catches did until
+  // 2026-08-09 — is worse than either. A mode whose overlay throws just stops
+  // drawing its grid/hover/selection, for ever, with nothing anywhere saying so;
+  // and the renderTV catch a few lines below has always logged, so the silence
+  // was an oversight rather than a decision.
+  var modeHookFailed = {};
+  function reportModeHookError(hook, mode, err) {
+    var key = (mode || '?') + '.' + hook;
+    if (modeHookFailed[key]) return;          // said once is said
+    modeHookFailed[key] = true;
+    try {
+      console.error('[studio] ' + key + ' threw — that overlay is missing from the '
+        + 'TV. The hook is still called on every render and will keep throwing; it '
+        + 'is this message that is said once, not the fault that is fixed.', err);
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
+  // Sibling of the above for the other way a mode can be absent: no module at
+  // all, rather than a hook that threw. Shares the said-once map so a mode that
+  // fails to load does not log on every dock re-render.
+  function reportMissingModule(mode) {
+    var key = (mode || '?') + '.module';
+    if (modeHookFailed[key]) return;
+    modeHookFailed[key] = true;
+    try {
+      console.error('[studio] no module registered for mode "' + mode + '" — '
+        + 'studio-' + mode + '.js did not load, or loaded without registering. '
+        + 'The dock is showing the "arrives later in the redesign" placeholder, '
+        + 'which is NOT the real reason. Said once per mode.');
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
+
   function renderLive() {
     renderRulers();
     var canvas = $('tv-canvas');
@@ -188,7 +224,10 @@
     // A mode may take over the TV entirely (e.g. CHARS/TILES paint canvas).
     if (mod && typeof mod.renderTV === 'function') {
       try { mod.renderTV(g, ctx); } catch (e) { console.error('[studio] renderTV', e); }
-      if (typeof mod.onRenderOverlay === 'function') { try { mod.onRenderOverlay(g, ctx); } catch (e2) {} }
+      if (typeof mod.onRenderOverlay === 'function') {
+        try { mod.onRenderOverlay(g, ctx); }
+        catch (e2) { reportModeHookError('onRenderOverlay', currentMode, e2); }
+      }
       return;
     }
     var img = g.createImageData(256, 240);
@@ -222,7 +261,8 @@
     if (!(mod && mod.hidePlayerPreview)) drawPlayerPreview(g);
     // Modes may draw an overlay (grid, hover cell, selection) on top.
     if (mod && typeof mod.onRenderOverlay === 'function') {
-      try { mod.onRenderOverlay(g, ctx); } catch (e) {}
+      try { mod.onRenderOverlay(g, ctx); }
+      catch (e) { reportModeHookError('onRenderOverlay', currentMode, e); }
     }
   }
   // A calm LIVE preview of the hero at its resting spot on the floor, so
@@ -474,6 +514,12 @@
       return;
     }
 
+    // Every mode in MODES has shipped a module since Phase 0, so reaching here
+    // now means one FAILED TO LOAD — a renamed file, a syntax error, a missing
+    // <script> in studio.html. The copy below stays calm and vague on purpose
+    // (a pupil can do nothing about it), which is exactly why the real reason
+    // has to be said somewhere a grown-up will look.
+    reportMissingModule(currentMode);
     var ph = document.createElement('div');
     ph.className = 'placeholder';
     ph.textContent = 'This mode arrives later in the redesign. The shell, the shared ' +
@@ -483,8 +529,9 @@
   }
 
   // The stage toolbar shows a mode's tools (design §4.2: "two tools by
-  // default, more behind a disclosure"). A mode without a module keeps the
-  // Phase-0 scaffold toolbar.
+  // default, more behind a disclosure"). A mode without a module falls back to
+  // the Phase-0 scaffold toolbar — which, now that all eight modes have shipped,
+  // means that module failed to load rather than that it is unbuilt.
   function renderStageToolbar(mod) {
     var bar = $('stage-toolbar');
     // Preserve the trailing mode-name label; rebuild the tool buttons.
@@ -584,7 +631,7 @@
     if (window.StudioModes && window.StudioModes.world) selectMode('world');
     renderLive(); renderDock(); refreshQuestsAndAttention();
     setSaveState('saved');
-    if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+    if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); } }
     // A new project may target a newer engine than the last one — refresh the
     // engine button / advisor affordance.
     if (typeof refreshEngineButton === 'function') { try { refreshEngineButton(); } catch (e) {} }
@@ -687,7 +734,7 @@
       if (v === 'save') {
         var pr = Storage.readPrefs() || {};
         pr.teacherConfig = cfg; Storage.writePrefs(pr);
-        if (window.StudioTutorial && typeof window.StudioTutorial.render === 'function') { try { window.StudioTutorial.render(); } catch (e) {} }
+        if (window.StudioTutorial && typeof window.StudioTutorial.render === 'function') { try { window.StudioTutorial.render(); } catch (e) { reportRenderFailure('StudioTutorial.render', e); } }
       }
       if (v === 'edit') { openStepEditor(function () { openTeacherSettings(onClose); }); return; }
       if (typeof onClose === 'function') onClose();
@@ -788,9 +835,77 @@
     } catch (e) {}
   }
 
+  // "Load a starter game" needs studio-starter.js to have registered
+  // window.StudioStarter. A host page that does not load it made the old code
+  // throw on `window.StudioStarter.list` at the first click — so the button
+  // looked live, did nothing, and said nothing anywhere a pupil would look.
+  // Returns null (not []) when the hook is absent, so "not wired" and "wired but
+  // empty" stay distinguishable; both disable the button, for different reasons.
+  // Returns { list, why, err }. `why` distinguishes the reasons a starter list
+  // can be unusable, because they send you to different places:
+  //   'ok'        — a usable list
+  //   'empty'     — registered and callable, but returned nothing
+  //   'absent'    — studio-starter.js did not load, or did not register
+  //   'threw'     — it loaded and list() raised; `err` carries what
+  //   'not-array' — it returned something that is not a list
+  // The first version of this collapsed all four to null and then reported
+  // 'studio-starter.js did not load', which is false for three of them and
+  // discarded the exception — the same swallowed-reason bug fixed in the
+  // re-render handlers earlier the same day, written by the same hand hours
+  // later. Distinguishing them costs four lines.
+  function starterList() {
+    if (!window.StudioStarter || typeof window.StudioStarter.list !== 'function') {
+      return { list: null, why: 'absent', err: null };
+    }
+    var l;
+    try { l = window.StudioStarter.list(); }
+    catch (e) { return { list: null, why: 'threw', err: e }; }
+    if (!Array.isArray(l)) return { list: null, why: 'not-array', err: null };
+    return { list: l, why: l.length ? 'ok' : 'empty', err: null };
+  }
+  // Sibling of reportMissingModule, sharing its said-once map for the same reason.
+  var STARTER_REASON = {
+    empty:       'StudioStarter.list() returned an empty list.',
+    absent:      'studio-starter.js did not load, or loaded without registering window.StudioStarter.',
+    threw:       'StudioStarter.list() threw — the file DID load; the error follows.',
+    'not-array': 'StudioStarter.list() returned something that is not an array.',
+  };
+  function reportNoStarters(res) {
+    var key = 'starters.missing';
+    if (modeHookFailed[key]) return;
+    modeHookFailed[key] = true;
+    var why = (res && res.why) || 'absent';
+    try {
+      console.error('[studio] "Load a starter game" is disabled: '
+        + (STARTER_REASON[why] || STARTER_REASON.absent)
+        + ' The button is disabled rather than left looking live — a control that '
+        + 'does nothing when clicked is indistinguishable from a broken pupil project. '
+        + 'Said once.', (res && res.err) || '');
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
+
+  // Third sibling of reportModeHookError / reportMissingModule, for the same
+  // reason and sharing the same said-once map. Four best-effort re-renders in
+  // this file were written as `try { render(); } catch (e) {}` — correct in that
+  // a failed menu redraw must not abort the save that preceded it, wrong in that
+  // the pupil is then looking at a stale menu with nothing anywhere saying so.
+  // Swallowing the ABORT is right; swallowing the REASON is not.
+  function reportRenderFailure(what, err) {
+    var key = 'render.' + what;
+    if (modeHookFailed[key]) return;
+    modeHookFailed[key] = true;
+    try {
+      console.error('[studio] ' + what + ' threw while re-rendering — whatever it draws is '
+        + 'now stale on screen. The action that triggered it DID complete; only the redraw '
+        + 'failed. Said once per source.', err);
+    } catch (_) { /* console itself is gone; nothing useful left to do */ }
+  }
+
   function onNewGame() {
     Storage.flushPending();
-    var starters = (window.StudioStarter.list && window.StudioStarter.list()) || [];
+    var res = starterList();
+    var starters = res.list;
+    if (!starters || !starters.length) { reportNoStarters(res); return; }
     // One starter (or no modal helper) → keep the simple confirm flow.
     if (starters.length <= 1 || !(window.StudioUI && window.StudioUI.modal)) {
       if (!confirm('Start a fresh starter game?\n\nYour current project stays saved — you can switch back to it from the projects menu anytime.')) return;
@@ -1476,7 +1591,7 @@
               if (!window.confirm('Delete "' + (p.name || 'untitled') + '"? This cannot be undone.')) return;
               Storage.deleteProject(p.id);
               updateStorageIndicator();
-              if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) {} }
+              if (window.renderProjectsMenu) { try { window.renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); } }
               rerender();
             },
           }));
@@ -1647,6 +1762,23 @@
     });
     $('level-select').addEventListener('change', onLevelChange);
     $('btn-new-game').addEventListener('click', onNewGame);
+    // Decided 2026-08-14 (the owner left this one to me): DISABLE rather than
+    // log-and-continue. Both make the console honest; only disabling is visible
+    // to the person actually using the page, and the pupil never opens a console.
+    // Safe to test here because studio-starter.js is loaded before studio.js in
+    // studio.html and boot runs on DOMContentLoaded, so the registry is settled.
+    (function () {
+      var b = $('btn-new-game');
+      var res = starterList();
+      if (b && res.why !== 'ok') {
+        b.disabled = true;
+        // The tooltip stays general because it is read by a pupil, who cannot act
+        // on any of the four causes. The precise one goes to the console, which is
+        // where whoever CAN act on it will look.
+        b.title = 'Starter games are unavailable on this page — see the browser console for why.';
+        reportNoStarters(res);
+      }
+    })();
     $('btn-tutorial').addEventListener('click', onTutorial);
     $('quest-collapse').addEventListener('click', function () { setQuestsCollapsed(true); });
     $('quest-expand').addEventListener('click', function () { setQuestsCollapsed(false); });
@@ -1659,7 +1791,7 @@
     }
     // Fill the (previously empty) #projects-menu with the local Games dropdown so
     // saved games can be reopened without an account.
-    try { renderProjectsMenu(); } catch (e) {}
+    try { renderProjectsMenu(); } catch (e) { reportRenderFailure('renderProjectsMenu', e); }
 
     // TV pointer interaction — delegated to the active mode module.
     // A mode implements onTvDown/onTvMove/onTvUp(cell, ctx, evt).

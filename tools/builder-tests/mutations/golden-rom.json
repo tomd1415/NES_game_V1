@@ -1,0 +1,22 @@
+{
+  "name": "golden byte-identical ROM invariants",
+  "why": "The crown-jewel guard. \"Unused features are stripped, so ROMs stay byte-identical\" is the single property that makes every engine change cheap to verify, and CLAUDE.md names it as the standing guardrail — but neither golden assertion had ever been watched failing.",
+  "anchor_note": "BOTH breaks were verified BY HAND to move the ROM hash before being written here (jmp_up 20->21 gives b7aea34f vs golden 1730448e, for the stock build and the template build alike). That verification is not ceremony — two earlier anchors were wrong and each produced a 'nothing caught this' result that looked exactly like a hollow guard. (1) #define DEADZONE_LEFT is DEAD: scroll.c takes its own default from scroll.h, and main.c never uses its own copy, so the build was byte-identical. (2) The `{ jumping = 1; jmp_up = 20; }` form on platformer.c:1389 sits inside `#if BW_GAME_STYLE == 2 && PLAYER2_ENABLED` and is stripped from a no-modules build — pointedly, that is the very property this invariant exists to guarantee. A break that does not change the output proves nothing about the guard, and 'stayed green' cannot tell you which of the two you have. Measure the hash first.",
+  "command": ["bash", "tools/builder-tests/mutate-report.sh"],
+  "breaks": [
+    {
+      "id": "stock-jump-height-changed",
+      "file": "steps/Step_Playground/src/main.c",
+      "find": "jmp_up = 20;",
+      "replace": "jmp_up = 21;",
+      "expect": ["invariant - Step_Playground stock ROM matches golden hash"]
+    },
+    {
+      "id": "template-jump-height-changed",
+      "file": "tools/tile_editor_web/builder-templates/platformer.c",
+      "find": "//>> jump_height: How high the player jumps. Bigger number = higher jump (try 10 to 40).\n                jmp_up = 20;",
+      "replace": "//>> jump_height: How high the player jumps. Bigger number = higher jump (try 10 to 40).\n                jmp_up = 21;",
+      "expect": ["invariant - template (no modules) ROM matches golden hash"]
+    }
+  ]
+}

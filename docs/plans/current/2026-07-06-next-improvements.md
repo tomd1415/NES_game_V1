@@ -1,5 +1,11 @@
 # Next improvements — prioritised roadmap (2026-07-06)
 
+> ⚠️ **Partly superseded as of 2026-07-20.** The A-tier below has entirely
+> shipped, and the C-tier "highest-impact remaining item" (the scrolling engine
+> rework) was largely closed by engine v62–v66. **For what to do next, read
+> [`docs/STATUS.md`](../../STATUS.md).** This file is still worth reading for
+> the standing guardrails at the foot and the D-tier long-horizon ideas.
+
 Written at the end of an autonomous session that shipped engine **v10** (flyer +
 patrol enemy paths) and **v11** (basic-platformer stomp), fixed bugs #14/#17/#18,
 investigated #16/#28, and swept the whole `recently-observed-bugs.md` list. This

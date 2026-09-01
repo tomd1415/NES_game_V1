@@ -250,6 +250,20 @@ was a massive improvement.
     keep their own fixed fall feel.
 23. Very low priority -- make sure it is usable on tablets and mobiles eventually.
 24. Add an optional user login system that saves the users work between computers and allows them to put their creations into the gallery and remove them, whereas without an account the user can only post to the gallery and not remove from the gallery unless there is a way to be sure that it was that user that posted it to the gallery.
+    *Done (audited 2026-07-28).* Both halves ship. **Cross-computer saves:**
+    `/auth/signup|login|logout|reset` plus `/me/projects` (GET/POST/PUT/DELETE),
+    covered by `accounts.mjs`, `account-projects.mjs`, `account-ui.mjs`.
+    **Gallery gating:** publishing stamps the signed-in account's id into the
+    entry's `metadata.json`, and `/gallery/remove` denies by default — a valid
+    teacher/admin secret removes anything (that is the moderation path for
+    anonymous posts), otherwise the caller must be signed in (401
+    `not_logged_in`) *and* be the owner (403 `not_owner`). So an account-less
+    pupil can post but not remove, which is exactly the "unless there is a way to
+    be sure it was that user" condition. `/gallery/list` returns a per-entry
+    `owned` boolean and never the raw owner id; `gallery.html` shows 🗑 Remove
+    only for owned entries or in teacher mode, and the server is the real gate.
+    Verified by `gallery-auth.mjs` (anon→401, wrong pupil→403, owner→200,
+    pupil-vs-anonymous-entry→403, teacher→200, wrong secret rejected).
 25. The very first frame of the game that is used in the gallery is almost always just the background transparent colour and nothing else. A different way of generating the thumbnail for the gallery might be useful.
     *Done (verified 2026-07-14).* The gallery thumbnail is no longer frame 0. The
     publish flow runs the ROM headless for a **fixed 60-frame (~1 s) warm-up**
@@ -726,8 +740,21 @@ Root causes below were verified against the current code on 2026-06-17.
     screen clamp was kept (correct — `ss_x` is a u8 single-screen
     coord, not a world coord).  Guarded in `run-all.mjs`; byte-identical
     baseline unaffected (helper only emits when an enemy moves).
-    Enemy-vs-enemy overlap remains a follow-up (needs an AABB pass).
     Plan §B-1.
+    **FIXED 2026-07-27 (engine v77)** — the follow-up AABB pass landed, so
+    this item is now *fully* closed.  New Globals toggle **"Enemies bump
+    into each other"** (`globals.enemyBump`, default **off**): once per
+    frame, after every AI has moved, each overlapping pair is pushed 1px
+    apart along the shallower axis, and walkers / patrols / hoppers turn
+    around rather than grinding together — push-apart alone would have
+    recreated the very 1px jitter this item reports.  Chasers and flyers
+    are push-apart only (they steer by the player, so there is no
+    direction to reverse).  Works on both build paths with no new 6502:
+    under `NES_ASM_AI` the pass flips `ss_ai_state[]` instead of the
+    flag the compiled-out C blocks would have consumed.  Byte-identical
+    with the box unticked.  `tools/builder-tests/enemy-bump.mjs`
+    (both paths, with a control run proving the walkers really do collide)
+    + `tools/studio-tests/enemy-bump.spec.js` (the toggle is reachable).
 
 31. **NPC dialogue glitches the stage, especially on gallery projects.**
     (Feedback F1b + F23, reporters K and A.)  Dialogue draws text as
@@ -754,9 +781,25 @@ Root causes below were verified against the current code on 2026-06-17.
     (cam_y>>3)+row`; nametable flip at col 32 / row 30; restore from
     `bg_world_tiles[]`); `pauseOnOpen` keeps the camera still while open.
     Verified by address math (on-screen x 12 vs the old off-screen −156) +
-    `dialogue-scroll.mjs` (2×1 compile) + round2 A9b.  **Still deferred (minor):**
-    the brief forced-blank flash when the box opens (the vblank `PPU_MASK=0`
-    window) — cosmetic, part of the frame-model rework (codegen plan Sprint 5).
+    `dialogue-scroll.mjs` (2×1 compile) + round2 A9b.  **Flash resolved
+    2026-07-28 (engine v78) — item 31 is now closed.** The last slice was the
+    forced-blank window: the banner is 4 tile rows (8 when a vertical scroll
+    straddles two attribute rows), so writing it took 128–256 `$2007` pokes in
+    one vblank — past the ~2273-cycle budget — and the writer set `PPU_MASK = 0`
+    for the burst.  With rendering off the burst runs into the visible frame, so
+    the top of the screen painted flat backdrop for a frame.  v78 prepares ONE
+    32-byte row per frame in `per_frame` (rendering on, cycles to spare) and the
+    vblank slot blits it with an unrolled `lda bw_dlg_buf+N / sta $2007` burst
+    (~260 cycles), so rendering is never disabled; attributes go first on open
+    and last on close so no frame shows glyphs in the scenery palette or
+    scenery in the box palette.  Costs 5 frames to open instead of 1 (invisible:
+    a blank box cell is colour 0 = `universal_bg` in every palette).  Measured
+    end-to-end: on v77 the open frame drops a 40-scanline band from 7680 lit
+    pixels to **0**; on v78 it stays 7680.  Guarded by
+    `render-dialogue-noflash.mjs` plus round2 B6i/B6j (both mutation-tested).
+    This was codegen plan Sprint 5(b) ("cap to one row + a per-frame byte
+    budget"); Sprint 5(c), moving OAM DMA and a VRAM queue into the crt0 NMI,
+    remains a separate long-horizon idea and is **not** needed for this item.
     Plan §B-2; codegen plan `2026-06-18-codegen-rework-implementation.md`.
 
 32. **Deleting the 2nd sprite animation appears to delete the 1st.**
@@ -844,15 +887,41 @@ Root causes below were verified against the current code on 2026-06-17.
 
 37. **"My game keeps crashing" / "emulator froze for no reason."**
     (Feedback F2, F11, F13; reporters D and A.)  Generic, no repro.
-    OAM-overflow guards from the June sweep cover the scene-sprite and
-    HUD fill loops, but the player / Player-2 OAM loops
-    (`platformer.c` ≈999 and ≈1099) are **unguarded** (bounded by sprite
-    size, so only a risk with a very large player), and the in-browser
-    jsnes frame loop (`emulator.js` ≈287) has **no watchdog** — a
-    malformed/oversized ROM or a tight vblank can hang it with no
-    recovery banner.  Status: **NEEDS REPRO** + harden (bound the
-    player loops; add a jsnes try/catch + frame-time watchdog).  Plan
+    Status: **HARDENED 2026-07-26** (engine v76 + emulator watchdog) —
+    **still NEEDS REPRO** for anything the hardening didn't cover.  Plan
     §B-10.
+
+    The original §B-10 note is partly superseded; recording what was
+    actually found, since two of the three guesses were wrong:
+
+    - The **Player-2** loops were *already* guarded — BR-03 did that and
+      left **Player 1** as the only unguarded one.  (The `≈999` / `≈1099`
+      line numbers are long stale.)
+    - The real Player-1 bug was **not** "only a risk with a very large
+      player": it was reachable at the Builder's own maximum.  Probing
+      `oam_idx` right after the player draw showed the ASM `draw_player`
+      — the **default** for scroll builds — tracks the cursor in **Y,
+      8-bit**, so a 64-cell (8×8) player wrapped it to 0.  The player
+      drew correctly, then P2 / scene / spawn / HUD all read an "empty"
+      buffer and painted over it, with their own `oam_idx > 252` guards
+      never tripping.  With the background status bar on (it parks a
+      sprite-0 split marker in slot 0) the player's last cells also wiped
+      that marker, breaking the scroll split.  Separately, the **C** draw
+      path had no bound at all and wrote 4 bytes past `oam_buf[255]`.
+      Both fixed; regression test `render-p1-oam-cursor.mjs`.
+    - The **jsnes watchdog** guess was right, and the sharper version of
+      it is that an exception inside `nes.frame()` does **not** stop a
+      `setInterval` — so a fault re-threw 60×/second into a console no
+      pupil sees, while the game sat frozen.  Now try/catch + a
+      stalled/slow watchdog + a plain-language banner with retry.
+      `loadROM` is guarded too (a malformed ROM used to make Play do
+      *nothing*, with no dialog at all).  Test `emulator-watchdog.mjs`.
+
+    **Not covered — still worth a repro for:** a genuinely infinite
+    *synchronous* loop inside `nes.frame()` cannot be preempted from the
+    page's own thread by any timer; that needs a worker or a patched
+    jsnes.  If a pupil can still freeze it, that is the likely shape, so
+    the checklist below is still worth filling in.
 
 38. **A jump animation plays the walk (or another) animation in the
     air.**  (Feedback F16, reporter T.)  `_resolve_animation` in
@@ -871,6 +940,42 @@ Root causes below were verified against the current code on 2026-06-17.
     `animFrameSizeMismatch`).  Rendering a differently-sized jump pose
     in-engine stays a deferred enhancement.  Guarded in `run-all.mjs`.
     Plan §B-8.
+
+39. **The colour keys 0–3 are awkward on a keyboard whose number row
+    starts at 1.**  Reported verbatim: *"I'd like a feature to change the
+    palette keyboard shortcuts (i.e. the 0, 1, 2, 3). I use a keyboard
+    where the number row is Esc, 1, 2, 3 … with 0 and backtick (`) all
+    the way on the right side, which makes it very inconvenient."*  Both
+    keys that pick colour 0 sat across the board from the keys used to
+    paint with, so choosing transparent meant moving hands.
+    **FIXED 2026-07-28 (editor only — no engine change, no version bump).**
+    **`4` is now an additional alias for colour 0**, so the whole set —
+    1, 2, 3 and 4-for-0 — sits under one hand.  Nothing was remapped:
+    `0`→0, `1`→1, `2`→2, `3`→3 and `` ` ``→0 all behave exactly as
+    before, so no existing muscle memory or printed worksheet is
+    invalidated.  Applied to all four places the shortcut lives: the
+    Studio's **TILES** and **CHARS** modes — which had *no* digit
+    shortcut at all before, so they gain 0–4 outright — and the legacy
+    `index.html` and `sprites.html` painters.  Help text and both Studio
+    pen docks updated so it is discoverable.  Covered by
+    `tools/studio-tests/palette-keys.spec.js` across all four surfaces,
+    including that `Ctrl`/`Cmd`+digit stays with the browser.
+    *Not* done: making the shortcuts **user-configurable**, which is what
+    the report literally asked for.  A fixed alias solves the stated
+    problem without a settings surface to build, store, teach and keep
+    in sync across four editors; revisit if a different layout complains.
+    **Extended 2026-07-30 to WORLD (editor only, no version bump).**  WORLD's
+    background-palette picker was deliberately left alone at the time because it
+    had never had a key binding; it now has one.  Its picker is four **BG
+    sub-palettes**, not five pen colours, so the set is `0`–`3` with no
+    transparent to alias — but `4` and `` ` `` still map to palette 0, because
+    otherwise WORLD would have become the single surface where the reporter's
+    awkward reach was still required.  A digit past the last palette (`5`+) is
+    ignored rather than clamped.  The keys set the *paint* palette only: WORLD's
+    metatile block editor has its own BG 0–3 buttons that mutate saved data
+    through `pushUndo`, and a stray keypress silently recolouring a block would
+    be a worse bug than the one being fixed, so those stay click-only.  Six new
+    cases in `palette-keys.spec.js`, each mutation-checked.
 
 ### Item 32 — animation delete (status: VERIFIED CORRECT in the Studio, 2026-07-13 — see item 32 + animation-delete.spec.js)
 

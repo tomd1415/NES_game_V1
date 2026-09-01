@@ -75,7 +75,7 @@
     },
     {
       "path": "steps/Step_Playground/src/pdraw_asm.s",
-      "sha1": "32e31bd4a4c04ea7e45c1fbedee0b39600f6c433"
+      "sha1": "c4856c5158df5d57773941a480c0a6fc1beeabcd"
     },
     {
       "path": "steps/Step_Playground/src/player_asm.s",
@@ -106,60 +106,16 @@
       "sha1": "880b8dfa6aba9b4179ab1a6cd4ab250c6c698810"
     },
     {
-      "path": "tools/nes_studio_core/README.md",
-      "sha1": "2014f05da3e350880401c36a6469a65777a40352"
-    },
-    {
-      "path": "tools/nes_studio_core/__init__.py",
-      "sha1": "b33e751f590ac6b71ab5fefe80ccc95767cd6155"
-    },
-    {
-      "path": "tools/nes_studio_core/build.py",
-      "sha1": "3e00c5e9d04b049af0d2c126f5c2af07488c4d3c"
-    },
-    {
-      "path": "tools/nes_studio_core/build_assets.py",
-      "sha1": "7ee032e58fa565fcbd944137ec3798cbacdf8921"
-    },
-    {
-      "path": "tools/nes_studio_core/collision.py",
-      "sha1": "b5b9ba2daa4acf5194431b187531574cabdf1c83"
-    },
-    {
-      "path": "tools/nes_studio_core/graphics.py",
-      "sha1": "55cc26a5ff9d85cec890e6da3bfac5f73b5e23e2"
-    },
-    {
-      "path": "tools/nes_studio_core/play.py",
-      "sha1": "a8b1d2bb30b2a28f7ecdea5b3432ebfcb94947f0"
-    },
-    {
-      "path": "tools/nes_studio_core/preparation.py",
-      "sha1": "944f0d897bb21251f9d9b77be32b0074a88d5017"
-    },
-    {
-      "path": "tools/nes_studio_core/project.py",
-      "sha1": "f478fabe30724e518b30f439cd9c41ee13b22af5"
-    },
-    {
-      "path": "tools/nes_studio_core/scene.py",
-      "sha1": "e510e02a4625aeec8e43606bf15d66e992ad4205"
-    },
-    {
-      "path": "tools/nes_studio_core/world.py",
-      "sha1": "e07b4b0030f7fcf5501cd852d9e9b78b09e2b68a"
-    },
-    {
       "path": "tools/tile_editor_web/builder-assembler.js",
       "sha1": "e8772529d0e94cda7f0e4dc0280c9f998f8bfbdc"
     },
     {
       "path": "tools/tile_editor_web/builder-modules.js",
-      "sha1": "4655715ec051d03ddeb3c2e801f9599dbed3c642"
+      "sha1": "b0a73f1135c8e720d254da96ec4f06d76239fdc4"
     },
     {
       "path": "tools/tile_editor_web/builder-templates/platformer.c",
-      "sha1": "918610589e3591a2f7d59181ddba9d875c14640b"
+      "sha1": "7921c8929f610bcc35ee34b9a5c9df7a4e1d4fcb"
     },
     {
       "path": "tools/tile_editor_web/engine-version.js",

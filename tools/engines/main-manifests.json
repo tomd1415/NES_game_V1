@@ -1,6 +1,6 @@
 {
   "_comment": "Digests of origin/main’s engine-snapshot manifests. See tools/builder-tests/lib/snapshot-collisions.mjs.",
-  "generated_from": "origin/main @ 6dbf2ab",
+  "generated_from": "origin/main @ 1c399c0",
   "generated_on": "2026-09-01",
   "digests": {
     "v1": "ada657f8b9f4907c90470b143c5becef25b1b116",
@@ -83,11 +83,7 @@
     "v8": "8c2ac204e76e17888eb1dee66302b7dd71c6fbcf",
     "v9": "6b31d681fbe45faeed12735fdc368d3fae3b958d"
   },
-  "expected_collisions": [
-    "v76",
-    "v77",
-    "v78"
-  ],
+  "expected_collisions": [],
   "local_only": [
     "v80",
     "v81",

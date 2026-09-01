@@ -88,7 +88,7 @@ archived and every v1 game keeps working.
   server and the JS both read (proposed `tools/engines/ENGINE_VERSION`).
 - **Project stamp** — `state.engineVersion` records the engine a project was
   **authored/last-built** against. Written on save + on successful build.
-  Absent ⇒ treat as v1 (the current shipped engine).
+  Absent ⇒ treat as v1 (the pre-versioning baseline, not the current engine).
 - **ROM stamp** — the build records the engine version in the returned build
   metadata, and (stretch) in a fixed ROM location / iNES trainer/comment so a
   downloaded `.nes` is self-identifying.
@@ -168,11 +168,11 @@ pins the multi-page site to v1 today. The server-side snapshot build below is
 the additional enforcement needed **once a future version changes the static
 cc65 sources** (not just client codegen).
 
-> **Update 2026-07-14 (engine now v72):** that "once" has arrived. Since v19/v20
+> **Update 2026-07-14 (engine now v75):** that "once" has arrived. Since v19/v20
 > the engine moved its hot paths to hand-written 6502 (`steps/Step_Playground/src/*.s`
 > plus regenerated `.c`), so versions now differ in the **static cc65 sources**,
 > not only client codegen. `scripts/snapshot-engine.mjs` already freezes those
-> sources under `tools/engines/v<N>/` (a v72 snapshot includes
+> sources under `tools/engines/v<N>/` (a v75 snapshot includes
 > `steps/Step_Playground/src/`), so the "v1↔v2 only client codegen" framing above
 > is historical and the snapshot capture the server rebuild depends on is in place.
 > The build path that *selects* a frozen version's sources on `/play` remains the

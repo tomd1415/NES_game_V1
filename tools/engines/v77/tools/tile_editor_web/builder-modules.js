@@ -192,6 +192,7 @@
       gravityPx: 1,    // matches `ss_y[i]++` (scene-sprite fall, 1 px/frame)
       jumpSpeedPx: 2,  // matches `py -= 2` (player rise, 2 px/frame)
       bobWhenWalking: false,   // R-10: 1px walk bob (off = byte-identical)
+      enemyBump: false,        // #30: enemy-vs-enemy AABB (off = byte-identical)
     },
     schema: [
       {
@@ -226,6 +227,16 @@
         type: 'bool',
         help: 'The player hops 1 pixel on alternate walk frames — a little ' +
           'life in the step.  Only while walking on the ground.',
+      },
+      {
+        key: 'enemyBump',
+        label: 'Enemies bump into each other',
+        type: 'bool',
+        help: 'Stops enemies standing inside one another.  When two of them ' +
+          'touch they are nudged apart, and ones that walk (Walker, Patrol, ' +
+          'Hopper) turn around instead of grinding together.  Chasers and ' +
+          'flyers still head for the player, they just cannot overlap.  ' +
+          'Leave it off if you want enemies to pass through each other.',
       },
     ],
     // Emit `#define BW_GRAVITY_PX <n>` + `#define BW_JUMP_SPEED_PX <n>`
@@ -535,6 +546,17 @@
       // fall the new kinds back to the plain `walker` so the codegen — and the
       // golden ROM — is byte-identical to what shipped before v4.
       const targetEngine = (typeof window !== 'undefined' && window.NES_TARGET_ENGINE) || 1;
+      // #30 / engine v77 — enemy-vs-enemy separation.  Lives on the Globals
+      // module (game-wide, like gravity) but is emitted from here because this
+      // module owns the ss_* indices and the per-instance AI.  Off unless the
+      // pupil ticks it, and degraded on pre-v77 targets, so every existing
+      // design — and the golden ROM — is byte-identical either way.
+      const glob = (state && state.builder && state.builder.modules &&
+        state.builder.modules.globals) || null;
+      const enemyBump = !!(glob && glob.enabled && glob.config &&
+        glob.config.enemyBump) && targetEngine >= 77;
+      const bumpIdx = [];   // instance indices that take part (movement AI only)
+      const BUMP_AIS = ['walker', 'chaser', 'flyer', 'patrol', 'hopper', 'goomba', 'koopa'];
       const parts = [
         '        // [builder] scene — per-instance AI for manually-placed sprites.',
       ];
@@ -568,6 +590,15 @@
         // can step its body slightly into a wall before reversing on the next
         // frame — acceptable for Tier 2 (visually it just turns a frame late).
         const speed = A.clampInt(inst.speed, 1, 4, 1);
+        // #30 — which instances the separation pass considers.  An explicit list
+        // of the AIs that move under their own steam, deliberately not "anything
+        // but static": every kind here also does `emitted++` below, which is what
+        // emits bw_sprite_blocked — the helper the pass itself calls.  A denylist
+        // could admit some future AI that doesn't, and break the build.
+        // `shooter` is a fixed turret, so nudging it would only shift scenery.
+        if (enemyBump && sp.role === 'enemy' && BUMP_AIS.indexOf(ai) !== -1) {
+          bumpIdx.push(i);
+        }
         if (sp.role === 'enemy' && ai === 'walker') {
           emitted++;
           // Phase 2b — the ai_update ASM loop owns walkers (type 1, dir seed 1).
@@ -580,6 +611,12 @@
               ' walks side to side, turning at walls and the screen edge');
           parts.push('        {');
           parts.push('            static signed char bw_dir_' + i + ' = 1;');
+          // #30 — turn around if last frame's separation pass nudged us off a
+          // neighbour.  Consumed (and cleared) here, where bw_dir_<i> is in
+          // scope, rather than reached into from the pass itself.
+          if (enemyBump) {
+            parts.push('            if (bw_bumped[' + i + ']) { bw_bumped[' + i + '] = 0; bw_dir_' + i + ' = -bw_dir_' + i + '; }');
+          }
           parts.push('            if (bw_dir_' + i + ' > 0) {');
           parts.push('                if (bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) bw_dir_' + i + ' = -1;');
           parts.push('                else ss_x[' + i + '] += ' + speed + ';');
@@ -659,6 +696,11 @@
           parts.push('        {');
           parts.push('            static signed char bw_pdir_' + i + ' = 1;');
           parts.push('            static signed char bw_poff_' + i + ' = 0;');
+          // #30 — same turn-on-bump as the walker.  The offset counter keeps
+          // running, so a bumped patrol simply covers its beat in reverse.
+          if (enemyBump) {
+            parts.push('            if (bw_bumped[' + i + ']) { bw_bumped[' + i + '] = 0; bw_pdir_' + i + ' = -bw_pdir_' + i + '; }');
+          }
           parts.push('            if (bw_pdir_' + i + ' > 0) { ss_x[' + i + '] += ' + speed + '; bw_poff_' + i + ' += ' + speed + '; if (bw_poff_' + i + ' >= 40) bw_pdir_' + i + ' = -1; }');
           parts.push('            else { ss_x[' + i + '] -= ' + speed + '; bw_poff_' + i + ' -= ' + speed + '; if (bw_poff_' + i + ' <= -40) bw_pdir_' + i + ' = 1; }');
           parts.push('        }');
@@ -681,6 +723,11 @@
           parts.push('            static signed char  bw_hdir_' + i + ' = 1;');
           parts.push('            static unsigned char bw_hph_' + i + ' = 0;');
           parts.push('            unsigned char bw_hph, bw_hup;');
+          // #30 — turn on bump.  The hop phase is untouched, so it keeps its
+          // rhythm and just travels the other way.
+          if (enemyBump) {
+            parts.push('            if (bw_bumped[' + i + ']) { bw_bumped[' + i + '] = 0; bw_hdir_' + i + ' = -bw_hdir_' + i + '; }');
+          }
           // Horizontal walk + turn.  Probe at the ground height (hopHome), not the
           // mid-hop Y, so a wall is sensed the same whether or not it is airborne.
           parts.push('            if (bw_hdir_' + i + ' > 0) {');
@@ -1128,6 +1175,89 @@
           '        }',
         ].join('\n');
         withHelper = A.appendToSlot(withHelper, 'scene_draw_extra', shooterDraw);
+      }
+      // #30 / engine v77 — enemy-vs-enemy separation (AABB).  Needs two
+      // participants to be worth anything; one enemy has nobody to bump.
+      if (enemyBump && bumpIdx.length >= 2) {
+        const k = bumpIdx.length;
+        withHelper = A.appendToSlot(withHelper, 'declarations', [
+          '/* [builder] #30 (engine v77) — enemy-vs-enemy separation state.',
+          ' * bw_bump_idx lists the instances that take part (movement AI only);',
+          ' * bw_bumped[] is the "you were nudged, turn around" flag each walking',
+          ' * AI consumes and clears on its next frame.  Indices match ss_x[]. */',
+          '#define BW_BUMP_COUNT ' + k,
+          'static const unsigned char bw_bump_idx[' + k + '] = { ' + bumpIdx.join(', ') + ' };',
+          'static unsigned char bw_bumped[' + instances.length + '] = { ' +
+            Array.from({ length: instances.length }, () => '0').join(', ') + ' };',
+        ].join('\n'));
+        const bumpPass = [
+          '        // [builder] #30 (v77) — enemy-vs-enemy separation.  Runs AFTER every',
+          '        // AI has moved this frame, so it only ever corrects a finished',
+          '        // position.  Any two live participants whose boxes overlap are pushed',
+          '        // 1px apart along the SHALLOWER axis (the one they are least buried',
+          '        // in — a head-on pair separates sideways, a landed-on-top pair',
+          '        // vertically) and flagged, so a walker/patrol/hopper turns around next',
+          '        // frame instead of grinding into its neighbour 1px at a time, which is',
+          '        // exactly the jitter reported in #30.',
+          '        //',
+          '        // Every push goes through bw_sprite_blocked, so it can never shove an',
+          '        // enemy into solid ground, off the screen edge, or (via the dir-2 240px',
+          '        // bound) up to the 0xFF row that marks an actor defeated.',
+          '        {',
+          '            unsigned char bwi, bwj, bwa, bwb;',
+          '            unsigned int bwax, bway, bwbx, bwby;',
+          '            unsigned char bwaw, bwah, bwbw, bwbh;',
+          '            unsigned int bwox, bwoy;',
+          '            for (bwi = 0; bwi + 1 < BW_BUMP_COUNT; bwi++) {',
+          '                bwa = bw_bump_idx[bwi];',
+          '                if (ss_y[bwa] >= 0xEF) continue;      /* defeated/parked */',
+          '                for (bwj = bwi + 1; bwj < BW_BUMP_COUNT; bwj++) {',
+          '                    bwb = bw_bump_idx[bwj];',
+          '                    if (ss_y[bwb] >= 0xEF) continue;',
+          '                    bwax = (unsigned int)ss_x[bwa]; bway = (unsigned int)ss_y[bwa];',
+          '                    bwbx = (unsigned int)ss_x[bwb]; bwby = (unsigned int)ss_y[bwb];',
+          '                    bwaw = (unsigned char)(ss_w[bwa] << 3); bwah = (unsigned char)(ss_h[bwa] << 3);',
+          '                    bwbw = (unsigned char)(ss_w[bwb] << 3); bwbh = (unsigned char)(ss_h[bwb] << 3);',
+          '                    /* Separating-axis test: touching edge-to-edge is NOT an overlap. */',
+          '                    if (bwax + bwaw <= bwbx || bwbx + bwbw <= bwax) continue;',
+          '                    if (bway + bwah <= bwby || bwby + bwbh <= bway) continue;',
+          '                    bwox = (bwax < bwbx) ? (bwax + bwaw - bwbx) : (bwbx + bwbw - bwax);',
+          '                    bwoy = (bway < bwby) ? (bway + bwah - bwby) : (bwby + bwbh - bway);',
+          '                    if (bwox <= bwoy) {',
+          '                        if (bwax < bwbx) {',
+          '                            if (!bw_sprite_blocked((unsigned char)bwax, (unsigned char)bway, ss_w[bwa], ss_h[bwa], 1)) ss_x[bwa]--;',
+          '                            if (!bw_sprite_blocked((unsigned char)bwbx, (unsigned char)bwby, ss_w[bwb], ss_h[bwb], 0)) ss_x[bwb]++;',
+          '                        } else {',
+          '                            if (!bw_sprite_blocked((unsigned char)bwbx, (unsigned char)bwby, ss_w[bwb], ss_h[bwb], 1)) ss_x[bwb]--;',
+          '                            if (!bw_sprite_blocked((unsigned char)bwax, (unsigned char)bway, ss_w[bwa], ss_h[bwa], 0)) ss_x[bwa]++;',
+          '                        }',
+          '                    } else {',
+          '                        if (bway < bwby) {',
+          '                            if (!bw_sprite_blocked((unsigned char)bwax, (unsigned char)bway, ss_w[bwa], ss_h[bwa], 3)) ss_y[bwa]--;',
+          '                            if (!bw_sprite_blocked((unsigned char)bwbx, (unsigned char)bwby, ss_w[bwb], ss_h[bwb], 2)) ss_y[bwb]++;',
+          '                        } else {',
+          '                            if (!bw_sprite_blocked((unsigned char)bwbx, (unsigned char)bwby, ss_w[bwb], ss_h[bwb], 3)) ss_y[bwb]--;',
+          '                            if (!bw_sprite_blocked((unsigned char)bwax, (unsigned char)bway, ss_w[bwa], ss_h[bwa], 2)) ss_y[bwa]++;',
+          '                        }',
+          '                    }',
+          '                    bw_bumped[bwa] = 1; bw_bumped[bwb] = 1;',
+        ];
+        if (asmAiHandled > 0) {
+          bumpPass.push(
+            '#ifdef NES_ASM_AI',
+            '                    /* The C AI blocks above are compiled out under NES_ASM_AI,',
+            '                     * so nothing would consume bw_bumped[].  Flip the ASM',
+            '                     * loop\'s own direction byte instead — type 1 = walker,',
+            '                     * 4 = patrol (a chaser/flyer has no direction to turn). */',
+            '                    if (ss_ai_type[bwa] == 1 || ss_ai_type[bwa] == 4) ss_ai_state[bwa] = -ss_ai_state[bwa];',
+            '                    if (ss_ai_type[bwb] == 1 || ss_ai_type[bwb] == 4) ss_ai_state[bwb] = -ss_ai_state[bwb];',
+            '#endif');
+        }
+        bumpPass.push(
+          '                }',
+          '            }',
+          '        }');
+        parts.push(bumpPass.join('\n'));
       }
       return A.appendToSlot(withHelper, 'per_frame', parts.join('\n'));
     },

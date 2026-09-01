@@ -10,12 +10,14 @@ of how we got here.
 
 | Folder | What's in it |
 | ------ | ------------ |
+| [`STATUS.md`](STATUS.md) | *(file, not a folder)* The living "where we are now" baseline — engine version, test state, open items, blockers. Read first, update last. |
 | [`guides/`](guides/) | Pupil-, teacher- and developer-facing reference docs. These change less often than plans and tend to grow in place. |
 | [`design/`](design/) | Design intent for the UI/UX redesign — vision, principles, wireframes, component specs, and design decisions. Plans say *what/when*; design docs say *why/how it should look and feel*. The redesign roadmap lives in [`design/phased-plan.md`](design/phased-plan.md). |
 | [`plans/current/`](plans/current/) | Active plan(s) the project is currently executing against. Should be a small number of files at any time. |
 | [`plans/archive/`](plans/archive/) | Superseded plans, named `YYYY-MM-DD-<slug>.md` so they sort chronologically. Old code/comment cross-references that point here are still meaningful — please don't delete or rename them. |
 | [`feedback/`](feedback/) | Pupil and teacher bug reports / feature requests, plus broader feedback summaries. The [running bugs list](feedback/recently-observed-bugs.md) feeds the next plan. |
 | [`changelog/`](changelog/) | What shipped, when. The [changelog-implemented](changelog/changelog-implemented.md) is a single growing file with one section per shipped change, newest at the top. |
+| [`LESSONS-LEARNT.md`](LESSONS-LEARNT.md) | *(file, not a folder)* What has actually cost time here, grouped by the *shape* of the mistake — silent checks, lists that must agree, environment differences you cannot see from inside. Includes the false theories held on the way. Worth skimming before an audit or a debugging session. |
 
 Repository-wide contribution, ownership and cross-team review rules live in
 [`CONTRIBUTING.md`](../CONTRIBUTING.md).
@@ -38,12 +40,35 @@ Repository-wide contribution, ownership and cross-team review rules live in
   executed — and the one check that would have settled each one.
 - **Picking up active work?** Work is now feedback-driven — the running list of
   open items (with fixes recorded inline as they land) is
+- **Picking up active work?** Start with [`STATUS.md`](STATUS.md) — the living
+  "where we are now" file: current engine version, test state, what's open and
+  what's blocked waiting on a human. Then, work is feedback-driven — the running
+  list of open items (with fixes recorded inline as they land) is
   [`feedback/recently-observed-bugs.md`](feedback/recently-observed-bugs.md), and
   the Studio "what's done / what's left" tracker is
   [`plans/current/2026-07-05-studio-redesign.md`](plans/current/2026-07-05-studio-redesign.md).
   The older tiered plan
   [`plans/current/2026-04-26-fixes-and-features.md`](plans/current/2026-04-26-fixes-and-features.md)
   is kept for historical context.
+- **Running the tests, or a server won't start?** Read
+  [`guides/TEST-SERVERS.md`](guides/TEST-SERVERS.md) — which of the three test
+  servers listens on which port (dev `8765`, Studio E2E `18790`, builder-tests
+  `18768–18897`), how to start each, and how to pick a port for a new suite.
+  The old 18790 double-claim is fixed (2026-08-06) and `run-all.mjs` now guards
+  against it, but still run the two suites sequentially — the box is small and
+  running both at once mostly loads it. That is a courtesy to the box, not a
+  warning that the E2E is fragile: it is green at the committed timeout at load
+  ~14.5, and [`STATUS.md`](STATUS.md) carries the measured detail.
+- **Looking for what is actually planned?** `docs/plans/current/` is misleading —
+  archiving stopped in April 2026, so most of the 21 plans in there describe shipped
+  work. [`plans/current/README.md`](plans/current/README.md) says which, with the
+  evidence, and names the two that are genuinely outstanding.
+- **Adding a Studio mode?** Read
+  [`guides/ADDING-A-STUDIO-MODE.md`](guides/ADDING-A-STUDIO-MODE.md) — the three
+  places that must agree (`MODES`, the `window.StudioModes` registration, and a
+  hand-written `<script>` tag), the full optional-hook contract, and what the
+  registry gate checks. Miss the script tag and the mode renders a placeholder
+  claiming the feature "arrives later", which is not what went wrong.
 - **Working on the UI/UX redesign?** (branch `redesign/ui-ux`)
   Start with the roadmap
   [`design/phased-plan.md`](design/phased-plan.md) and its companions
@@ -84,7 +109,9 @@ Repository-wide contribution, ownership and cross-team review rules live in
   cross-reference each other.
 - **Adding a feature?**  Prepend a section at the top of
   [`changelog/changelog-implemented.md`](changelog/changelog-implemented.md)
-  when it ships, and link the planning entry it came from.
+  when it ships, and link the planning entry it came from. If it shipped an
+  engine version or closed a numbered feedback item, also refresh
+  [`STATUS.md`](STATUS.md).
 - **Pupil reported a bug?**  Append to
   [`feedback/recently-observed-bugs.md`](feedback/recently-observed-bugs.md)
   *first*, then add (or link) it under the matching tier in the
@@ -130,6 +157,21 @@ A snapshot for anyone landing here cold.  Each row shows where the
 file *moved to* in the reorg; if you're chasing a code comment that
 references the old name, this is your lookup table.
 
+> **If you run a link checker over `docs/`, expect ~55 broken relative links.
+> They are deliberate and this table is their resolution.**  Entries in
+> [`changelog/changelog-implemented.md`](changelog/changelog-implemented.md) and
+> in `plans/archive/` dated before 2026-04-26 were written when these files sat
+> at the repo root, and they are **not** rewritten on purpose — they describe the
+> world as it was when that change shipped.  The policy and its reasoning are
+> stated at the top of the changelog itself.
+>
+> Verified 2026-08-08: every one of the 19 distinct broken targets appears in the
+> tables below, so the workaround actually covers every case rather than merely
+> claiming to.  Two traps if you check this yourself — the changelog's own note
+> contains a literal `[X.md](X.md)` as an *example*, which a naive scanner counts
+> as a 20th broken link; and finding these is not a reason to fix them.  Confirm
+> against this table before "repairing" anything.
+
 ### Guides (now in `docs/guides/`)
 
 | Old path | New path |
@@ -168,7 +210,7 @@ references the old name, this is your lookup table.
 
 | New path | What it tracks |
 | -------- | -------------- |
-| `docs/plans/current/2026-04-26-fixes-and-features.md` | The post-Phase-4 plan: fixes the 27 outstanding pupil-reported items in tiered order. |
+| `docs/plans/current/2026-04-26-fixes-and-features.md` | The post-Phase-4 plan: fixed the 27 pupil-reported items outstanding *at that time*, in tiered order. Historical — for live status see [`STATUS.md`](STATUS.md). |
 | `docs/plans/current/2026-07-05-studio-redesign.md` | The UI/UX redesign execution tracker — what has landed (Phases 0–3) and the remaining backlog, cross-linked to `docs/design/`. |
 | `docs/plans/current/2026-08-27-port-forward-main-engine.md` | How this branch takes `main`'s four engine advances (v76–v79) one version at a time, and why that is not a merge. Names the two decisions the owner has to make. |
 

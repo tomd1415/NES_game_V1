@@ -54,8 +54,44 @@ process.on('exit', () => {
   try { fs.rmSync(SYNTAX_TMP, { recursive: true, force: true }); } catch {}
 });
 
+// The two half-run modes. Each exists to make a mutation spec affordable, and
+// each is a silent-success hazard handled the same loud way (announced on
+// entry, never the plain green headline, a closing line stating what did NOT
+// run). See the CHECKS_ONLY block near the suite loop for the full reasoning.
+//
+// SUITES_ONLY is the mirror of CHECKS_ONLY and its purpose is narrower than it
+// looks: it is what makes the gates.json / gates-checks.json split enforce
+// ITSELF. mutate refuses a break whose `expect` names an assertion the baseline
+// does not contain. Under SUITES_ONLY the baseline holds only `suite X` names,
+// under CHECKS_ONLY only check and invariant names — so a break filed into the
+// wrong spec is rejected by name before anything is edited, instead of quietly
+// passing. Without this mode the full run prints both kinds and the split would
+// be enforced by nothing but a sentence in a README.
+const CHECKS_ONLY = process.env.RUNALL_CHECKS_ONLY === '1'
+  // Alias: this branch shipped the same mode under its own name while diverged.
+  || process.env.BUILDER_TESTS_SKIP_SUITES === '1';
+const SUITES_ONLY = process.env.RUNALL_SUITES_ONLY === '1';
+if (CHECKS_ONLY && SUITES_ONLY) {
+  console.error('RUNALL_CHECKS_ONLY=1 and RUNALL_SUITES_ONLY=1 together would run ' +
+    'nothing at all and exit 0 — the exact shape both flags are written to avoid. ' +
+    'Set one or neither.');
+  process.exit(2);
+}
+
+let checksSkipped = 0;
+if (SUITES_ONLY) {
+  console.log('⚠️  RUNALL_SUITES_ONLY=1 — skipping every check and invariant. ' +
+    'This is NOT a full run and must not be reported as one.');
+}
+
 // --- Step 1: JS syntax check -------------------------------------------
 function check(label, fn) {
+  // Skipped checks print NOTHING, deliberately: a "SKIP" line would put the
+  // assertion's name back into the output, and mutate's name-based rejection —
+  // the whole point of the mode — keys off names being absent. They are counted
+  // instead, so the closing line can say how many did not run without anyone
+  // maintaining that number by hand.
+  if (SUITES_ONLY) { checksSkipped++; return true; }
   process.stdout.write(label + ' ... ');
   try {
     fn();
@@ -70,21 +106,39 @@ function check(label, fn) {
 
 let anyFail = false;
 
-// Standalone JS files — use `node --check`.
-const standalone = [
-  'storage.js', 'feedback.js', 'sprite-render.js',
-  'builder-assembler.js', 'builder-modules.js', 'builder-validators.js',
-  'play-pipeline.js', 'emulator.js', 'help.js',
-  'tour.js',
-  // Studio redesign (Phase 0) shell modules.
-  'studio.js', 'studio-starter.js',
-  'engine-version.js', 'studio-promo.js',
-];
-for (const f of standalone) {
-  const full = path.join(WEB, f);
-  if (!fs.existsSync(full)) continue;  // tour.js etc. may be optional
+// Standalone JS files — use `node --check`. Enumerated from disk at RUNTIME,
+// deliberately, rather than hand-listed.
+//
+// This used to be a list of 14 filenames followed by
+// `if (!fs.existsSync(full)) continue;` — two silent-coverage bugs in four lines.
+// A module added to the editor was simply never checked, and a module renamed
+// dropped off the list without anything going red. Measured on 2026-08-07: 18 of
+// the 32 shipped modules were unchecked, including *every* Studio mode module
+// (studio-world.js, studio-tiles.js, studio-chars.js, studio-ui.js …) — which is
+// exactly where the feature work happens.
+//
+// Enumerating the directory means the check covers whatever is actually there.
+// Vendored bundles are the only exclusion and they are identifiable by name
+// (`*.min.js` — jsnes and CodeMirror), so there is no second list to keep in step
+// with the first. All 32 pass today, so widening this cost nothing to adopt.
+const shipped = fs.readdirSync(WEB)
+  .filter(f => f.endsWith('.js') && !f.endsWith('.min.js'))
+  .sort();
+// An empty enumeration must not read as "all clear" — that is the same
+// silent-success shape this block was written to remove.
+// Unconditional on purpose. This used to be `if (shipped.length === 0) { check(...) }`,
+// so on a healthy run the assertion did not exist at all — it only appeared in the
+// output when it was already failing. That is a guard you cannot prove is present:
+// delete the whole block and nothing changes in a green run. Mutation testing found
+// it (2026-08-14) by naming an assertion the baseline did not have.
+check('shipped JS modules found', () => {
+  if (shipped.length === 0) {
+    throw new Error(`no non-vendored .js files under ${WEB} — wrong path, or the glob broke`);
+  }
+}) || (anyFail = true);
+for (const f of shipped) {
   const ok = check('syntax ' + f, () => {
-    const r = spawnSync('node', ['--check', full], { encoding: 'utf8' });
+    const r = spawnSync('node', ['--check', path.join(WEB, f)], { encoding: 'utf8' });
     if (r.status !== 0) throw new Error(r.stderr.trim() || r.stdout.trim());
   });
   if (!ok) anyFail = true;
@@ -119,6 +173,91 @@ check('engine snapshot numbers do not collide with main', () => {
 check('no builder-test suite chooses its own port', () => {
   const r = spawnSync('node', [path.join(__dirname, 'lib', 'ports-unique.mjs')], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error((r.stdout || '') + (r.stderr || ''));
+}) || (anyFail = true);
+
+// A mutation spec that names a frozen snapshot directory pins the engine
+// version into a file nobody rereads on a bump — and mutate refuses to run a
+// spec whose anchor has stopped matching, so the whole spec dies rather than
+// one break. That is exactly what happened here: v79 shipped on 2026-08-20 and
+// gates.json kept pointing at tools/engines/v78/, so from that moment the
+// builder gates could not be proved at all and nothing said so until someone
+// tried. Two of the three stale breaks were rewritten to be version-agnostic;
+// this covers the one that cannot be, because --check derives its directory
+// from ENGINE_VERSION and so the path must name the current version to mean
+// anything.
+//
+// Enumerated from disk, not from a list of spec filenames: a spec added later
+// is covered the day it lands.
+check('invariant: mutation specs name the current engine snapshot', () => {
+  const dir = path.join(__dirname, 'mutations');
+  const specs = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort();
+  if (specs.length === 0) {
+    throw new Error(`no .json specs under ${dir} — wrong path, or the glob broke`);
+  }
+  const cur = fs.readFileSync(path.join(ROOT, 'tools', 'engines', 'ENGINE_VERSION'), 'utf8').trim();
+  const bad = [];
+  for (const f of specs) {
+    // Only `breaks[].file` — the paths mutate actually opens. Scanning the raw
+    // text would trip on prose that mentions an old version for a historical
+    // reason, and a guard that fires when nothing is wrong gets called flaky
+    // and then deleted, taking the coverage with it.
+    const spec = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    for (const b of spec.breaks || []) {
+      const m = /^tools\/engines\/v(\d+)\//.exec(b.file || '');
+      if (m && m[1] !== cur) {
+        bad.push(`${f} break "${b.id}": ${b.file} names v${m[1]}, current engine is v${cur}`);
+      }
+    }
+  }
+  if (bad.length) {
+    throw new Error(bad.join('\n  ') +
+      '\n  Repoint the anchor at the current snapshot, or make the break ' +
+      'version-agnostic. Until then `mutate` rejects the whole spec, not one break.');
+  }
+}) || (anyFail = true);
+
+// Port hygiene: the Studio E2E server and the builder suites draw from the same
+// range, and a collision between them fails SILENTLY. playground_server.py, on
+// finding a *working* playground server already on its port, prints
+// "already running -- nothing to do" and returns 0 — it never binds, and it
+// discards the env the caller set (PLAYGROUND_ACCOUNTS_DB, PLAYGROUND_PORT…).
+// The suite then runs green against a server it did not configure. Nothing goes
+// red, so this drifted for a long time with only a doc note to catch it — which
+// is the point: if two lists must agree, something has to fail when they don't.
+// Reading the port out of playwright.config.js rather than hardcoding it keeps
+// this honest if the E2E port ever moves.
+//
+// KNOWN LIMIT, stated rather than papered over: this scans for the port as a
+// *literal*. `enemy-bump.mjs` derives its second port as `PORT + 1`, so a suite
+// whose base literal happened to be one below the E2E port would slip past.
+// That is not the case today (18853 -> 18854) and the arithmetic form is rare,
+// but a green result here means "no suite names the port", not "no suite can
+// bind it". See docs/guides/TEST-SERVERS.md for the full port map.
+check('no builder-test suite claims the Studio E2E port', () => {
+  const cfg = fs.readFileSync(path.join(ROOT, 'playwright.config.js'), 'utf8');
+  const pm = cfg.match(/STUDIO_TEST_PORT\s*\|\|\s*(\d+)/);
+  if (!pm) throw new Error('playwright.config.js: could not read the default STUDIO_TEST_PORT');
+  const e2ePort = pm[1];
+  const hit = new RegExp('(?<![\\d.])' + e2ePort + '(?![\\d.])');
+  const offenders = [];
+  for (const f of fs.readdirSync(__dirname).sort()) {
+    if (!f.endsWith('.mjs') || f === 'run-all.mjs') continue;
+    // Strip comments first: a suite may legitimately *mention* the port in a
+    // note about this very clash, and a guard that trips on prose is decoration.
+    const src = fs.readFileSync(path.join(__dirname, f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/\/\/[^\n]*/g, ' ');
+    if (hit.test(src)) offenders.push(f);
+  }
+  if (offenders.length) {
+    throw new Error(
+      `port ${e2ePort} belongs to the Studio E2E server (playwright.config.js) ` +
+      `but is also claimed by: ${offenders.join(', ')}\n` +
+      '  Give each suite a free port above the current highest, staying under 19000.\n' +
+      '  docs/guides/TEST-SERVERS.md has the map and the grep that finds it — do\n' +
+      '  not guess, the suites spell the port several ways (PORT, PORT_C/_A/_D, an\n' +
+      '  inline startServer(...), and PORT + 1 in enemy-bump.mjs).');
+  }
 }) || (anyFail = true);
 
 // Playwright browser builds are keyed to the Playwright VERSION, and the dev
@@ -156,6 +295,77 @@ check('devcontainer Playwright pin matches package-lock.json', () => {
   }
 }) || (anyFail = true);
 
+// BUILDER_GUIDE.md admits it documents only some of the Builder modules, and
+// tables the rest so the gap reads as a gap rather than as "these do not exist".
+// That note ends: "if that count has moved, this table has gone stale, which is
+// exactly the failure this note exists to make visible."
+//
+// Nothing made it visible. It named the failure and left it to the next reader to
+// notice — which is the "a doc note is not a check" lesson that the 18790 port
+// clash already taught this project once. So: check it.
+//
+// Both directions, and the arithmetic between them:
+//   a) the claimed total must equal the modules that actually exist
+//   b) documented + tabled must equal that total (no module unaccounted for)
+//   c) every module the table names must really exist (no phantom rows)
+// It deliberately does NOT try to verify which 10 are "documented" — that would
+// mean parsing prose for coverage, and a confident number built on fragile
+// parsing is worse than an honest one maintained by hand.
+check('invariant: BUILDER_GUIDE module coverage matches builder-modules.js', () => {
+  const guide = fs.readFileSync(path.join(ROOT, 'docs', 'guides', 'BUILDER_GUIDE.md'), 'utf8');
+  const claim = guide.match(/documents\s+(\d+)\s+of\s+the\s+(\d+)\s+modules that exist/);
+  if (!claim) {
+    throw new Error('BUILDER_GUIDE.md: the "documents N of the M modules that exist" ' +
+      'sentence is gone or reworded — this check reads its numbers, so update both together');
+  }
+  const documented = Number(claim[1]);
+  const claimedTotal = Number(claim[2]);
+
+  // Scope the table to its own section so other tables in the guide cannot match.
+  const secStart = guide.indexOf('### Modules this section does not cover yet');
+  if (secStart < 0) throw new Error('BUILDER_GUIDE.md: the "does not cover yet" section is gone');
+  const secEnd = guide.indexOf('\n## ', secStart);
+  const section = guide.slice(secStart, secEnd < 0 ? undefined : secEnd);
+  const tabled = [...section.matchAll(/^\|\s*`([a-zA-Z0-9_-]+)`\s*\|/gm)].map(m => m[1]);
+
+  // Comments stripped first. A module cannot be DECLARED in a comment, so this
+  // can only remove false positives — unlike narrowing a value pattern, it cannot
+  // hide a real one. The exposure is not hypothetical: a "how to add a module"
+  // note written into this file (`// modules['example'] = { ... }`) would invent a
+  // 19th module, and the count check would fail complaining the guide is stale
+  // when nothing is wrong. A gate that cries wolf gets deleted.
+  const src = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+  const actual = [...new Set([...src.matchAll(/modules\['([a-zA-Z0-9_-]+)'\]/g)].map(m => m[1]))];
+  // An empty enumeration must not read as agreement — it would make (a) and (c)
+  // trivially satisfiable and the whole check decoration.
+  if (actual.length === 0) {
+    throw new Error(`no modules['<name>'] declarations found in builder-modules.js — ` +
+      'the declaration form changed, and this check cannot see anything');
+  }
+
+  if (claimedTotal !== actual.length) {
+    throw new Error(
+      `BUILDER_GUIDE.md says ${claimedTotal} modules exist; builder-modules.js has ` +
+      `${actual.length} (${actual.sort().join(', ')}).\n` +
+      '  Update the count AND the "does not cover yet" table in ' +
+      'docs/guides/BUILDER_GUIDE.md — a new module is undocumented until it is listed.');
+  }
+  if (documented + tabled.length !== claimedTotal) {
+    throw new Error(
+      `BUILDER_GUIDE.md accounts for ${documented} documented + ${tabled.length} tabled ` +
+      `= ${documented + tabled.length}, but claims ${claimedTotal} exist. ` +
+      'Every module must be either written up or listed as not-yet-written-up.');
+  }
+  const phantom = tabled.filter(m => !actual.includes(m));
+  if (phantom.length) {
+    throw new Error(
+      `BUILDER_GUIDE.md tables module(s) that do not exist: ${phantom.join(', ')}.\n` +
+      '  Renamed or removed in builder-modules.js without updating the guide.');
+  }
+}) || (anyFail = true);
+
 // Inline <script> bodies in the HTML pages.  Regex-extract, write to
 // a private temp directory, then node --check each one.  (These are the heavyweight scripts
 // that define the pages' entire behaviour.)
@@ -171,9 +381,31 @@ function extractInline(file) {
   }
   return out;
 }
-for (const page of ['builder.html', 'sprites.html', 'index.html',
-                    'behaviour.html', 'code.html']) {
+// Enumerated from disk, for the same reason the .js list above is — and this was
+// the half that got left behind. The .js fix landed 2026-08-07 after finding 18 of
+// 32 shipped modules silently unchecked; this hand-list sat one screen further
+// down naming five pages when there are eight.
+//
+// Measured 2026-08-12, before the change: audio.html (~22 kB of inline JS) and
+// gallery.html (~7.8 kB) were never syntax-checked at all. studio.html has zero
+// bare <script> blocks — every one carries src= — so listing it costs nothing
+// today, but that is luck rather than design and it is the primary front-end.
+//
+// Enumerating means a new page is covered the day it appears, and a renamed one
+// cannot drop out silently, which is exactly how audio.html and gallery.html were
+// missed: nothing went red when they were added.
+const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
+// A page with no bare <script> is legitimate (studio.html), so an empty CHUNK
+// list is fine — an empty PAGE list is not, and would silently check nothing.
+check('HTML pages found', () => {
+  if (pages.length === 0) {
+    throw new Error(`no .html files under ${WEB} — wrong path, or the glob broke`);
+  }
+}) || (anyFail = true);
+let inlineBlocks = 0;
+for (const page of pages) {
   const chunks = extractInline(page);
+  inlineBlocks += chunks.length;
   chunks.forEach((p, idx) => {
     const ok = check('syntax ' + page + '[' + idx + ']', () => {
       const r = spawnSync('node', ['--check', p], { encoding: 'utf8' });
@@ -181,6 +413,28 @@ for (const page of ['builder.html', 'sprites.html', 'index.html',
     });
     if (!ok) anyFail = true;
   });
+}
+// The pages list being non-empty is not enough. extractInline finds blocks with a
+// regex, and if that regex ever stops matching — a `<script >` spelling it does
+// not expect, a build step that moves the bodies out — every page yields zero
+// chunks, zero checks run, and the whole block passes in silence with all eight
+// pages present. That is the "nothing matched" pole: the offender list is empty
+// every day, whether the detector works or not.
+//
+// Seven blocks exist today across eight pages (studio.html has none by design).
+// Asserting merely "> 0" would still be satisfied by a regex that found one and
+// missed six, but a floor of one is what can be stated without hard-coding a
+// number that rots; the planted-error fixture recorded above is what proves the
+// detector actually works.
+if (inlineBlocks === 0) {
+  check('inline <script> blocks found', () => {
+    throw new Error(
+      `no inline <script> blocks found across ${pages.length} HTML page(s) in ${WEB}.\n` +
+      '  Every page having none is possible but has never been true here — far more\n' +
+      '  likely the extraction regex stopped matching, in which case this whole\n' +
+      '  section was checking nothing.');
+  });
+  anyFail = true;
 }
 
 // Python server syntax.
@@ -242,10 +496,15 @@ check('invariant: ladder climb checks target-cell behaviour in both templates', 
   for (const t of readTwoTemplates()) {
     // Both up and down branches should probe behaviour_at on their
     // target row and honour a LADDER / SOLID_GROUND tie-break.
-    if (!/up_ladder\s*=.*BEHAVIOUR_LADDER/s.test(t.body)) {
+    // Scoped to the same statement (`[^;]*`, no dotall). The original used
+    // `.*` with /s, so the two tokens could sit thousands of lines apart and
+    // still match — it asserted "both names appear in order", not "the climb-up
+    // branch tests LADDER". They are adjacent today, so this is a latent
+    // weakness rather than a live gap, but the name promises the stronger thing.
+    if (!/up_ladder\s*=[^;]*BEHAVIOUR_LADDER/.test(t.body)) {
       throw new Error(t.name + ': ladder climb-up guard missing (up_ladder LADDER check)');
     }
-    if (!/dn_ladder\s*=.*BEHAVIOUR_LADDER/s.test(t.body)) {
+    if (!/dn_ladder\s*=[^;]*BEHAVIOUR_LADDER/.test(t.body)) {
       throw new Error(t.name + ': ladder climb-down guard missing (dn_ladder LADDER check)');
     }
     if (!/if \(up_ladder \|\| !up_solid\)/.test(t.body)) {
@@ -263,8 +522,16 @@ check('invariant: playground_server.py native launch uses _play_latest.nes', () 
                                'utf8');
   const playCore = fs.readFileSync(path.join(ROOT, 'tools', 'nes_studio_core', 'play.py'),
                                    'utf8');
-  if (!/_play_latest\.nes/.test(body)) {
-    throw new Error('native launch path must write to _play_latest.nes');
+  // Match the ASSIGNMENT, not the bare filename — `main`'s correction, kept, with the
+  // pattern pointed at where this branch makes it. A bare `_play_latest.nes` also
+  // appears in prose explaining why a dedicated file is used, so a test for the string
+  // passes on the comment that documents the fix, exactly as the B6i dialogue guard
+  // once did: deleting the code would leave it green. `main` asserts
+  // `latest_rom = STEP_DIR / "..."`; here the server hands the path to the play
+  // service instead, so the code-shaped thing to require is the keyword argument.
+  if (!/native_rom_path\s*=\s*STEP_DIR\s*\/\s*"_play_latest\.nes"/.test(body)) {
+    throw new Error('native launch path must pass native_rom_path = STEP_DIR / "_play_latest.nes" ' +
+      '— a bare mention of the filename is not evidence; it appears in a comment too');
   }
   // The pre-fix bug was `Popen([FCEUX_PATH, STEP_DIR / "game.nes"])`.
   // After the fix, Popen is given `latest_rom`.  Catch the regression
@@ -389,13 +656,35 @@ check('invariant: PPU register macros are volatile', () => {
     const raw = fs.readFileSync(f, 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, ' ')
       .replace(/\/\/[^\n]*/g,       ' ');
-    // Match the literal pattern these files used before the fix.
-    // `*((unsigned char*)0x20XX)` without `volatile` is the hazard.
-    const m = /\*\s*\(\s*\(\s*unsigned\s+char\s*\*\s*\)\s*0x[0-9A-Fa-f]+\s*\)/.exec(raw);
-    if (m) {
+    // Match the CAST, not one historical spelling of the whole macro.
+    //
+    // This guard was hollow until 2026-08-15 and had been since it was written.
+    // It looked for `*((unsigned char*)0x20XX)` — the double-paren form these
+    // files used before the original fix — while every macro here is now spelled
+    // `(*(volatile unsigned char*)0x2006)`. Delete the `volatile` today and you
+    // get `(*(unsigned char*)0x2006)`, which has ONE paren after the `*` and so
+    // never matched. The check could not fail on the code it guards, and was
+    // green for the most boring reason there is: it was looking for a spelling
+    // nobody uses. Found by mutation testing, which is the only thing that would
+    // have found it — reading it, it looks fine.
+    //
+    // Matching the cast covers both spellings and anything else that dereferences
+    // a hardware address, because the hazard is the missing `volatile`, not the
+    // brackets around it. Measured when installed: 24 such casts across these
+    // three files, every one already volatile, so this passes on merit.
+    // The address may be parenthesised — `(*(unsigned char*)(0x2006))` is at
+    // least as common an idiom as the bare form, and slipped straight through
+    // the first version of this fix. Enumerated rather than guessed, along with
+    // the shapes that must NOT be flagged: `volatile unsigned char*` and
+    // `unsigned char volatile*` are both correct C and both pass.
+    const re = /\(\s*(volatile\s+)?unsigned\s+char\s*\*\s*\)\s*\(?\s*0x[0-9A-Fa-f]+/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      if (m[1]) continue;               // has volatile — fine
       throw new Error(path.relative(ROOT, f) +
-        ' has a non-volatile PPU/OAM macro near offset ' + m.index +
-        ' — keep `(*(volatile unsigned char*)0xNNNN)` or cc65 will elide stride writes');
+        ' has a non-volatile PPU/OAM cast `' + m[0] + '` near offset ' + m.index +
+        ' — keep `(*(volatile unsigned char*)0xNNNN)` or cc65 will elide repeated ' +
+        'writes to the same address and the scroll stride silently stops updating');
     }
   }
 }) || (anyFail = true);
@@ -428,17 +717,77 @@ check('invariant: playground_server.py exposes /docs/ route for editor doc links
   }
 }) || (anyFail = true);
 
+// `if (!trigger) continue;` is how a guard stops guarding without anyone noticing
+// (LESSONS.md §4 — "nothing found" and "never ran" must not look the same). If the
+// <script src="storage.js"> spelling ever changes — a bundler, type="module", a
+// different filename — every page is skipped, the loop body never runs, and this
+// prints OK having checked nothing. So the trigger's own hit-count is asserted.
+//
+// studio.html is exempt BY NAME rather than by a pattern: it does load storage.js,
+// but calls createTileEditorStorage from studio.js instead of inline, so requiring
+// the call in the page would be a false failure. Naming it means a NEW page cannot
+// drift into the exemption by resembling it.
+const STORAGE_INIT_EXTERNAL = ['studio.html'];   // init lives in a module, not inline
+// A best-effort re-render that throws must not discard the REASON.
+//
+// studio.js re-renders menus after actions that must not be rolled back by a
+// failed redraw, so `try { render(); } catch` is the right structure — but four
+// of them were written with an empty body, which also threw away the only
+// evidence the pupil's menu had gone stale. Same class as the mode-hook and
+// missing-module reporters already in that file; this stops it growing back.
+//
+// COMMENTS ARE STRIPPED FIRST, and that is not incidental. The comment
+// explaining this fix necessarily quotes `catch (e) {}` — so a scan of the raw
+// source matches its own explanation and fails forever, which is precisely the
+// contamination LESSONS records for source-scanning tests. Verified by checking
+// that the raw text does contain the pattern in a comment while the stripped
+// text does not.
+check('invariant: no best-effort re-render in studio.js swallows its error', () => {
+  const raw = fs.readFileSync(path.join(WEB, 'studio.js'), 'utf8');
+  const src = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\/\/.*$/gm, '');
+  const offenders = [];
+  // The binding is OPTIONAL — `catch {}` is ES2019 and storage.js already uses
+  // it three times, so requiring `catch (e)` here was a hole in a guard written
+  // the same day, not a hypothetical one. Enumerated rather than guessed: the
+  // ways an error can be discarded here are `catch (e) {}`, `catch {}`, and
+  // `catch (e) { /* only a comment */ }` — the third is handled by stripping
+  // comments before this runs, which also stops the guard matching the comment
+  // that explains it.
+  const re = /catch\s*(?:\(\s*\w+\s*\)\s*)?\{\s*\}/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const before = src.slice(Math.max(0, m.index - 90), m.index);
+    if (/\brender[A-Za-z]*\s*\(/.test(before)) {
+      offenders.push(before.trim().split('\n').pop().trim().slice(-70));
+    }
+  }
+  if (offenders.length) {
+    throw new Error('studio.js has ' + offenders.length + ' re-render(s) whose catch block is '
+      + 'empty, so a failed redraw leaves stale UI with nothing reported:\n  '
+      + offenders.join('\n  ')
+      + '\nUse reportRenderFailure(<what>, e) — it says it once per source and does not '
+      + 'abort the action the redraw followed.');
+  }
+}) || (anyFail = true);
+
 check('invariant: every page that loads storage.js calls createTileEditorStorage', () => {
-  const pages = ['index.html', 'sprites.html', 'behaviour.html',
-                 'builder.html', 'code.html', 'audio.html', 'gallery.html'];
+  const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
+  let triggered = 0;
   for (const p of pages) {
     const html = fs.readFileSync(path.join(WEB, p), 'utf8');
-    const loadsStorage = /<script\s+src=["']storage\.js["']/i.test(html);
-    if (!loadsStorage) continue;
+    if (!/<script\s+src=["']storage\.js["']/i.test(html)) continue;
+    triggered++;
+    if (STORAGE_INIT_EXTERNAL.includes(p)) continue;
     if (!/createTileEditorStorage\s*\(/.test(html)) {
       throw new Error(`${p} loads storage.js but never calls createTileEditorStorage(...)` +
         ' — Storage.loadCurrent will hit the browser\'s Web Storage interface and throw');
     }
+  }
+  if (triggered === 0) {
+    throw new Error(
+      `no page under ${WEB} matched <script src="storage.js"> — the trigger, not the\n` +
+      '  pages. Every page was skipped and this guard checked nothing. Either the tag\n' +
+      '  spelling changed, or storage.js is no longer loaded that way.');
   }
 }) || (anyFail = true);
 
@@ -492,15 +841,32 @@ check('invariant: btn-sprite-dup handler clones tile pixels (not just sprite str
 // code.html) must convert via String.fromCharCode before loadROM.  Both
 // regressed here once: openEmulator received the raw Uint8Array.  Pure
 // source-text guard until a JSDOM/emulator harness exists.
+// Same self-disabling shape as the storage guard above, and the same fix. The
+// `.loadROM(` test IS the selector for "this page drives its own emulator", so
+// the pages are enumerated rather than hand-listed — a NEW page that grows a
+// private emulator is then covered on arrival instead of being invisible — and
+// the selector's hit-count is asserted, because if `.loadROM(` stops appearing
+// (renamed, wrapped, moved into a module) every page is skipped and this prints
+// OK having checked nothing.
 check('invariant: private-emulator pages convert ROM bytes to a binary string for jsnes', () => {
-  for (const p of ['sprites.html', 'code.html']) {
+  const pages = fs.readdirSync(WEB).filter(f => f.endsWith('.html')).sort();
+  let triggered = 0;
+  for (const p of pages) {
     const html = fs.readFileSync(path.join(WEB, p), 'utf8');
     if (!/\.loadROM\s*\(/.test(html)) continue;   // no private emulator → nothing to guard
+    triggered++;
     if (!/String\.fromCharCode\(/.test(html)) {
       throw new Error(`${p}: drives its own jsnes.loadROM but never converts the ROM ` +
         'Uint8Array to a binary string (String.fromCharCode) — the in-browser ' +
         '"Play in NES" will throw "Not a valid NES ROM."');
     }
+  }
+  if (triggered === 0) {
+    throw new Error(
+      `no page under ${WEB} calls .loadROM( — the selector, not the pages. Every page\n` +
+      '  was skipped and this guard checked nothing. sprites.html and code.html drove\n' +
+      '  their own jsnes instance when this was written; if that moved into a module,\n' +
+      '  this guard has to follow it rather than silently pass.');
   }
 }) || (anyFail = true);
 
@@ -558,11 +924,72 @@ check('invariant: scene enemy AI probes solids via bw_sprite_blocked', () => {
 // B-8 (feedback F16, bug 38): the Sprites page must warn when an assigned
 // walk/jump animation has frames that aren't the player size, because the
 // server silently drops those frames (JUMP_FRAME_COUNT 0 → jump plays walk).
+// Does `name` appear as a CALL somewhere in `src` — not as its declaration, and
+// not inside a comment?
+//
+// Both halves are load-bearing and each was learned by getting it wrong:
+//   * matching a name anywhere passes on the declaration alone, so a function
+//     nobody calls reads as wired up (three guards had this, 2026-08-15);
+//   * matching one calling syntax (`= name(`, or a call at line start) cries
+//     wolf on a legitimate refactor to `if (name(...))`, which is the same
+//     pinned-to-one-spelling fault seen from the other side;
+//   * and matching any call INCLUDING commented-out ones passes on
+//     `// name(...)`, which is exactly what a mutation leaves behind — caught
+//     because widening the pattern made two proven breaks stop being caught.
+// So: any call, minus the declaration, minus anything after a comment marker on
+// the same line.
+function callsOutsideComments(src, name, declKeyword, lineComment) {
+  // Block and HTML comments are blanked FIRST — replaced with spaces of equal
+  // length so every offset below still lines up with the original. A call
+  // sitting inside `/* ... */` or `<!-- ... -->` is disabled just as surely as
+  // one behind `//`, and commenting a block out is the more likely way someone
+  // switches a feature off. (Found by testing this helper an hour after writing
+  // it: both cases returned true.)
+  const blanked = src
+    .replace(/\/\*[\s\S]*?\*\//g, (t) => ' '.repeat(t.length))
+    .replace(/<!--[\s\S]*?-->/g,      (t) => ' '.repeat(t.length));
+  // `name` is escaped rather than trusted: it is a parameter, and a caller
+  // passing anything with regex punctuation in it would otherwise get a pattern
+  // that quietly means something else.
+  const safe = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(?<!' + declKeyword + '\\s)' + safe + '\\s*\\(', 'g');
+  let m;
+  while ((m = re.exec(blanked)) !== null) {
+    const lineStart = blanked.lastIndexOf('\n', m.index) + 1;
+    const before = blanked.slice(lineStart, m.index);
+    if (before.includes(lineComment)) continue;   // behind a line comment
+    return true;
+  }
+  return false;
+}
+
 check('invariant: sprites.html warns on player-size animation frame mismatch', () => {
   const html = fs.readFileSync(path.join(WEB, 'sprites.html'), 'utf8');
-  if (!/animFrameSizeMismatch\s*\(/.test(html) || !/anim-assign-warn/.test(html)) {
-    throw new Error('sprites.html no longer computes the animation size-mismatch warning — ' +
-      'a wrong-size jump animation will silently play as walk (web-feedback bug 38)');
+  // Assert the warning is COMPUTED and DISPLAYED, not merely that the two names
+  // appear somewhere in the file.
+  //
+  // Until 2026-08-15 this tested `/animFrameSizeMismatch\s*\(/` and
+  // `/anim-assign-warn/` anywhere in the source. Both are far weaker than they
+  // look: the first is satisfied by the function's own declaration even if
+  // nothing ever calls it, and the second by either of the two CSS rules for
+  // `.anim-assign-warn` even if the element and the logic are both gone. Found
+  // by mutation — renaming the declaration left the call site matching, so the
+  // check stayed green with the guarded property half removed.
+  // Any CALL, excluding the declaration — not one calling syntax.
+  // The first fix here matched `= animFrameSizeMismatch(`, which pins the guard to
+  // assignment: a refactor to `if (animFrameSizeMismatch(...))` would have failed it
+  // with nothing wrong. That is the same 'pinned to one spelling' fault this guard was
+  // tightened to escape, reintroduced while escaping it. A negative lookbehind for the
+  // declaration keyword says what is actually meant: called from somewhere, anywhere.
+  if (!callsOutsideComments(html, 'animFrameSizeMismatch', 'function', '//')) {
+    throw new Error('sprites.html no longer CALLS animFrameSizeMismatch(...) — a wrong-size ' +
+      'jump animation will silently play as walk (web-feedback bug 38). The function may ' +
+      'still be declared; a declaration nothing calls is not a warning.');
+  }
+  if (!/id=["']anim-assign-warn["']/.test(html)) {
+    throw new Error('sprites.html has no element with id="anim-assign-warn" — the mismatch is ' +
+      'computed but has nowhere to appear, so the pupil still sees nothing. (The CSS rules for ' +
+      '.anim-assign-warn are not evidence the element exists.)');
   }
 }) || (anyFail = true);
 
@@ -602,9 +1029,20 @@ check('invariant: Builder scene preview renders with only a Player sprite', () =
 // Guard all three so the fix can't silently regress.
 check('invariant: dialogue ships a built-in font + uppercases + warns on unsupported chars', () => {
   const graphics = fs.readFileSync(path.join(ROOT, 'tools', 'nes_studio_core', 'graphics.py'), 'utf8');
-  if (!/_seed_dialogue_font\(/.test(graphics) || !/_DIALOGUE_FONT/.test(graphics)) {
-    throw new Error('graphics core no longer seeds a dialogue font — dialogue on a ' +
-      'project with no painted font will show garbage again (web-feedback bug 31)');
+  // Assert the seeder is CALLED, not merely defined — `main`'s fix, applied to where
+  // this branch keeps the seeder (it moved into nes_studio_core with the codegen).
+  //
+  // main's copy tested `/_seed_dialogue_font\(/` anywhere until 2026-08-15, which the
+  // `def _seed_dialogue_font(` line satisfies on its own. So the realistic regression —
+  // the call being dropped while the function stays — left the check green and dialogue
+  // rendering garbage. Found there by mutation: renaming the def changed nothing,
+  // because the call still matched; and the mirror is that removing the call changes
+  // nothing either, because the def matches. A name appearing in both a definition and
+  // its call site cannot tell you which of the two you still have.
+  if (!callsOutsideComments(graphics, '_seed_dialogue_font', 'def', '#') || !/_DIALOGUE_FONT/.test(graphics)) {
+    throw new Error('graphics core no longer CALLS _seed_dialogue_font(...) — dialogue on a ' +
+      'project with no painted font will show garbage again (web-feedback bug 31). ' +
+      'The function may still be defined; a definition nothing calls seeds nothing.');
   }
   const mods = fs.readFileSync(path.join(WEB, 'builder-modules.js'), 'utf8');
   if (!/toUpperCase\(\)/.test(mods.slice(mods.indexOf('function strToBytes')))) {
@@ -756,19 +1194,43 @@ if (portCeiling > 19200) {
   process.exit(2);
 }
 
-// The invariant checks above are cheap; the 110 suites below are ~25 minutes. Mutation
-// testing needs to break an invariant and see which assertion reddens, which is
-// impossible to do repeatedly if every run costs half an hour. This skips step 4 only.
-// It is NOT a way to shorten a real run: the summary below still reports what ran.
-if (process.env.BUILDER_TESTS_SKIP_SUITES === '1') {
-  console.log('(suites skipped: BUILDER_TESTS_SKIP_SUITES=1 — invariant checks only)');
-  console.log('');
-  if (anyFail) { console.error('❌ One or more checks failed.'); process.exit(1); }
-  console.log('✅ Invariant checks pass (suites not run).');
-  process.exit(0);
-}
+// An empty suite list must not read as success — and this is the enumeration it
+// matters most for. Without this guard the loop below runs zero times, `anyFail`
+// stays false, and the runner prints "✅ All Builder regression checks pass"
+// having executed NONE of the suites, golden byte-identical ROM hashes included.
+// Measured on `main` 2026-08-12 by pointing the filter at an extension that
+// matches nothing: 0 suites, exit 0, green headline.
+//
+// KNOWN LIMIT: it catches "none", not "fewer than there should be". A filter that
+// broke down to three suites would still pass. Any floor here would be a
+// hand-maintained number that drifts, which is the failure mode this file is
+// already full of lessons about; the honest guard is the one that cannot go stale.
+check('builder-test suites found', () => {
+  if (suites.length === 0) {
+    throw new Error(`no *.mjs suites found in ${__dirname} — wrong directory, or the filter broke`);
+  }
+}) || (anyFail = true);
 
+// CHECKS-ONLY mode — for mutation testing the check-level gates above.
+//
+// THIS IS A SILENT-SUCCESS HAZARD AND IS HANDLED AS ONE. A skip flag that still
+// printed the normal green headline would be exactly the failure this file is full
+// of lessons about — worse, because it would be a supported way to produce it. So
+// the mode is loud in three places: it says so when it starts, it never prints the
+// green line, and its headline states that ZERO suites ran.
+//
+// `main`'s RUNALL_CHECKS_ONLY and this branch's BUILDER_TESTS_SKIP_SUITES were the
+// same idea invented twice while diverged. main's is kept — it is the louder of the
+// two and it comes with SUITES_ONLY, which is what makes the gates.json split
+// enforce itself. The older name stays as an alias rather than breaking the
+// mutation specs and docs that already use it; new callers should use main's.
+if (CHECKS_ONLY) {
+  console.log('');
+  console.log('⚠️  RUNALL_CHECKS_ONLY=1 — skipping all ' + suites.length +
+    ' suites. This is NOT a full run and must not be reported as one.');
+}
 suites.forEach((suite, index) => {
+  if (CHECKS_ONLY) return;
   const full = path.join(__dirname, suite);
   const base = PORT_BASE + index * PORT_BLOCK;
   process.stdout.write('suite ' + suite + ' ... ');
@@ -800,6 +1262,19 @@ console.log('');
 if (anyFail) {
   console.error('❌ One or more checks failed.');
   process.exit(1);
+} else if (CHECKS_ONLY) {
+  // Deliberately NOT the green sentence. `mutate-report.sh` keys off the
+  // per-check `... OK` / `... FAIL` lines, not this one, so the checks-only run
+  // is still machine-readable — but no human or script skimming for the
+  // familiar headline can mistake this for a full pass.
+  console.log('⚠️  Checks and invariants pass — but 0 of ' + suites.length +
+    ' suites ran (RUNALL_CHECKS_ONLY=1). NOT a full regression pass.');
+} else if (SUITES_ONLY) {
+  // Same treatment in the mirror direction, and the count is the number of
+  // check() calls actually reached rather than a figure written here — the last
+  // hardcoded total in this project's docs went stale inside a week.
+  console.log('⚠️  Suites pass — but 0 of ' + checksSkipped +
+    ' checks and invariants ran (RUNALL_SUITES_ONLY=1). NOT a full regression pass.');
 } else {
   console.log('✅ All Builder regression checks pass.');
 }

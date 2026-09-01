@@ -77,7 +77,11 @@ test('the platformer tutorial walks the pupil through every step to a played gam
   await expect(page.locator('.tut-complete')).toBeVisible();
 });
 
+// Slow on purpose — see the note above `every game style` for the measurement
+// and why these two get their own budget rather than the whole suite getting a
+// bigger one. 18+ steps including several real cc65 builds.
 test('the long from-scratch tutorial walks from a blank project to a finished game', async ({ page }) => {
+  test.slow();
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
   await launch(page, 'Build from scratch');
@@ -127,7 +131,31 @@ test('a pupil can leave a tutorial (Hide) and resume it later', async ({ page })
   expect(await page.evaluate(() => window.StudioTutorial.stepIndex())).toBe(leftAt);
 });
 
+// SLOW ON PURPOSE, and given a budget that matches the work rather than the
+// suite's default. Measured 2026-08-27 at host load ~2, with a timeout generous
+// enough that nothing hit it, so these are the work and not the limit:
+//
+//     every game style ................ 13.8 s
+//     the long from-scratch tutorial ... 9.8 s
+//     next slowest test in the suite ... 3.6 s   (screenshot.spec.js)
+//     median of the other 162 ......... ~1 s
+//
+// The committed 30 s is uniform; the work is not. It leaves 163 tests with 8x to
+// 30x headroom and these two with 2.2x and 3.1x — which is the whole reason only
+// ever these two redden on a busy box. That was diagnosed as flakiness for weeks
+// and worked around inside the mutation adapter, where it was invisible to an
+// ordinary `npx playwright test`.
+//
+// test.slow() triples the timeout to 90 s, restoring 6.5x and 9.2x — comparable
+// to the rest of the suite. It is used in preference to raising the global
+// timeout, which would weaken the guard on all 163 well-behaved tests, and in
+// preference to splitting these two, which cannot be done honestly: a tutorial
+// walk is sequential by nature and half a walk proves half a thing.
+//
+// The cost, stated: a genuine hang in one of these now takes 90 s to surface
+// instead of 30. That is the right trade for a test whose real work is 14 s.
 test('every game style walks through all its steps', async ({ page }) => {
+  test.slow();
   await page.goto('/studio.html');
   await page.waitForFunction(() => document.body.dataset.studioReady === '1');
   const styles = [
@@ -137,6 +165,26 @@ test('every game style walks through all its steps', async ({ page }) => {
     { pick: 'Auto-runner', type: 'runner', tut: 'runner-first' },
     { pick: 'Racing', type: 'racer', tut: 'racer-first' },
   ];
+
+  // This test is called "every game style", and that list is hand-written — so
+  // adding a sixth tutorial would silently narrow it while the name went on
+  // claiming completeness. Enumerate the real registry and make the claim true.
+  //
+  // `scratch` is deliberately excluded: it is not a game style, and it has its
+  // own test ("the long from-scratch tutorial…") a few cases above. It is named
+  // here rather than filtered by a pattern so that a NEW tutorial cannot slip
+  // into the exemption by accident.
+  const COVERED_ELSEWHERE = ['scratch'];
+  const registered = await page.evaluate(() => Object.keys(window.STUDIO_TUTORIALS || {}));
+  expect(registered.length, 'window.STUDIO_TUTORIALS is empty — the tutorial files did not ' +
+    'load, and walking zero styles would otherwise pass').toBeGreaterThan(0);
+  const uncovered = registered
+    .filter((id) => !COVERED_ELSEWHERE.includes(id))
+    .filter((id) => !styles.some((s) => s.tut === id));
+  expect(uncovered, `tutorial(s) registered but not walked by any style here: ${uncovered.join(', ')}. ` +
+    'Add them to `styles` above (with the label its button shows and the game type it ' +
+    'sets), or to COVERED_ELSEWHERE if another test owns them.').toEqual([]);
+
   for (const st of styles) {
     await launch(page, st.pick);
     const info = await page.evaluate(() => {

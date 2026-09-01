@@ -169,7 +169,7 @@ If PPU_CTRL ever shows the +32 stride bit (bit 2, value `$04`) set
 while rendering is active, `scroll_stream` left it on by mistake —
 that was the latent bug fixed by the explicit `PPU_CTRL =
 PPU_CTRL_BASE` reset at the end of `scroll_stream` in
-[steps/Step_Playground/src/scroll.c](steps/Step_Playground/src/scroll.c).
+[steps/Step_Playground/src/scroll.c](../../steps/Step_Playground/src/scroll.c).
 
 ---
 

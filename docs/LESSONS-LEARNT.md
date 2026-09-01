@@ -15,8 +15,9 @@ files that a merge would have kept side by side is exactly the failure §2 is ab
 the branch's twenty-two entries were folded into the sections below and its copy
 deleted. They carry their dates in the heading. Two links in `main`'s entries — to
 `reference/shared-tooling-findings.md` and `plans/current/2026-08-06-item-14-multiscreen-rooms.md`
-— point at files that do not exist on the branch yet; they resolve on `main` and will
-resolve here at the merge. They are left alone deliberately rather than removed.
+— pointed at files the branch did not have. **`main` was merged in on 2026-09-02 and
+they resolve now**; this sentence is kept because it is the record of why they were left
+alone rather than deleted.
 
 ## If you read nothing else
 
@@ -1379,6 +1380,36 @@ This one *is* guarded (`run-all.mjs`, "engine version constants agree"), which i
 why it has never bitten — a useful counter-example proving the guard is what makes
 the difference, not the care of the person editing.
 
+### …and a third place, which was not guarded, and bit within five days
+
+The version is also written into `tools/builder-tests/mutations/*.json`, as the
+literal text a mutation break anchors on. Three of `gates.json`'s seven breaks
+quoted `78`. v79 shipped on 2026-08-20; from that moment the builder gates could
+not be proved at all, and nothing said so until someone tried on the 26th.
+
+Two things make this worse than an ordinary stale reference:
+
+- **`mutate` refuses a spec whose anchor no longer matches** — correctly, because a
+  break landing nowhere proves nothing. But the refusal is per *spec*, not per
+  break, so one stale anchor disabled the other six with it.
+- **It is invisible until someone runs it.** A check that only fails when you go
+  looking has no upper bound on its decay. This is §1's silent success one level
+  up: the *prover* had stopped working, not the thing being proved.
+
+Two of the three are now version-agnostic — anchor on `global.NES_ENGINE_VERSION = `
+and prefix a digit, rather than quoting the digits. The third cannot be:
+`snapshot-engine.mjs --check` derives its directory from `ENGINE_VERSION`, so the
+manifest path must name the current version to mean anything. That one is covered by
+enumerating instead — `invariant: mutation specs name the current engine snapshot`
+reads every spec's `breaks[].file` at runtime and fails the seconds-long checks-only
+run when one has fallen behind. It was watched failing on the live staleness before
+it was fixed, which is the only reason to believe it.
+
+Worth copying: it reads `breaks[].file`, **not** the spec's raw text. The first draft
+regexed the whole file and would have tripped on the `expect_none_because` prose that
+names an old version for a historical reason — and a gate that fires when nothing is
+wrong gets called flaky and deleted, taking the coverage with it.
+
 ### The mode rail and the mode registry
 
 `MODES` in `studio.js` builds the rail; the eight `window.StudioModes.<id>`
@@ -1467,6 +1498,52 @@ from inside.
 - **What would have told us sooner:** *which* tests failed, before *why*. If the
   failures do not touch your diff, suspect the environment before the code.
   Re-running with `--timeout=120000` turned 147 tests green and settled it.
+
+### …but "the box was busy" became an excuse for two tests that were genuinely wrong
+
+The entry above is right and was over-applied. For weeks two `tutorial.spec.js`
+tests reddened under load and were waved through as weather, with a `--timeout`
+override wired into the mutation adapter so they would stop reddening *there*.
+Measuring them (2026-08-27) settled it in one run: at a quiet box they take
+**13.8 s and 9.8 s** while the next slowest test in the whole suite takes 3.6 s and
+the median is ~1 s. A uniform 30 s limit gave 163 tests 8×–30× headroom and those
+two 2.2× and 3.1×. They were not flaky; they were under-budgeted.
+
+- **The tell was available all along:** it was always the *same two* tests. Genuine
+  environment noise moves around; a fixed cast is a property of those tests.
+- **The load penalty is ADDITIVE, not proportional**, which broke the model I sized
+  the fix with at first. At load ~26 two tests that did not fail went 2.9 s → 26.4 s
+  and 2.5 s → 25.6 s — about **+23 s each**, independent of quiet duration. So
+  reasoning in ratios ("it has 10× headroom") is wrong; the penalty is a per-test
+  fixed cost that contention inflates.
+- **Fixing it inside the mutation adapter was the wrong place** and is the part
+  worth generalising. It made the symptom disappear where I was looking and left it
+  for everyone running the suite normally — which is how a suite earns a reputation
+  for flakiness and then stops being believed. If a workaround is invisible from the
+  ordinary path, it is hiding the problem, not solving it.
+
+### A summary line that asserts a condition nothing measured
+
+Proving the fix needed "five consecutive runs at load ≥ 15". The driver I wrote for
+it printed:
+
+> ════ 5 of 5 runs green at load >= 15, no per-run override
+
+and it had **never looked at the load**. It counted green runs; the load figure in
+that sentence was decoration. Two of the five were actually below the bar (13.95 and
+12.29) because ambient load fell away mid-series.
+
+This is §1's silent success wearing a summary line, and it is worth its own entry
+because the tempting fix — printing the load — is not enough either. The next
+version printed load at the two *endpoints*, and a run that started at 18.5 and
+ended at 14.9 still read as qualifying. Only sampling throughout and judging on the
+**minimum** actually tests the claim.
+
+- **Rule:** a headline may only name conditions the code evaluated. If a sentence
+  says "green AND at load ≥ 15", something must be able to print `NO`.
+- **Second-order:** `/proc/loadavg` is a 1-minute EWMA, so a fixed `sleep` before a
+  run does not mean the load is up yet — the first strict run disqualified itself at
+  13.33 for exactly that. Wait for the value, do not assume a sleep reached it.
 
 ---
 
@@ -1691,6 +1768,30 @@ been two, contributing to a heavily loaded box.
 - **How to tell them apart:** read each one's port out of its own environment —
   `tr '\0' '\n' < /proc/$PID/environ | grep PLAYGROUND_PORT` — rather than guessing
   from the process list, which is identical for all of them.
+
+### `mutate` caps a suite run at 900 s, and does not say so when it bites
+
+`SUITE_TIMEOUT = 900` in `/usr/local/bin/mutate`, hardcoded, with no flag or env
+override. A full `run-all.mjs` fits comfortably at a quiet load and does **not** fit
+at host load ~30, where it stretches past fifteen minutes.
+
+What you see when it happens is not a timeout message. `mutate-report.sh` buffers the
+whole run and prints at the end, so a killed run emits *nothing*, and mutate reports:
+
+> baseline produced no recognisable test results — refusing to mutate.
+
+Which is the correct refusal for the input it had, and points at the adapter or the
+runner rather than at the clock. The `*** timed out after 900s ***` line is in the
+captured output, below the verdict — read past the summary before diagnosing.
+
+- **Fix in the repo:** none available; it is a shared tool every container uses, so
+  do not patch it locally. Run the expensive spec when the box is quiet — check
+  `uptime` first, the same way you would before trusting a wall-clock figure.
+- **Worth asking for on the host:** a `MUTATE_SUITE_TIMEOUT` env var, and a verdict
+  line that names the timeout when that is what happened.
+- **Wider point, and it is the same one as the E2E timeouts:** at high load a run
+  becomes indistinguishable from a failure. Any verdict that a busy box can
+  manufacture is a verdict you have to re-take when it is quiet.
 
 ### Grepping a directory that contains minified bundles
 

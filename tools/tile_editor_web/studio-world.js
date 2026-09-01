@@ -917,11 +917,13 @@
       pal.forEach(function (c) { strip.appendChild(swatchEl(global.NesRender.nesRgb(c))); });
       palSec.appendChild(strip);
     })(p);
+    palSec.appendChild(el('div', { class: 'dock-note',
+      text: 'Keys: 0 1 2 3 pick a palette. 4 (or `) also picks 0, for keyboards where 0 is a stretch.' }));
     palSec.appendChild(el('div', { class: 'dock-note', text: 'Backdrop colour is shared by every palette. Colour is chosen per 2×2 block on the NES — use the 🎨 Colour tool.' }));
-    var clashes = countAttrConflicts(bg);
+    var clashes = countAttrConflicts(bg, ctx);
     if (clashes > 0) {
       palSec.appendChild(el('div', { class: 'dock-note', style: 'color:var(--warn)',
-        text: '⚠ ' + clashes + ' block' + (clashes === 1 ? '' : 's') + ' mix two palettes (red X on screen). The NES shows one palette per 2×2 block — recolour with 🎨 to fix.' }));
+        text: '⚠ ' + clashes + ' block' + (clashes === 1 ? '' : 's') + ' mix two palettes (red X on this screen). The NES shows one palette per 2×2 block — recolour with 🎨 to fix.' }));
     }
     dock.appendChild(palSec);
 
@@ -1134,6 +1136,13 @@
   }
 
   // Render a background's nametable cleanly (no grid/entities) into a canvas.
+  // Renders the WHOLE background, every screen of it — not screen 0. Until
+  // 2026-08-14 both loops stopped at SCREEN_W/SCREEN_H, so on any level bigger
+  // than one screen "Full-screen preview" always showed the top-left screen no
+  // matter which one the pupil was looking at. Same shape as the palette-clash
+  // count fixed in 6a93e3f: a control that describes a different place from the
+  // one you are on, and silent about it, because a correct-looking screen is
+  // indistinguishable from the right screen.
   function renderBgInto(cv, bg, state, scale) {
     var g = cv.getContext('2d');
     g.imageSmoothingEnabled = false;
@@ -1141,7 +1150,8 @@
     g.fillStyle = backdrop; g.fillRect(0, 0, cv.width, cv.height);
     var nt = (isMetatileBg(bg) && global.MetatileLib) ? global.MetatileLib.expand(bg).nametable : bg.nametable;
     if (!Array.isArray(nt)) return;
-    for (var cy = 0; cy < SCREEN_H; cy++) for (var cx = 0; cx < SCREEN_W; cx++) {
+    var cols = worldCols(bg), rows = worldRows(bg);
+    for (var cy = 0; cy < rows; cy++) for (var cx = 0; cx < cols; cx++) {
       if (!nt[cy] || !nt[cy][cx]) continue;
       var c = (nt[cy] && nt[cy][cx]) || { tile: 0, palette: 0 };
       var tile = state.bg_tiles[c.tile | 0];
@@ -1152,26 +1162,44 @@
   function openPreview(ctx) {
     var state = ctx.getState();
     var bg = activeBg(ctx);
-    var scale = 2;
-    var cv = el('canvas', { width: SCREEN_W * 8 * scale, height: SCREEN_H * 8 * scale,
+    var cols = worldCols(bg), rows = worldRows(bg);
+    var screensX = Math.max(1, Math.round(cols / SCREEN_W));
+    var screensY = Math.max(1, Math.round(rows / SCREEN_H));
+    // Scale down as the level grows so a 4x2 world still fits a laptop screen.
+    // A single screen keeps the 2x it has always had.
+    var scale = screensX * screensY <= 1 ? 2 : (Math.max(screensX, screensY) >= 3 ? 1 : 2);
+    var cv = el('canvas', { width: cols * 8 * scale, height: rows * 8 * scale,
       style: 'image-rendering:pixelated;max-width:100%;border:2px solid var(--line);display:block;margin:0 auto' });
     renderBgInto(cv, bg, state, scale);
+    var many = screensX * screensY > 1;
     UI.modal({
       title: '⛶ ' + (bg.name || 'background'),
-      sub: 'Full-screen preview — the background exactly as the NES draws it (no grid or entities).',
+      sub: many
+        ? ('Full-screen preview — the whole level, all ' + screensX + '\u00D7' + screensY
+           + ' screens of it, exactly as the NES draws it (no grid or entities).')
+        : 'Full-screen preview — the background exactly as the NES draws it (no grid or entities).',
       bodyNodes: [cv],
       actions: [{ label: 'Close', value: 'close', kind: 'primary' }],
     });
   }
 
   // Count 2×2 chunks whose four cells disagree on palette (attribute lie).
-  function countAttrConflicts(bg) {
+  function countAttrConflicts(bg, ctx) {
     if (!bg || isMetatileBg(bg) || !Array.isArray(bg.nametable)) return 0;
+    // Count on the screen the pupil is LOOKING at, using the same view offset as
+    // the red-X overlay above. Until 2026-08-09 this scanned screen 0 always
+    // while the overlay was offset-aware, so on any level wider than one screen
+    // the dock's number and the marks on the TV described different places: a
+    // clash on screen 2 drew Xs but reported 0, and a clash on screen 0 reported
+    // a count the pupil could not find anywhere. The message says "red X on
+    // screen", so the count has to mean the same screen.
+    var c = ctx || _octx || (global.Studio && global.Studio.ctx) || null;
+    var vo = c ? off(c) : { cx: 0, cy: 0 };
     var nt = bg.nametable, n = 0;
     for (var qy = 0; qy < SCREEN_H; qy += 2) for (var qx = 0; qx < SCREEN_W; qx += 2) {
       var seen = -1, clash = false;
       for (var dy = 0; dy < 2 && !clash; dy++) for (var dx = 0; dx < 2; dx++) {
-        var cc = nt[qy + dy] && nt[qy + dy][qx + dx];
+        var cc = nt[qy + dy + vo.cy] && nt[qy + dy + vo.cy][qx + dx + vo.cx];
         var pv = cc ? (cc.palette | 0) : 0;
         if (seen < 0) seen = pv; else if (pv !== seen) { clash = true; break; }
       }
@@ -1212,6 +1240,32 @@
     onRenderOverlay: onRenderOverlay,
     onEnter: function () { hover = null; selecting = false; },
     onToolChange: function (id, ctx) { ctx.renderDock(); ctx.renderLive(); },
+    // Paint palette by keyboard: 0-3, with 4 and ` as aliases for 0 (#39).
+    //
+    // WORLD's picker is FOUR BG SUB-PALETTES, not the painters' five pen
+    // colours, so there is no colour-0/transparent here and the set stops at 3.
+    // 4 and ` are still bound to palette 0 for the same reason they are in the
+    // painters: on a keyboard whose number row starts at 1 (Esc,1,2,3…) both 0
+    // and ` sit across the board from the keys you paint with, and WORLD would
+    // otherwise be the one surface where that reach is still required.
+    //
+    // Does exactly what clicking the matching BG strip does — sets paintPalette
+    // and redraws the dock. The active TOOL is deliberately left alone: 🎨 Colour
+    // recolours a 2x2 block with paintPalette, but 🖌 Stamp also stamps with it,
+    // so a digit is a "which colour am I painting in" change either way.
+    //
+    // Modifier-guarded: studio.js dispatches onKey even with Ctrl/Cmd held, and
+    // Ctrl+1 belongs to the browser (switch tab), not to us.
+    //
+    // NOT bound: the selected metatile block's own BG 0-3 buttons in the block
+    // editor. Those mutate saved project data through pushUndo, and a stray
+    // keypress silently recolouring a block is a different and worse thing than
+    // changing which colour the next stroke uses.
+    onKey: function (evt, ctx) {
+      if (evt.metaKey || evt.ctrlKey || evt.altKey) return;
+      if (evt.key >= '0' && evt.key <= '3') { paintPalette = parseInt(evt.key, 10); ctx.renderDock(); }
+      else if (evt.key === '4' || evt.key === '`') { paintPalette = 0; ctx.renderDock(); }
+    },
     onTvDown: function (cell, ctx) {
       var tool = ctx.getActiveTool();
       if (tool === 'place') { placeDown(ctx, cell); return; }
@@ -1256,7 +1310,7 @@
     },
     // Test/inspection hooks.
     _get: function () { return { stampTile: stampTile, paintPalette: paintPalette, paintType: paintType, showGrid: showGrid, showTypes: showTypes, selRect: selRect, clipboard: clipboard }; },
-    _conflicts: function () { var s = global.Studio.getState(); return countAttrConflicts(s.backgrounds[s.selectedBgIdx] || s.backgrounds[0]); },
+    _conflicts: function () { var s = global.Studio.getState(); return countAttrConflicts(s.backgrounds[s.selectedBgIdx] || s.backgrounds[0], global.Studio.ctx); },
     _set: function (o) { if (o.stampTile != null) stampTile = o.stampTile; if (o.paintPalette != null) paintPalette = o.paintPalette; if (o.paintType != null) paintType = o.paintType; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

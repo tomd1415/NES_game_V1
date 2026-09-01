@@ -2,6 +2,13 @@
 
 **Status:** planning · **Branch:** `redesign/ui-ux` · **Started:** 2026-07-05
 
+> ⚠️ **Historical roadmap — read for intent, not for current state.** Written
+> 2026-07-05, when the Studio was opt-in behind a flag and "the seven pages
+> remain the default" (as several phases below still say). The redesign has
+> since merged to `main` and **the Studio is now the primary front-end**; the
+> seven pages are still served but critical-fix-only. For where things actually
+> stand, read [`../STATUS.md`](../STATUS.md).
+
 > This is the roadmap that turns the approved design direction into
 > sequenced, shippable work. Read the companions first — they are the
 > "why" and "what", this is the "in what order":

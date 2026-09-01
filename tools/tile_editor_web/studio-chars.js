@@ -482,6 +482,8 @@
       palRow.appendChild(sw);
     })(v);
     penSec.appendChild(palRow);
+    penSec.appendChild(el('div', { class: 'dock-note',
+      text: 'Keys: 0 1 2 3 pick a colour. 4 (or `) also picks 0 (erase), for keyboards where 0 is a stretch.' }));
     penSec.appendChild(el('div', { class: 'dock-note', text: 'Draw on the big canvas. Each 8×8 cell is a shared tile — editing it updates every character that uses it.' }));
     // In-context jump-in to TILES (2.4), focused on this character's first
     // tile — Maker+, since TILES itself is a Maker mode.
@@ -722,6 +724,18 @@
     onEnter: function (ctx) { if (selIdx >= sprites(ctx).length) selIdx = 0; ackTiles = {}; selRect = null; selecting = false; },
     onExit: function () { stopPreview(); },
     onToolChange: function (id) { if (id === 'erase') pen = 0; else if (pen === 0) pen = 1; },
+    // Pen colour by keyboard: 0-3, with 4 and ` as aliases for 0 (transparent /
+    // erase). 4 is here because on keyboards whose number row starts at 1
+    // (Esc,1,2,3…) both 0 and ` sit right across the board from the keys you
+    // paint with. Does exactly what clicking the matching swatch does — the
+    // tool is left alone, so this never fights onToolChange above.
+    // Modifier-guarded: studio.js dispatches here with Ctrl/Cmd held too, and
+    // Ctrl+1 is the browser's (switch tab).
+    onKey: function (evt, ctx) {
+      if (evt.metaKey || evt.ctrlKey || evt.altKey) return;
+      if (evt.key >= '0' && evt.key <= '3') { pen = parseInt(evt.key, 10); ctx.renderDock(); }
+      else if (evt.key === '4' || evt.key === '`') { pen = 0; ctx.renderDock(); }
+    },
     onTvDown: function (cell, ctx) {
       var p = pixelFromCell(cell); if (!p) return;
       var tool = ctx.getActiveTool();

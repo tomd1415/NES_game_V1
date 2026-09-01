@@ -4,7 +4,15 @@
 
 This project builds a NES ROM using the **cc65 toolchain** (a C compiler and assembler targeting the 6502 CPU). The game is written primarily in C with a small amount of 65xx assembly for graphics data loading. The cc65 library (`nes.lib`) provides the startup code (crt0), C runtime, and hardware abstraction.
 
-> **Pupil feedback log:** log and triage pupil-testing feedback in [PUPIL_FEEDBACK.md](../feedback/PUPIL_FEEDBACK.md). Append new items as they come in; don't wait for a formal review.
+> **Pupil feedback log:** new pupil-testing feedback goes in
+> [recently-observed-bugs.md](../feedback/recently-observed-bugs.md) — the numbered
+> list (#1–#39 today) that is the project's actual backlog. Append as items come in;
+> don't wait for a formal review.
+>
+> [PUPIL_FEEDBACK.md](../feedback/PUPIL_FEEDBACK.md) is the **older, unnumbered
+> themed log, kept for history**. This paragraph used to send you there, and that
+> file still opens with "append freely" — so feedback added to it lands where
+> nothing is triaged from. Read it for context; do not add to it.
 >
 > **In-editor feedback form:** pupils can submit feedback from inside each editor page via the `?` help dialog (💬 Feedback tab on Backgrounds / Sprites, or the expandable section on Behaviour / Code). Submissions land in `feedback.jsonl` in the repo root. Open `http://<server>:8765/feedback` for a read-back page with ✓ handled toggles — the handled-set persists in `feedback-handled.json`. Both files are `.gitignore`d.
 
@@ -104,7 +112,9 @@ When a sprite is deleted, `btn-sprite-del` rewrites every animation's `frames` a
 Python stdlib HTTP server on `127.0.0.1:8765`. Two roles:
 
 1. **Serves the editor** over HTTP (the `file://` protocol breaks `fetch()` CORS when the editor tries to POST).
-2. **POST `/play`** — accepts the full editor state, encodes sprite_tiles + bg_tiles into a single 8 KB CHR (sprite pool at $0000, BG pool at $1000 — `PPU_CTRL=0x10` selects $1000 for the background), encodes the active nametable into 1024 bytes (960 tile + 64 attribute), writes `src/scene.inc` + `src/palettes.inc` into `steps/Step_Playground/`, runs `make -C steps/Step_Playground`, and spawns `fceux` detached on the resulting ROM.
+2. **POST `/play`** — accepts the full editor state, encodes sprite_tiles + bg_tiles into a single 8 KB CHR (sprite pool at $0000, BG pool at $1000 — `PPU_CTRL` bit 4 (`0x10`) selects $1000 for the background; the shipped value is `0x90`, that bit plus NMI-enable), encodes the active nametable into 1024 bytes (960 tile + 64 attribute), writes all of that plus the generated sources and a Makefile into a **private temporary directory**, and runs `make` there. The ROM comes back to the browser for in-browser play; `fceux` is launched only in **"native" mode**, which needs fceux on the server's PATH and a desktop to show it on (the server falls back to returning the ROM, with a warning, if it is missing).
+
+   > **Nothing is written into `steps/Step_Playground/`.** An earlier version of this paragraph said `/play` writes `src/scene.inc` + `src/palettes.inc` there and runs `make -C steps/Step_Playground`. Both build paths moved into a temp directory, so a play leaves `git status` clean — and if you *do* see engine sources modified after one, that is a real edit rather than build noise.
 
 The server is stdlib-only — no pip installs needed. Keep it that way.
 
@@ -142,7 +152,7 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-Then `systemctl enable --now nesgame`. Pupils open `http://<lxc-ip>:8765/sprites.html`.
+Then `systemctl enable --now nesgame`. Pupils open `http://<lxc-ip>:8765/studio.html`.
 
 ### Configuration (`.env` or env vars)
 
@@ -167,7 +177,7 @@ Pupils can optionally sign in (📁 menu → **Account (optional)**) to save pro
 
 ### Phase 3a — pupil-editable `main.c` (the Code page)
 
-[tools/tile_editor_web/code.html](tools/tile_editor_web/code.html) adds a third editor tab that opens the stock [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c) in a CodeMirror 5 editor. The pupil's edited source is saved to `state.customMainC` in the shared `nes_tile_editor.current.v1` localStorage record (null = "use the built-in template").
+[tools/tile_editor_web/code.html](../../tools/tile_editor_web/code.html) adds a third editor tab that opens the stock [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c) in a CodeMirror 5 editor. The pupil's edited source is saved to `state.customMainC` in the shared `nes_tile_editor.current.v1` localStorage record (null = "use the built-in template").
 
 On Play, the Code page posts `customMainC` alongside the usual scene payload. The server:
 
@@ -201,7 +211,7 @@ The Code page has two modes, toggled in its header:
 
 `//>>` requires an identifier (`[A-Za-z_][A-Za-z0-9_]*`) followed by a colon and free-text hint; `//<<` stands alone on its own line. Anything cc65 accepts between the two is fine. The C compiler treats both lines as ordinary comments so builds in Advanced mode, at the terminal, or via `make -C steps/Step_Playground` are unaffected.
 
-**Seed regions in [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c):**
+**Seed regions in [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c):**
 
 - `walk_speed` — how many pixels the player moves per frame (a module-scope variable referenced by the LEFT / RIGHT branches).
 - `player_start` — where the player spawns (`px = PLAYER_X; py = PLAYER_Y; ground_y = PLAYER_Y;`).
@@ -209,7 +219,7 @@ The Code page has two modes, toggled in its header:
 
 Add more by dropping `//>> … //<<` pairs around any block you want pupils to tweak in a given lesson.
 
-**Autocomplete.** The editor vendors `codemirror/addon/hint/show-hint` and ships a custom hint source (`nesHint` in [code.html](tools/tile_editor_web/code.html)) that offers:
+**Autocomplete.** The editor vendors `codemirror/addon/hint/show-hint` and ships a custom hint source (`nesHint` in [code.html](../../tools/tile_editor_web/code.html)) that offers:
 
 - Generated scene symbols (`PLAYER_X`, `player_tiles`, `walk_tiles`, `NUM_STATIC_SPRITES`, `palette_bytes`, the `ss_*` arrays, etc.).
 - NES MMIO macros the template defines (`PPU_CTRL`, `OAM_DATA`, `JOYPAD1`, …).
@@ -245,9 +255,9 @@ The `/*! LESSON … */` is a plain C block comment — `cc65` ignores it, `make 
 
 | File                                            | Region(s) unlocked         | Teaching goal                                             |
 |-------------------------------------------------|----------------------------|-----------------------------------------------------------|
-| [lessons/01-move-player.c](lessons/01-move-player.c)    | `player_start`             | Change three numbers to reposition the spawn.             |
-| [lessons/02-speed-and-jump.c](lessons/02-speed-and-jump.c) | `walk_speed`, `jump_height` | Tune two constants to change game feel.                   |
-| [lessons/03-magic-button.c](lessons/03-magic-button.c)  | `magic_button`             | Write a per-frame `if (pad & 0x40)` branch for the B button. |
+| [lessons/01-move-player.c](../../lessons/01-move-player.c)    | `player_start`             | Change three numbers to reposition the spawn.             |
+| [lessons/02-speed-and-jump.c](../../lessons/02-speed-and-jump.c) | `walk_speed`, `jump_height` | Tune two constants to change game feel.                   |
+| [lessons/03-magic-button.c](../../lessons/03-magic-button.c)  | `magic_button`             | Write a per-frame `if (pad & 0x40)` branch for the B button. |
 
 **Server endpoints:**
 
@@ -294,25 +304,25 @@ A sibling of the lesson library: `snippets/` at the repo root holds short blocks
 
 | File                                                                     | Fits region    | Effect                                                     |
 |--------------------------------------------------------------------------|----------------|------------------------------------------------------------|
-| [snippets/teleport-on-b.c](snippets/teleport-on-b.c)                     | `magic_button` | Pressing B warps the hero to the top-left corner.          |
-| [snippets/sprint-on-a.c](snippets/sprint-on-a.c)                         | `magic_button` | Hold A to double walking speed.                            |
-| [snippets/run-on-b.c](snippets/run-on-b.c)                               | `magic_button` | Hold B to triple walking speed.                            |
-| [snippets/wrap-screen.c](snippets/wrap-screen.c)                         | `magic_button` | Walking off either edge re-enters from the other side.     |
-| [snippets/wrap-vertical.c](snippets/wrap-vertical.c)                     | `magic_button` | Flying off the top/bottom re-enters from the other side.   |
-| [snippets/rainbow-background.c](snippets/rainbow-background.c)           | `magic_button` | Rewrites PPU $3F00 every frame for a palette strobe.       |
-| [snippets/rainbow-player.c](snippets/rainbow-player.c)                   | `magic_button` | Cycles the player's primary colour every frame.            |
-| [snippets/auto-bounce.c](snippets/auto-bounce.c)                         | `magic_button` | Re-fires a jump the instant the hero lands.                |
-| [snippets/fly-on-a.c](snippets/fly-on-a.c)                               | `magic_button` | Hold A to rise; release to fall.                           |
-| [snippets/fast-fall.c](snippets/fast-fall.c)                             | `magic_button` | Hold DOWN while airborne to slam back down.                |
-| [snippets/double-jump.c](snippets/double-jump.c)                         | `magic_button` | A second A-press mid-air gives one extra bounce.           |
-| [snippets/dash-on-b.c](snippets/dash-on-b.c)                             | `magic_button` | Tap B for a short horizontal dash in the facing direction. |
-| [snippets/high-jump.c](snippets/high-jump.c)                             | `magic_button` | Boosts every jump so it travels roughly twice as high.     |
-| [snippets/freeze-on-start.c](snippets/freeze-on-start.c)                 | `magic_button` | Hold START to pause gravity so you can walk on air.        |
-| [snippets/auto-walk-right.c](snippets/auto-walk-right.c)                 | `magic_button` | Autopilot: the player walks right without input.           |
-| [snippets/bounce-off-walls.c](snippets/bounce-off-walls.c)               | `magic_button` | Autopilot with direction flip at each screen edge.         |
-| [snippets/solid-obstacles.c](snippets/solid-obstacles.c)                 | `magic_button` | Scene sprites block horizontal movement (walls).           |
-| [snippets/stand-on-obstacles.c](snippets/stand-on-obstacles.c)           | `magic_button` | Scene sprites become platforms you can stand on.           |
-| [snippets/screen-shake-on-landing.c](snippets/screen-shake-on-landing.c) | `magic_button` | PPU scroll wobbles for 8 frames after each landing.        |
+| [snippets/teleport-on-b.c](../../snippets/teleport-on-b.c)                     | `magic_button` | Pressing B warps the hero to the top-left corner.          |
+| [snippets/sprint-on-a.c](../../snippets/sprint-on-a.c)                         | `magic_button` | Hold A to double walking speed.                            |
+| [snippets/run-on-b.c](../../snippets/run-on-b.c)                               | `magic_button` | Hold B to triple walking speed.                            |
+| [snippets/wrap-screen.c](../../snippets/wrap-screen.c)                         | `magic_button` | Walking off either edge re-enters from the other side.     |
+| [snippets/wrap-vertical.c](../../snippets/wrap-vertical.c)                     | `magic_button` | Flying off the top/bottom re-enters from the other side.   |
+| [snippets/rainbow-background.c](../../snippets/rainbow-background.c)           | `magic_button` | Rewrites PPU $3F00 every frame for a palette strobe.       |
+| [snippets/rainbow-player.c](../../snippets/rainbow-player.c)                   | `magic_button` | Cycles the player's primary colour every frame.            |
+| [snippets/auto-bounce.c](../../snippets/auto-bounce.c)                         | `magic_button` | Re-fires a jump the instant the hero lands.                |
+| [snippets/fly-on-a.c](../../snippets/fly-on-a.c)                               | `magic_button` | Hold A to rise; release to fall.                           |
+| [snippets/fast-fall.c](../../snippets/fast-fall.c)                             | `magic_button` | Hold DOWN while airborne to slam back down.                |
+| [snippets/double-jump.c](../../snippets/double-jump.c)                         | `magic_button` | A second A-press mid-air gives one extra bounce.           |
+| [snippets/dash-on-b.c](../../snippets/dash-on-b.c)                             | `magic_button` | Tap B for a short horizontal dash in the facing direction. |
+| [snippets/high-jump.c](../../snippets/high-jump.c)                             | `magic_button` | Boosts every jump so it travels roughly twice as high.     |
+| [snippets/freeze-on-start.c](../../snippets/freeze-on-start.c)                 | `magic_button` | Hold START to pause gravity so you can walk on air.        |
+| [snippets/auto-walk-right.c](../../snippets/auto-walk-right.c)                 | `magic_button` | Autopilot: the player walks right without input.           |
+| [snippets/bounce-off-walls.c](../../snippets/bounce-off-walls.c)               | `magic_button` | Autopilot with direction flip at each screen edge.         |
+| [snippets/solid-obstacles.c](../../snippets/solid-obstacles.c)                 | `magic_button` | Scene sprites block horizontal movement (walls).           |
+| [snippets/stand-on-obstacles.c](../../snippets/stand-on-obstacles.c)           | `magic_button` | Scene sprites become platforms you can stand on.           |
+| [snippets/screen-shake-on-landing.c](../../snippets/screen-shake-on-landing.c) | `magic_button` | PPU scroll wobbles for 8 frames after each landing.        |
 
 **Server endpoints:**
 
@@ -334,7 +344,7 @@ Unknown ids 404 (same id-validation as lessons: `[A-Za-z0-9][A-Za-z0-9._-]*`). T
 
 ### Phase 3e — Assembly mode (C / 6502 toggle)
 
-The Code page carries a second mode-toggle pair beside **Guided / Advanced**: **C / Asm**. Advanced pupils can flip the editor's source between [steps/Step_Playground/src/main.c](steps/Step_Playground/src/main.c) (cc65) and a standalone 6502 starter at [steps/Step_Playground/src/main.s.starter](steps/Step_Playground/src/main.s.starter) (ca65). Each language keeps its own working copy inside the same shared state blob (`state.customMainC`, `state.customMainAsm`), so switching back and forth never loses work.
+The Code page carries a second mode-toggle pair beside **Guided / Advanced**: **C / Asm**. Advanced pupils can flip the editor's source between [steps/Step_Playground/src/main.c](../../steps/Step_Playground/src/main.c) (cc65) and a standalone 6502 starter at [steps/Step_Playground/src/main.s.starter](../../steps/Step_Playground/src/main.s.starter) (ca65). Each language keeps its own working copy inside the same shared state blob (`state.customMainC`, `state.customMainAsm`), so switching back and forth never loses work.
 
 **Why a standalone asm starter (no `nes.lib`).** The starter writes its own `.segment "HEADER"` iNES bytes and its own `.segment "VECTORS"` block, and the asm build path links `main.o + graphics.o` directly with `ld65 -C cfg/nes.cfg` — no crt0, no `nes.lib`. This keeps the boot path visible end-to-end: `reset:` disables rendering, double-waits for vblank, writes palettes, calls `_load_background`, sets `PPU_CTRL`/`PPU_MASK`/scroll, then drops into `game_loop`. An empty `.segment "STARTUP"` stub silences the nes.cfg-declared segment without pulling any runtime in.
 
@@ -398,7 +408,11 @@ POST body:
 }
 ```
 
-`mode` is `"browser"` (default) or `"native"`. Native auto-falls-back to browser (with a warning in the response) if `fceux` isn't on PATH. When `customMainC` is present and non-empty, the build runs in a per-request tempdir so concurrent pupil edits don't race; without it, the shared `steps/Step_Playground/` build path is used (serialised through `BUILD_LOCK`).
+`mode` is `"browser"` (default) or `"native"`. Native auto-falls-back to browser (with a warning in the response) if `fceux` isn't on PATH.
+
+**Every** build runs in its own throwaway tempdir — the pupil's `customMainC` and the default stock build alike — so nothing races on the shared tree and nothing is left behind. Concurrent Plays therefore run **in parallel**, capped by a semaphore sized to the machine (`BUILD_SEM = BoundedSemaphore(max(2, min(8, cpu_count)))`), rather than one at a time.
+
+> This paragraph used to say the no-`customMainC` case used the shared `steps/Step_Playground/` path, serialised through `BUILD_LOCK`. Both halves are gone: there is no shared build path any more, and `BUILD_LOCK` no longer exists — it was replaced precisely because serialising every build is a bottleneck when thirty pupils press Play at once. If you sized a classroom on "builds are serialised", size it again.
 
 Native mode writes the just-built ROM to `steps/Step_Playground/_play_latest.nes` and launches `fceux` against **that** file, not the shared `game.nes`.  The tempdir build path never updates `game.nes`, so an earlier bug had fceux loading whatever stale ROM the last offline `make` had left there; the dedicated `_play_latest.nes` keeps the offline workflow's stock `game.nes` authoritative while giving `/play` a predictable launch target.  `*.nes` is already in `.gitignore`, so nothing new to ignore.
 
@@ -414,7 +428,7 @@ Response on success:
 }
 ```
 
-Browser mode decodes `rom_b64` and hands it either to the page's embedded `jsnes.NES.loadROM()` (Builder / Sprites / Code / Backgrounds / Behaviour — all now share [tools/tile_editor_web/emulator.js](tools/tile_editor_web/emulator.js)) or to a blob URL for the Download-ROM flow. Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load — [play-pipeline.js](tools/tile_editor_web/play-pipeline.js)'s `capabilities()` caches the probe for the page's lifetime.
+Browser mode decodes `rom_b64` and hands it either to the page's embedded `jsnes.NES.loadROM()` (Builder / Sprites / Code / Backgrounds / Behaviour — all now share [tools/tile_editor_web/emulator.js](../../tools/tile_editor_web/emulator.js)) or to a blob URL for the Download-ROM flow. Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load — [play-pipeline.js](../../tools/tile_editor_web/play-pipeline.js)'s `capabilities()` caches the probe for the page's lifetime.
 
 **Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, `ss_*` arrays (extra static sprites), and the animation tables **`walk_tiles` / `walk_attrs` / `WALK_FRAME_COUNT` / `WALK_FRAME_TICKS`** (and the `jump_*` equivalents). If you rename any of these symbols, update `build_scene_inc()` in the server to match.
 
@@ -472,13 +486,17 @@ reference.  A few teacher-relevant bits:
 ### Regression tests
 
 Run `node tools/builder-tests/run-all.mjs` from the repo root.
-It syntax-checks every module + inline script, verifies the
-byte-identical baseline invariant, and runs eight smoke-test
-suites covering Player 2, HP+HUD, runtime animations, teleport
-doors, multi-background doors, the polish sweep (P2 HP + P2
-animation + enemy/pickup idle), and dialogue (including a
-regression guard against the old `draw_text()` / `clear_text_row()`
-from-per-frame pattern that caused a one-frame sprite stutter).
+It syntax-checks every shipped module and every inline `<script>`,
+checks the byte-identical golden-ROM invariants, and then runs
+**every** smoke-test suite in `tools/builder-tests/`.
+
+The runner enumerates those suites from disk rather than from a list,
+so the count is simply whatever is in the directory — 115 on
+2026-08-13, up from the eight this paragraph used to name. What they
+cover is documented per-suite in
+[`tools/builder-tests/README.md`](../../tools/builder-tests/README.md),
+which is the file to read rather than a summary here that goes stale
+the next time someone adds one.
 
 The suite should be green before any Builder change ships.
 

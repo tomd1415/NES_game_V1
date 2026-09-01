@@ -50,6 +50,15 @@
     // init-firewall.sh opens INPUT for these; without it the default INPUT DROP
     // silently swallows connections to a published port.
     "DEV_PORTS": "8765",
+    // Bind the playground server to ALL CONTAINER INTERFACES, not the container's
+    // loopback. Docker delivers a published port to the container's own interface,
+    // so the server's default HOST=127.0.0.1 leaves the publish connection-refused
+    // and nothing reaches the host — the symptom is a dev server that answers curl
+    // fine *inside* the container and is dead from outside it. This does NOT widen
+    // host exposure: appPort above still publishes to the host's 127.0.0.1 only, and
+    // INPUT is default-DROP apart from DEV_PORTS. Taken from `main` in the 2026-09-02
+    // merge; it is a property of Docker, not of which project is running.
+    "PLAYGROUND_HOST": "0.0.0.0",
     // Claude Code refuses bypass-permissions as root; this marks the container as a
     // sandbox so the isolation (rootless + firewall) is the boundary instead of prompts.
     "IS_SANDBOX": "1",

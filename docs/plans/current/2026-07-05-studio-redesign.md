@@ -11,6 +11,13 @@
 > (`tools/tile_editor_web/studio.html`) alongside the untouched seven
 > pages, which stay the default until parity lands and the switch-over is
 > made (see the design plan's "Migration strategy").
+>
+> **Update — the switch-over has happened.** As of 2026-07-26 the Studio is
+> the **primary** front-end: it is what the server's startup banner points at,
+> what the `Open Editor via Playground Server` task opens, and what the README
+> documents. The seven pages are still served, but are critical-fix-only. The
+> paragraph above describes the plan as written on 2026-07-05; read it as
+> history, not as current state.
 
 ## Companion docs
 

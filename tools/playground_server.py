@@ -7,10 +7,20 @@ POST /play endpoint that takes the current editor state plus a little
 scene definition (which sprite is the Player, which static sprites to
 drop on the background and where) and:
 
-  1. writes the CHR + nametable into steps/Step_Playground/assets/
-  2. writes palettes.inc and scene.inc into steps/Step_Playground/src/
-  3. runs `make -C steps/Step_Playground` to build game.nes
-  4. launches FCEUX on the freshly-built ROM
+  1. writes the CHR, nametable, generated sources and a Makefile into a
+     private `tempfile.TemporaryDirectory`
+  2. runs `make` in that directory to build game.nes
+  3. returns the ROM for in-browser play (jsnes), or — in "native" mode
+     only, and only when fceux is on PATH — launches FCEUX on the
+     server's own desktop
+
+**Nothing is written into steps/Step_Playground/.** This used to write CHR,
+nametable, palettes.inc and scene.inc straight into the tracked tree and run
+`make -C steps/Step_Playground`; both build paths (C and asm) now build in a
+temp directory, so a /play leaves `git status` clean. The old description
+survived here long enough to teach people to expect modified engine sources
+and wave them through — which would mask a real edit. If you DO see files
+modified under steps/Step_Playground/ after a play, something is wrong.
 
 The server is intentionally a single-file stdlib-only script so it works
 on any box with Python 3 and cc65 installed -- no extra dependencies.
@@ -19,8 +29,10 @@ Start from the repo root with:
 
     python3 tools/playground_server.py
 
-then browse http://127.0.0.1:8765/sprites.html  (or let the VSCode task
-'Start Playground Server' do it for you -- runs on folder open).
+then browse http://127.0.0.1:8765/studio.html  (Studio is the primary
+editor; the legacy index/sprites/code pages are still served).  Or let
+the VSCode task 'Start Playground Server' do it for you -- runs on folder
+open.
 """
 
 from __future__ import annotations
@@ -95,10 +107,6 @@ def _load_dotenv(path):
 # account join code/admin secret, etc.
 _load_dotenv(ROOT / ".env")
 STEP_DIR = ROOT / "steps" / "Step_Playground"
-SCENE_INC = STEP_DIR / "src" / "scene.inc"
-PAL_INC = STEP_DIR / "src" / "palettes.inc"
-CHR_PATH = STEP_DIR / "assets" / "sprites" / "game.chr"
-NAM_PATH = STEP_DIR / "assets" / "backgrounds" / "level.nam"
 DEFAULT_MAIN_C = STEP_DIR / "src" / "main.c"
 DEFAULT_MAIN_S = STEP_DIR / "src" / "main.s.starter"
 LESSONS_DIR = ROOT / "lessons"
@@ -1109,10 +1117,6 @@ def build_project_inc(state, player_idx, scene_sprites, start_y=120, player_idx2
     )
 
 
-COLLISION_H_PATH = STEP_DIR / "src" / "collision.h"
-BEHAVIOUR_C_PATH = STEP_DIR / "src" / "behaviour.c"
-
-
 # ---------------------------------------------------------------------------
 # Full-world background data (Sprint 11 S-1 slice 1)
 #
@@ -1145,8 +1149,6 @@ def build_bg_world_c(state):
     """Emit src/bg_world.c — flat tile + attribute arrays for the whole world."""
     return world_core.build_bg_world_c(state)
 
-BG_WORLD_H_PATH = STEP_DIR / "src" / "bg_world.h"
-BG_WORLD_C_PATH = STEP_DIR / "src" / "bg_world.c"
 
 
 # ---------------------------------------------------------------------------
@@ -1412,9 +1414,19 @@ def _resolve_engine_versions(body):
     """(target_engine, current_engine) for build provenance / versioning.
 
     The original multi-page site defaults to v1 (stable/pinned); the Studio
-    targets the latest.  For v1..v2 the static cc65 sources are identical, so
-    this is provenance-only today — it is the hook where a future engine whose
-    static sources diverge would build the target's snapshot."""
+    targets the latest.
+
+    This is still provenance-only: the returned target is recorded, and every
+    build uses the CURRENT sources regardless of it.  Nothing here reads
+    `tools/engines/v<N>/`.
+
+    What has changed is the reason.  This said "for v1..v2 the static cc65
+    sources are identical, so there is nothing to select yet" — that stopped
+    being true at v19/v20, when the hot paths moved to hand-written 6502 under
+    `steps/Step_Playground/src/*.s`, and we are now on v78.  The snapshots that
+    a selecting build would need are frozen and have been for a long time; the
+    selection step itself is simply unbuilt.  See "Build-time selection &
+    fallback" in docs/design/engine-versioning.md for the intended algorithm."""
     try:
         current_engine = int((ROOT / "tools" / "engines" / "ENGINE_VERSION").read_text().strip())
     except Exception:
@@ -2429,8 +2441,7 @@ def main():
         if _ping_existing_playground(probe_host, PORT):
             print(
                 f"Playground server already running on http://{probe_host}:{PORT}/ -- nothing to do.\n"
-                f"  Editor:  http://{probe_host}:{PORT}/index.html\n"
-                f"  Sprites: http://{probe_host}:{PORT}/sprites.html",
+                f"  Studio (primary): http://{probe_host}:{PORT}/studio.html",
                 file=sys.stderr, flush=True,
             )
             return
@@ -2445,9 +2456,8 @@ def main():
     fceux_note = f"fceux: {FCEUX_PATH}" if FCEUX_PATH else "fceux: not installed (browser mode only)"
     banner = (
         f"Playground server listening on {display_host}:{PORT}\n"
-        f"  Editor:    http://{probe_host}:{PORT}/index.html\n"
-        f"  Sprites:   http://{probe_host}:{PORT}/sprites.html\n"
-        f"  Code:      http://{probe_host}:{PORT}/code.html\n"
+        f"  Studio (primary):  http://{probe_host}:{PORT}/studio.html\n"
+        f"  Legacy pages:      index.html / sprites.html / code.html (still served)\n"
         f"  {fceux_note}\n"
         f"Press Ctrl-C to stop."
     )

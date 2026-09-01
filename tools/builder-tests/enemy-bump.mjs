@@ -107,10 +107,22 @@ function makeState(bump) {
   } else bad('no ss_ai_state flip — walkers would never turn in the default ASM build');
 
   // A design authored at v81 must still build byte-identically on an older target.
-  window.NES_TARGET_ENGINE = 80;
-  const older = win.BuilderAssembler.assemble(makeState(true), tpl);
-  if (!/bw_bump/.test(older)) ok('v80 target degrades the feature (no separation code)');
-  else bad('v80 target still emitted bw_bump* — the engine-version gate is broken');
+  // The version line is not one line after the 2026-09-02 merge: 76-79 are `main`'s
+  // engines (it added this at 77), 80-83 are this branch's ports of them (we added it
+  // at 81). v80 is therefore a HOLE — the versions either side of it have the feature
+  // and its own frozen snapshot does not. Every boundary is asserted, because a gate
+  // that is wrong here is wrong silently, in whichever direction it errs.
+  for (const [target, want] of [[76, false], [77, true], [79, true],
+                                [80, false], [81, true], [83, true]]) {
+    window.NES_TARGET_ENGINE = target;
+    const got = /bw_bump/.test(win.BuilderAssembler.assemble(makeState(true), tpl));
+    if (got === want) {
+      ok(`target v${target}: separation code ${want ? 'emitted' : 'withheld'}`);
+    } else {
+      bad(`target v${target}: separation code ${got ? 'emitted' : 'withheld'}, expected `
+          + `the opposite — v80 is a hole in the version line, see builder-modules.js`);
+    }
+  }
   window.NES_TARGET_ENGINE = 81;
 }
 

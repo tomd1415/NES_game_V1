@@ -21,6 +21,8 @@ import { testPort } from './lib/test-port.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
+//   (The version numbers below are THIS branch's. `main` shipped the same two
+//    changes as its v78 and v76; the hashes are identical, the numbering is not.)
 //   e86a91b8… is the value from engine v82 (item #31, ported from `main`'s v78). The
 //     dialogue banner writer stopped force-blanking: it now prepares one 32-byte row
 //     per frame in per_frame and blits it from an unrolled burst in vblank, so the

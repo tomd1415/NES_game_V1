@@ -9,6 +9,66 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## Two numbering lines, merged 2026-09-02 — read this before quoting a version
+
+Up to **v75** there is one history. Above it there are two, and they are now both in this
+file because both are real:
+
+* **v76–v79 are `main`'s** engines, and their snapshot directories under
+  `tools/engines/` are `main`'s. Games in classrooms are stamped with these.
+* **v80–v83 are this branch's ports of those same four fixes** (#37, #30, #31, #14 Step 2),
+  made while diverged and before the merge. Each entry says which of `main`'s it carries.
+
+So the same fix appears twice, under two numbers, and that is not an editing mistake —
+it is what happened. `tools/builder-tests/lib/snapshot-collisions.mjs` asserts the two
+lines never describe *different* engines under the *same* number.
+
+Three entries that used to sit here are gone: this branch's own local **v76, v77 and v78**
+(the codegen snapshot widening, the cartridge-overflow message, and the `_hex_table`
+rename). Their numbers belonged to `main`'s published engines, and a snapshot directory
+can hold only one engine, so `main`'s were taken and those three were dropped. Nothing is
+lost from the code — all three changes are in the tree and inside the v80–v83 snapshots —
+but there is no longer a frozen engine you can roll back to for those three intermediate
+states. They were never published outside this branch, which is what makes that the
+right trade rather than a loss.
+
+## v84 — 2026-09-02 — The merge itself, and the version line stops being a line
+
+### Changed — one engine file, for one reason.
+
+Merging `origin/main` (139 commits) changed exactly one file inside the snapshot:
+`builder-modules.js`, and only the `enemyBump` gate. That is why the merge needs a
+version of its own rather than riding on v83.
+
+Before the merge this branch gated the feature at `targetEngine >= 81`, which was right
+while 77-80 named only *this* branch's engines. The merge brings `main`'s v76-v79 in as
+the snapshot directories of those numbers, and **`main` added this feature at its v77**.
+So the truth is now discontinuous:
+
+| target | has the feature? | whose engine |
+| --- | --- | --- |
+| ≤ 76 | no | shared, then `main`'s v76 |
+| 77, 78, 79 | **yes** | `main`'s |
+| **80** | **no** | ours — the port of `main`'s v76 |
+| 81 – 84 | yes | ours |
+
+`>= 81` would silently deny the feature to a project authored on `main` at 77-79.
+`>= 77` would silently emit it for a v80 project whose frozen engine cannot have produced
+it. Both are wrong quietly, so the gate states the real shape —
+`targetEngine >= 77 && targetEngine !== 80` — and `enemy-bump.mjs` asserts **every one of
+those six boundaries** rather than the two it checked before.
+
+### Byte-identity
+
+Both goldens unchanged, and `_rom-equiv` unchanged at `e86a91b8`: none of those fixtures
+has `enemyBump` ticked, so no emitted byte moves for them. A project that *does* tick it
+and targets 77-79 now gets separation code it did not get before — which is the point.
+
+### Migration
+
+None for a project stamped 80 or above. A project stamped 77, 78 or 79 (authored on
+`main`) gains the enemy-separation code its own engine already had.
+
 ## v83 — 2026-09-01 — Multi-screen rooms keep their own entities (#14 Step 2, ported from `main`'s v79)
 
 **Changed (migration: none needed).** `_scene_is_perroom` now refuses a project
@@ -289,7 +349,257 @@ instead of 256 — the wrap itself, at the emulator. `test_build_preparation.py`
 selection directly, including the boundary pair where the status bar is the only
 difference (7×9 fits without it, not with it), and was seen to fail first.
 
-## v78 — 2026-08-14 — Two same-named helpers get different names (F12 follow-on)
+## v79 — 2026-08-14 — Multi-screen rooms keep their own entities (#14 Step 2)
+
+**Changed (migration: none needed).** `_scene_is_perroom` now refuses a project
+only when an entity sits at **y > 238**. Up to v78 it refused any entity past
+**x > 255 or y > 255**, which made per-room scene instances and multi-screen
+levels mutually exclusive: paint a level two screens wide and every room quietly
+shared one scene, with nothing to say the feature had stood down.
+
+*Why x could go.* Measured 2026-08-13 (#14 Step 1): parking survives a wide
+16-bit build. Off-room actors are parked at `ss_y = 0xFF` and skipped by the draw
+guards — the C loops compare a u16 `ss_y`, and `ai_asm.s` tests the high byte
+before comparing the low one against `0xEF`. Four code sites in two languages,
+all correct for wide positions. So the x half of the old restriction rejected a
+case that already worked.
+
+*Why 238 and not 239.* `0xEF` **is** 239 and the guards test `>= 0xEF`, so an
+entity legitimately placed on row 239 is indistinguishable from a parked one:
+it never appears and nothing reports why. 238 is the highest row that cannot be
+confused with the sentinel.
+
+**This also fixes a bug that predates the feature.** Under v78's `y > 255` bound,
+rows 239–255 were admitted, so a multi-room project with an entity anywhere in
+that band silently lost it. That was reachable on a plain single-screen-tall
+project and is now refused.
+
+The bound is on the ENTITY's coordinate, not the room's height — a two-screen-tall
+room whose entities all sit on the upper screen still gets per-room, because the
+sentinel collision is a property of the coordinate.
+
+**ROM output for existing projects is unchanged**, verified rather than argued:
+both goldens still hash `1730448e…` and the everything-on fixture still hashes
+`e86a91b8…`. Nothing that built per-room before builds differently; projects that
+previously fell back to the shared scene now get what they asked for.
+
+Covered by `tools/builder-tests/perroom-wide-gate.mjs` — five cases, including a
+same-geometry control that differs only by one room tag, and the y=238/239 pair
+that is the only thing able to tell the two thresholds apart.
+
+**Knock-on effect, found 2026-08-15 and not noticed when this shipped.** Two ASM
+paths are gated on `not _scene_is_perroom(...)` — the scene DRAW loop
+(`nes_asm_scene`) and the scene AI (`nes_asm_ai`). Both fall back to C for
+multi-room projects, because the hand-written versions do not honour the
+`ss_y = 0xFF` parking sentinel: the ASM draw has no skip for parked actors, and
+of the four ASM AI routines only `chaser` and `flyer` test the sentinel —
+`walker` and `patrol` do not, so a parked walker would crawl back on screen.
+
+Widening `_scene_is_perroom` therefore **switches both ASM paths off for
+wide multi-room projects that previously used them**. That is correct and
+necessary — parking now applies to those projects, so the fallbacks must apply
+too — but it means such a build gets the C draw and C AI: byte-behaviour-identical
+(the `asm-scene` / `asm-ai` A/B suites prove that), and about 1.2x slower with a
+slightly larger ROM (`asm-ai-bench`). Anyone benchmarking a wide multi-room
+project against a v78 build will see that difference and should not go hunting
+for a regression: it is this gate, working as intended.
+
+## v78 — 2026-07-28 — The dialogue box no longer flashes the screen (#31)
+
+### Changed (dialogue projects only; goldens UNCHANGED)
+The last open slice of feedback **#31** ("NPC dialogue glitches the stage,
+especially on gallery projects"). The garbage-glyph half was fixed 2026-06-18
+by the built-in font, and the scrolled-off-screen half the same day by anchoring
+the box to the camera; what was left — and deferred to the codegen plan's
+Sprint 5 — was the **forced-blank flash when the box opens or closes**.
+
+- **Cause.** The banner is a full-width band four tile rows tall (eight when a
+  vertical scroll leaves it straddling two attribute rows). Writing it took
+  128–256 `$2007` pokes in a single vblank, far past the ~2273-cycle window, so
+  the writer set `PPU_MASK = 0` for the burst and restored it after. With
+  rendering off the burst runs long past vblank into the visible frame, so the
+  top of the screen paints as flat backdrop for a frame: the "split-second
+  stage glitch" pupils reported.
+- **Fix — one row per frame, prepared outside vblank.** `per_frame` now builds
+  a single 32-byte row into `bw_dlg_buf[]` while rendering is on (~27000 cycles
+  going spare there), and the vblank slot only pushes those bytes. On the
+  non-scroll path the push is **unrolled** — `lda bw_dlg_buf+N / sta $2007`, 8
+  cycles a byte, ~260 for the row — so it fits inside vblank with rendering left
+  **on**. This is the same prepare-then-burst shape `scroll_stream()` already
+  uses for its column bursts, and it is the bound the codegen plan's Sprint 5(b)
+  asked for ("cap to one row + a per-frame byte budget").
+- **Cost.** A box takes 5 frames to appear instead of 1 (4 tile rows + one
+  attribute step), i.e. under a tenth of a second. The part-drawn band is not
+  visible: a blank box cell (0x20) is colour 0 = the shared `universal_bg` in
+  every palette, so only the glyph cells read as "box".
+- **Attribute ordering.** The attribute bytes are written **first** on open, so
+  glyphs never appear for a frame in the scenery's palette, and **last** on
+  close, so scenery never appears for a frame in the box palette.
+- **Geometry is snapshotted** when the job starts, so a camera that moves
+  mid-animation cannot tear the band across two positions; and **B is swallowed
+  while a job is in flight** (the auto-close timer holds too), so a mashed
+  button cannot queue a clear on top of a half-drawn box and stamp the band into
+  the background.
+- **Scroll builds** already hold `PPU_MASK` at 0 across their whole vblank
+  window — that is the template's own scroll-burst guard, not the dialogue's —
+  so this path could not stop disabling rendering. Bounding it to one row still
+  shrinks that window from roughly half a screen to a few scanlines, so the
+  visible artefact goes from a flash to the thin band scroll builds already have.
+
+### Byte-identity
+Goldens unchanged: the whole change lives inside the dialogue module's injected
+code, and the goldens (`GOLDEN_STOCK` / `GOLDEN_TEMPLATE`) are no-module builds.
+A project **with** dialogue ticked does get different ROM bytes — that is the
+point of the bump. `draw_text` / `clear_text_row` in the template are untouched;
+they have been off the dialogue path since Arc B and stay as the stock `main.c`
+twins the byte-identity invariant compares against.
+
+### Tests
+- `tools/builder-tests/render-dialogue-noflash.mjs` (new) — drives a real ROM in
+  jsnes frame by frame through an open and a close and asserts no frame blanks.
+  Measured on v77 the open frame collapses a busy 40-scanline band from 7680 lit
+  pixels to **0**; on v78 it stays at 7680 throughout. Also checks the box still
+  finishes drawing, still round-trips on close, and that mashing B leaves it
+  fully open or fully closed rather than stranded half-drawn.
+- `round2-dialogue.mjs` — B6f/B6f2/B6g re-pointed at the new prepare-step shape
+  (same intent: the writer must cover the banner's world rows and bound the text
+  span by the row count), plus two new guards: **B6i** fails if any `PPU_MASK`
+  write reappears in the dialogue vblank block, **B6j** fails if the non-scroll
+  row burst stops being unrolled. Both mutation-tested.
+- `render-dialogue-box.mjs`, `render-dialogue-visible.mjs`, `dialogue-scroll.mjs`
+  and `dialogue-font.mjs` pass **unchanged** — including the close round-trip and
+  the 2×1 scroll build — so the visible behaviour is the same apart from the
+  flash.
+
+## v77 — 2026-07-27 — Enemies can no longer stand inside each other (#30)
+
+### Added (off by default; goldens UNCHANGED)
+The last open slice of feedback **#30** ("enemy sprites pass through solids *and
+through each other*; jitter one to the side"). The solids half shipped
+2026-06-17 via `bw_sprite_blocked()`; this is the enemy-vs-enemy AABB pass that
+entry left as a follow-up.
+
+- **New Globals toggle — "Enemies bump into each other"** (`globals.enemyBump`,
+  default **off**). Chosen over a Scene-module setting because Scene is
+  `customRender: true` with an empty schema, so it has no generic settings UI,
+  while Globals already renders bools (`bobWhenWalking`) in both front-ends.
+  The code is still *emitted* by the Scene module, which owns the `ss_*` indices.
+- **The pass** runs once per frame in `per_frame`, appended **after** every
+  per-instance AI block, so it only ever corrects finished positions. For each
+  pair of live participants whose boxes overlap it pushes them 1px apart along
+  the **shallower** axis — a head-on pair separates sideways, a landed-on-top
+  pair vertically. Participants are placed enemies with a movement AI; `static`
+  and `shooter` (a fixed turret) are excluded.
+- **Walkers, patrols and hoppers turn around** rather than grinding together.
+  The pass cannot reach their direction variables (block-scope statics), so it
+  sets a `bw_bumped[]` flag that each AI consumes and clears on its next frame.
+  Push-apart *alone* would have recreated the 1px vibration #30 also complains
+  about: A steps right, gets pushed left, steps right again, forever.
+- **Chasers and flyers are push-apart only** — they steer by the player's
+  position and have no direction to reverse. In practice a pair stalls
+  shoulder-to-shoulder, which is the intended "cannot overlap".
+- Every push is filtered through `bw_sprite_blocked`, so separation cannot shove
+  an enemy into solid ground or off the screen edge. That helper's `dir == 2`
+  bound (`sy + hpx >= 240`) also means a downward push can never reach the
+  `0xFF` row that marks an actor **defeated** — a nudge must not kill an enemy.
+
+### Byte-identity
+Goldens unchanged. With the box unticked nothing is emitted — no tables, no
+flags, no pass, and no change to any AI block — so every existing project builds
+byte-for-byte as it did under v76. A design authored with the box ticked also
+degrades cleanly on a pre-v77 target (`targetEngine >= 77` gate), matching how
+the v71 hopper and v72 shooter degrade to a plain walker.
+
+### Both build paths, no new 6502
+Under `NES_ASM_AI` the walker/patrol C blocks are preprocessed out, so nothing
+would consume `bw_bumped[]`. Rather than hand-write a 6502 twin, the pass flips
+`ss_ai_state[]` — the same mutable direction byte `ai_update` itself reads — for
+`ss_ai_type` 1 (walker) and 4 (patrol). That sub-block is emitted only when
+`asmAiHandled > 0`, since the `ss_ai_*` tables don't exist otherwise. Hoppers
+keep the flag in both paths (their C block runs in both by design).
+
+### Known limits
+- O(k²) pairs with a `bw_sprite_blocked` call per push. Fine for the handful of
+  enemies a pupil places, and it costs nothing when the box is unticked, but it
+  is not a broadphase — a level with dozens of participating enemies would feel
+  it. Revisit with a grid if that ever shows up.
+- The `ss_y >= 0xEF` liveness test follows the convention the existing AI blocks
+  use. In a **wide** (16-bit `ss_y`) build a legitimately low enemy can exceed
+  that, so it would be skipped by the pass — a pre-existing wart shared with the
+  chaser/flyer/hopper guards, not introduced here.
+- Separation is 1px per frame per pair, so a deep overlap (two enemies placed on
+  top of each other in the editor) unpicks over several frames rather than
+  snapping apart.
+
+Covered by [`tools/builder-tests/enemy-bump.mjs`](../builder-tests/enemy-bump.mjs)
+— codegen gating both ways plus a real ROM where two walkers set on a collision
+course never overlap and are seen to turn.
+
+## v76 — 2026-07-26 — Player 1's OAM cursor can no longer wrap or overrun (#37)
+
+### Changed (goldens UNCHANGED; `_rom-equiv` re-pinned — see "Byte-identity" below)
+Two silent OAM-corruption bugs on the Player 1 draw, both in the "random mess on
+screen / the emulator froze for no reason" class of feedback **#37**. Neither
+crashed — they quietly scribbled over memory or over other sprites, which is why
+they never produced a clean repro. Found by probing `oam_idx` immediately after
+the player draw; both are covered by
+[`tools/builder-tests/render-p1-oam-cursor.mjs`](../builder-tests/render-p1-oam-cursor.mjs).
+
+- **ASM draw (`pdraw_asm.s`, on by default for scroll builds).** `draw_player`
+  tracks the OAM cursor in **Y — 8 bits**. A 64-cell (8×8) player spans exactly
+  256 bytes, so the closing `sty _oam_idx` stored 256 mod 256 = **0**. The
+  player's own pixels landed correctly, but the cursor came back at 0, so P2,
+  scene instances, spawn effects and the HUD all read an "empty" buffer and drew
+  **over the player** — and their `oam_idx > 252` guards never tripped. With the
+  background status bar on (`BW_SMB_HUD_BG` starts the player at byte 4) the
+  player's last cells additionally wrapped onto `oam_buf[0..3]` and wiped the
+  **sprite-0 split marker** that holds the status bar over the scrolling
+  playfield. Fix: `playground_server.py` no longer selects `NES_ASM_PDRAW`
+  unless the span ends strictly inside the page — `base + W*H*4 < 256`, note the
+  strict `<`, since the writes are fine at exactly 256 but the cursor store is
+  not. Those builds use the C draw instead.
+- **C draw (character bob, or `PLAYGROUND_NO_PDRAW`).** `oam_idx` is a real
+  `unsigned int` there and the P1 loop had **no bound at all**, so 8×8 + the
+  background status bar drove it to **260** — a genuine out-of-bounds write 4
+  bytes past `oam_buf[255]` into `$0300`. Fix: `platformer.c` gained
+  `BW_OAM_P1_BASE` / `BW_P1_OAM_FITS` and an `oam_idx > 252` bound in both the
+  row and column loops, matching the P2 / scene / spawn writers.
+
+### Changed — HUD heart loops exit properly
+The `if (oam_idx > 252) break;` in the P1/P2 heart blocks sat in the innermost of
+**three** nested loops, so a full buffer stopped the cell loop while the row and
+heart loops kept spinning and re-entering it (9 HP × 2×2 hearts ≈ 36 wasted
+iterations per frame, inside the pre-vblank window we are trying to keep cheap on
+a crowded scene). The test now lives in all three loop conditions.
+
+### Changed — the Builder warns before the engine has to cope
+`player-oam-overflow` (V11) did not count the status bar's sprite-0 split marker,
+so an 8×8 player passed at exactly 64 and then needed 65 slots. It now adds the
+marker when the background status bar is on, and says so in the message.
+
+**Byte-identity:** both goldens are unchanged. The OAM-cursor fixes are fully
+byte-preserving — `BW_P1_OAM_FITS` compiles the new bound out entirely whenever
+the player provably fits (every ordinary project), and the ASM-selection and
+validator changes emit nothing new.
+
+The **heart-loop change is not** byte-preserving, and deliberately so: any
+project with the HP HUD emits different code, so the `_rom-equiv` "everything on"
+fixture was re-pinned `0aed6e95` → `972cb215`. That drift was isolated before
+re-pinning — reverting only the heart loops reproduces `0aed6e95` exactly, which
+is what confirms the other three changes are byte-clean.
+
+**Not fixed here:** `draw_player` still uses an 8-bit cursor. Widening it to 16
+bits (as `draw_player2` already does) would cost every scroll build ROM bytes for
+a case the server now routes around. If a future change makes big players common,
+that is the follow-up.
+
+## Superseded — this branch's local v76, v77 and v78 (2026-08-06 to 2026-08-14)
+
+Kept as a record of what the numbers used to mean here, because a reader who finds
+`engineVersion: 77` in an old local project file on this branch needs to know it was
+ambiguous. **These are not the engines those numbers now name** — see the note at the top.
+
+## ~~v78~~ (superseded, local only) — 2026-08-14 — Two same-named helpers get different names (F12 follow-on)
 
 ### Changed — names only. **No ROM output changes.**
 
@@ -320,7 +630,7 @@ Verified no ROM movement: both golden hashes and the full 110-suite pass are gre
 > work-list, so this collision exists for one item's duration by design rather than by
 > accident. Recorded here so it cannot be discovered only at merge time.
 
-## v77 — 2026-08-13 — A one-byte cartridge overflow is explained, not dumped (F1)
+## ~~v77~~ (superseded, local only) — 2026-08-13 — A one-byte cartridge overflow is explained, not dumped (F1)
 
 ### Changed — error text only. **No ROM output changes.**
 
@@ -352,7 +662,7 @@ path had been skipped. The fix is one character, `bytes?`.
 > this branch's bumps to the next free numbers. Recorded here so the collision cannot
 > be discovered only at merge time.
 
-## v76 — 2026-08-06 — The snapshot now covers the server's ROM codegen
+## ~~v76~~ (superseded, local only) — 2026-08-06 — The snapshot now covers the server's ROM codegen
 
 ### Changed — snapshot scope only. **No ROM output changes.**
 

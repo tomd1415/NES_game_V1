@@ -91,131 +91,113 @@ Some ideas:
 
 ---
 
-## Designing your own sprites and backgrounds
+## Making your own game — the Studio
 
-The fastest way is the **visual tile editor**: a web page that runs in
-your browser with tools for drawing tiles, arranging sprites, and
-laying out backgrounds.
+The 5 steps above are about reading and tweaking C. When you want to build a
+game of your own, use the **Studio**: one browser page where you draw the
+art, lay out the level, set the rules and press Play — and a real `.nes` ROM
+comes out the other end.
 
-### 🎨 Opening the visual editor
+### 🎨 Opening the Studio
 
 1. Press **Ctrl+Shift+P → Tasks: Run Task → Open Editor via Playground Server**.
-2. A browser tab opens at `http://127.0.0.1:8765/` with the **Backgrounds** page.
-3. Click the **Sprites** link at the top of the page to switch to the sprites editor. Both pages share one project.
+2. A browser tab opens at `http://127.0.0.1:8765/studio.html`.
 
-The first time you open the editor a Quick-start tour pops up. If you
-dismiss it and want it back, click **?** → **↺ Replay on next load**.
+(Or from a terminal: `python3 tools/playground_server.py`, then open that
+address yourself. The server prints it on startup.)
 
-### 🎨 What's in the editor
+The first time you open it you can pick a **starter** — a guided tutorial, a
+platformer, an SMB-style showcase, a top-down adventure, an auto-runner, Geo
+Dash, a top-down racer, or a blank project.
 
-- **Tileset** — 256 tiles. Click one to edit it. Press **C** to copy a tile's pixels, select another slot and press **V** to paste.
-- **Tile editor** — click pixels to paint. Numbers 0–3 map to the four palette colours.
-- **Palettes** — 4 background palettes + 4 sprite palettes, 3 colours each. Click any of the 64 NES colours to assign.
-- **Backgrounds page** — a 32×30 tile grid (plus multi-screen scrolling). You can create **multiple named backgrounds** with **+ New** above the grid and flip between them.
-- **Sprites page** — build multi-tile sprites (up to 8×8 tiles) out of the shared tileset.
+### 🖥 How the Studio is laid out
 
-Your work **auto-saves** to the browser on every change, with a snapshot
-every 30 s and a backup every 5 min. Hit **Recover…** in the toolbar if
-anything ever goes wrong. **New** starts fresh (snapshotting your
-current work first, so it's never lost).
+Four regions, left to right:
 
-### ▶ Play your scene in the NES
+- **Mode rail** — which part of the game you're working on (see below).
+- **Edit column** — the tools for the mode you picked. Drag its right edge
+  to make it wider or narrower.
+- **The TV** — your actual game screen, live. You stamp straight onto it with
+  the **▣ Select** / **✎ Paint** tools in the bar above.
+- **Quests panel** — what to do next, and anything that needs attention.
 
-Every editor page — Backgrounds, Sprites, Behaviour, Builder, Code —
-has a **▶ Play in NES** button in the top-right.  Click it and the
-editor compiles your project into a real NES ROM and runs it in the
-embedded emulator.
+### 🗺 The modes
 
-Alongside Play, two other controls:
+There's a **Level** control in the top-right — *Beginner*, *Maker*,
+*Advanced*. Higher levels unlock more modes. Locked modes stay visible with a
+🔒 so you can see what's still to come.
 
-- **⬇ ROM** — downloads the compiled `.nes` file so you can open it
-  in any external NES emulator (or email it to a friend).
-- **In browser / Local (fceux)** dropdown — picks where the ROM
-  runs.  *In browser* uses the page's embedded jsnes.  *Local
-  (fceux)* launches fceux on the machine running the playground
-  server; the option is greyed out when fceux isn't installed there.
+| Mode | Level | What it's for |
+| ---- | ----- | ------------- |
+| 🗺 **World** | Beginner | Stamp blocks and characters onto the live screen, set what each tile does, build the level |
+| 🦸 **Chars** | Beginner | Every character, assembled out of shared tiles, and what role it plays (player, enemy, pickup, NPC…) |
+| 🎮 **Style** | Beginner | Your game style — platformer, top-down, runner, racer — and its options |
+| ⚙ **Rules** | Beginner | How the game behaves: movement, damage, win condition, reactions |
+| 🧩 **Tiles** | Maker | The 8×8 tiles everything else is built from |
+| 🎨 **Pals** | Maker | Backdrop + 4 background and 4 sprite palettes of 3, from the 64 NES colours |
+| 🎵 **Sound** | Maker | Music and sound effects |
+| 💻 **Code** | Advanced | The real C the game compiles to (and 6502 assembly) |
 
-Play needs the **Playground Server** running — the
-"Open Editor via Playground Server" task starts it for you. If you see
-"is the server running?" in the status bar, run the task again.
+Your work **auto-saves** to the browser as you go. **Recover…** brings back an
+earlier snapshot if something goes wrong.
 
-### 📝 Editing the game code (Code page)
+### ▶ Playing your game
 
-The **📝 Code** tab (alongside Backgrounds / Sprites) is an in-browser
-editor for the game's main source file. Your edits drive the ROM that
-**▶ Play in NES** builds.
+Press **▶ Play**. The Studio compiles your project into a real NES ROM and runs
+it in the emulator built into the page.
 
-- **Guided mode** (default) locks everything except a few highlighted
-  regions — `player_start`, `walk_speed`, `magic_button`, and so on —
-  so you can change interesting numbers without breaking the rest.
-  Use the **📚 Lesson** chip to follow a short lesson, or drop in a
-  ready-made block of code from the **🧩 Snippets…** picker.
-- **Advanced mode** unlocks the whole file for free editing.
-- **C / Asm toggle** (advanced only): flip the editor between C
-  (cc65) and 6502 assembly (ca65). Both compile to a real NES ROM
-  through the same Play button. Your C and asm code are saved
-  separately so you can switch back and forth without losing work.
+- **⬇ .nes** downloads the ROM so you can run it in any NES emulator, or keep it.
+- **In browser / Local (fceux)** picks where it runs. *In browser* uses the
+  built-in jsnes. *Local (fceux)* launches fceux on the machine running the
+  server, and is greyed out when fceux isn't installed there.
 
-Code auto-saves to the browser. **Restore default** reverts the file
-to the stock starter for the current language.
+Play needs the **Playground Server** running — the "Open Editor via Playground
+Server" task starts it for you. If you see "is the server running?", run the
+task again.
 
-### 🧱 Building a whole game without typing C (Builder page)
+Two-player co-op works throughout: Player 2 uses the `I` / `J` / `K` / `L`
+cluster, with `O` = A and `U` = B.
 
-The **🧱 Builder** tab is the simplest way to make a working game.
-Instead of writing code, you tick modules (Players, Enemies,
-Pickups, Damage, HUD, Doors, Dialogue, …) and fill in the
-attributes you care about.  The Builder assembles all of that
-into a real `main.c` behind the scenes and hits the same ▶ Play
-pipeline as the Code page.
+### 📚 Going further
 
-You can:
-
-- Tag sprites by role (Player, Enemy, NPC, Pickup, HUD…) on the
-  Sprites page, then drag-and-place them on the Builder's
-  preview canvas.
-- Give enemies walker or chaser AI per instance.
-- Turn on HP + hearts, damage, pickup collection, win-condition
-  logic.
-- Paint Door tiles on the Behaviour page and have them swap to
-  a second background.
-- Add NPC dialogue boxes (press B near the NPC).
-
-Two-player co-op is supported — Player 2 uses the `I` / `J` / `K`
-/ `L` cluster on the keyboard.  See
-[docs/guides/BUILDER_GUIDE.md](docs/guides/BUILDER_GUIDE.md) for
-the module reference + the font-tile convention you need to know
-for Dialogue.
+- **[`docs/guides/BUILDER_GUIDE.md`](docs/guides/BUILDER_GUIDE.md)** — the module
+  reference (players, enemies, pickups, damage, HUD, doors, dialogue…) and the
+  font-tile convention Dialogue needs. It covers 10 of the 18 modules in depth;
+  the remaining eight — mostly the SMB-style set — are listed by name at the end
+  of its §2 so you can see they exist.
+- **[`docs/guides/TILE_EDITOR_GUIDE.md`](docs/guides/TILE_EDITOR_GUIDE.md)** —
+  detailed editor instructions.
+- All 64 NES colours: run `python3 tools/generate_palette_reference.py` to
+  generate **`assets/pupil/palette_reference.png`** (produced on demand, not
+  checked in).
 
 ### 💾 Exporting your work
 
-The editor writes a few different formats. Most of the time you want
-**JSON save** (portable, re-importable) or leave everything in browser
-storage. The other formats are there for the cc65 build.
+Most of the time you want **JSON save** — portable and re-importable — or you
+can just leave everything in browser storage. The other formats exist for the
+cc65 build.
 
-| Format | Where | Use for |
-| ------ | ----- | ------- |
-| `.json` | both pages | Round-trip save you can email / commit to git |
-| `my_tiles.txt` | backgrounds | Feed the text-based preview + converter |
-| `.chr` | backgrounds | Raw tile bitmap for cc65 |
-| `.nam` / `.pal` | backgrounds | Nametable + palette bytes for cc65 |
-| `sprites.inc` / `sprites.h` | sprites | C arrays compiled into the game |
+| Format | Use for |
+| ------ | ------- |
+| `.json` | Round-trip save you can email or commit to git |
+| `.chr` | Raw tile bitmap for cc65 |
+| `.nam` / `.pal` | Nametable + palette bytes for cc65 |
+| `sprites.inc` / `sprites.h` | C arrays compiled into the game |
+| `my_tiles.txt` | Feeds the text-based preview + converter (legacy) |
 
-### 📝 Or: text editor (type digits — legacy)
+### 🕹 The older pages
 
-The visual editor is the main path. The older text-file workflow still works
-if you prefer typing: edit `assets/pupil/my_tiles.txt` directly, open it
-alongside `preview.png`, and in a terminal run
+Before the Studio there were seven separate pages — Backgrounds, Sprites,
+Behaviour, Builder, Code and friends. They're **still served** (`index.html`,
+`sprites.html`, `code.html`, …) so nothing that relied on them breaks, but the
+Studio is where the work happens now and the older pages only get critical
+fixes. Prefer the Studio unless you have a specific reason not to.
+
+There's also a text-file workflow if you'd rather type digits than click: edit
+`assets/pupil/my_tiles.txt`, open it alongside `preview.png`, and run
 `python3 tools/tile_editor.py assets/pupil/my_tiles.txt --watch` — every save
-refreshes the preview image.
-
-To move a text-format file into the visual editor, run
-`python3 tools/convert_my_tiles.py` and then on each page click
-**Import…** and pick the resulting `assets/pupil/my_project.json`.
-
-Full editor instructions: **[`docs/guides/TILE_EDITOR_GUIDE.md`](docs/guides/TILE_EDITOR_GUIDE.md)**.
-All 64 NES colours: run `python3 tools/generate_palette_reference.py` to generate
-the reference sheet at **`assets/pupil/palette_reference.png`** (it's produced on
-demand, not checked in).
+refreshes the preview. `python3 tools/convert_my_tiles.py` turns such a file
+into a project you can **Import…**.
 
 ---
 
@@ -224,6 +206,10 @@ demand, not checked in).
 The project's documentation now lives in **[`docs/`](docs/)** — see
 [`docs/README.md`](docs/README.md) for a navigation index.  The
 short version:
+
+- **Picking up development cold? Start with
+  [`docs/STATUS.md`](docs/STATUS.md)** — the living "where we are now" file:
+  engine version, test state, what's open and what it's blocked on.
 
 - **Developing the web or native Linux application?** Read
   **[`CONTRIBUTING.md`](CONTRIBUTING.md)** for ownership, branching, review and

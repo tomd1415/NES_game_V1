@@ -1,0 +1,15 @@
+{
+  "name": "builder gates (suite-level)",
+  "why": "The suite-level half of the builder gates. A break belongs here if the assertion it expects to turn red is a `suite X` line — something only a spawned suite can produce. Everything decided before the first suite spawns lives in gates-checks.json, which runs in seconds; this half runs the real suites and costs about 11 minutes per run, so it stays small on purpose.\n\nThe split is not a convention anyone has to remember. This spec runs with RUNALL_SUITES_ONLY=1, so its baseline contains only `suite X` names; gates-checks.json runs with RUNALL_CHECKS_ONLY=1, so its baseline contains only check and invariant names. mutate refuses a break whose `expect` names an assertion the baseline does not have, and it refuses it BEFORE editing anything. A break filed into the wrong spec therefore fails loudly and instantly instead of quietly passing.\n\nWhy that mattered enough to build: before the split every break here ran the full builder suite, so proving the seven gates cost about 80 minutes. A gate that is expensive to verify is a gate nobody verifies, and these exist precisely because prose decays.",
+  "command": ["bash", "-c", "RUNALL_SUITES_ONLY=1 bash tools/builder-tests/mutate-report.sh"],
+  "breaks": [
+    {
+      "id": "startserver-preflight-removed",
+      "file": "tools/builder-tests/lib/render-harness.mjs",
+      "find": "  if (await healthOk(port)) {",
+      "replace": "  if (false && await healthOk(port)) {",
+      "expect": ["suite harness-startserver.mjs"],
+      "note": "startServer() refuses to reuse a server it did not configure: it health-checks the port first and fails rather than silently running the suite against someone else's process. Disabling the preflight is invisible to every check — only harness-startserver.mjs actually exercises it, which is why this break is the one that needs a suite to run."
+    }
+  ]
+}
