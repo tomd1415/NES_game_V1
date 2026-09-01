@@ -258,6 +258,53 @@ Playwright needs no equivalent guard: it exits **1** with "No tests found" when
 nothing matches, so an empty run cannot be mistaken for a passing one (checked
 both `--list` and a real run).
 
+## A suite that records bugs rather than asserting they are gone
+
+`tall-level-entities.mjs` is the only suite of this shape, and the shape is worth
+knowing before you write a second one.
+
+It measures what an entity in the **lower half of an ordinary single-room 1×2
+level** actually does — a configuration a pupil reaches just by making their level
+taller — and finds two holes with two different boundaries: a chaser or flyer at
+`y >= 239` never runs its AI, and an enemy at `y >= 240` cannot damage the player
+at all. Both look entirely normal on screen. #14 Step 3 fixes them; until it does,
+the suite records them **exactly**, as a `KNOWN_HOLES` map.
+
+Exact means both directions, and the second is the one people leave out:
+
+- a `y` that stops working and is **not** listed fails the suite — a regression;
+- a listed `y` that **starts** working *also* fails it — the list is stale.
+
+Without the second, the list quietly becomes permanent and the suite ends up
+enforcing the bugs. So when Step 3 lands this suite goes red until `KNOWN_HOLES` is
+emptied, and that is the intended way to find out the fix worked. There is a third
+check too: an entry the run never scores fails as unreachable, because an entry
+protecting nothing is worse than no entry.
+
+**Use this shape only when the bug is real, understood, and scheduled.** For
+anything else, a suite that records a bug is a suite that tolerates it.
+
+**The positive control is load-bearing here and is not optional.** Every case is
+"did the player get hurt / did the enemy move", so the quiet way to pass is a
+fixture in which nothing could ever happen — and then every hole "confirms". Two
+earlier versions of this measurement failed exactly that way: once the player and
+the probe sat at different `x` and never overlapped, once the player's spawn `y`
+turned out to be clamped to 200 however high it was set. Both produced a clean "no
+damage" that meant nothing. The control at `y=150` must come out *working*, and is
+checked before any hole is believed.
+
+Watched failing in all four directions on 2026-09-01, against the suite as it
+actually stands: widening the damage guard produced `NEW HOLE`; removing it
+produced `STALE ENTRY`; moving the probe out of the player's column produced the
+control failure; a `KNOWN_HOLES` key outside `PROBE_YS` produced the unreachable
+error. Restored and green after each.
+
+> The first version put both probes in one build and the meta-test caught it: where
+> the chaser's AI still runs, the chaser reaches the player and damages them
+> itself, so `damage=yes` did not mean the *static* enemy had done anything. One
+> probe per build now. That is the whole argument for meta-testing a gate against
+> the version you are shipping rather than the one you started with.
+
 ## Re-proving the gates: `mutations/*.json`
 
 The table above is a *record* of gates that were broken by hand. Most of those breaks
