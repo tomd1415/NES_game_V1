@@ -3,9 +3,9 @@
   "what_a_pass_means": "This manifest records what was verified, when, and by which command. A passing test_baseline_manifest means the RECORD is well-formed and tracks the live engine version. It does not re-run any of the evidence below, and it does not mean the product is correct.",
   "renamed_from": "baseline-v63.json",
   "rename_reason": "The old name asserted that the contents described engine v63. They no longer did: the file sat at engine_version 63 while the live engine reached 75, so test_manifest_tracks_the_live_engine_baseline failed for twelve versions (F6). A baseline that has to be renamed every engine bump will not be, so it is now version-neutral and carries the version as data.",
-  "engine_version": 83,
-  "repository_commit": "80e1266eb27e8eecb51f96639a255029f73dc3d4",
-  "captured_on": "2026-09-01",
+  "engine_version": 84,
+  "repository_commit": "ebc602ba27d7132b5727bcd271a96e6407a51852",
+  "captured_on": "2026-09-02",
   "scope": "studio_plus_legacy_union",
   "toolchain": {
     "note": "Measured in the nesnative dev container on 2026-08-06. These differ from the 2026-07-10 capture, which ran on a different host (python 3.13.5, node 20.19.2, npm 9.2.0) -- recorded so a future mismatch is read as 'different machine', not 'regression'.",
@@ -19,20 +19,20 @@
     "builder_regression": {
       "status": "pass",
       "command": "node tools/builder-tests/run-all.mjs",
-      "verified_on": "2026-09-01",
-      "notes": "114 suites, 0 failures, exit 0 — re-run in full at v83, 10m11s. The four suites beyond v78's 110 arrived with the port-forward: render-p1-oam-cursor.mjs (#37, v80), enemy-bump.mjs (#30, v81), render-dialogue-noflash.mjs (#31, v82) and perroom-wide-gate.mjs (#14 Step 2, v83). No listener survived anywhere in the allocated range 18800-19141 afterwards and `git status` was empty. Wall-clock across the four runs of the same week: 8m26s (110 suites), 7m25s (111), 7m51s (113), 10m11s (114) — the spread is host load on a shared box, not the suite count, so do not read a trend into it."
+      "verified_on": "2026-09-02",
+      "notes": "118 suites, 0 failures, exit 0 — re-run in full at v84, 7m0s, on the MERGED tree (origin/main merged 2026-09-02, 139 commits). Four of the suites arrived with the port-forward and three more with main; three of main's were re-pointed onto the runner's assigned-port scheme during the merge. No listener survived anywhere in the allocated range 18800-19153 afterwards and `git status` was empty. Wall-clock for this suite has ranged 7m0s to 10m11s over the week at 110-118 suites: that is host load on a shared box, not suite count."
     },
     "engine_snapshot": {
       "status": "pass",
       "command": "node scripts/snapshot-engine.mjs --check",
-      "verified_on": "2026-09-01",
-      "notes": "Confirms the v83 snapshot matches HEAD, 41 of 41 files read back FROM HEAD (not merely present on disk — direction 3, added after F21). v80-v83 are this branch's ports of main's v76-v79; the numbers diverge and tools/builder-tests/lib/snapshot-collisions.mjs asserts exactly which, including that 80-83 are local-only and main may still claim them."
+      "verified_on": "2026-09-02",
+      "notes": "Confirms the v84 snapshot matches HEAD, 41 of 41 files read back FROM HEAD (not merely present on disk — direction 3, added after F21). AFTER THE MERGE the numbering has two eras above v75: v76-v79 are main's engines (their snapshot directories are main's, taken wholesale), v80-v84 are this branch's. tools/builder-tests/lib/snapshot-collisions.mjs now reports zero collisions and five local-only versions, which is the resolved state it was written to detect."
     },
     "native_unittest": {
       "status": "partial",
       "command": "cd native && QT_QPA_PLATFORM=offscreen pytest -q",
-      "verified_on": "2026-09-01",
-      "notes": "Re-run at v83: 225 passed, 161 skipped, 195 subtests passed, 0 failures and 0 errors. PySide6 is absent in this container, so the Qt UI layer is untested here, NOT passing — do not read the pass count as coverage.",
+      "verified_on": "2026-09-02",
+      "notes": "Re-run at v84: 225 passed, 161 skipped, 195 subtests passed, 0 failures and 0 errors. PySide6 is absent in this container, so the Qt UI layer is untested here, NOT passing — do not read the pass count as coverage.",
       "known_gaps": [
         "F3 is fixed: no collection errors and no absent-dependency failures remain; the modules that need Qt now skip. The 161 skips are the UI layer standing down.",
         "The Qt UI suite has never been run anywhere, because no dev-container image in this repository's history installs Qt. See .devcontainer/README.md."
@@ -40,7 +40,7 @@
     }
   },
   "golden_rom_sha1": {
-    "note": "Not a stale copy. These same three values are asserted live by tools/builder-tests/run-all.mjs (GOLDEN_STOCK, GOLDEN_TEMPLATE) and tools/builder-tests/_rom-equiv.mjs (EXPECT), which run in the builder suite recorded above. They therefore hold at engine v83. stock and no_modules_template have not moved through the port-forward at all — projects without an HP HUD or dialogue still build byte-for-byte. everything_on moved twice: 0aed6e95 -> 972cb215 at v80 (#37's heart-loop change) and -> e86a91b8 at v82 (#31's dialogue banner writer). Both are the values main measured independently for the same changes, which is a check on the ports rather than a restatement of them. That history lives in this note and not in keys of its own: test_golden_hashes_are_explicit requires every value here to be a bare sha1, and it caught the attempt. #14 Step 2 (v83) moved none of the three: it widens WHEN per-room activates, and no golden or _rom-equiv fixture has more than one room.",
+    "note": "Not a stale copy. These same three values are asserted live by tools/builder-tests/run-all.mjs (GOLDEN_STOCK, GOLDEN_TEMPLATE) and tools/builder-tests/_rom-equiv.mjs (EXPECT), which run in the builder suite recorded above. They therefore hold at engine v84. stock and no_modules_template have not moved through the port-forward at all — projects without an HP HUD or dialogue still build byte-for-byte. everything_on moved twice: 0aed6e95 -> 972cb215 at v80 (#37's heart-loop change) and -> e86a91b8 at v82 (#31's dialogue banner writer). Both are the values main measured independently for the same changes, which is a check on the ports rather than a restatement of them. That history lives in this note and not in keys of its own: test_golden_hashes_are_explicit requires every value here to be a bare sha1, and it caught the attempt. #14 Step 2 (v83) moved none of the three: it widens WHEN per-room activates, and no golden or _rom-equiv fixture has more than one room. The merge (v84) moved none of the three: its one engine change is the enemyBump gate, and no golden or _rom-equiv fixture ticks that box.",
     "stock": "1730448eca6d4857d3468407b33e41de7806bf99",
     "no_modules_template": "1730448eca6d4857d3468407b33e41de7806bf99",
     "everything_on": "e86a91b83df18e498df4cafd15069c8d57615251"
