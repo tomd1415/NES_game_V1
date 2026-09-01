@@ -140,17 +140,36 @@ def scene_is_perroom(scene_sprites: Any) -> bool:
     room 0 (or untagged) this is False, so existing single-scene projects (and
     all goldens) build byte-identically.
 
-    v1 restriction: only when every entity fits in a single byte (x, y <= 255).
-    Per-room parks off-room actors at ss_y = 0xFF; that is reliably off-screen
-    only for 8-bit / single-screen-room layouts.  Multi-screen (wide) rooms are a
-    follow-up — they fall back to the shared-scene behaviour."""
+    Restricted to entities whose y fits below the parking sentinel (v83 here, which
+    is `main`'s v79; was "x and y both <= 255" up to v82).
+
+    Per-room parks off-room actors at ss_y = 0xFF and every draw guard skips a
+    sprite whose ss_y is >= 0xEF.  So the restriction that matters is about y, and
+    about 0xEF rather than 0xFF:
+
+      * y > 238 is refused.  0xEF IS 239, so an entity legitimately placed on
+        row 239 or below is indistinguishable from a parked one and would be
+        silently swallowed — it simply never appears, with nothing to say why.
+        238 is the highest row that cannot be confused with the sentinel.
+      * x is no longer considered at all.  Up to v82 any entity past x=255
+        turned per-room off, which made per-room rooms and multi-screen levels
+        mutually exclusive: paint a level two screens wide and every room
+        quietly shared one scene.  Measured on `main` 2026-08-13 (#14 Step 1)
+        that parking DOES survive a wide 16-bit build — the C draw loops compare
+        a u16 ss_y, and ai_asm.s tests the high byte before comparing the low one
+        against 0xEF — so the x half rejected a case that works.
+
+    Note the y bound is NOT the same as "the room is one screen tall": it is a
+    bound on where an ENTITY sits, so a two-screen-tall room with every entity
+    on the upper screen still qualifies.  That is deliberate — the sentinel
+    collision is a property of the entity's coordinate, not of the room."""
     sprites = scene_sprites or []
     rooms = {scene_room_of(item) for item in sprites}
     if len(rooms) <= 1:
         return False
     for item in sprites:
         try:
-            if int(item.get("x", 0)) > 255 or int(item.get("y", 0)) > 255:
+            if int(item.get("y", 0)) > 238:
                 return False
         except (TypeError, ValueError):
             return False

@@ -155,3 +155,49 @@ def test_c_scene_emitter_matches_server_for_multiplayer_animations_and_spawn() -
     assert "#define SPAWN1_W 1" in generated
     assert "SS_LINKAGE unsigned int ss_x[1]" in generated
     assert state == before
+
+
+def _perroom(entities: list[dict]) -> bool:
+    return scene.scene_is_perroom(entities)
+
+
+def test_per_room_is_bounded_by_the_parking_sentinel_not_by_screen_width() -> None:
+    """Item #14 Step 2, ported from `main`'s v79.
+
+    Per-room parks off-room actors at `ss_y = 0xFF`, and every draw guard skips a
+    sprite whose `ss_y >= 0xEF`. So the restriction that matters is about **y**, and
+    about 0xEF rather than 0xFF:
+
+    * y > 238 must be refused — 0xEF is 239, so an entity legitimately placed on row
+      239 or below is indistinguishable from a parked one and would be silently
+      swallowed, never appearing with nothing to say why. 238 is the highest row that
+      cannot be confused with the sentinel.
+    * x must not be considered at all. Up to v82 here, any entity past x=255 turned
+      per-room off, which made per-room rooms and multi-screen levels mutually
+      exclusive: paint a level two screens wide and every room quietly shared one
+      scene. Parking does survive a wide 16-bit build — the C draw loops compare a u16
+      `ss_y` and `ai_asm.s` tests the high byte before comparing the low one against
+      0xEF — so the x half rejected a case that works.
+
+    The y bound is NOT "the room is one screen tall": it bounds where an ENTITY sits,
+    so a two-screen-tall room with every entity on the upper screen still qualifies.
+    """
+
+    wide = [{"bg": 0, "x": 20, "y": 40}, {"bg": 1, "x": 300, "y": 40}]
+    assert _perroom(wide) is True, (
+        "a multi-screen-wide level must not silently drop back to one shared scene"
+    )
+
+    tall_but_high = [{"bg": 0, "x": 20, "y": 40}, {"bg": 1, "x": 20, "y": 238}]
+    assert _perroom(tall_but_high) is True, "238 is the last row that is not the sentinel"
+
+    at_the_sentinel = [{"bg": 0, "x": 20, "y": 40}, {"bg": 1, "x": 20, "y": 239}]
+    assert _perroom(at_the_sentinel) is False, (
+        "0xEF is 239 — an entity there cannot be told apart from a parked one"
+    )
+
+    # Unchanged by the port: one room is not per-room, and unreadable input is refused.
+    # (`bg` is the room key — `room` is not read at all, which is why the first draft of
+    # this test failed for the wrong reason: every entity defaulted to room 0.)
+    assert _perroom([{"bg": 0, "x": 1, "y": 1}, {"bg": 0, "x": 2, "y": 2}]) is False
+    assert _perroom([{"bg": 0, "x": 1, "y": 1}, {"bg": 1, "y": "nonsense"}]) is False
