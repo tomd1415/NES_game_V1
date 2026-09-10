@@ -70,6 +70,12 @@
     "GIT_COMMITTER_NAME": "Tom Duguid",
     "GIT_COMMITTER_EMAIL": "tomd1415@gmail.com"
   },
+  // Runs ONCE at creation, BEFORE init-firewall.sh — which matters: PyPI, crates.io and
+  // the npm registry are all unreachable once the firewall lands, and post-create.sh
+  // needs all three. Restored 2026-09-10; the 2026-08-21 reconstruction of this file
+  // (from `docker inspect` of a running container) could not recover this key, so the
+  // script sat orphaned and native/.venv was never built.
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   // waitFor ensures the container is never "ready" before egress is locked down.
   "postStartCommand": "sh /claude-guidance/container-init.sh",
   "waitFor": "postStartCommand"

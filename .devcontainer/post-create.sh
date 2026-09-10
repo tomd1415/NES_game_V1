@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
-# ⚠ ORPHANED AS OF 2026-08-26 — NOTHING RUNS THIS.
+# Runs ONCE at container creation, via devcontainer.json's postCreateCommand.
 #
-# `devcontainer.json` has no `postCreateCommand`; it was reconstructed on 2026-08-21
-# from `docker inspect` of the live container and that key was not recovered. Tracked
-# anyway because it is the only record of the *order* the two editable installs must
-# go in — but do not simply wire it back up: the image this repo now builds has no
-# Rust/maturin and no Qt runtime libraries, so steps 1, 2 and 4 below will fail. The
-# same steps, with the reasons, are in `native/README.md` (the "nes_core wheel" and
-# ".venv" sections), which is the maintained copy.
-#
-# Originally: runs ONCE at container creation, via devcontainer.json's postCreateCommand.
+# It was orphaned between 2026-08-14 and 2026-09-10 — the reconstruction of
+# devcontainer.json could not recover that key — and the Dockerfile had lost the Rust
+# and Qt provisioning these steps depend on. Both are restored: the image now carries
+# the Qt runtime libraries, a pinned rustup toolchain and maturin, and this script is
+# wired back in. `native/README.md` documents the same steps for a non-container setup
+# and is the place to keep in step with this one.
 #
 # WHY HERE AND NOT IN THE DOCKERFILE: every step below needs the *workspace*, which
 # is bind-mounted at run time and does not exist during the image build. And why not
@@ -50,6 +47,11 @@ npm ci
 # 4. Prove the two things this whole rebuild existed to enable actually import/run,
 #    so a broken toolchain fails HERE, loudly, instead of looking like a test failure
 #    days later. Offscreen because the container has no display.
+#
+#    THIS IS THE TEST FOR THE WHOLE Qt CHANGE. It cannot be run from inside a container
+#    whose firewall blocks PyPI, so the person doing the rebuild is the one who finds
+#    out. `set -euo pipefail` above means a failure here fails container creation rather
+#    than leaving a container that looks fine and skips 161 tests.
 say 'smoke checks'
 QT_QPA_PLATFORM=offscreen native/.venv/bin/python -c \
   'import PySide6, nes_core, nes_studio; print("PySide6", PySide6.__version__, "+ nes_core + nes_studio OK")'

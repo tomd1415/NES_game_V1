@@ -273,6 +273,50 @@ check('no builder-test suite claims the Studio E2E port', () => {
 // directory is tracked (it was untracked, and lost, on 2026-08-14), so a missing
 // Dockerfile is a deletion and must be loud rather than "not applicable" -- a
 // check that passes by not running is the failure shape this branch keeps finding.
+// The dev container must still provision what the NATIVE app needs, and the failure
+// mode if it stops is silence: the app cannot start, its 161 UI tests SKIP, and a test
+// summary reading "225 passed, 161 skipped" looks like success. That is not theory —
+// the Qt provisioning was lost on 2026-08-14 and nobody noticed for three weeks,
+// because nothing went red.
+//
+// Structural, not textual, in both halves. The Dockerfile is read with comment lines
+// stripped, so the explanation of a package cannot stand in for installing it — the
+// mistake this repo has made twice (F14, F17) and once inside the fix for it.
+// devcontainer.json is parsed and its key looked up, so a mention in prose is not a
+// wiring-up. Losing THAT key is what orphaned post-create.sh in the first place.
+check('devcontainer still provisions the native app (Qt, Rust, maturin, postCreate)', () => {
+  const dockerfile = path.join(ROOT, '.devcontainer', 'Dockerfile');
+  const devjson = path.join(ROOT, '.devcontainer', 'devcontainer.json');
+  if (!fs.existsSync(dockerfile) || !fs.existsSync(devjson)) {
+    throw new Error('.devcontainer/ is tracked on this branch — a missing file here is a ' +
+      'deletion, not a project without a dev container.');
+  }
+  const directives = fs.readFileSync(dockerfile, 'utf8')
+    .split('\n').filter(l => !/^\s*#/.test(l)).join('\n');
+  const required = [
+    ['libxcb-cursor0', 'the xcb platform plugin fails to load without it, even offscreen'],
+    ['libgl1', 'PySide6 links libGL'],
+    ['libxkbcommon-x11-0', 'PySide6 links libxkbcommon-x11'],
+    ['rustup.rs', 'native/nes_core is a PyO3 extension and needs a Rust toolchain'],
+    ['maturin', 'nes_core/pyproject.toml declares maturin as its build backend'],
+  ];
+  const missing = required.filter(([token]) => !directives.includes(token));
+  if (missing.length) {
+    throw new Error('.devcontainer/Dockerfile no longer provisions:\n' +
+      missing.map(([t, why]) => `  ${t} — ${why}`).join('\n') +
+      '\n  Without it the native app cannot run and its 161 UI tests skip, which reads ' +
+      'as a pass. See .devcontainer/README.md.');
+  }
+  // JSONC: strip // comments, then parse. A regex over the raw text would match the
+  // key inside the comment that explains why the key is there.
+  const cfg = JSON.parse(fs.readFileSync(devjson, 'utf8').replace(/^\s*\/\/.*$/gm, ''));
+  if (!cfg.postCreateCommand || !/post-create\.sh/.test(cfg.postCreateCommand)) {
+    throw new Error('devcontainer.json has no postCreateCommand running post-create.sh — ' +
+      'the image would build and native/.venv would never exist. This key was lost once ' +
+      'already, on 2026-08-21, and nothing noticed.');
+  }
+}) || (anyFail = true);
+
 check('devcontainer Playwright pin matches package-lock.json', () => {
   const dockerfile = path.join(ROOT, '.devcontainer', 'Dockerfile');
   const lockPath = path.join(ROOT, 'package-lock.json');
