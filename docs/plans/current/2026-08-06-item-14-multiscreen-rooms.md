@@ -1,8 +1,9 @@
 # #14 — per-room scene instances for multi-screen rooms
 
-**Status:** Steps 1 and 2 are **done** (Step 2 shipped as v79, 2026-08-20).
-Step 3 is planned and **blocked on an owner decision** — see the bottom of this
-file, question 2. Steps 4 and 5 follow it. Written 2026-08-06.
+**Status:** Steps 1, 2 and 3 are **done** — Step 2 shipped as v79 (2026-08-20),
+Step 3 as **v80** (2026-09-10). Step 4 is now unblocked and is the next slice; Step
+5's version ritual was folded into v80, so what remains of it is the redeploy.
+Written 2026-08-06.
 **Engine impact:** yes. Step 2 shipped as **v79** on 2026-08-20; the remaining
 steps ship as **v80** and need the full versioning ritual (bump both constants,
 changelog entry, commit, snapshot). Do not reuse v79 — snapshots are immutable.
@@ -215,7 +216,32 @@ So: when Step 2 bumps to v79 anyway, correct that comment in the same commit. Th
 fix costs nothing on the back of a bump that is already happening, and the golden ROM
 hashes are unaffected because no emitted byte changes.
 
-## Step 3 — Give "parked" its own flag
+## Step 3 — Give "parked" its own flag — ✅ DONE, shipped as v80 (2026-09-10)
+
+> **Shipped, and not the way this section proposes.** The mechanism is an all-ones
+> **sentinel** (`SS_PARKED` — `0xFF` with u8 positions, `0xFFFF` with u16) tested for
+> equality via `ss_is_parked(i)`, **not** the `ss_active[]` byte the sub-steps below
+> describe. The owner's decision (question 2 at the foot of this file) was never
+> answered, and after three instructions to carry on the call was made here rather
+> than guessed at silently — the changelog and the commit both say it was mine.
+>
+> **What actually landed:** 25 C sites and the two `ai_asm.s` routines converted;
+> positions promote to u16 at `y >= 255` so the sentinel is unreachable by
+> construction; no-modules goldens unmoved; the everything-on `_rom-equiv` hash
+> re-pinned `e86a91b8…` → `026e516a…` with its reason. Confirmed by
+> `tall-level-entities.mjs`, which had recorded all five holes the day before and went
+> red until they closed.
+>
+> **What that forecloses**, stated because it is the real cost: a sentinel cannot
+> distinguish *defeated* from *off-room*. If open question 1 below is ever answered
+> "defeated enemies should stay defeated across a room re-entry", that needs the flag
+> after all — and this section's sub-steps are the plan for it.
+>
+> The sub-steps are kept below as written, because they remain the right plan for the
+> flag if it is ever wanted, and because the verification list a–h is what the work
+> was actually checked against.
+
+### The original plan (superseded in mechanism, kept for the verification list)
 
 *The real fix; needed for tall rooms regardless of Step 1's outcome.*
 
@@ -344,14 +370,23 @@ entity per frame in the draw and AI loops. Measure against `asm-benchmark.mjs`
 before committing — the ASM AI exists because the C was too slow, so a per-entity
 branch is exactly the kind of cost that motivated it.
 
-## Step 4 — Remove the coordinate restriction
+## Step 4 — Remove the coordinate restriction — **now unblocked**
 
+*This is the next slice. Its blocker went away with v80.*
+
+- `_scene_is_perroom` still refuses a project with an entity at `y > 238`. That
+  clause existed for one reason: a parked entity was indistinguishable from a low
+  one. **v80 removed that ambiguity**, so the clause now rejects a case that works,
+  exactly as the `x > 255` clause did before Step 2 — the same mistake one axis over.
 - `_scene_is_perroom` drops the coordinate clauses entirely; multi-room is
   decided purely by "entities span more than one background".
 - **Verifiable when:** a matrix suite covers {1 screen, 4 wide, 2 tall, 4×2} ×
   {2 rooms, 3 rooms} and each shows only the active room's entities.
 
-## Step 5 — Ship it as v80
+## Step 5 — Ship it — ✅ the version ritual is done; the redeploy is not
+
+*v80 shipped 2026-09-10 carrying Step 3. What is left of this step is the part only
+a human can do: the live host is still on **v75**.*
 
 - Bump `tools/engines/ENGINE_VERSION` **and**
   `tools/tile_editor_web/engine-version.js` to 80. (This said 79 until

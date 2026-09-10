@@ -1,16 +1,18 @@
-# Handoff: v79 shipped, the same two human-gated items remain — 2026-08-14
+# Handoff: v80 shipped, the same two human-gated items remain — 2026-09-10
 
-> **Updated 2026-08-14: the engine is now v79, not v78.** The redeploy target below
-> moved with it — the live host should end up on **v79**, not v78. Everything else in
-> this file still stands; the two human-gated items are unchanged and neither was
-> affected by v79. The "Established" section below is a record of what was true on
+> **Updated 2026-09-10: the engine is now v80.** The redeploy target below moved with
+> it — the live host should end up on **v80**. It is still on v75, so the redeploy now
+> carries five versions; v80's headline change is that enemies in the lower half of a
+> two-screen-tall level work at all (they neither moved nor damaged the player
+> before). Everything else in this file still stands; the two human-gated items are
+> unchanged and neither was affected by v79 or v80. The "Established" section below is a record of what was true on
 > 2026-07-28 and is deliberately left as it was, except where it states the engine
 > version, which would otherwise send someone to redeploy the wrong build.
 
 **Goal:** clear the two items a session cannot do alone — the attended playtests
 (#7/#27, #15) and the live-host redeploy — then pick new work from `docs/STATUS.md`.
 **Done looks like:** both playtests judged and their items closed, and the live host
-serving engine **v79** with the Python server restarted.
+serving engine **v80** with the Python server restarted.
 
 ## Environment
 - Repo `/workspace`, branch `main`, **inside a dev container** (`/.dockerenv`, built
@@ -29,10 +31,10 @@ serving engine **v79** with the Python server restarted.
 - The full builder suite takes **~25–30 min**; the Studio E2E ~3 min. Budget for that.
 
 ## Established (fact ← evidence)
-- Engine is **v79** (was v78 when this file was written), both constants agree,
-  snapshot frozen ← `cat tools/engines/ENGINE_VERSION` → `79`; `grep NES_ENGINE_VERSION
-  tools/tile_editor_web/engine-version.js` → `= 79`; `node scripts/snapshot-engine.mjs
-  --check` → `✓ v79 snapshot matches HEAD (30 compared, 30 in the snapshot).`
+- Engine is **v80** (was v78 when this file was written), both constants agree,
+  snapshot frozen ← `cat tools/engines/ENGINE_VERSION` → `80`; `grep NES_ENGINE_VERSION
+  tools/tile_editor_web/engine-version.js` → `= 80`; `node scripts/snapshot-engine.mjs
+  --check` → `✓ v80 snapshot matches HEAD (30 compared, 30 in the snapshot).`
 - Node suite green at v78 incl. golden byte-identical ROMs ←
   `node tools/builder-tests/run-all.mjs` → `✅ All Builder regression checks pass.`
 - Studio E2E **141 passed** (3.0 min) ← `npx playwright test`, plain, no override.

@@ -4,9 +4,8 @@
 don't date-stamp the filename. This is the file to read *first* when picking up
 work cold, and the file to refresh *last* before putting work down.
 
-- **Last updated:** 2026-09-01 (unattended maintenance — a three-item accepted
-  work-list; two done, the third's harness landed and its code is blocked on an
-  owner decision. No engine change).
+- **Last updated:** 2026-09-10 (unattended maintenance — a three-item accepted
+  work-list, all three now done. **Engine v80 shipped**: #14 Step 3.)
   ✅ **Everything below is pushed.** `main` and `origin/main` agree; the four-day
   divergence that earlier versions of this line warned about is closed.
   Do not restate a commit count here — ask git:
@@ -14,8 +13,9 @@ work cold, and the file to refresh *last* before putting work down.
   drafts of this line carried a hand-written count and both were wrong within one
   commit.
 - **Branch:** `main`
-- **Engine version:** **v79** (multi-screen rooms keep their own entities, #14 Step 2 —
-  and with it a fix for entities on rows 239-255 being silently swallowed)
+- **Engine version:** **v80** (#14 Step 3 — "parked" stops being a coordinate, which
+  fixes enemies in the lower half of a tall level neither moving nor damaging the
+  player). v79 was #14 Step 2, multi-screen rooms keeping their own entities.
 - **Node build/regression suite:** ✅ green, including the golden
   byte-identical-ROM hashes (`node tools/builder-tests/run-all.mjs`,
   **118 suites, exit 0, re-run 2026-09-01 at v79**) — plus **24 invariants and 40
@@ -150,6 +150,43 @@ No engine change, so **still v78**. The 2026-08-06 commits are on `origin/main`
 - ~~**Dead code found, not removed**: eight unreferenced path constants in
   `playground_server.py`.~~ **Removed 2026-08-13** (`4c108ec`).
   `DEFAULT_MAIN_C`/`DEFAULT_MAIN_S` beside them were live and stayed.
+
+## 2026-09-10 — engine v80: "parked" stops being a coordinate (#14 Step 3)
+
+The bug the suite recorded on 2026-09-01 is fixed, and the suite is how we know.
+
+- **What was wrong.** Off-room / defeated / collected was marked by writing a
+  *coordinate* (`ss_y = 0xFF`), and every guard asked whether `ss_y` was past the
+  sentinel — spelled `>= 0xEF` (239) at some sites and `>= 240` at others. In a
+  2-screen-tall level a legitimate `y` runs to 479 and answers yes, so **the lower
+  half of every tall level was decorative**: enemies neither ran their AI (y ≥ 239)
+  nor damaged the player (y ≥ 240), while drawing perfectly normally.
+- **What replaced it.** `SS_PARKED`, all-ones in whatever width the positions are,
+  tested for **equality** via `ss_is_parked(i)`. No threshold remains for two sites
+  to spell differently. 25 C sites and both `ai_asm.s` routines converted.
+- **Unreachable by construction:** positions promote to u16 at `y >= 255` (was
+  `> 255`), because with u8 positions the sentinel *is* 255. Levels cap at 12×1 or
+  2×2 screens, so the largest legitimate y is 480 against a u16 sentinel of 65535.
+- **The harness proved it, by going red.** `tall-level-entities.mjs` had recorded all
+  five holes exactly; when the fix landed it failed with five `STALE ENTRY` errors
+  until the list was cleared. That is the known-failures shape doing the one thing it
+  exists for — the list could not outlive the bugs.
+- **Goldens:** no-modules hashes **unchanged** (projects without scene sprites still
+  build byte-for-byte); the everything-on `_rom-equiv` hash moved `e86a91b8…` →
+  `026e516a…`, deliberately, re-pinned with its reason. `asm-ai`, `asm-ai-wide` and
+  `asm-ai-corpus` all pass, so the ASM and C engines moved together.
+- **The design choice was mine, not the owner's.** A per-entity `ss_active[]` byte was
+  the alternative; the question went unanswered for fifteen days and three "carry on"
+  instructions. Recorded as my call in the changelog and the commit. What it
+  forecloses: a sentinel cannot distinguish *defeated* from *off-room*, so "defeated
+  enemies stay defeated across a room re-entry" would need the flag after all.
+- **`invariant: mutation specs name the current engine snapshot` earned itself on its
+  first bump** — it caught `gates-checks.json` still naming v79 the moment
+  ENGINE_VERSION went to 80. That is the exact silent breakage that killed the gates
+  unnoticed after v79.
+- **#14 Step 4 is now unblocked**: `_scene_is_perroom`'s `y > 238` clause existed only
+  because a parked entity was indistinguishable from a low one, and now rejects a case
+  that works — the same mistake as the old `x > 255` clause, one axis over.
 
 ## 2026-09-01 — the tall-level holes are now a suite, written before the fix
 
