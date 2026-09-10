@@ -20,7 +20,23 @@ import * as H from './lib/render-harness.mjs';
 // T7.1–T7.5) must keep this UNCHANGED — the "ROM-equality diff" the Arc D plan
 // calls the strongest proof a migration is behaviour-preserving.  Re-pin
 // deliberately when codegen legitimately changes; note why.
-//   e86a91b8… is the value from engine v78 (item #31). The dialogue banner writer
+//   026e516a… is the value from engine v80 (#14 Step 3). "Parked / defeated /
+//     consumed" stopped being a COORDINATE and became an all-ones sentinel tested
+//     for equality: `SS_PARKED` is 0xFF with u8 positions and 0xFFFF with u16, and
+//     every guard now calls `ss_is_parked(i)` instead of asking whether ss_y is past
+//     0xEF (239) or 240 — two thresholds that disagreed by one. 25 C sites and the
+//     two 6502 routines in ai_asm.s changed, so this fixture's emitted code
+//     legitimately changes; it has scene sprites, AI, pickups and damage on.
+//     Deliberate. Verified to be the ONLY cause: the no-modules goldens
+//     (GOLDEN_STOCK / GOLDEN_TEMPLATE in run-all.mjs) are UNCHANGED, so a project
+//     without scene sprites still builds byte-for-byte, and asm-ai / asm-ai-wide /
+//     asm-ai-corpus all still pass, so the ASM and C halves moved together. ROM size
+//     is unchanged at 49168 bytes. Why it was worth moving: measured, a chaser at
+//     y >= 239 never ran its AI and an enemy at y >= 240 could not damage the player
+//     in an ordinary 2-screen-tall level — the lower half of every tall level was
+//     decorative. tools/builder-tests/tall-level-entities.mjs recorded those five
+//     holes BEFORE the fix and went red until they closed.
+//   e86a91b8… was the value from engine v78 (item #31). The dialogue banner writer
 //     stopped force-blanking: it now prepares one 32-byte row per frame in
 //     per_frame and blits it from an unrolled burst in vblank, so the emitted
 //     dialogue block legitimately changes. Deliberate: this fixture has dialogue
@@ -49,7 +65,7 @@ import * as H from './lib/render-harness.mjs';
 //     AI still in cc65 C; set PLAYGROUND_NO_ASM=1 to rebuild the pure-C engine).
 //   8172e353… was engine v19 (NES_ASM_LEAF always + NES_ASM_SCROLL for scroll).
 //   42a45ca8… was the pure-C -Os value; ce62ec47… the no-opt value.
-const EXPECT = 'e86a91b83df18e498df4cafd15069c8d57615251';
+const EXPECT = '026e516affe28317bf78933c04367e1e2459ffc0';
 
 const PORT = 18834;
 

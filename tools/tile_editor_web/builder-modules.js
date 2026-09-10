@@ -639,7 +639,7 @@
           // Skip a defeated (parked at y=0xFF) chaser: it seeks the player on
           // BOTH axes, so without this guard a stomped one would crawl its Y
           // back down from 0xFF and reappear on screen.
-          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
+          parts.push('        if (!ss_is_parked(' + i + ')) {');
           parts.push('        if (ss_x[' + i + '] + ' + speed + ' <= px) {');
           parts.push('            if (!bw_sprite_blocked(ss_x[' + i + '], ss_y[' + i + '], ss_w[' + i + '], ss_h[' + i + '], 0)) ss_x[' + i + '] += ' + speed + ';');
           parts.push('        } else if (ss_x[' + i + '] >= px + ' + speed + ') {');
@@ -671,7 +671,7 @@
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' flies: hovers around its start height and drifts toward the player');
-          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
+          parts.push('        if (!ss_is_parked(' + i + ')) {');
           parts.push('            static signed char bw_fdir_' + i + ' = 1;');
           parts.push('            static signed char bw_foff_' + i + ' = 0;');
           parts.push('            if (bw_fdir_' + i + ' > 0) { bw_foff_' + i + ' += ' + speed + '; if (bw_foff_' + i + ' >= 20) bw_fdir_' + i + ' = -1; }');
@@ -719,7 +719,7 @@
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' hops: walks + turns at walls and bounces up and down on the spot');
-          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
+          parts.push('        if (!ss_is_parked(' + i + ')) {');
           parts.push('            static signed char  bw_hdir_' + i + ' = 1;');
           parts.push('            static unsigned char bw_hph_' + i + ' = 0;');
           parts.push('            unsigned char bw_hph, bw_hup;');
@@ -759,7 +759,7 @@
               ' Goomba: walks + off ledges, stomp to defeat, side-touch hurts');
           parts.push('        {');
           parts.push('            static signed char ' + g + ' = 1;');
-          parts.push('            if (ss_y[' + i + '] < 240 && BW_SMB_ONSCREEN(' + i + ')) {');
+          parts.push('            if (!ss_is_parked(' + i + ') && BW_SMB_ONSCREEN(' + i + ')) {');
           parts.push('                if (' + g + ' > 0) {');
           parts.push('                    if (bw_smb_wall(' + i + ', 1)) ' + g + ' = -1;');
           parts.push('                    else ss_x[' + i + '] += ' + speed + ';');
@@ -768,7 +768,7 @@
           parts.push('                    else ss_x[' + i + '] -= ' + speed + ';');
           parts.push('                }');
           parts.push('                if (BW_SMB_TOUCH(' + i + ')) {');
-          parts.push('                    if (BW_SMB_STOMP(' + i + ')) { ss_y[' + i + '] = 0xFF; BW_SMB_BOUNCE(); }');
+          parts.push('                    if (BW_SMB_STOMP(' + i + ')) { ss_y[' + i + '] = SS_PARKED; BW_SMB_BOUNCE(); }');
           parts.push('                    else BW_SMB_HURT();');
           parts.push('                }');
           parts.push('            }');
@@ -787,7 +787,7 @@
           parts.push('            static unsigned char ' + st + ' = 0;   /* 0 walk, 1 shell, 2 kicked */');
           parts.push('            static signed char ' + kd + ' = 1;');
           parts.push('            unsigned char ' + kj + ';');
-          parts.push('            if (ss_y[' + i + '] < 240 && BW_SMB_ONSCREEN(' + i + ')) {');
+          parts.push('            if (!ss_is_parked(' + i + ') && BW_SMB_ONSCREEN(' + i + ')) {');
           parts.push('                if (' + st + ' == 0) {');
           parts.push('                    if (' + kd + ' > 0) {');
           parts.push('                        if (bw_smb_wall(' + i + ', 1)) ' + kd + ' = -1;');
@@ -807,10 +807,10 @@
           parts.push('                    for (' + kj + ' = 0; ' + kj + ' < NUM_STATIC_SPRITES; ' + kj + '++) {');
           parts.push('                        if (' + kj + ' == ' + i + ') continue;');
           parts.push('                        if (ss_role[' + kj + '] != ROLE_ENEMY) continue;');
-          parts.push('                        if (ss_y[' + kj + '] >= 240) continue;');
+          parts.push('                        if (ss_is_parked(' + kj + ')) continue;');
           parts.push('                        if (!(ss_x[' + i + '] + (ss_w[' + i + '] << 3) <= ss_x[' + kj + '] || ss_x[' + i + '] >= ss_x[' + kj + '] + (ss_w[' + kj + '] << 3) ||');
           parts.push('                              ss_y[' + i + '] + (ss_h[' + i + '] << 3) <= ss_y[' + kj + '] || ss_y[' + i + '] >= ss_y[' + kj + '] + (ss_h[' + kj + '] << 3)))');
-          parts.push('                            ss_y[' + kj + '] = 0xFF;');
+          parts.push('                            ss_y[' + kj + '] = SS_PARKED;');
           parts.push('                    }');
           parts.push('                }');
           parts.push('                if (BW_SMB_TOUCH(' + i + ')) {');
@@ -835,7 +835,7 @@
           parts.push('#ifdef BW_SMB_POWERUPS');
           parts.push('        // instance ' + i + ' — ' + (sp.name || '?') +
             ' power-up item (' + power + ')');
-          parts.push('        if (ss_y[' + i + '] < 240 && BW_SMB_TOUCH(' + i + ')) {');
+          parts.push('        if (!ss_is_parked(' + i + ') && BW_SMB_TOUCH(' + i + ')) {');
           if (power === 'fireflower') {
             parts.push('            smb_pstate = 2;             /* Fire Flower → fire */');
           } else if (power === 'star') {
@@ -847,7 +847,7 @@
           } else {
             parts.push('            if (smb_pstate < 1) smb_pstate = 1;  /* Super Mushroom → super */');
           }
-          parts.push('            ss_y[' + i + '] = 0xFF;');
+          parts.push('            ss_y[' + i + '] = SS_PARKED;');
           parts.push('        }');
           parts.push('#endif');
         } else if (sp.role === 'enemy' && ai === 'shooter') {
@@ -866,7 +866,7 @@
           parts.push(
             '        // instance ' + i + ' — ' + (sp.name || '?') +
               ' is a turret: holds position and fires a shot toward the player on a timer');
-          parts.push('        if (ss_y[' + i + '] < 0xEF) {');
+          parts.push('        if (!ss_is_parked(' + i + ')) {');
           parts.push('            static unsigned char bw_sht_' + i + ' = ' + shStagger + ';');
           parts.push('            ss_y[' + i + '] = ' + shHome + ';');   /* hold position (ignore gravity) */
           parts.push('            bw_sht_' + i + '++;');
@@ -1210,10 +1210,10 @@
           '            unsigned int bwox, bwoy;',
           '            for (bwi = 0; bwi + 1 < BW_BUMP_COUNT; bwi++) {',
           '                bwa = bw_bump_idx[bwi];',
-          '                if (ss_y[bwa] >= 0xEF) continue;      /* defeated/parked */',
+          '                if (ss_is_parked(bwa)) continue;      /* defeated/parked */',
           '                for (bwj = bwi + 1; bwj < BW_BUMP_COUNT; bwj++) {',
           '                    bwb = bw_bump_idx[bwj];',
-          '                    if (ss_y[bwb] >= 0xEF) continue;',
+          '                    if (ss_is_parked(bwb)) continue;',
           '                    bwax = (unsigned int)ss_x[bwa]; bway = (unsigned int)ss_y[bwa];',
           '                    bwbx = (unsigned int)ss_x[bwb]; bwby = (unsigned int)ss_y[bwb];',
           '                    bwaw = (unsigned char)(ss_w[bwa] << 3); bwah = (unsigned char)(ss_h[bwa] << 3);',
@@ -1306,12 +1306,12 @@
         '        // either player can pick things up.',
         '        for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
         '            if (ss_role[i] != ROLE_PICKUP) continue;',
-        '            if (ss_y[i] >= 240) continue;       // already collected',
+        '            if (ss_is_parked(i)) continue;       // already collected',
         '            if (!(px + (PLAYER_W << 3) <= ss_x[i] ||',
         '                  px >= ss_x[i] + (ss_w[i] << 3) ||',
         '                  py + (PLAYER_H << 3) <= ss_y[i] ||',
         '                  py >= ss_y[i] + (ss_h[i] << 3))) {',
-        '                ss_y[i] = 0xFF;',
+        '                ss_y[i] = SS_PARKED;',
         '                bw_pickup_count++;',
         '                continue;',
         '            }',
@@ -1320,7 +1320,7 @@
         '                  px2 >= ss_x[i] + (ss_w[i] << 3) ||',
         '                  py2 + (PLAYER2_H << 3) <= ss_y[i] ||',
         '                  py2 >= ss_y[i] + (ss_h[i] << 3))) {',
-        '                ss_y[i] = 0xFF;',
+        '                ss_y[i] = SS_PARKED;',
         '                bw_pickup_count++;',
         '            }',
         '#endif',
@@ -1519,7 +1519,7 @@
         '#endif',
         '            for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
         '                if (ss_role[i] != ROLE_ENEMY) continue;',
-        '                if (ss_y[i] >= 240) continue;',
+        '                if (ss_is_parked(i)) continue;',
         '                if (px + (PLAYER_W << 3) <= ss_x[i]) continue;',
         '                if (px >= ss_x[i] + (ss_w[i] << 3)) continue;',
         '                if (py + (PLAYER_H << 3) <= ss_y[i]) continue;',
@@ -1528,7 +1528,7 @@
         '                /* #15 — landing on the enemy from above (not rising, feet',
         '                 * near its top) defeats it instead of hurting the player. */',
         '                if (jmp_up == 0 && py + (PLAYER_H << 3) <= ss_y[i] + BW_STOMP_MARGIN) {',
-        '                    ss_y[i] = 0xFF; stomp_hit = 1; continue;',
+        '                    ss_y[i] = SS_PARKED; stomp_hit = 1; continue;',
         '                }',
         '#endif',
         '                dmg_hit = 1; break;',
@@ -1584,7 +1584,7 @@
         '            unsigned char dmg2_hit = 0;',
         '            for (i = 0; i < NUM_STATIC_SPRITES; i++) {',
         '                if (ss_role[i] != ROLE_ENEMY) continue;',
-        '                if (ss_y[i] >= 240) continue;',
+        '                if (ss_is_parked(i)) continue;',
         '                if (px2 + (PLAYER2_W << 3) <= ss_x[i]) continue;',
         '                if (px2 >= ss_x[i] + (ss_w[i] << 3)) continue;',
         '                if (py2 + (PLAYER2_H << 3) <= ss_y[i]) continue;',
@@ -2651,7 +2651,7 @@
         '                    unsigned char dx, dy;',
         '                    unsigned char nx, ny;',
         '                    if (ss_role[j] != ROLE_NPC) continue;',
-        '                    if (ss_y[j] >= 240) continue;',
+        '                    if (ss_is_parked(j)) continue;',
         '                    nx = (ss_x[j] + ((ss_w[j] << 3) >> 1)) >> 3;',
         '                    ny = (ss_y[j] + ((ss_h[j] << 3) >> 1)) >> 3;',
         '                    dx = (px_tile > nx) ? (px_tile - nx) : (nx - px_tile);',

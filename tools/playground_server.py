@@ -1988,6 +1988,12 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         # never accessed because NUM_STATIC_SPRITES gates the loop.
         # ss_x / ss_y are non-const so movement snippets can write to them.
         stub = (
+            # v80: "not present" is an ALL-ONES SENTINEL, not a coordinate
+            # threshold.  Emitted here too so every build defines it, even one
+            # with no scene sprites -- a guard that only exists in some builds
+            # is the shape that let the tall-level holes survive.
+            "#define SS_PARKED 0xFFu\n"
+            "#define ss_is_parked(i) (ss_y[(i)] == SS_PARKED)\n"
             "SS_LINKAGE unsigned char ss_x[1]            = { 0 };\n"
             "SS_LINKAGE unsigned char ss_y[1]            = { 0 };\n"
             "SS_LINKAGE const unsigned char ss_w[1]      = { 0 };\n"
@@ -2047,13 +2053,38 @@ def build_scene_inc(state, player_idx, scene_sprites, start_x, start_y,
         # only when a sprite sits past the first screen (x or y > 255), so
         # single-screen ROMs keep the 8-bit layout — which matches the asm /play
         # path, so the asm/C rom-equiv parity holds for first-screen projects.
-        wide_pos = any(v > 255 for v in xs) or any(v > 255 for v in ys)
+        # v80: `>= 255` for Y, not `> 255`, and that boundary is load-bearing.
+        # SS_PARKED is all-ones in whatever width the positions are, so with u8
+        # positions the sentinel IS 255 -- an entity legitimately at y=255 would
+        # read as parked. Promoting to u16 at 255 rather than 256 makes the
+        # sentinel unreachable by construction instead of merely unlikely, which
+        # is the whole difference between this and the bug it replaces. X keeps
+        # `> 255`: the sentinel is only ever compared against ss_y, and widening
+        # on x=255 would grow ROMs for no reason.
+        wide_pos = any(v > 255 for v in xs) or any(v >= 255 for v in ys)
         # Per-instance animation state — one frame counter + one
         # tick counter per scene sprite.  Zero-initialised; the
         # template advances them when a matching tagged animation
         # exists (Phase B finale chunk B).
         anim_zero = [0] * n
+        # v80: "not present" is an ALL-ONES SENTINEL, not a coordinate threshold.
+        #
+        # It used to be `ss_y = 0xFF` tested as `ss_y >= 0xEF` (and `>= 240` at
+        # other sites -- the two disagreed by one).  In a 2-screen-tall level a
+        # LEGITIMATE y runs to 479, so a real entity satisfied the test: measured,
+        # a chaser at y >= 239 never ran its AI and an enemy at y >= 240 could not
+        # damage the player, both while drawing normally.  See
+        # tools/builder-tests/tall-level-entities.mjs, which recorded those holes
+        # before this fix and goes red when they close.
+        #
+        # The sentinel is all-ones in whatever width the positions are, so it is
+        # unreachable by construction: 255 with u8 positions (max legitimate y is
+        # 239) and 65535 with u16 (max is 479, and a level would need 2048 screens
+        # to reach it).  The test is now an EQUALITY, so there is no threshold left
+        # for two sites to spell differently.
         lines += [
+            f"#define SS_PARKED {'0xFFFFu' if wide_pos else '0xFFu'}",
+            "#define ss_is_parked(i) (ss_y[(i)] == SS_PARKED)",
             arr("ss_x", xs, mutable=True, wide=wide_pos, link=True),
             arr("ss_y", ys, mutable=True, wide=wide_pos, link=True),
             arr("ss_w", ws, link=True),

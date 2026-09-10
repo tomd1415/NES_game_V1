@@ -377,20 +377,27 @@ patrol_flip:
 ; X is resolved (and may store ss_x) before Y, so the Y probe reads the updated
 ; ss_x, matching the C statement order.
 chaser:
+; v80 -- parked is now the ALL-ONES SENTINEL, tested for EQUALITY, not a
+; threshold.  This used to skip on `ss_y >= 0xEF`, and under SS_POS_WIDE it
+; skipped on a non-zero high byte as well -- so EVERY legitimate entity below
+; y=239 in a tall level was treated as defeated and never moved.  Exact twin of
+; the C `ss_is_parked()`.
 .if SS_POS_WIDE
     lda au_i
     asl
     tay
     lda _ss_y+1,y
-    bne ch_skip                 ; ss_y >= 256 -> >= 0xEF -> defeated -> skip
+    cmp #$FF                    ; hi != $FF -> alive, whatever the low byte is
+    bne @ch_alive
     lda _ss_y,y
-    cmp #$EF
-    bcs ch_skip
+    cmp #$FF
+    beq ch_skip                 ; $FFFF -> parked
+@ch_alive:
 .else
     ldx au_i
     lda _ss_y,x
-    cmp #$EF
-    bcs ch_skip                 ; ss_y >= 0xEF -> defeated -> skip
+    cmp #$FF
+    beq ch_skip                 ; $FF -> parked
 .endif
     ; --- X axis (target px, dirs 0=right / 1=left) ---
     jsr ch_load_x
@@ -430,23 +437,27 @@ ch_skip:
 ; flyer: hover ±20px around a fixed home-Y (state = fdir ±1, aux = foff signed),
 ; writing ss_y ABSOLUTELY from home+foff each frame (overrides scene gravity),
 ; and drift toward px in X with NO wall probe (flyers pass through). A defeated
-; actor parked off-screen (ss_y >= 0xEF) is skipped so it stays parked. Exact
+; actor parked at the all-ones sentinel is skipped so it stays parked. Exact
 ; twin of the C flyer block.
 flyer:
+; v80 -- see the note on `chaser` above: equality against the all-ones sentinel,
+; not a threshold, so a legitimate y in a tall level is no longer read as defeated.
 .if SS_POS_WIDE
     lda au_i
     asl
     tay
     lda _ss_y+1,y
-    bne fly_skip                ; ss_y >= 256 -> >= 0xEF -> defeated -> skip
+    cmp #$FF                    ; hi != $FF -> alive, whatever the low byte is
+    bne @fly_alive
     lda _ss_y,y
-    cmp #$EF
-    bcs fly_skip
+    cmp #$FF
+    beq fly_skip                ; $FFFF -> parked
+@fly_alive:
 .else
     ldx au_i
     lda _ss_y,x
-    cmp #$EF
-    bcs fly_skip
+    cmp #$FF
+    beq fly_skip                ; $FF -> parked
 .endif
     ; hover: update fdir (state) + foff (aux), flip at ±20
     ldx au_i

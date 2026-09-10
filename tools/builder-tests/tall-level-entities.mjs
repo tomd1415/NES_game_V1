@@ -5,32 +5,34 @@
  *
  * WHY THIS EXISTS
  * ---------------
- * In an ordinary single-room 1x2 level — no multi-room, no per-room, the default
- * configuration a pupil gets by making their level taller — entities below a
- * certain `y` stop working, in two different ways with two different boundaries:
+ * FIXED IN ENGINE v80. Until then, in an ordinary single-room 1x2 level — no
+ * multi-room, no per-room, the configuration a pupil gets just by making their
+ * level taller — entities below a certain `y` stopped working, in two ways with
+ * two different boundaries:
  *
- *   - a chaser or flyer at y >= 239 never runs its AI      (measured 2026-08-21)
- *   - an enemy at y >= 240 cannot damage the player at all (measured 2026-08-27)
+ *   - a chaser or flyer at y >= 239 never ran its AI      (measured 2026-08-21)
+ *   - an enemy at y >= 240 could not damage the player    (measured 2026-08-27)
  *
- * Both look completely normal on screen, which is what makes them expensive: the
- * pupil sees an enemy standing there and no error anywhere. The cause is one
- * design decision — "parked / defeated / consumed" is encoded as a COORDINATE
- * (`ss_y = 0xFF`), so every guard asks "is this entity's y past the sentinel?",
- * and a legitimately-placed entity in a tall level answers yes. #14 Step 3
- * replaces the sentinel and removes both.
+ * Both looked completely normal on screen, which is what made them expensive: the
+ * pupil saw an enemy standing there and no error anywhere. The cause was one
+ * design decision — "parked / defeated / consumed" was encoded as a COORDINATE
+ * (`ss_y = 0xFF`), so every guard asked "is this entity's y past the sentinel?",
+ * and a legitimately-placed entity in a tall level answered yes. v80 replaced it
+ * with an all-ones sentinel tested for EQUALITY, so there is no threshold left.
  *
- * THIS SUITE IS THE HARNESS, WRITTEN BEFORE THE FIX
- * -------------------------------------------------
- * It does not assert the bugs are gone. It asserts the CURRENT behaviour exactly,
+ * THIS SUITE WAS THE HARNESS, WRITTEN BEFORE THE FIX
+ * --------------------------------------------------
+ * It shipped one day before v80 asserting the CURRENT (broken) behaviour exactly,
  * as a known-failures list, so that:
  *
  *   - a NEW y that stops working fails the suite (a regression), and
  *   - a listed y that STARTS working ALSO fails the suite (the list is stale).
  *
  * The second half is the point and is easy to leave out. Without it the list
- * quietly becomes permanent and the suite ends up enforcing the bugs — so when
- * Step 3 lands, this suite goes red until KNOWN_HOLES is emptied, which is the
- * intended way to find out it worked.
+ * quietly becomes permanent and the suite ends up enforcing the bugs. It worked:
+ * when v80 landed this suite went red with five STALE ENTRY failures, which is how
+ * the fix was confirmed. KNOWN_HOLES is empty now and the suite is a plain
+ * regression guard.
  *
  * THE POSITIVE CONTROL IS NOT OPTIONAL
  * ------------------------------------
@@ -67,15 +69,20 @@ const MAX_HP = 5;
 const PROBE_YS = [150, 238, 239, 240, 400];
 const WORKING_CONTROL = 150;
 
-// The holes that exist TODAY. Exact match: an entry that starts working fails
+// The holes that exist today. Exact match: an entry that starts working fails
 // this suite just as loudly as a new one appearing. Keyed `<y>:<probe>`.
-const KNOWN_HOLES = new Map([
-  ['239:ai',     'chaser AI guard is `ss_y[i] < 0xEF` (239), so a legitimate y=239 reads as parked'],
-  ['240:ai',     'same guard, one row lower'],
-  ['400:ai',     'same guard, deep in the lower screen'],
-  ['240:damage', 'damage loop guard is `if (ss_y[i] >= 240) continue;` (builder-modules.js)'],
-  ['400:damage', 'same guard, deep in the lower screen'],
-]);
+//
+// EMPTY SINCE ENGINE v80 (2026-09-02), and that is the whole point of the shape.
+// It held five entries; #14 Step 3 replaced the coordinate sentinel with an
+// all-ones one tested for equality, every probe started working, and this suite
+// went RED with five STALE ENTRY failures until the list was cleared. The list
+// could not outlive the bugs, which is exactly what it was built to guarantee.
+//
+// It stays here, empty, rather than being deleted with the entries: the suite is
+// now a plain regression guard, and if any y in PROBE_YS stops working it fails
+// as a NEW HOLE. Add an entry only for a bug that is real, understood and
+// scheduled — otherwise this file starts tolerating bugs instead of recording them.
+const KNOWN_HOLES = new Map([]);
 
 let failed = 0;
 const fail = (msg) => { console.log('FAIL ' + msg); failed++; };
@@ -231,8 +238,11 @@ try {
     }
   }
   if (!failed) {
-    ok(`${KNOWN_HOLES.size} known holes, all still exactly as recorded — ` +
-       'this suite goes RED when #14 Step 3 fixes them, which is how you will know it worked');
+    ok(KNOWN_HOLES.size === 0
+      ? `every probe works at all ${PROBE_YS.length} depths — no known holes ` +
+        '(the five recorded before v80 are closed; a new one fails this suite)'
+      : `${KNOWN_HOLES.size} known hole(s), all still exactly as recorded — ` +
+        'this suite goes RED the moment one of them is fixed, so the list cannot outlive the bugs');
   }
 } finally {
   await H.stopServer(srv);

@@ -9,6 +9,75 @@ change alters ROM output or the project↔ROM contract, then run
 See [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
 for the full design (snapshots, fallback, upgrade advisor).
 
+## v80 — 2026-09-10 — "Parked" stops being a coordinate (#14 Step 3)
+
+**Changed (migration: none needed; ROM output changes for projects with scene
+sprites).** An entity that is off-room, defeated or collected used to be marked by
+writing a **coordinate** — `ss_y = 0xFF` — and every guard asked "is this entity's
+y past the sentinel?". That question was spelled `>= 0xEF` (239) at some sites and
+`>= 240` at others, across 25 C sites and two 6502 routines.
+
+It works while a level is one screen tall. It does not survive a **two-screen-tall**
+level, where a legitimately placed entity has a `y` up to 479 and therefore answers
+"yes". Measured, in an ordinary single-room 1×2 level with no multi-room involved:
+
+| enemy y | drawn | AI runs | damages the player |
+| ------- | ----- | ------- | ------------------ |
+| 150 | yes | yes | yes |
+| 238 | yes | yes | yes |
+| 239 | yes | **no** | yes |
+| 240 | yes | **no** | **no** |
+| 400 | yes | **no** | **no** |
+
+So the lower half of every tall level was decorative: enemies there neither moved
+nor hurt anyone, while looking entirely correct on screen. That is the default
+configuration a pupil reaches just by making their level taller.
+
+**What replaced it.** `SS_PARKED` is all-ones in whatever width the positions are —
+`0xFF` with u8, `0xFFFF` with u16 — and the test is now `ss_is_parked(i)`, an
+**equality**. There is no threshold left for two sites to spell differently. Both
+macros are emitted from `build_scene_inc`, including in the no-scene-sprites stub
+path, so no build can be missing them.
+
+*Unreachable by construction, not merely unlikely.* Positions promote to u16 when
+any y is **>= 255** (it was `> 255`), because with u8 positions the sentinel *is*
+255 and an entity legitimately at y=255 would otherwise read as parked. X keeps
+`> 255`: the sentinel is only ever compared against `ss_y`. Level sizes are capped
+at 12×1 or 2×2 screens, so the largest legitimate y is 480 against a u16 sentinel of
+65535.
+
+*The 6502 moved with the C.* `ai_asm.s`'s chaser and flyer tested `cmp #$EF`, and
+under `SS_POS_WIDE` skipped on any non-zero high byte — which is precisely why a
+tall-level enemy never moved. Both now compare for equality against `$FF` / `$FFFF`.
+`asm-ai`, `asm-ai-wide` and `asm-ai-corpus` still pass, so the two engines did not
+diverge.
+
+*Golden ROMs.* The no-modules goldens are **unchanged** — a project without scene
+sprites still builds byte-for-byte, because the changed code is stripped. The
+everything-on `_rom-equiv` hash legitimately moved from `e86a91b8…` to `026e516a…`
+(size unchanged, 49168 bytes) and is re-pinned with its reason in that file.
+
+*Verified by a harness written before the fix.*
+`tools/builder-tests/tall-level-entities.mjs` shipped one day earlier recording all
+five holes as an exact known-failures list. When this change landed the suite went
+**red** with five `STALE ENTRY` failures until the list was cleared — which is how
+the fix was confirmed, rather than by asserting the bugs were gone.
+
+*Still to do, deliberately not in this version.* `_scene_is_perroom` still refuses a
+project with an entity at `y > 238`. That restriction existed because a parked entity
+was indistinguishable from a low one; it is now obsolete and can go, but removing it
+is #14 Step 4 and wants its own version.
+
+**Design note, and whose decision it was.** The alternative was a per-entity
+`ss_active[]` byte. The choice between them was put to the owner on 2026-08-26 and
+was still unanswered on 2026-09-10 after three instructions to carry on, so **this
+was my call, not theirs**: the sentinel costs no RAM on a 2 KB machine and removes
+the threshold that caused the bug rather than adding state beside it. The one thing
+it forecloses: a sentinel cannot distinguish "defeated" from "off-room", so if
+enemies should ever stay defeated across a room re-entry (an open question on the
+plan) that needs the flag after all. Today's behaviour is respawn-on-re-entry,
+documented as deliberate.
+
 ## v79 — 2026-08-14 — Multi-screen rooms keep their own entities (#14 Step 2)
 
 **Changed (migration: none needed).** `_scene_is_perroom` now refuses a project

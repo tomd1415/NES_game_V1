@@ -1172,7 +1172,7 @@ static void scene_set_active_bg(unsigned char n) {
             ss_x[k] = ss_home_x[k];
             ss_y[k] = ss_home_y[k];
         } else {
-            ss_y[k] = 0xFF;
+            ss_y[k] = SS_PARKED;
         }
     }
 }
@@ -2248,12 +2248,12 @@ void main(void) {
                 /* Enemy hit → defeat it and consume the fireball. */
                 for (fbj = 0; fbj < NUM_STATIC_SPRITES; fbj++) {
                     if (ss_role[fbj] != ROLE_ENEMY) continue;
-                    if (ss_y[fbj] >= 240) continue;
+                    if (ss_is_parked(fbj)) continue;
                     if (!((unsigned int)fb_x[fbi] + 8 <= (unsigned int)ss_x[fbj] ||
                           (unsigned int)fb_x[fbi] >= (unsigned int)ss_x[fbj] + (ss_w[fbj] << 3) ||
                           (unsigned int)fb_y[fbi] + 8 <= (unsigned int)ss_y[fbj] ||
                           (unsigned int)fb_y[fbi] >= (unsigned int)ss_y[fbj] + (ss_h[fbj] << 3))) {
-                        ss_y[fbj] = 0xFF;
+                        ss_y[fbj] = SS_PARKED;
                         fb_active[fbi] = 0;
                         break;
                     }
@@ -2957,7 +2957,7 @@ void main(void) {
             const unsigned char *src_tiles;
             const unsigned char *src_attrs;
 #ifdef BW_SCENE_PERROOM
-            if (ss_y[i] >= 0xEF) continue;   /* parked (off-room) — don't draw */
+            if (ss_is_parked(i)) continue;   /* parked (off-room) — don't draw */
 #endif
             off = ss_offset[i];
             sw = ss_w[i];
@@ -3019,7 +3019,7 @@ void main(void) {
 #else
         for (i = 0; i < NUM_STATIC_SPRITES; i++) {
 #ifdef BW_SCENE_PERROOM
-            if (ss_y[i] >= 0xEF) continue;   /* parked (off-room) — don't draw */
+            if (ss_is_parked(i)) continue;   /* parked (off-room) — don't draw */
 #endif
             off = ss_offset[i];
             sw = ss_w[i];
