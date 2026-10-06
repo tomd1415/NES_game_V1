@@ -5,6 +5,10 @@ the project, engine and ROM contracts with the browser product — `tests/contra
 is where the two targets are held to **byte-identical ROMs** and **identical
 validation problems**.
 
+> *Superseded the same day: both causes below were fixed on 2026-08-06 — the seven
+> baselines are committed and the manifest is `baseline.json` (see "Known failures"
+> below). This note is kept as the record of what was found.*
+>
 > ⚠ **As of 2026-08-06 the ROM half of that is not actually running.** The seven
 > `game.nes` baselines it compares against were never committed (`.gitignore:3` is
 > `*.nes`), and the native baseline manifest is still pinned to engine v63 while

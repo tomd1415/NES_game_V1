@@ -13,7 +13,7 @@ This file is the answer to "which port is which, and how do I start it".
 | ------- | ---- | -------------- | --------------- |
 | **Dev / manual** | **8765** | The Studio at `/studio.html`, the seven legacy pages, and `/play` (builds a ROM with cc65). What you open in a browser to use the thing. | `python3 tools/playground_server.py` — **in a container it must bind `0.0.0.0`, see below** |
 | **Studio E2E** | **18790** | The same server, booted and killed **automatically** by Playwright with an isolated accounts DB. You do not start this yourself. | `npx playwright test` (from the repo root) |
-| **Builder tests** | **18768–18897** | One throwaway server per suite, spawned and killed by that suite. Each `.mjs` picks its own port. | `node tools/builder-tests/run-all.mjs`, or one suite: `node tools/builder-tests/enemy-bump.mjs` |
+| **Builder tests** | **18768–18898** | One throwaway server per suite, spawned and killed by that suite. Each `.mjs` picks its own port. | `node tools/builder-tests/run-all.mjs`, or one suite: `node tools/builder-tests/enemy-bump.mjs` |
 
 The runner (`run-all.mjs`) executes suites **one at a time** (`spawnSync` in a
 loop), so several suites sharing a port is deliberate and harmless — about a dozen
@@ -144,11 +144,13 @@ STUDIO_TEST_PORT=18990 npx playwright test
 
 ## Adding a suite: picking a port
 
-Either take the next free port **above 18897** (the current highest, stay under
-19000), **or reuse an unclaimed gap inside 18768–18897** — there are several, and
+Either take the next free port **above 18898** (the current highest, stay under
+19000), **or reuse an unclaimed gap inside 18768–18898** — there are several, and
 using one keeps the documented range stable. That matters more than it looks:
-the range `18768–18897` is quoted in the project's `CLAUDE.md` as well as in the
-table above, so going above 18897 silently makes two other documents wrong.
+the range `18768–18898` is quoted in `docs/README.md` as well as in the
+table above, so going above 18898 silently makes another document wrong. (It
+happened once: `tall-level-entities.mjs` took 18898 on 2026-09-01, `cb7125a`, and
+both documents said 18897 until 2026-10-06.)
 Whichever you pick, **prove it free with the command below first** — a gap is only
 safe if you checked, and "it looked unused" is not checking. (`door-transition-wide.mjs`
 took 18777 this way on 2026-08-14.)

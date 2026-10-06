@@ -28,6 +28,11 @@ when each one is green**, and the claims you may not.
 
 ## What has no gate at all
 
+> *Superseded for the first two bullets the day after this snapshot:* `c68159d`
+> (2026-08-14) added `native/tests/unit/test_registries_are_complete.py`, which reads
+> both `MODE_CLASSES` and `STARTERS` with `ast` and fails in both directions, with two
+> matching breaks in `tests/mutations/guards.json`. The bullets are kept as the record.
+
 * **`MODE_CLASSES`** (F15). A mode written but not registered is silently absent from
   the app. Nothing references the registry in any test.
 * **`project_catalog.STARTERS`** (F16). The pupil-facing starter picker is a

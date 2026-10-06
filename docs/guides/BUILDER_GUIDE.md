@@ -439,7 +439,8 @@ What it does:
 
 Each smoke file can also run on its own (`node
 tools/builder-tests/round2-dialogue.mjs`).  They launch their
-own throwaway Playground Server on a unique port (18768-18792)
+own throwaway Playground Server on a unique port (18768–18898; see
+[`TEST-SERVERS.md`](TEST-SERVERS.md))
 and exit 0 on success, non-zero on any failed assertion.
 
 **All suites must pass before any Builder change ships** —

@@ -17,6 +17,8 @@ steps/
   Step_1_Player_Movement/    <-- Just the player character on a blue background
   Step_2_Background_Level/   <-- Adds a background level with platforms and ground
   Step_3_Enemies_And_Items/  <-- Adds enemies, gems, and a heart pickup
+  Step_4_Dialogue/           <-- Talk to an NPC who shows a message
+  Step_5_Multi_NPC_Dialogue/ <-- Two NPCs with a bordered dialogue box
 ```
 
 **To try a step**, open a terminal in that step's folder and run:

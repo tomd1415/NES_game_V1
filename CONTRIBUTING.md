@@ -3,7 +3,7 @@
 NES Studio is developed as two supported product targets in one repository:
 
 - the browser application under `tools/tile_editor_web/`;
-- the native Linux application under `native/` once its skeleton is added.
+- the native Linux application under `native/` (scaffolded 2026-07-10).
 
 Both targets share project formats, NES engines, ROM-generation behavior and
 selected services. This guide defines how the web and native teams can work in
@@ -214,13 +214,11 @@ running for them.)
 forwards a *published* port to the container's bridge IP (e.g. `172.17.0.2:8765`),
 so a default loopback bind is refused and nothing reaches the host — even though
 `curl 127.0.0.1:8765` *inside* the container answers fine (that split is the
-tell). Set `PLAYGROUND_HOST=0.0.0.0`. In the maintainer's dev container this is
-durable — `containerEnv` sets it, and the container's `postStartCommand` runs a
-`/workspace/start.sh` that exports it and launches the server — so it survives
-restarts. **Neither of those files is in version control** (`.gitignore:8` ignores
-`.devcontainer/`, and `start.sh` is host-side), so a fresh clone gets neither the
-variable nor the auto-start: if you launch the server by hand, pass
-`PLAYGROUND_HOST=0.0.0.0` yourself.
+tell). Set `PLAYGROUND_HOST=0.0.0.0`. In the dev container this is durable —
+`containerEnv` in `.devcontainer/devcontainer.json` sets it, so it survives
+restarts, and that file has been in version control since `4b3b38d` (2026-08-26;
+before that `.gitignore` hid `.devcontainer/`). If you launch the server by hand
+in any other container, pass `PLAYGROUND_HOST=0.0.0.0` yourself.
 This is safe on a public-IP host: the host publishes to its **own** loopback
 (`appPort`) and the firewall gates INPUT — the boundary is the publish +
 firewall, not the internal bind. Verify against the bridge IP, not loopback:

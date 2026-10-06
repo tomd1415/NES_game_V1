@@ -44,8 +44,9 @@ were authored for.
 >
 > | Snapshots | Cover |
 > | --- | --- |
-> | **v1 – v75** | JS + cc65 sources only. **30 files, no Python.** |
-> | **v76 onward** *(on this branch)* | the above **plus `tools/nes_studio_core/`**, the server's ROM codegen. |
+> | **v1 – v75** | JS + cc65 sources only. **19–30 files (it grew with the engine), no Python.** |
+> | **v76 – v79** *(`main`'s, taken in the 2026-09-02 merge)* | as v1 – v75: **30 files each, no Python.** |
+> | **v80 onward** *(on this branch)* | the above **plus `tools/nes_studio_core/`**, the server's ROM codegen (41 files). |
 >
 > **Do not read this boundary as a version range.** A snapshot covers the Python
 > codegen **iff its own `manifest.json` lists files under `tools/nes_studio_core/`**.
@@ -60,30 +61,30 @@ were authored for.
 > done
 > ```
 >
-> On this branch today that returns Python for **v76 only**. It will *not* stay that
-> way: `main` has since published v76, v77 and v78 as 30-file snapshots with **no**
-> Python, and its v76 is a different snapshot from this branch's. Merging `main` makes
-> any sentence of the form "v76 onward includes the codegen" false for three published
-> versions — see
+> Checked 2026-10-06, that returns Python for **v80 – v84** and none for v76 – v79. It
+> returned Python for v76 alone until the 2026-09-02 merge, which took `main`'s v76 – v79
+> (30-file snapshots, no Python) and dropped this branch's own v76 – v78; see the top of
+> [`CHANGELOG.md`](CHANGELOG.md) and
 > [`docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](../../docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md).
 
 > **That collision is now checked, not just described.** `main-manifests.json` records
 > the sha1 of every `vN/manifest.json` on `main` at a named commit, and
 > `tools/builder-tests/lib/snapshot-collisions.mjs` (run by `run-all.mjs` as *engine
 > snapshot numbers do not collide with main*) asserts the colliding set is **exactly**
-> `v76, v77, v78` — measured, not assumed: v1–v75 are byte-identical across the two
-> branches. A **fourth** collision reddens it, and so does a collision that has been
+> the record's `expected_collisions` — `v76, v77, v78` before the 2026-09-02 merge,
+> empty since (record taken at `origin/main @ 1c399c0`, with v80 – v84 listed as
+> local-only). A **new** collision reddens it, and so does a collision that has been
 > *resolved* without updating the record, so the list cannot quietly go stale after the
 > port-forward renumbers ours. Refresh with `--update` after fetching `main`, and read
 > the diff: a version moving from identical to colliding is an event.
 
-> Up to v75 the codegen that emits most of the ROM was **outside** the snapshot,
+> Up to v79 the codegen that emits most of the ROM was **outside** the snapshot,
 > so two matching snapshots in that range say nothing about whether it changed.
-> Treat v1–v75 as records of the templates and cc65 project, not as full records
+> Treat v1–v79 as records of the templates and cc65 project, not as full records
 > of what produced a ROM. The gap cannot be repaired — those directories are
 > immutable. See
 > [`docs/design/engine-versioning.md`](../../docs/design/engine-versioning.md)
-> and the v76 entry in [`CHANGELOG.md`](CHANGELOG.md).
+> and the superseded local ~~v76~~ entry in [`CHANGELOG.md`](CHANGELOG.md).
 
 This scheme began at **v1** (baseline) with the first engine feature — per-door
 destinations — shipping as **v2**, always snapshotting v1 first so every v1 game

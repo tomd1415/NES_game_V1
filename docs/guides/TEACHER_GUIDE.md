@@ -171,9 +171,9 @@ Pupils can optionally sign in (📁 menu → **Account (optional)**) to save pro
 
 **No fceux on the server.** The classroom path is browser-only — `/health` reports `fceux: false` and the Play dialog only shows "This browser (jsnes)" as the Run-on option. Pupils who want the real FCEUX emulator run the stack on their own laptop (see the single-user dev instructions above).
 
-**Per-pupil state.** Everything lives in each pupil's `localStorage`, keyed to the origin. Clearing browser data wipes their project — the **Export → JSON** button is the escape hatch. Pupils can *optionally* also sign in and save to the server (see **Optional pupil accounts** below); without an account the editor works exactly as before, entirely in the browser.
+**Per-pupil state.** Everything lives in each pupil's `localStorage`, keyed to the origin. Clearing browser data wipes their project — the **Export → JSON** button is the escape hatch. Pupils can *optionally* also sign in and save to the server (see **Optional pupil accounts** above); without an account the editor works exactly as before, entirely in the browser.
 
-**Concurrency.** A `threading.Lock()` wraps the shared `steps/Step_Playground/` writes + `make` invocation, so two pupils pressing Play at the same instant serialise on the ~1 s build rather than clobbering each other's `scene.inc`. Pupils using the Code page (Phase 3a) bypass this lock — their builds clone `Step_Playground` into a throwaway tempdir and compile in parallel.
+**Concurrency.** Every Play clones `Step_Playground` into its own throwaway tempdir, so two pupils pressing Play at the same instant cannot clobber each other's `scene.inc`. Builds run in parallel, capped by `BUILD_SEM` (a semaphore sized to the machine: 2–8 concurrent compiles). The old `threading.Lock()` around a shared `steps/Step_Playground/` build is gone (`7a67263`).
 
 ### Phase 3a — pupil-editable `main.c` (the Code page)
 
@@ -186,7 +186,7 @@ On Play, the Code page posts `customMainC` alongside the usual scene payload. Th
 3. Writes the auto-generated `game.chr`, `level.nam`, `scene.inc`, `palettes.inc` into the copy.
 4. Runs `make -C <tempdir>` and returns the resulting ROM.
 
-The tempdir is torn down automatically. Because each request has its own working directory, concurrent Code-page builds do not take `BUILD_LOCK` — they run in parallel, limited only by `cc65` CPU.
+The tempdir is torn down automatically. Because each request has its own working directory, concurrent Code-page builds run in parallel, limited only by `BUILD_SEM` (see **Concurrency** above).
 
 A `GET /default-main-c` endpoint serves the stock `main.c` as `text/plain` so the Code page's **↻ Restore default** button can round-trip back to the template.
 
@@ -378,7 +378,7 @@ The starter ships two regions (`player_start`, `movement`) so Guided mode and th
 |---------------------|--------------------------------------------|-----------------------------------|
 | `customMainC` set   | `_build_in_tempdir()` (cc65 + nes.lib)     | `palettes.inc`, `scene.inc`       |
 | `customMainAsm` set | `_build_asm_in_tempdir()` (ca65, no .lib)  | `palettes.asminc`, `scene.asminc` |
-| neither             | `_build_in_shared_dir()` (native workflow) | `palettes.inc`, `scene.inc`       |
+| neither             | `_build_in_tempdir()`, stock `main.c`      | `palettes.inc`, `scene.inc`       |
 
 The asm path copies `STEP_DIR` to a tempdir, removes `main.c` / `scene.inc` / `palettes.inc`, drops the pupil's `main.s` + generated `.asminc` files, overwrites `Makefile` with the in-memory `ASM_MAKEFILE` (ca65-only, two `.o` → `ld65`), then runs `make`. CHR (`assets/sprites/game.chr`) and NAM (`assets/backgrounds/level.nam`) assets are written the same way as the C path — `graphics.s` reads them at assemble time.
 
@@ -430,7 +430,7 @@ Response on success:
 
 Browser mode decodes `rom_b64` and hands it either to the page's embedded `jsnes.NES.loadROM()` (Builder / Sprites / Code / Backgrounds / Behaviour — all now share [tools/tile_editor_web/emulator.js](../../tools/tile_editor_web/emulator.js)) or to a blob URL for the Download-ROM flow. Native mode spawns `fceux` detached and returns immediately. `/health` publishes `{ok, fceux, modes}` so the client can grey out unavailable options at page load — [play-pipeline.js](../../tools/tile_editor_web/play-pipeline.js)'s `capabilities()` caches the probe for the page's lifetime.
 
-**Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles before the first Play, but they are overwritten on every Play. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, `ss_*` arrays (extra static sprites), and the animation tables **`walk_tiles` / `walk_attrs` / `WALK_FRAME_COUNT` / `WALK_FRAME_TICKS`** (and the `jump_*` equivalents). If you rename any of these symbols, update `build_scene_inc()` in the server to match.
+**Step_Playground** is a throwaway step folder. Its `src/scene.inc` and `src/palettes.inc` are committed as placeholders so the skeleton compiles on its own; Play overwrites the copies in its tempdir, never these. `src/main.c` reads `palette_bytes[32]`, `player_tiles/attrs/X/Y/W/H`, `ss_*` arrays (extra static sprites), and the animation tables **`walk_tiles` / `walk_attrs` / `WALK_FRAME_COUNT` / `WALK_FRAME_TICKS`** (and the `jump_*` equivalents). If you rename any of these symbols, update `build_scene_inc()` in the server to match.
 
 **Walk/jump contract:** for each kind, the server emits a compile-time count (0 when no animation is assigned), a tick interval, and two flat byte arrays sized `count * PLAYER_W * PLAYER_H` that concatenate every frame's tile + attribute cells row-major. All frames of a given animation must share the Player sprite's W×H — `_resolve_animation()` in the server silently drops frames that don't. When the count is 0, cc65 still needs a valid array so the server emits a 1-element stub; `main.c` gates the use behind the macros with `#if WALK_FRAME_COUNT > 0`.
 

@@ -1,8 +1,11 @@
 # Documentation map
 
-This directory holds every Markdown file in the project except the
-top-level [`README.md`](../README.md), [`NOTICE.md`](../NOTICE.md),
-and [`LICENSE`](../LICENSE).  It's organised so that finding *what
+This directory holds the project's documentation, apart from the
+top-level [`README.md`](../README.md), [`CLAUDE.md`](../CLAUDE.md),
+[`CONTRIBUTING.md`](../CONTRIBUTING.md), [`HANDOVER.md`](../HANDOVER.md),
+[`NOTICE.md`](../NOTICE.md) and [`LICENSE`](../LICENSE), and the READMEs that
+sit beside the code they describe (e.g. [`native/README.md`](../native/README.md),
+[`tools/engines/README.md`](../tools/engines/README.md)).  It's organised so that finding *what
 we're working on now* is easy without losing the chronological trail
 of how we got here.
 
@@ -38,8 +41,6 @@ Repository-wide contribution, ownership and cross-team review rules live in
   things this project has already believed and been wrong about — a tool reported
   absent that was installed all along, a contract test whose assertion had never
   executed — and the one check that would have settled each one.
-- **Picking up active work?** Work is now feedback-driven — the running list of
-  open items (with fixes recorded inline as they land) is
 - **Picking up active work?** Start with [`STATUS.md`](STATUS.md) — the living
   "where we are now" file: current engine version, test state, what's open and
   what's blocked waiting on a human. Then, work is feedback-driven — the running
@@ -53,7 +54,7 @@ Repository-wide contribution, ownership and cross-team review rules live in
 - **Running the tests, or a server won't start?** Read
   [`guides/TEST-SERVERS.md`](guides/TEST-SERVERS.md) — which of the three test
   servers listens on which port (dev `8765`, Studio E2E `18790`, builder-tests
-  `18768–18897`), how to start each, and how to pick a port for a new suite.
+  `18768–18898`), how to start each, and how to pick a port for a new suite.
   The old 18790 double-claim is fixed (2026-08-06) and `run-all.mjs` now guards
   against it, but still run the two suites sequentially — the box is small and
   running both at once mostly loads it. That is a courtesy to the box, not a

@@ -91,7 +91,11 @@ workflow: [`tools/engines/README.md`](tools/engines/README.md).
   [`docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md`](docs/handoffs/2026-08-12-main-divergence-and-the-v76-collision.md)
   **before merging or bumping the engine.** The line below describes the state as of
   2026-08-06 and its first clause is now stale.
-- **⚠ `.devcontainer/` is gitignored on this branch and tracked on `main`.** The
+- *Superseded (checked 2026-10-06): `.devcontainer/` has been tracked on this branch
+  since `4b3b38d` (2026-08-26), and `413947d` (2026-09-10) added the Qt runtime, Rust,
+  maturin and `post-create.sh` back into it. The rest of this bullet is kept as the
+  record of how it stood on 2026-08-12.*
+  ~~**⚠ `.devcontainer/` is gitignored on this branch and tracked on `main`.**~~ The
   Dockerfile on this disk installs the Qt runtime libraries and runs a
   `post-create.sh` that builds the `nes_core` wheel and creates `native/.venv`;
   `main`'s installs no Qt at all. **None of it is in the repository here**, so a fresh
