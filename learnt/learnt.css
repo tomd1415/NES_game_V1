@@ -1,0 +1,63 @@
+/* learnt.css — shared stylesheet for the "What I have learnt" pages.
+   One copy per project today; identical in every project so the pages can be merged into one
+   site later. Self-contained: system fonts, no external assets. */
+:root {
+  --bg: #fbfaf7; --fg: #1f2328; --muted: #5a6470; --line: #d9d4c7;
+  --card: #ffffff; --accent: #0b5d8a; --accent-soft: #e3f0f8;
+  --trap: #9a3412; --trap-soft: #fdebdc; --fact: #166534; --fact-soft: #e3f5e9;
+  --code-bg: #f1efe8; --max: 60rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181c; --fg: #e6e3dc; --muted: #a2a9b3; --line: #30363d;
+    --card: #1c2127; --accent: #6cb6e0; --accent-soft: #1b2e3c;
+    --trap: #f4a56e; --trap-soft: #3a2316; --fact: #7fd39a; --fact-soft: #16301f;
+    --code-bg: #23282f;
+  }
+}
+* { box-sizing: border-box; }
+html { font-size: 17px; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); line-height: 1.55;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Liberation Sans", sans-serif;
+}
+header.site { border-bottom: 1px solid var(--line); background: var(--card); }
+header.site .inner, main, footer .inner { max-width: var(--max); margin: 0 auto; padding: 1rem 1.25rem; }
+header.site h1 { margin: 0.2rem 0 0.3rem; font-size: 1.9rem; }
+header.site p.meta { margin: 0; color: var(--muted); font-size: 0.95rem; }
+header.site a { color: var(--accent); text-decoration: none; }
+nav.toc { background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px; padding: 0.8rem 1.1rem; margin: 1.2rem 0 1.6rem; }
+nav.toc ol { margin: 0.3rem 0 0; padding-left: 1.3rem; columns: 2; column-gap: 2rem; }
+nav.toc li { break-inside: avoid; margin: 0.15rem 0; }
+nav.toc a { color: var(--accent); text-decoration: none; }
+h2 { font-size: 1.45rem; margin: 2.2rem 0 0.6rem; padding-top: 0.4rem; border-top: 1px solid var(--line); }
+h3 { font-size: 1.12rem; margin: 1.4rem 0 0.4rem; }
+p, li { max-width: 46rem; }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+code { background: var(--code-bg); padding: 0.05em 0.35em; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 0.8rem 1rem; border-radius: 8px; overflow-x: auto; line-height: 1.4; }
+pre code { background: none; padding: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-left-width: 5px; border-radius: 8px; padding: 0.7rem 1rem; margin: 0.9rem 0; }
+.card > :first-child { margin-top: 0; } .card > :last-child { margin-bottom: 0; }
+.card.trap { border-left-color: var(--trap); background: var(--trap-soft); }
+.card.fact { border-left-color: var(--fact); background: var(--fact-soft); }
+.card.idea { border-left-color: var(--accent); background: var(--accent-soft); }
+.card .label { display: inline-block; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.3rem; }
+.card.trap .label { color: var(--trap); } .card.fact .label { color: var(--fact); } .card.idea .label { color: var(--accent); }
+table { border-collapse: collapse; width: 100%; margin: 0.8rem 0 1.2rem; font-size: 0.95rem; }
+th, td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+tr.hl td { background: var(--fact-soft); font-weight: 600; }
+figure.chain { margin: 1rem 0; }
+.chain ol { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+.chain li { position: relative; padding: 0.35rem 0 0.35rem 2.4rem; border-left: 2px solid var(--line); margin-left: 0.9rem; }
+.chain li::before { counter-increment: step; content: counter(step); position: absolute; left: -0.95rem; top: 0.35rem; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 0.85rem; }
+details { margin: 0.5rem 0; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.9rem; }
+details summary { cursor: pointer; font-weight: 600; }
+details[open] summary { margin-bottom: 0.4rem; }
+dl.glossary dt { font-weight: 700; margin-top: 0.7rem; }
+dl.glossary dd { margin: 0.1rem 0 0 1rem; max-width: 44rem; }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; margin-top: 3rem; }
+@media (max-width: 40rem) { nav.toc ol { columns: 1; } html { font-size: 16px; } }
+@media print { header.site, nav.toc { break-inside: avoid; } details { display: block; } details summary { display: none; } .card { break-inside: avoid; } a { color: inherit; text-decoration: none; } }

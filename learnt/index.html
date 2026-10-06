@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What I have learnt: NES Studio, a browser game-maker that builds real NES ROMs</title>
+<link rel="stylesheet" href="learnt.css">
+<style>
+  /* page-only additions; the shared learnt.css stays identical across projects */
+  figure.diagram { margin: 1rem 0; }
+  figure.diagram svg { width: 100%; height: auto; max-width: 46rem; display: block; }
+  figure.diagram figcaption { color: var(--muted); font-size: 0.9rem; max-width: 46rem; }
+  main th, main td { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="inner">
+    <p class="meta"><a href="../../../index.html">What I have learnt</a> · project: <code>nesgame/attempt1</code> (repo NES_game_V1) · a browser NES game-maker for pupils, a Python build server running cc65, and a native Linux sibling app</p>
+    <h1>NES Studio: a browser game-maker that builds real NES ROMs</h1>
+    <p class="meta">Reconstructed on 2026-10-06 from the repository record (git history <code>7d3afae</code>–<code>413947d</code>, 9 April – 10 September 2026, 1,008 commits; <code>docs/LESSONS-LEARNT.md</code>, <code>docs/STATUS.md</code>, <code>docs/reference/codegen-and-nes-architecture-review.md</code>, <code>docs/design/engine-versioning.md</code>, <code>tools/engines/</code>, <code>asm-lab/STATUS.md</code>, the bug reports, feedback logs and handoffs), not written at the time · engine v84 on the native branch <code>chore/linux-native-bootstrap-v63</code>, not yet merged; <code>main</code> is at its own v80 · for revisiting later, not for reference while working (that is <code>CLAUDE.md</code> and <code>docs/STATUS.md</code>)</p>
+  </div>
+</header>
+
+<main>
+<nav class="toc" aria-label="Contents">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#big-picture">The big picture</a></li>
+    <li><a href="#nes-picture">How the NES draws a picture</a></li>
+    <li><a href="#pipeline">From the browser to a ROM</a></li>
+    <li><a href="#engine">The engine and its version contract</a></li>
+    <li><a href="#timing">Timing on a 1.79 MHz machine</a></li>
+    <li><a href="#pupils">Making it work for pupils</a></li>
+    <li><a href="#gates">Tests that were green for the wrong reason</a></li>
+    <li><a href="#results">Results</a></li>
+    <li><a href="#traps">More traps</a></li>
+    <li><a href="#lessons">General lessons</a></li>
+    <li><a href="#test">Test yourself</a></li>
+    <li><a href="#next">Still to do</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ol>
+</nav>
+
+<h2 id="big-picture">1. The big picture</h2>
+<p><strong>NES Studio is a browser game-maker: a pupil draws 8×8 tiles, builds a level, picks rules and presses Play, and a small Python server turns the project into C and 6502 assembly, compiles it with cc65 and sends back a real <code>.nes</code> ROM that runs in the page.</strong> Between April and September 2026 it grew from a Zelda II-style demo into an eight-mode Studio with a versioned engine (v84 on this branch). Most of what it taught me was about the NES's tiny timing budget, and about tests that were green for the wrong reason.</p>
+<p>It began on 9 April (<code>7d3afae</code>) as one cc65 program with a jumping player, became five C "steps" for pupils to edit in VS Code, then a set of browser pages ending in a Builder that assembles a game from ticked modules. There are no commits in May; June went on pupils' bug reports and a rebuilt code generator. July carried 598 of the 1,008 commits: the unified Studio (<code>73cecdd</code>), engine versioning (v1 on 5 July, <code>b76f54c</code>), an SMB-style engine, hand-written 6502 and a native Linux app on this branch. August was almost all verification, and main was merged in on 2 September (<code>d3d507f</code>). 707 commits carry a Claude co-author line, so several lessons are about checking AI sessions' confident claims.</p>
+<p>Where it stands: this branch is 284 commits ahead of <code>main</code> and 2 behind, and not merged. Those two commits are main's own engine v80 (<code>391d262</code>, 10 September), a different engine from this branch's v80.</p>
+<div class="card idea"><span class="label">The one-line summary</span>
+The NES lets you touch the picture for only a sliver of each frame, and an emulator or a test suite can look perfect while that rule is broken. The project worked when each claim was checked against something that could say no: FCEUX as well as jsnes, a planted fault as well as a passing suite, the bytes as well as the hash.</div>
+
+<h2 id="nes-picture">2. How the NES draws a picture</h2>
+<p>Everything in the Studio is shaped by the NES's picture chip, the PPU (the "NES Architecture Summary" in <code>docs/guides/TEACHER_GUIDE.md</code>; <code>docs/design/design-principles.md</code> §2).</p>
+<p><strong>Tiles and CHR.</strong> The NES never stores a screen as pixels. Pixels exist only inside tiles: 8×8 squares in which each pixel is a 2-bit number, 0 to 3, that picks a palette slot rather than a colour. A tile is 16 bytes in two bitplanes: 8 bytes holding bit 0 of every pixel, then 8 holding bit 1 (<code>tools/chr_codec.py</code>). The tile store is the CHR: here one 8 KB bank with sprite tiles at <code>$0000</code> and background tiles at <code>$1000</code>, selected by bit 4 of <code>PPU_CTRL</code> (<code>build_chr</code> in <code>tools/nes_studio_core/graphics.py</code>).</p>
+<p><strong>Nametable and attributes.</strong> The background is a nametable: 32×30 tile <em>numbers</em> plus 64 attribute bytes that choose palettes, 1,024 bytes in all, exactly a <code>.nam</code> file. A background palette applies to a whole 16×16-pixel quadrant, not to one tile. The original editor stored a palette per 8×8 tile, which <code>docs/design/target-data-model.md</code> calls "a compile-time lie to remove". 16×16 blocks (metatiles) with one palette each make the honest answer the easy one.</p>
+<p><strong>Palettes.</strong> There are 64 fixed colours. A game picks one backdrop plus four background and four sprite palettes of three colours each, 32 bytes at <code>$3F00</code>. Pixel value 0 in a sprite is transparent.</p>
+<p><strong>Sprites and OAM.</strong> Sprites are 64 four-byte entries (Y, tile, attributes, X) in a 256-byte table, OAM. The engine fills a shadow copy at <code>$0200</code> and copies it in one go by writing to <code>$4014</code> (OAM DMA). At most 8 sprites show on one scanline, and Y = <code>$FF</code> hides one. A big character is a grid of sprites, so an 8×8-tile player uses all 64.</p>
+
+<figure class="diagram">
+<svg viewBox="0 0 720 330" role="img" aria-label="Diagram: the 8 KB CHR holds sprite tiles at $0000 and background tiles at $1000. The nametable and attribute table point at background tiles; OAM entries point at sprite tiles. Both, coloured through the palettes at $3F00, make the 256 by 240 screen." style="color: var(--fg); font-family: system-ui, sans-serif;">
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: currentColor"/></marker></defs>
+  <g style="fill: var(--card); stroke: currentColor; stroke-width: 1.5">
+    <rect x="10" y="30" width="180" height="270" rx="8"/>
+    <rect x="250" y="30" width="210" height="120" rx="8"/>
+    <rect x="250" y="180" width="210" height="120" rx="8"/>
+    <rect x="525" y="30" width="185" height="110" rx="8"/>
+    <rect x="525" y="190" width="185" height="110" rx="8"/>
+  </g>
+  <g style="stroke: currentColor; stroke-width: 1; stroke-dasharray: 4 3; fill: none">
+    <line x1="20" y1="165" x2="180" y2="165"/>
+  </g>
+  <g style="fill: currentColor; font-size: 13px">
+    <text x="100" y="54" text-anchor="middle" font-weight="700">CHR, 8 KB</text>
+    <text x="100" y="72" text-anchor="middle" font-size="11.5">pixels live only here</text>
+    <text x="100" y="105" text-anchor="middle">sprite tiles</text>
+    <text x="100" y="123" text-anchor="middle" font-size="11.5">$0000, 256 tiles</text>
+    <text x="100" y="200" text-anchor="middle">background tiles</text>
+    <text x="100" y="218" text-anchor="middle" font-size="11.5">$1000, 256 tiles</text>
+    <text x="100" y="262" text-anchor="middle" font-size="11.5">tile = 16 bytes,</text>
+    <text x="100" y="278" text-anchor="middle" font-size="11.5">2 bits per pixel</text>
+    <text x="355" y="54" text-anchor="middle" font-weight="700">Nametable</text>
+    <text x="355" y="76" text-anchor="middle" font-size="11.5">32×30 tile numbers (960 B)</text>
+    <text x="355" y="100" text-anchor="middle" font-weight="700">Attribute table</text>
+    <text x="355" y="122" text-anchor="middle" font-size="11.5">64 B: one palette per 16×16</text>
+    <text x="355" y="204" text-anchor="middle" font-weight="700">OAM</text>
+    <text x="355" y="226" text-anchor="middle" font-size="11.5">64 sprites × 4 bytes</text>
+    <text x="355" y="246" text-anchor="middle" font-size="11.5">Y, tile, attributes, X</text>
+    <text x="355" y="272" text-anchor="middle" font-size="11.5">max 8 per scanline;</text>
+    <text x="355" y="288" text-anchor="middle" font-size="11.5">filled by DMA via $4014</text>
+    <text x="617" y="54" text-anchor="middle" font-weight="700">Palettes $3F00</text>
+    <text x="617" y="76" text-anchor="middle" font-size="11.5">backdrop + 4 background</text>
+    <text x="617" y="94" text-anchor="middle" font-size="11.5">+ 4 sprite palettes,</text>
+    <text x="617" y="112" text-anchor="middle" font-size="11.5">3 colours each, of 64</text>
+    <text x="617" y="234" text-anchor="middle" font-weight="700">Screen</text>
+    <text x="617" y="256" text-anchor="middle" font-size="11.5">256×240, 60 frames/s</text>
+    <text x="210" y="132" text-anchor="middle" font-size="11">points at</text>
+    <text x="210" y="252" text-anchor="middle" font-size="11">points at</text>
+  </g>
+  <g style="stroke: currentColor; stroke-width: 1.5; fill: none">
+    <line x1="248" y1="110" x2="192" y2="200" marker-end="url(#arr)"/>
+    <line x1="248" y1="240" x2="192" y2="120" marker-end="url(#arr)"/>
+    <line x1="462" y1="100" x2="523" y2="230" marker-end="url(#arr)"/>
+    <line x1="462" y1="250" x2="523" y2="255" marker-end="url(#arr)"/>
+    <line x1="617" y1="142" x2="617" y2="188" marker-end="url(#arr)"/>
+  </g>
+</svg>
+<figcaption>Everything on screen is a tile number pointing into CHR, and colour is only applied at the end. Figures are from <code>TEACHER_GUIDE.md</code>, <code>design-principles.md</code> §2 and <code>graphics.py</code>.</figcaption>
+</figure>
+
+<div class="card fact"><span class="label">Verified: a nametable byte is a tile number, not a letter</span>
+Dialogue showed garbage on projects whose pupil had not painted a font, because the engine wrote ASCII codes into the nametable and those tile numbers held scenery (finding N3 in the architecture review). The server now seeds a built-in font into blank background tiles whenever dialogue is on (<code>_seed_dialogue_font</code>, <code>f89d778</code>, 18 June).</div>
+<div class="card idea"><span class="label">Everything references shared tiles</span>
+On the hardware a block is four tile references and a character is a grid of them, so editing a tile changes it everywhere and "CHR 214/256" is a real budget (<code>design-principles.md</code> §3). The design keeps that visible, with an "also used by…" warning and <em>Duplicate first</em>, on the rule that a tool which lets a pupil build what the hardware cannot do "is teaching a lie".</div>
+
+<h2 id="pipeline">3. From the browser to a ROM</h2>
+<p>What happens when a pupil presses Play (the <code>/play</code> contract in <code>TEACHER_GUIDE.md</code>, and §1 of the review):</p>
+<figure class="chain"><ol>
+  <li>The project is JSON (tiles, palettes, level, characters, rules), autosaved in the browser's <code>localStorage</code>.</li>
+  <li><code>BuilderAssembler.assemble</code> walks the ticked modules and fills marked slots (<code>//@ insert:</code> for declarations, init, per-frame code and vblank writes) and replaceable regions (<code>//&gt;&gt; … //&lt;&lt;</code>) in the C template <code>builder-templates/platformer.c</code>.</li>
+  <li><code>POST /play</code> sends the state and that <code>main.c</code> to <code>tools/playground_server.py</code>.</li>
+  <li>The server's code generator (now <code>tools/nes_studio_core/</code>) writes the CHR, nametable, <code>palettes.inc</code>, <code>scene.inc</code> and a Makefile into a private <code>tempfile.TemporaryDirectory</code>.</li>
+  <li><code>make</code> runs cc65 (C to 6502 assembly), ca65 and ld65 against <code>cfg/nes.cfg</code>, giving an iNES file for mapper 0 (NROM): 32 KB of program and 8 KB of CHR.</li>
+  <li>The ROM returns base64-encoded and runs in jsnes inside the page, or downloads as a <code>.nes</code>.</li>
+</ol></figure>
+<p>A server is needed because cc65 is a native toolchain and the editor cannot POST from a <code>file://</code> page. Builds run in parallel under <code>BUILD_SEM</code> (2 to 8 at once), which replaced a single lock "because serialising every build is a bottleneck when thirty pupils press Play at once".</p>
+<p><strong>Fat engine, thin data.</strong> The June review found the bugs clustered where Builder modules emitted per-frame C loops as strings, while the subsystems already compiled into the engine behind <code>#if</code> flags (movement, Player 2, the HUD) were sound. The direction chosen: modules emit <code>#define</code>s and constant tables, not control flow. The review also rejected a full assembly rewrite, because for a teaching tool "C <em>is</em> the feature": pupils read and edit the main loop.</p>
+<div class="card trap"><span class="label">Trap: untracking generated files broke the baseline</span>
+Playtests used to rewrite engine sources inside the repo, so I untracked the eight generated files. That broke the golden-hash checks, which build that folder with <code>make</code> directly: once a playtest overwrote the untracked copies, <code>make</code> built the wrong ROM. They were re-tracked the same day (<code>230fdce</code>), and the commit names the real fix, building in a temporary directory, which is what happens now. If engine sources show as modified after a Play, something is genuinely wrong.</div>
+<div class="card fact"><span class="label">Verified: the one-byte overflow</span>
+The server turns ld65's "segment overflows" error into "your game is about N bytes too big". ld65's format string is <code>by %lu byte%c</code>: an <code>s</code> for a plural, a <em>space</em> for exactly one. The regex required <code>bytes</code>, so a one-byte overflow showed the child the raw linker error. The fix was one character, <code>bytes?</code>, with a test seen to fail first (<code>d90f10b</code>).</div>
+
+<h2 id="engine">4. The engine and its version contract</h2>
+<p>The <strong>engine</strong> is everything that turns a project into a ROM: the C templates, the assembler, the cc65 project and the server's code generator. The contract (<code>CLAUDE.md</code>; <code>docs/design/engine-versioning.md</code>): any change that could alter ROM output means bumping <code>tools/engines/ENGINE_VERSION</code> and <code>engine-version.js</code> to the same integer, adding a CHANGELOG entry and freezing a snapshot with <code>node scripts/snapshot-engine.mjs</code>. <code>run-all.mjs</code> fails if the constants disagree or the snapshot has drifted, and new projects are stamped with <code>state.engineVersion</code>.</p>
+<p><strong>Off by default keeps the golden ROMs still.</strong> New behaviour sits behind a flag that is off unless a project needs it, so the preprocessor and cc65 strip it from every other project and their ROMs stay byte-identical. The proof is one line of <code>run-all.mjs</code>: <code>GOLDEN_STOCK = '1730448e…'</code>, pinned on 20 June (<code>a793bd1</code>), is still the value at v84. All 84 engine versions came after it.</p>
+<p><strong>Snapshots, and what they do not do.</strong> Each version is frozen into <code>tools/engines/v&lt;N&gt;/</code> with a SHA-1 manifest. Two things surprised me in the record. The snapshot script reads committed bytes, so snapshotting before committing silently freezes the <em>previous</em> engine, <code>--check</code> agrees with itself, and because snapshots are immutable the only way out is another version (<code>tools/engines/README.md</code>). And nothing builds from a snapshot yet: the server's <code>_resolve_engine_versions</code> is "still provenance-only", every build uses the current sources, and "the selection step itself is simply unbuilt". A project stamped v63 builds with today's templates, which is why fixtures labelled "v63" had drifted for twelve versions (<code>LESSONS-LEARNT.md</code> §4).</p>
+<div class="card fact"><span class="label">Verified: two eras of snapshot</span>
+Up to v75 a snapshot held 19 to 30 files and no Python, though the Python code generator produced most of the ROM, so a codegen change could not turn the gate red (finding F7). This branch's v76 added <code>tools/nes_studio_core/</code> (41 files), but the merge took main's Python-less v76–v79, so today only v80–v84 cover the codegen. That is why the README defines the boundary by what a manifest lists, not by a version range.</div>
+<div class="card trap"><span class="label">Trap: two branches, one counter</span>
+While this branch and <code>main</code> were apart, each published its own v76, v77 and v78. Main's had shipped to classrooms, so at the 2 September merge main kept those numbers and this branch's engines were renumbered v80–v83, with the superseded CHANGELOG entries kept and struck through (<code>d3d507f</code>). A gate now compares the collision set with a recorded list in <code>tools/engines/main-manifests.json</code>. Then on 10 September main published its own v80 (<code>391d262</code>). The two <code>v80/manifest.json</code> files differ (checked 2026-10-06), and the recorded list, taken from main at <code>1c399c0</code>, predates it. Same collision, one number later.</div>
+
+<h2 id="timing">5. Timing on a 1.79 MHz machine</h2>
+<p>The PPU is drawing almost all the time. The CPU can safely write to it only during <strong>vblank</strong>, the gap between frames: about 2,273 CPU cycles, of which the sprite DMA uses 513, leaving room for roughly 160 bytes to <code>$2007</code> (review finding N5). A plain cc65 loop costs 50–65 cycles per byte and an unrolled <code>lda buf+N / sta $2007</code> pair costs 8 (<code>LESSONS-LEARNT.md</code> §5). Anything bigger has to be prepared while the picture draws, then copied fast or spread over several frames.</p>
+<p><strong>The write that vanished.</strong> In April a scrolling level smeared stripes across the background. FCEUX's PPU viewer showed each new column being laid along a row. The note in <code>dad85a2</code> blames cc65 for dropping the <code>PPU_CTRL</code> write that sets column stride, because a later assignment to the same address followed. The fix was to declare every PPU register macro <code>volatile</code>. jsnes had not shown the fault: the note says glitch detection on jsnes "isn't meaningful when jsnes already tolerates the timing our ROM used to have".</p>
+<p><strong>The dialogue box that blanked the screen.</strong> Pupils reported the stage "glitches for a split second" when an NPC's box opens (#31). The banner was 128–256 writes in one vblank with rendering off, so the burst ran into the visible frame. The fix copies the scroll streamer's pattern: prepare one 32-byte row per frame, then copy it in vblank with an unrolled burst of about 260 cycles (<code>a70241e</code>, main's v78; v82 here). A new test counts lit pixels in a 40-scanline band: 7,680 → 0 on the opening frame before, 7,680 throughout after. An earlier plan had deferred it as "Verification: visual, needs Mesen".</p>
+<p><strong>The status bar that would not keep still.</strong> The SMB-style status bar stays put while the level scrolls: the engine places an opaque sprite 0 at the bottom of the strip, polls the sprite-0 hit flag (bit 6 of <code>PPU_STATUS</code>), and at the hit writes the playfield's scroll. It flickered after the first screen. Driving it from the NMI was reverted because jsnes showed garbage (<code>a91a23f</code>). v69 (<code>8446e27</code>) trimmed vblank cost instead, measured as flicker-free on runs with no enemies. Re-measured with enemies, the flicker was dropped frames, so v70 (<code>6c65967</code>) went back to the NMI with four fixes. A double buffer stops the NMI copying a half-built OAM. The NMI-enable bit had never been set. The main loop waited on <code>$2002</code>, and reading <code>$2002</code> clears the vblank flag, which raced the NMI's own poll. And the poll is now bounded. In FCEUX, frames showing sky fell from 211 to 3.</p>
+<div class="card trap"><span class="label">Trap: the emulator in the browser is not the hardware</span>
+jsnes "does not model the 8-sprite-per-scanline limit or sprite-0-hit timing", which is "why the tests stay green while the flicker is real on hardware/FCEUX" (<code>docs/design/2026-07-08-smb-bg-status-bar.md</code>). The headless tests run in jsnes, so timing claims needed FCEUX or Mesen.</div>
+<div class="card trap"><span class="label">Trap: the optimiser "regression" was a test sampling mid-fall</span>
+The first time I switched cc65 to <code>-Os</code>, two render tests failed, and I reverted it as "a visual bug that would have shipped to pupils" (<code>89cf371</code>). The same day, tracing the player's position showed nothing was miscompiled. <code>-Os</code> finished loading the world about 45 frames sooner, so tests that sampled at a fixed frame caught the player mid-fall. They were changed to wait for him to settle, and <code>-Os</code> went in (<code>a793bd1</code>).</div>
+<p><strong>Hand-written 6502, one function at a time.</strong> <code>asm-lab/</code> rewrote engine functions individually, each passing three gates: correct (a unit harness in a real ROM, checked against the C and an independent JavaScript model), integrated (the render suites still pass), and efficient (no bigger or slower than cc65 <code>-Os</code>). <code>world_to_screen_x</code> went from 66 bytes and about 120 cycles to 20 bytes and about 28 (<code>asm-lab/STATUS.md</code>). By v54 (<code>df78e76</code>, 9 July) "every per-frame hot loop is on ASM".</p>
+<div class="card trap"><span class="label">Trap: an 8-bit cursor and a 256-byte table</span>
+The assembly <code>draw_player</code> kept its OAM position in the 8-bit Y register. An 8×8-tile player fills exactly 256 bytes, so the final store wrote 256 mod 256 = 0. The player drew correctly, but everything drawn after him saw an "empty" table and drew on top, and their <code>oam_idx &gt; 252</code> guards never tripped: pupils saw "random mess on screen" (#37). The writes are fine at exactly 256 but the cursor is not, so the fix tests a strict <code>base + W×H×4 &lt; 256</code> (<code>fa79846</code>; v80 here).</div>
+<div class="card trap"><span class="label">Trap: "parked" was a coordinate</span>
+An enemy that was off-room or defeated was parked at Y = <code>0xFF</code>, and guards tested <code>&gt;= 0xEF</code> at some sites and <code>&gt;= 240</code> at others. In a two-screen-tall level a real Y runs to 479, so enemies in the lower half neither moved nor hurt anyone while looking correct. Main's v80 makes "parked" an all-ones value tested by equality, leaving no threshold to spell two ways (<code>391d262</code>).</div>
+
+<h2 id="pupils">6. Making it work for pupils</h2>
+<p><strong>Two front doors.</strong> The first (<code>15b1616</code>, 12 April) was a VS Code workspace in which everything except <code>**/src/main.c</code> is read-only, <code>Ctrl+Shift+B</code> builds and runs, and <code>// TRY:</code> and <code>// EDIT:</code> comments point at things to change. That suits pupils who already read C; the browser editor was for everyone else.</p>
+<p><strong>The Studio</strong> replaced seven loosely connected pages with one workspace: a mode rail, an editing dock, the game running on a "TV", and a quest log. Its principles (<code>design-principles.md</code>): boot into a working starter game, never a blank canvas (there are eight, the document citing pupils' "I don't know how to start" paralysis); teach by doing, with a self-ticking quest log and a "Needs attention" list with <em>Fix →</em> jumps instead of intro dialogs pupils skipped; autosave, snapshots and a Time Machine so work is very unlikely to be lost; and Beginner, Maker and Advanced levels that reveal more of the eight modes, with locked modes still visible. The test for any control: "Could a confused KS3 pupil ignore this control and still finish a game?"</p>
+<p><strong>Pupils as the bug tracker.</strong> An in-editor feedback form went in on 22 April (<code>cbac562</code>). Its 25 entries were transcribed on 17 June, and teacher-collected reports became a numbered list in <code>docs/feedback/recently-observed-bugs.md</code>, now 39 items. Several engine versions exist because of a pupil report: the dialogue flash (#31), the "random mess" (#37), and a door that showed the wrong background on a room's second screen (#2, v63).</p>
+<div class="card fact"><span class="label">Verified: a frozen game nobody could see failing</span>
+For #37, the browser's emulator loop had no error handling. An exception inside <code>nes.frame()</code> does not stop a <code>setInterval</code>, so a fault re-threw 60 times a second into a console no pupil opens while the game sat frozen. It now has try/catch, a frame watchdog and a plain-language banner with a retry (<code>STATUS.md</code>).</div>
+<p><strong>Accounts are optional and minimal:</strong> a username that is not a real name and a scrypt-hashed password, no email, no analytics. <strong>The native app</strong> on this branch is a PySide6 sibling held to the web version by contract tests. Its emulator wraps <code>tetanes-core</code>, chosen because it is MIT or Apache licensed where the mature cores are GPL, it produces audio, and it builds to a self-contained wheel, so "target machines need no Rust, no compiler and no apt packages" (<code>native/nes_core/README.md</code>).</p>
+<div class="card trap"><span class="label">Trap: a green suite and a blank app</span>
+The native suite was once fully green while the app showed a transparent emulator frame and a white-on-white panel, and crashed on every background switch. Every test asserted <code>document.field == X</code> and none asserted that anything had been drawn. The rule now: assert pixels, not document fields (<code>native/README.md</code>, "Six traps").</div>
+
+<h2 id="gates">7. Tests that were green for the wrong reason</h2>
+<p>There are three suites: Node builder tests that compile real ROMs and run them headless in jsnes, Playwright for the Studio, and pytest for the native app. August's verdict (<code>docs/guides/what-the-gates-prove.md</code>): "The repeated failure on this branch has not been gates going red. It has been gates being <strong>green for the wrong reason</strong>."</p>
+<p>The <strong>render harness</strong> (Arc A, June) boots a compiled ROM in jsnes inside Node and asserts on what was rendered, not just that the C compiled. Before it, the "byte-identical" check built the template with <em>no</em> modules, so that check never compiled any module's output (review smell S2). It was re-founded on frozen golden hashes (<code>680833b</code>).</p>
+<div class="card trap"><span class="label">Trap: a guard that could not fail</span>
+"PPU register macros are volatile" had been green since it was written. Its regex matched the old spelling <code>*((unsigned char*)0x20XX)</code>, but with <code>volatile</code> removed today's macros read <code>(*(unsigned char*)0x2006)</code>, which it never matched. It was found by planting the exact fault and watching the suite stay green (<code>cb19d8e</code>). The same day every invariant in <code>run-all.mjs</code> was given a planted break: "24 breaks, 24 caught" (<code>cff3cdd</code>).</div>
+<div class="card trap"><span class="label">Trap: a test any canvas would pass</span>
+A Studio test checked that the full-screen preview "opens a modal with a canvas", while the preview always showed the level's top-left screen. The fix asserts something only correct behaviour produces: the canvas is as wide as the level, 1,024 device pixels for two screens against 512. With the bug restored, the new test went red and the old one stayed green (<code>LESSONS-LEARNT.md</code> §1).</div>
+<div class="card trap"><span class="label">Trap: a meta-test one value out</span>
+The plan for #14 said "flip the threshold to 239 and the tall-project assertion must go red". It did not: the fixture's enemy was at y = 400, which both the right and the off-by-one threshold reject. Only an entity at exactly 239 tells them apart (<code>LESSONS-LEARNT.md</code> §1).</div>
+<div class="card trap"><span class="label">Trap: reasoning about hashes instead of reading bytes</span>
+Regenerating seven starter fixtures changed every project hash, and I reported that the starters had drifted. A decompress-and-diff showed the inputs differed only by a timestamp. "A hash tells you two things differ; only the diff tells you what." The tell was the uniformity: real drift would not hit all seven (<code>LESSONS-LEARNT.md</code> §4).</div>
+<div class="card fact"><span class="label">Verified: not flaky, under-budgeted</span>
+Two Studio tests that failed under load were waved through for weeks as "the box was busy". On a quiet machine they took 13.8 s and 9.8 s, against 3.6 s for the next slowest and a median of about 1 s, with a 30 s limit. It was always the same two (<code>ea2fdfe</code>; <code>LESSONS-LEARNT.md</code> §3).</div>
+
+<h2 id="results">8. Results</h2>
+<table>
+  <tr><th>Measure</th><th>Value</th><th>Source</th></tr>
+  <tr><td>History</td><td>1,008 commits, 9 April – 10 September 2026; 598 in July, none in May</td><td>git log</td></tr>
+  <tr class="hl"><td>Engine</td><td>v1 on 5 July → v84 on this branch (2 September); main at its own v80</td><td><code>b76f54c</code>, <code>f56c7e8</code>, <code>391d262</code></td></tr>
+  <tr class="hl"><td>No-module golden ROM</td><td><code>1730448e…</code>, unchanged since 20 June</td><td><code>run-all.mjs</code></td></tr>
+  <tr><td>Builder suite (real cc65 builds)</td><td>118 suites, exit 0, on 1 September (a dated record)</td><td><code>STATUS.md</code></td></tr>
+  <tr><td>Studio end-to-end tests</td><td>165 passed on 15 August (a dated record)</td><td><code>STATUS.md</code></td></tr>
+  <tr><td>Native tests without Qt</td><td>225 passed, 161 skipped: the UI layer untested, not passing</td><td><code>413947d</code></td></tr>
+  <tr><td>Planted faults in builder invariants</td><td>24 breaks, 24 caught</td><td><code>cff3cdd</code></td></tr>
+  <tr><td>Dialogue flash, lit pixels in band</td><td>7,680 → 0 → 7,680 before; 7,680 throughout after</td><td><code>a70241e</code></td></tr>
+  <tr><td>Status bar, frames showing sky</td><td>211 → 3 (FCEUX, 760-frame run)</td><td><code>6c65967</code></td></tr>
+  <tr><td><code>world_to_screen_x</code> in hand 6502</td><td>66 → 20 bytes; ~120+ → ~28 cycles</td><td><code>asm-lab/STATUS.md</code></td></tr>
+</table>
+
+<h2 id="traps">9. More traps</h2>
+<div class="card trap"><span class="label">Trap: a fix on a branch that was never merged</span>
+<code>945393e</code> (26 June) added an <code>oam_idx &gt; 252</code> bound to the C Player 1 sprite loop. It exists only on <code>origin/fix/br-03-oam-overflow</code>, which was never merged, and the fix plan already marked BR-03 fixed. A month later the #37 investigation found that loop "had no bound at all" (<code>fa79846</code>).</div>
+<div class="card trap"><span class="label">Trap: the answer was one branch away</span>
+I spent two stretches getting a port count wrong, then found the lesson that would have prevented it already written in main's lessons file and its <code>TEST-SERVERS.md</code>, neither of which existed on this branch. The cheap check is <code>git log --oneline HEAD..origin/main</code> before an audit: "A branch that has not merged its trunk in weeks is not a snapshot of the project; it is one opinion about the project" (<code>LESSONS-LEARNT.md</code> §6).</div>
+<div class="card trap"><span class="label">Trap: tools that fail quietly</span>
+An <code>awk</code> script using <code>strtonum</code> printed nothing on Debian's <code>mawk</code>, and that became "nothing is listening on 8765" while the server ran. Playwright and three builder suites shared port 18790, and the server, finding one already running, said "nothing to do" and exited 0. And <code>git add</code> silently declines a path <code>.gitignore</code> matches, which is how seven baseline ROMs and a whole <code>.devcontainer/</code> went uncommitted (<code>LESSONS-LEARNT.md</code> §1–2).</div>
+
+<h2 id="lessons">10. General lessons</h2>
+<div class="card idea"><span class="label">Ask a check what it would reject</span>
+"A canvas is visible" and "the regex matched" are true of the working version and of most broken ones. Plant the fault and watch the check go red before trusting its green. Then ask the other question: could it fail when nothing is wrong? A gate that cries wolf gets deleted with its coverage.</div>
+<div class="card idea"><span class="label">"Needs a human to look" is a claim to test once</span>
+The dialogue flash turned out to be countable headless. Some things really do need a person (the event sounds need ears, after inspecting jsnes's audio proved too fragile), but that was tried first.</div>
+<div class="card idea"><span class="label">Know what your emulator does not model</span>
+jsnes skips the 8-per-scanline limit and sprite-0 timing, and it tolerated a scroll fault that FCEUX showed plainly. Use the convenient tool for bytes and behaviour, and a faithful one for timing.</div>
+<div class="card idea"><span class="label">Gate new behaviour off by default</span>
+Because each feature compiles out unless a project asks for it, one golden hash has guarded the no-module ROM through 84 engine versions. That is what made a fast-moving engine safe to change.</div>
+<div class="card idea"><span class="label">A number two people allocate will collide</span>
+Engine versions were integers handed out independently on two long-lived branches, and they collided twice. Anything that must be unique needs one writer, or names that cannot clash.</div>
+<div class="card idea"><span class="label">If two lists must agree, derive one</span>
+A hand-written list of modules to syntax-check had silently missed 18 of 32. Enumerating the directory at run time removed the second list instead of policing it. Documentation is not a check.</div>
+
+<h2 id="test">11. Test yourself</h2>
+<details><summary>What is in a 16-byte NES tile, and why can a tile not say "red"?</summary>
+An 8×8 grid of 2-bit values in two bitplanes. The values 0–3 pick a slot in whichever palette the tile is drawn with; the attribute table or the sprite's attribute byte chooses that palette.</details>
+<details><summary>Why could the old editor's per-tile palette never be honoured in the ROM?</summary>
+The attribute table chooses a background palette per 16×16-pixel quadrant, so four tiles must share one. 16×16 blocks with one palette each make that true by construction.</details>
+<details><summary>Dialogue showed garbage on some projects. Why, and what fixed it?</summary>
+A nametable byte is a tile number. The engine wrote ASCII codes, and without a painted font those tile numbers held scenery. The server now seeds a built-in font when dialogue is on.</details>
+<details><summary>Why does the dialogue fix prepare one row per frame instead of writing the whole box at once?</summary>
+Vblank is about 2,273 cycles, 513 already used by OAM DMA. The whole banner was 128–256 writes with rendering off and ran into the visible frame. One 32-byte unrolled row takes about 260 cycles and fits.</details>
+<details><summary>An 8×8-tile player drew correctly, yet everything after him drew on top. Why?</summary>
+64 sprites × 4 bytes = 256. The assembly kept the OAM cursor in the 8-bit Y register, so it wrapped to 0; later writers saw an empty table, and their "&gt; 252" guards never fired.</details>
+<details><summary>The main-loop status bar was measured at zero flicker. Why was that not good enough?</summary>
+The runs had no enemies. With enemies, game logic overran vblank and frames dropped. And jsnes could not judge it, because it does not model sprite-0-hit timing.</details>
+<details><summary>Why did waiting on <code>$2002</code> in the main loop hang the NMI-driven status bar?</summary>
+Reading <code>$2002</code> clears the vblank flag, so the main loop raced the NMI's own sprite-0 poll of that register. The loop now waits on a flag the NMI clears.</details>
+<details><summary>The first <code>-Os</code> build failed two render tests. Why was reverting it the wrong conclusion?</summary>
+Nothing was miscompiled. <code>-Os</code> loaded the world about 45 frames sooner, and tests sampling at a fixed frame caught the player mid-fall. Waiting for him to settle fixed them.</details>
+<details><summary>A project is stamped <code>engineVersion: 63</code>. Which engine builds it today?</summary>
+The current one. The target is recorded for provenance only; building from <code>tools/engines/v63/</code> is designed but not built.</details>
+<details><summary>Why must you commit before running <code>snapshot-engine.mjs</code>?</summary>
+It reads HEAD. Snapshot first and <code>v&lt;N&gt;/</code> freezes the previous code, <code>--check</code> agrees with itself, and snapshots are immutable, so the only fix is another version.</details>
+<details><summary>A meta-test put an enemy at y = 400 to check a 238/239 threshold. What was wrong with it?</summary>
+400 is rejected by both the right and the off-by-one threshold, so the test could not tell the bug from the fix. Only a value exactly at the boundary separates them.</details>
+<details><summary>Two Playwright tests failed only "when the box was busy". What showed they were genuinely wrong?</summary>
+It was always the same two; real noise moves around. Measured quietly they took 13.8 s and 9.8 s against a median of about 1 s, so they were under-budgeted.</details>
+
+<h2 id="next">12. Still to do</h2>
+<ul>
+  <li><strong>Merge or close the native branch</strong> (<code>docs/plans/current/2026-08-06-close-out-native-branch.md</code>), after deciding how to number around main's new v80 and refreshing <code>main-manifests.json</code>.</li>
+  <li><strong>Run the Qt UI tests.</strong> The last commit (<code>413947d</code>) provisions Qt, Rust and maturin in the dev container, because "the native app has never run in any image this repository has ever built".</li>
+  <li><strong>The attended playtests:</strong> listen to the four event sounds (#7/#27) and choose the stomp feel from three prepared ROMs (#15).</li>
+  <li><strong>Redeploy the live host</strong>, which main's last commit records as still on v75.</li>
+  <li><strong>Build-time engine selection</strong>, so a stamped project really is rebuilt with its snapshot.</li>
+  <li><strong>An automatic playtester:</strong> the sibling project plans to have Claude play games made here and report to the teacher (milestone M5 of <a href="../../../claude_plays_nes/learnt/index.html">Claude plays DuckTales</a>).</li>
+</ul>
+
+<h2 id="glossary">13. Glossary</h2>
+<dl class="glossary">
+  <dt>PPU</dt><dd>The NES's picture chip: draws 256×240 pixels at 60 frames a second from tiles, nametables, OAM and palettes, through registers at <code>$2000–$2007</code>.</dd>
+  <dt>CHR / pattern table</dt><dd>The tile graphics; here one 8 KB bank with 256 sprite tiles at <code>$0000</code> and 256 background tiles at <code>$1000</code>.</dd>
+  <dt>Bitplane</dt><dd>One bit of every pixel stored together; an NES tile is two 8-byte bitplanes.</dd>
+  <dt>Nametable</dt><dd>A 32×30 grid of tile numbers forming the background, plus its 64-byte attribute table.</dd>
+  <dt>Attribute table</dt><dd>Bytes choosing a background palette for each 16×16-pixel quadrant.</dd>
+  <dt>Metatile (block)</dt><dd>A 2×2 arrangement of tile references with one palette.</dd>
+  <dt>OAM</dt><dd>64 sprites × 4 bytes (Y, tile, attributes, X), copied from a RAM shadow by OAM DMA (a write to <code>$4014</code>, 513 cycles).</dd>
+  <dt>Vblank</dt><dd>The gap between frames, about 2,273 CPU cycles, when the CPU can safely write to the PPU.</dd>
+  <dt>NMI</dt><dd>The interrupt the PPU raises at the start of vblank when bit 7 of <code>PPU_CTRL</code> enables it.</dd>
+  <dt>Sprite-0 hit</dt><dd>A flag (bit 6 of <code>$2002</code>) set when sprite 0 overlaps an opaque background pixel; used to time a mid-frame scroll change.</dd>
+  <dt>NROM (mapper 0)</dt><dd>The simplest cartridge: 32 KB of program, 8 KB of CHR, no bank switching.</dd>
+  <dt>cc65 / ca65 / ld65</dt><dd>The 6502 C compiler, assembler and linker.</dd>
+  <dt>jsnes, FCEUX, Mesen</dt><dd>NES emulators: jsnes runs in the browser and the headless tests; FCEUX and Mesen are more faithful and were used for timing.</dd>
+  <dt>Engine snapshot</dt><dd>A frozen copy of one engine version's sources under <code>tools/engines/v&lt;N&gt;/</code>, with a SHA-1 manifest.</dd>
+  <dt>Golden hash</dt><dd>The pinned hash of a reference ROM; a change says the bytes differ, and only a diff says how.</dd>
+  <dt>Mutation testing</dt><dd>Planting a deliberate fault to prove a test or guard goes red when it should.</dd>
+  <dt>Sentinel</dt><dd>A special value meaning "none" or "parked", such as Y = <code>0xFF</code>; safe only if no real value can equal it.</dd>
+</dl>
+</main>
+<footer><div class="inner">Part of the "what I have learnt" collection, one page per project, all sharing <code>learnt.css</code>. Reconstructed 2026-10-06 from the NES_game_V1 repository: git history, <code>docs/LESSONS-LEARNT.md</code>, <code>docs/STATUS.md</code>, the architecture review, the engine-versioning design, <code>asm-lab/</code>, the bug reports, feedback logs and handoffs. Hardware figures are as the project's own documents state them.</div></footer>
+</body>
+</html>
